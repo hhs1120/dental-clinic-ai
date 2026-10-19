@@ -6,6 +6,7 @@
 - `docs/치과 AX - 기능 정의.md` — 무엇을 만드나, `make gate` 기준
 - `docs/치과 AX - 데이터 설계.md` — 스키마, 생성 규칙, `make verify` 검사 목록
 - `docs/치과 AX - 평가 설계.md` — 지표, 채점, 정답 저장소(`truth_*`) 테이블 정의
+- `docs/치과 AX - 전환의 의미.md` — 전환 전후 업무 변화 (배경, 구현 스펙 아님)
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
