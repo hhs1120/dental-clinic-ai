@@ -45,8 +45,8 @@ blind_pool_size: 150
 documents: { core: 50, distractor: 27 }
 messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
 eob: { monthly_forms: 9, supplementary_ratio: 0.10 }   # supplementary_ratio는 정형 5단계, monthly_forms는 PDF(조건부)
-holidays: data/holidays_2026.json
-forbidden_topics: data/forbidden_topics.json
+holidays: config/holidays_2026.json
+forbidden_topics: config/forbidden_topics.json
 scale_presets: { small, medium, large }                 # small = 테스트 fixture
 ```
 
@@ -79,6 +79,8 @@ scale_presets: { small, medium, large }                 # small = 테스트 fixt
 | age_group | `child/adult/senior/null` |
 | is_tooth_level | 치아 단위 → `tooth_no` 필수 |
 | aliases | 구어체 별칭 json. 전사 fact 검증·검색 동의어 |
+
+코드·값의 원본은 `generator/master.py`(`U0001`~`U0019` = 표 순번, 스케일링 `U0001`).
 
 | # | 분류 | 시술 | 급여 | 비용 | 소요 | 비고 |
 |---|---|---|---|---|---|---|
