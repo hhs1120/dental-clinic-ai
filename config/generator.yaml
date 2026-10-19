@@ -1,0 +1,22 @@
+# 출처: docs/치과 AX - 데이터 설계.md §0
+seed: 20261201
+today: 2026-12-01
+range: { start: 2026-02-01, end: 2026-12-15 }
+patients: 1000
+visits_per_day: 26          # 평일. 토요일 ×0.5
+reschedule_rate: 0.05
+noshow_rate: 0.06
+sameday_cancel_rate: 0.04
+confirm_rate: 0.85
+unpaid_rate: 0.15
+settle_next_visit: 0.80
+calls_with_transcript: 1000
+calls_meta_only: 5000
+eval_pool_size: 300
+blind_pool_size: 150
+documents: { core: 50, distractor: 27 }
+messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
+eob: { monthly_forms: 9, supplementary_ratio: 0.10 }
+holidays: config/holidays_2026.json          # TODO: 2026 공휴일 채우기
+forbidden_topics: config/forbidden_topics.json  # TODO: make data 전 2개 선정
+scale_presets: { small: 0.1, medium: 0.5, large: 1.0 }

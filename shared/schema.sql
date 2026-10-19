@@ -1,0 +1,3 @@
+-- app.sqlite 스키마 (emr_* / ax_*). 생성기와 앱의 단일 원본.
+-- 정의: docs/치과 AX - 데이터 설계.md §2·§3
+-- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
