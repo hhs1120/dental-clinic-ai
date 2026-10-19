@@ -17,6 +17,6 @@ blind_pool_size: 150
 documents: { core: 50, distractor: 27 }
 messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
 eob: { monthly_forms: 9, supplementary_ratio: 0.10 }
-holidays: config/holidays_2026.json          # TODO: 2026 공휴일 채우기
+holidays: config/holidays_2026.json          # 출처: 한국천문연구원 2026 월력
 forbidden_topics: config/forbidden_topics.json  # TODO: make data 전 2개 선정
 scale_presets: { small: 0.1, medium: 0.5, large: 1.0 }

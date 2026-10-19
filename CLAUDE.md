@@ -19,6 +19,7 @@
 - 정형 데이터(1~6단계) 완성 + `make verify` 통과 → LLM 생성(7~9단계) 1회. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기 입력은 `classify(transcript, direction)`만
+- 병원 상수(시술·영업시간·동시성 한도·스케일링 규칙)는 `generator/master.py`에만 둔다. 생성기·verify·테스트 모두 여기서 읽는다
 
 ## 명령
 - `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향)

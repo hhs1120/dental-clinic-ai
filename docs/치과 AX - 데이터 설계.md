@@ -52,6 +52,8 @@ scale_presets: { small, medium, large }                 # small = 테스트 fixt
 
 ## 1. 병원 프로필
 
+영업시간·동시성 한도·시술 마스터의 코드상 원본은 `generator/master.py` (이 절과 어긋나면 둘 다 고친다).
+
 - 원장 1, 위생사 3, 데스크 2, 상담실장 1. 체어 4
 - 평일 09:30–18:30(점심 13–14), 토 09:30–13:30, **목·일·공휴일 휴진**. 30분 슬롯
 - 내원 구성: 진료 70% / 위생(스케일링·검진) 25% / 상담 5%. 피크 10–11시·15–17시
@@ -390,7 +392,7 @@ make data [--scale small|medium|large] [--regen-llm]
 | 기준일 | TODAY 당일은 `scheduled/cancelled`만; 12/2~15는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date` ≤ TODAY(11월 claims `pending`) |
 | 용량·충돌 | 요일별 원장 슬롯 ≤ 32(토 16); 같은 체어·같은 시간 중복 없음; 동시 treatment ≤ 2, hygiene + treatment ≤ 3; 같은 환자 같은 날 중복 없음; 영업시간·휴진일 밖 없음 |
 | 예약 | 전 예약에 `planned_procedure_code`; 변경 쌍 ≥ 5% × 예약 수; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 예약 전날 날짜만) |
-| 시술·청구 | `performed_at` == 예약 일시; `service_date` == 진료일; 비급여 시술은 claims에 없음; 스케일링 급여 19세↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE |
+| 시술·청구 | `performed_at` == 예약 일시; `service_date` == 진료일; 비급여 시술은 claims에 없음; 스케일링 급여 19세↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; 9~10월 청구는 `submitted`·결과(`paid_amount`·`adjust_code`) 없음 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
