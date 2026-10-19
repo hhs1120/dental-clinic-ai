@@ -5,7 +5,7 @@ related:
   - "[[치과 AX - 평가 설계]]"
 created: 2026-10-16
 updated: 2026-10-19
-status: v2.1 (2026-10-19. 중복 규칙 단일화, 일정·마감 날짜 삭제, 리뷰 8건 반영. 이전 판은 _archive/)
+status: v2.2 (2026-10-19. 중복 규칙 단일화, 일정·마감 날짜 삭제, 검수 반영 — 통화 enum·급함·플래그 규칙, 캐시 키 attempt, EOB 청구 측을 정형 5단계로, `refuse` 도구, 병원 상수는 `generator/master.py`, 입력 파일은 `config/`. 이전 판은 프로젝트 밖에 별도 보관)
 tags:
   - 치과AX
   - 데이터
