@@ -41,7 +41,7 @@ AGE_BANDS = [
 
 # 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
 ACTIVE_MONTHS = 6
-ACTIVE_SHARE = 0.70  # 예정 신환을 뺀 환자 중
+ACTIVE_SHARE = 0.60  # 예정 신환을 뺀 환자 중. 초기 설계 가정 — 첫 large 실행 결과로 확정
 
 # 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 목표 — 경고로만 확인
 NEW_PATIENT_SHARE = 0.12

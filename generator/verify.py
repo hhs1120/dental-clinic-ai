@@ -563,9 +563,11 @@ def check_new_patient_share(conn, ctx):
 
 
 def check_status_rates(conn, ctx):
-    """노쇼 6%·당일 취소 4% ±2%p — 분모는 TODAY 이전 전체 예약(취소 포함)"""
+    """노쇼 6%·당일 취소 4% ±2%p — 분모는 TODAY 이전 예약 − 변경 원래 예약(당일 취소는 포함)"""
     today = ctx.today.isoformat()
-    base = conn.execute("SELECT count(*) FROM emr_appointments WHERE date(scheduled_at) < ?", (today,)).fetchone()[0]
+    base = conn.execute("SELECT count(*) FROM emr_appointments a WHERE date(a.scheduled_at) < ?"
+                        " AND NOT EXISTS (SELECT 1 FROM emr_appointments n WHERE n.rescheduled_from_id = a.id)",
+                        (today,)).fetchone()[0]
     if not base:
         return []
     noshow = conn.execute("SELECT count(*) FROM emr_appointments WHERE status = 'noshow'"
@@ -655,12 +657,15 @@ def _peak_time_share(weekday: int) -> float:
 
 
 def check_reschedule_rate(conn, ctx):
-    """변경 쌍 / 변경 전 예약 수(전체 행 − 변경으로 생긴 새 예약) = reschedule_rate ±2%p"""
-    total, pairs = conn.execute(
-        "SELECT count(*), count(rescheduled_from_id) FROM emr_appointments").fetchone()
-    if total == pairs:
+    """변경 쌍 / 변경 가능한 예약 = reschedule_rate ±2%p.
+    변경 가능 = created_at 다음 날 ~ 예약 전날이 하루 이상(리드 ≥ 2일), 변경으로 생긴 새 예약은 제외.
+    빈자리가 없어 못 바꾼 예약은 분모에 남는다(허용치로 흡수)"""
+    eligible, = conn.execute("SELECT count(*) FROM emr_appointments WHERE rescheduled_from_id IS NULL"
+                             " AND julianday(date(scheduled_at)) - julianday(date(created_at)) >= 2").fetchone()
+    pairs, = conn.execute("SELECT count(rescheduled_from_id) FROM emr_appointments").fetchone()
+    if not eligible:
         return []
-    rate = pairs / (total - pairs)
+    rate = pairs / eligible
     return [] if abs(rate - ctx.reschedule_rate) <= SHARE_TOLERANCE else [
         {"pairs": pairs, "rate": round(rate, 3), "target": ctx.reschedule_rate}]
 
