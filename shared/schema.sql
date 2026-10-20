@@ -1,6 +1,6 @@
--- app.sqlite 스키마 (emr_* / ax_*). 생성기와 앱의 단일 원본.
--- 정의: emr_*·생성기 적재 ax_*(ax_calls·ax_documents)는 docs/치과 AX - 가상 데이터 생성 설계.md §2·§3,
---       나머지 ax_*는 docs/치과 AX - 앱 설계.md
+-- app.sqlite 스키마 (emr_* / ax_*). 컬럼·enum·인덱스의 원본 — 생성기와 앱이 같이 쓴다.
+-- 의미·생성 규칙: emr_*·생성기 적재 ax_*(ax_calls·ax_documents)는 docs/치과 AX - 가상 데이터 생성 설계.md §2·§3,
+--                나머지 ax_*는 docs/치과 AX - 앱 설계.md
 -- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
 -- 시각은 naive KST ISO 문자열('2026-07-03 10:30:00'), 날짜는 'YYYY-MM-DD'
 

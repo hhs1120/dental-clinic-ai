@@ -469,7 +469,7 @@ def check_visit_payment_completed(conn, ctx):
 
 # ── 누출 ────────────────────────────────────────────────────
 
-# 가상 데이터 생성 설계 §3.1의 ax_calls 컬럼. 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
+# shared/schema.sql의 ax_calls 컬럼(의미는 가상 데이터 생성 설계 §3). 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
 AX_CALLS_COLUMNS = {
     "id", "call_uid", "source", "patient_id", "caller_phone", "caller_name", "direction", "started_at",
     "duration_sec", "has_transcript", "audio_path", "transcript", "in_eval_pool", "eval_sort_order",
@@ -479,7 +479,7 @@ CALL_UID = re.compile(r"c-\d{4,}")
 
 
 def check_ax_calls_columns(conn, ctx):
-    """ax_calls에 §3.1 밖의 컬럼(라벨·노이즈·카테고리) 없음"""
+    """ax_calls에 정해진 컬럼 밖(라벨·노이즈·카테고리) 없음"""
     return [{"column": r["name"]} for r in conn.execute("PRAGMA main.table_info(ax_calls)")
             if r["name"] not in AX_CALLS_COLUMNS]
 
