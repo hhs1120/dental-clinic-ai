@@ -264,6 +264,19 @@ def check_confirmed_not_future(conn, ctx):
             if _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays) > ctx.today]
 
 
+def check_created_before_scheduled(conn, ctx):
+    """예약은 잡은 뒤에 열린다 — created_at < scheduled_at"""
+    return _rows(conn, "SELECT id, created_at, scheduled_at FROM emr_appointments"
+                       " WHERE datetime(created_at) >= datetime(scheduled_at)")
+
+
+def check_cancel_time(conn, ctx):
+    """취소 시각은 예약을 잡은 뒤, 예약 시각 전 — created_at ≤ cancelled_at < scheduled_at"""
+    return _rows(conn, "SELECT id, created_at, cancelled_at, scheduled_at FROM emr_appointments"
+                       " WHERE cancelled_at IS NOT NULL AND (datetime(cancelled_at) < datetime(created_at)"
+                       " OR datetime(cancelled_at) >= datetime(scheduled_at))")
+
+
 def check_cancelled_at_status(conn, ctx):
     """cancelled_at은 cancelled 예약에만, cancelled 예약은 cancelled_at 필수"""
     return _rows(conn, "SELECT id, status, cancelled_at FROM emr_appointments"
@@ -271,10 +284,13 @@ def check_cancelled_at_status(conn, ctx):
 
 
 def _future_new_patients(conn, ctx) -> list[int]:
-    """예정 신환 — 비취소 예약이 있고 전부 TODAY 이후인 환자"""
+    """예정 신환 — 창 안에서 등록했고(registered_at ≥ range_start) 비취소 예약이 전부 TODAY 이후인 환자.
+    구환은 리콜·치료로 미래 예약만 있어도 정상이라 제외"""
     return [r["patient_id"] for r in _rows(
-        conn, "SELECT patient_id FROM emr_appointments WHERE status != 'cancelled'"
-              " GROUP BY patient_id HAVING min(date(scheduled_at)) >= ?", ctx.today.isoformat())]
+        conn, "SELECT a.patient_id FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"
+              " WHERE a.status != 'cancelled' AND date(p.registered_at) >= ?"
+              " GROUP BY a.patient_id HAVING min(date(a.scheduled_at)) >= ?",
+        ctx.range_start.isoformat(), ctx.today.isoformat())]
 
 
 def check_future_new_patient_single(conn, ctx):
@@ -289,7 +305,7 @@ def check_future_new_patient_single(conn, ctx):
 
 
 def check_future_new_patient_registered(conn, ctx):
-    """예정 신환의 registered_at = 첫 예약 created_at의 날짜 (구환에게 미래 예약만 생긴 버그를 잡는다)"""
+    """예정 신환의 registered_at = 첫 예약 created_at의 날짜 (전화 예약 때 차트 생성)"""
     ids = _future_new_patients(conn, ctx)
     if not ids:
         return []
@@ -523,13 +539,14 @@ def check_daily_fill(conn, ctx):
 
 
 def check_new_patient_share(conn, ctx):
-    """월별 신환(등록일 = 첫 예약 created_at 날짜) 첫 내원 / 그달 내원(completed) = 12% ±3%p"""
+    """월별 신환(창 안 등록 — registered_at ≥ range_start이고 = 첫 예약 created_at 날짜) 첫 내원 / 그달 내원(completed) = 12% ±3%p"""
     first_visit = {r["patient_id"]: r["d"][:7] for r in _rows(
         conn, "SELECT a.patient_id, min(date(a.scheduled_at)) AS d FROM emr_appointments a"
               " JOIN emr_patients p ON p.id = a.patient_id WHERE a.status = 'completed'"
+              " AND date(p.registered_at) >= ?"
               " AND date(p.registered_at) = (SELECT min(date(b.created_at)) FROM emr_appointments b"
               "                              WHERE b.patient_id = a.patient_id)"
-              " GROUP BY a.patient_id")}
+              " GROUP BY a.patient_id", ctx.range_start.isoformat())}
     new_by_month = defaultdict(int)
     for month in first_visit.values():
         new_by_month[month] += 1
@@ -613,7 +630,10 @@ def _visit_split(conn, ctx) -> tuple[set, set]:
 
 
 def check_active_ratio(conn, ctx):
-    """활동(TODAY 전 6개월 안 completed 내원) 비중 70% ±5%p — 예정 신환 제외"""
+    """활동(TODAY 전 6개월 안 completed 내원) 비중 70% ±5%p — 예정 신환 제외.
+    생성 기간이 6개월보다 짧으면(small) 활동 창을 다 덮지 못해 건너뜀"""
+    if ctx.range_start > _active_from(ctx.today):
+        return []
     patients, active = _visit_split(conn, ctx)
     if not patients:
         return []
@@ -692,6 +712,8 @@ REQUIRED = [
     check_business_hours,
     check_planned_procedure,
     check_confirmed_not_future,
+    check_created_before_scheduled,
+    check_cancel_time,
     check_cancelled_at_status,
     check_cancellation_kind,
     check_future_new_patient_single,
@@ -736,16 +758,17 @@ WARNINGS = [
 HASH_EXCLUDED = {("ax_calls", "indexed_at")}
 
 
-def canonical_hash(conn) -> str:
-    """main 스키마 전 테이블의 내용 해시 — 테이블·컬럼 이름순, 행은 정렬. 같은 시드 2회 비교용"""
+def canonical_hash(conn, schema: str = "main") -> str:
+    """한 스키마(main = app.sqlite, truth = truth.sqlite) 전 테이블의 내용 해시 — 테이블·컬럼 이름순, 행은 정렬.
+    같은 시드 2회 비교용. 결정성은 두 스키마 모두 본다"""
     h = hashlib.sha256()
-    tables = [r[0] for r in conn.execute("SELECT name FROM main.sqlite_master WHERE type = 'table'"
+    tables = [r[0] for r in conn.execute(f"SELECT name FROM {schema}.sqlite_master WHERE type = 'table'"
                                          " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
     for table in tables:
-        cols = sorted(r[1] for r in conn.execute(f"PRAGMA main.table_info({table})")
+        cols = sorted(r[1] for r in conn.execute(f"PRAGMA {schema}.table_info({table})")
                       if (table, r[1]) not in HASH_EXCLUDED)
         rows = sorted(repr(tuple(r)) for r in conn.execute(
-            f"SELECT {', '.join(f'[{c}]' for c in cols)} FROM main.[{table}]"))
+            f"SELECT {', '.join(f'[{c}]' for c in cols)} FROM {schema}.[{table}]"))
         h.update(json.dumps([table, cols, rows], ensure_ascii=False).encode())
     return h.hexdigest()
 

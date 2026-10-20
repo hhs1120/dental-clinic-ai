@@ -78,6 +78,10 @@ BREAKS = {
     "reschedule_earlier": ("UPDATE emr_appointments SET scheduled_at = '2026-11-16 10:00:00' WHERE id = 4", "check_reschedule_pair"),
     "reschedule_other_procedure": ("UPDATE emr_appointments SET planned_procedure_code = 'U0006' WHERE id = 4", "check_reschedule_pair"),
     "reschedule_created_mismatch": ("UPDATE emr_appointments SET created_at = '2026-11-13 09:00:00' WHERE id = 4", "check_reschedule_pair"),
+    # 시각 순서
+    "created_after_scheduled": ("UPDATE emr_appointments SET created_at = '2026-10-07 10:00:00' WHERE id = 1", "check_created_before_scheduled"),
+    "sameday_cancel_after_start": ("UPDATE emr_appointments SET cancelled_at = '2026-11-17 17:00:00' WHERE id = 3", "check_cancel_time"),
+    "cancelled_before_created": ("UPDATE emr_appointments SET cancelled_at = '2026-10-29 10:00:00' WHERE id = 3", "check_cancel_time"),
     # 진료 기록 ↔ completed
     "treatment_on_noshow": ("UPDATE emr_treatments SET appointment_id = 7 WHERE id = 1", "check_treatment_on_completed"),
     "completed_without_treatment": ("DELETE FROM emr_treatments WHERE id = 3", "check_completed_one_treatment"),
@@ -274,12 +278,21 @@ def test_future_new_patient_two_appointments(tmp_path):
     assert [v["patient_id"] for v in verify.check_future_new_patient_single(conn, CTX)] == [3]
 
 
+def test_old_patient_with_only_future_appointments_is_not_future_new(tmp_path):
+    conn = make_db(tmp_path)
+    _future_new_patient(conn, 2)
+    # 창 시작(10-01) 전에 등록한 구환 — 리콜·치료로 미래 예약만 2건이어도 정상
+    conn.execute("UPDATE emr_patients SET registered_at = '2019-03-01' WHERE id = 3")
+    assert verify.check_future_new_patient_single(conn, CTX) == []
+    assert verify.check_future_new_patient_registered(conn, CTX) == []
+
+
 def test_future_new_patient_registered_at_first_booking(tmp_path):
     conn = make_db(tmp_path)
     _future_new_patient(conn, 1)
     assert verify.check_future_new_patient_registered(conn, CTX) == []
-    # 오래전 등록된 구환에게 미래 예약만 있으면 예정 신환이 아니다 — 구환에게 미래 예약만 생긴 생성기 버그
-    conn.execute("UPDATE emr_patients SET registered_at = '2019-03-01' WHERE id = 3")
+    # 창 안에서 등록했는데 등록일이 첫 예약 날짜와 다르면 위반
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-20' WHERE id = 3")
     assert [v["patient_id"] for v in verify.check_future_new_patient_registered(conn, CTX)] == [3]
 
 
@@ -345,6 +358,14 @@ def test_canonical_hash_ignores_insertion_order(tmp_path):
     b.execute("DELETE FROM emr_procedures")
     b.executemany(f"INSERT INTO emr_procedures VALUES ({', '.join('?' * len(rows[0]))})", rows[::-1])
     assert verify.canonical_hash(a) == verify.canonical_hash(b)
+
+
+def test_canonical_hash_truth_schema(tmp_path):
+    a, b = _two_dbs(tmp_path)
+    assert verify.canonical_hash(a, "truth") == verify.canonical_hash(b, "truth")
+    b.execute("UPDATE truth.truth_gen_meta SET value = '1' WHERE key = 'seed'")
+    assert verify.canonical_hash(a, "truth") != verify.canonical_hash(b, "truth")
+    assert verify.canonical_hash(a) == verify.canonical_hash(b)  # main은 그대로
 
 
 def test_canonical_hash_ignores_indexed_at(tmp_path):

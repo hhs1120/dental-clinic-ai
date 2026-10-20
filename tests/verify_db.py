@@ -29,7 +29,7 @@ INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_m
   (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
   (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    '2026-11-14 10:00:00', NULL),
   (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
-  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0001', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
+  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
   (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, '2026-11-20 11:00:00', NULL);
 INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),

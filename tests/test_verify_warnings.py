@@ -7,6 +7,8 @@ from datetime import date
 from generator import verify
 from tests.verify_db import CTX, appt, make_db
 
+LARGE = replace(CTX, range_start=date(2026, 2, 1))  # 활동 창(6개월)을 다 덮는 생성 기간
+
 
 def test_valid_db_tooth_checks_pass(tmp_path):
     conn = make_db(tmp_path)
@@ -102,10 +104,12 @@ def _month_visits(conn, n_visits, n_new):
 
 def test_new_patient_share(tmp_path):
     conn = make_db(tmp_path)
-    _month_visits(conn, 100, 12)
-    assert verify.check_new_patient_share(conn, CTX) == []
+    _month_visits(conn, 100, 12)  # 신환 등록일 03-03 = 첫 예약 날짜
+    assert verify.check_new_patient_share(conn, LARGE) == []
     _month_visits(conn, 100, 20)
-    assert [v["month"] for v in verify.check_new_patient_share(conn, CTX)] == ["2026-11"]
+    assert [v["month"] for v in verify.check_new_patient_share(conn, LARGE)] == ["2026-11"]
+    # 창(10-01~) 시작 전 등록이면 워밍업 등록 = 구환 → 신환 0명으로 경고
+    assert [v["share"] for v in verify.check_new_patient_share(conn, CTX)] == [0.0]
 
 
 def test_status_rates(tmp_path):
@@ -200,11 +204,20 @@ def test_active_ratio(tmp_path):
     _patients(conn, {"1986-01-01": 100})
     # 활동 70 = 06-01 이후 completed, 휴면 30 = 05-31 이전 또는 내원 없음
     _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
-    assert verify.check_active_ratio(conn, CTX) == []
+    assert verify.check_active_ratio(conn, LARGE) == []
     conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 4")  # 노쇼는 내원 아님 → 66%(±5%p 안)
-    assert verify.check_active_ratio(conn, CTX) == []
+    assert verify.check_active_ratio(conn, LARGE) == []
     conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 10")  # 60%
-    assert verify.check_active_ratio(conn, CTX)
+    assert verify.check_active_ratio(conn, LARGE)
+
+
+def test_active_ratio_skipped_when_window_shorter_than_6_months(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    _visits(conn, {i: ("2026-08-07" if i <= 40 else None) for i in range(1, 101)})  # 40% — 창이 짧아 의미 없음
+    small = replace(CTX, range_start=date(2026, 8, 1))
+    assert verify.check_active_ratio(conn, small) == []
+    assert verify.check_active_ratio(conn, replace(CTX, range_start=date(2026, 2, 1)))
 
 
 def test_active_ratio_excludes_future_new_patients(tmp_path):
@@ -212,9 +225,10 @@ def test_active_ratio_excludes_future_new_patients(tmp_path):
     _patients(conn, {"1986-01-01": 110})
     visits = {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)}
     _visits(conn, visits)
-    for pid in range(101, 111):  # 예정 신환 10명: 미래 예약만 → 분모에서 제외
+    for pid in range(101, 111):  # 예정 신환 10명: 창 안 등록 + 미래 예약만 → 분모에서 제외
         appt(conn, "2026-12-04 10:00:00", patient=pid, status="scheduled")
-    assert verify.check_active_ratio(conn, CTX) == []
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-20' WHERE id > 100")
+    assert verify.check_active_ratio(conn, LARGE) == []
 
 
 def test_active_from_clips_to_month_end():
@@ -229,6 +243,7 @@ def test_visit_split_boundaries(tmp_path):
     _visits(conn, {1: "2026-05-29", 2: "2026-06-01", 3: "2026-11-30"})
     conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-05-31 10:00:00' WHERE patient_id = 1")
     appt(conn, "2026-12-01 10:00:00", patient=4, status="scheduled")
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-20' WHERE id = 4")  # 창 안 등록
     patients, active = verify._visit_split(conn, CTX)
     assert (patients, active) == ({1, 2, 3}, {2, 3})
 
