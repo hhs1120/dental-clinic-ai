@@ -122,6 +122,23 @@ def test_status_rates(tmp_path):
     assert [v["status"] for v in verify.check_status_rates(conn, CTX)] == ["noshow"]
 
 
+def test_reschedule_rate_excludes_new_appointments(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):  # 예약 100건 중 5건을 변경 → 원래 5(cancelled) + 새 예약 5
+        appt(conn, "2026-11-24 10:00:00", patient=pid, chair=pid, status="cancelled" if pid <= 5 else "completed")
+    for pid in range(1, 6):
+        original = conn.execute("SELECT id FROM emr_appointments WHERE patient_id = ?", (pid,)).fetchone()[0]
+        appt(conn, "2026-11-27 10:00:00", patient=pid, chair=pid)
+        conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE patient_id = ? AND id != ?",
+                     (original, pid, original))
+    # 분모 = 전체 105행 − 새 예약 5 = 100 → 5%
+    assert verify.check_reschedule_rate(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET rescheduled_from_id = NULL")
+    assert verify.check_reschedule_rate(conn, CTX)
+
+
 def _visits(conn, last_visit_by_patient):
     """환자별 completed 내원 1건만 남긴다 (None이면 내원 없음). 시드 예약은 지운다."""
     conn.execute("DELETE FROM emr_appointments")

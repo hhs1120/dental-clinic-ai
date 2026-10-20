@@ -242,14 +242,6 @@ def check_planned_procedure(conn, ctx):
                        " WHERE planned_procedure_code IS NULL")
 
 
-def check_reschedule_ratio(conn, ctx):
-    """변경 쌍 ≥ reschedule_rate × 예약 수"""
-    total, pairs = conn.execute(
-        "SELECT count(*), count(rescheduled_from_id) FROM emr_appointments").fetchone()
-    need = ctx.reschedule_rate * total
-    return [] if pairs >= need else [{"pairs": pairs, "appointments": total, "need": need}]
-
-
 def check_confirmed_not_future(conn, ctx):
     """confirmed는 전날 리마인드 응답 — 전날이 TODAY 이후인 예약(TODAY+2일~)은 0"""
     return _rows(conn, "SELECT id, scheduled_at, confirmed FROM emr_appointments"
@@ -393,7 +385,9 @@ def check_extra_eob_not_in_ledger(conn, ctx):
 
 def check_truth_claims_match(conn, ctx):
     """9~10월 emr_claims마다 truth_claims 1행(claim_id·대조 키·금액 일치), 그 밖을 가리키는 truth 행 없음,
-    extra_in_eob 줄도 9~10월 진료일"""
+    extra_in_eob 줄도 9~10월 진료일. truth_claims는 EOB 슬롯 착수 때 생성 — 비어 있으면 건너뜀"""
+    if not conn.execute("SELECT 1 FROM truth.truth_claims LIMIT 1").fetchone():
+        return []
     months = _submitted_months(ctx)
     marks = ",".join("?" * len(months))
     unmatched = _rows(conn, "SELECT c.id AS claim_id, c.claim_month, t.id AS truth_id FROM emr_claims c"
@@ -580,6 +574,17 @@ def _peak_time_share(weekday: int) -> float:
     return peak / (open_slots(weekday) * SLOT_MIN)
 
 
+def check_reschedule_rate(conn, ctx):
+    """변경 쌍 / 변경 전 예약 수(전체 행 − 변경으로 생긴 새 예약) = reschedule_rate ±2%p"""
+    total, pairs = conn.execute(
+        "SELECT count(*), count(rescheduled_from_id) FROM emr_appointments").fetchone()
+    if total == pairs:
+        return []
+    rate = pairs / (total - pairs)
+    return [] if abs(rate - ctx.reschedule_rate) <= SHARE_TOLERANCE else [
+        {"pairs": pairs, "rate": round(rate, 3), "target": ctx.reschedule_rate}]
+
+
 def check_peak_pattern(conn, ctx):
     """피크(10–11·15–17시) 시작 비중이 피크의 영업시간 비중보다 큼 (휴진 요일 예약은 필수 검사 몫이라 제외)"""
     starts = [a["start"] for a in _active_appointments(conn) if open_slots(a["start"].weekday())]
@@ -627,7 +632,6 @@ REQUIRED = [
     check_patient_same_day,
     check_business_hours,
     check_planned_procedure,
-    check_reschedule_ratio,
     check_confirmed_not_future,
     check_cancelled_at_status,
     check_cancellation_kind,
@@ -656,6 +660,7 @@ WARNINGS = [
     check_active_ratio,
     check_new_patient_share,
     check_status_rates,
+    check_reschedule_rate,
     check_peak_pattern,
     check_tooth_level,
     check_child_procedures,

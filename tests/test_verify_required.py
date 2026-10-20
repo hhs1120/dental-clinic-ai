@@ -28,7 +28,6 @@ BREAKS = {
     "recent_month_paid": ("UPDATE emr_claims SET status = 'paid', paid_amount = 84000 WHERE id = 1", "check_submitted_months_no_result"),
     "recent_month_adjust_code": ("UPDATE emr_claims SET adjust_code = 'A01' WHERE id = 1", "check_submitted_months_no_result"),
     "planned_null": ("UPDATE emr_appointments SET planned_procedure_code = NULL WHERE id = 7", "check_planned_procedure"),
-    "no_reschedule": ("UPDATE emr_appointments SET rescheduled_from_id = NULL WHERE id = 4", "check_reschedule_ratio"),
     "performed_mismatch": ("UPDATE emr_treatments SET performed_at = '2026-11-18 11:00:00' WHERE id = 3", "check_performed_at"),
     "service_date_mismatch": ("UPDATE emr_claims SET service_date = '2026-10-07' WHERE id = 1", "check_service_date"),
     "uninsured_claimed": (
@@ -269,6 +268,13 @@ def test_run_survives_closed_day_and_unborn_patient(tmp_path, capsys):
     assert verify.run(conn, CTX) is False
     out = capsys.readouterr().out
     assert "check_business_hours" in out and "check_timestamps_not_future" in out
+
+
+def test_truth_checks_skip_until_truth_claims_exist(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute("DELETE FROM truth.truth_claims")  # EOB 슬롯 착수 전에는 비어 있다
+    assert verify.check_truth_claims_match(conn, CTX) == []
+    assert verify.check_extra_eob_not_in_ledger(conn, CTX) == []
 
 
 def test_truth_claims_extra_must_have_no_claim_id(tmp_path):

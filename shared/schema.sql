@@ -134,7 +134,6 @@ CREATE TABLE emr_messages (
 
 CREATE INDEX ix_appt_sched_status  ON emr_appointments(scheduled_at, status);
 CREATE INDEX ix_appt_patient_sched ON emr_appointments(patient_id, scheduled_at);
-CREATE INDEX ix_appt_chair_sched   ON emr_appointments(chair_no, scheduled_at);
 CREATE INDEX ix_appt_staff_sched   ON emr_appointments(staff_id, scheduled_at);
 CREATE INDEX ix_treat_patient_proc ON emr_treatments(patient_id, procedure_code);
 CREATE INDEX ix_treat_appt         ON emr_treatments(appointment_id);
