@@ -44,7 +44,7 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 ## 구조
 
 ```
-docs/          설계 문서 (기능 정의 · 데이터 설계 · 평가 설계)
+docs/          설계 문서 (기능 정의 · 가상 데이터 생성 설계 · 앱 설계 · 평가 설계)
 config/        생성기 설정 (시드, 규모, 공휴일, 금지 토픽)
 generator/     데이터 생성기 + verify
 shared/        스키마, LLM 게이트웨이

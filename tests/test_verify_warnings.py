@@ -1,4 +1,4 @@
-"""verify 경고 검사(분포·치아)가 위반을 잡는지 — 데이터 설계 §5.3 경고 표."""
+"""verify 경고 검사(분포·치아)가 위반을 잡는지 — 가상 데이터 생성 설계 §5.3 경고 표."""
 import pytest
 
 from generator import verify

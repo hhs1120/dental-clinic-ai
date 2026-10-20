@@ -1,4 +1,4 @@
-"""make data — 데이터 생성기 진입점. 단계는 docs/치과 AX - 데이터 설계.md §5.1."""
+"""make data — 데이터 생성기 진입점. 단계는 docs/치과 AX - 가상 데이터 생성 설계.md §5.1."""
 import argparse
 
 

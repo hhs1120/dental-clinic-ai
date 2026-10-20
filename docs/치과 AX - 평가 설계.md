@@ -2,7 +2,8 @@
 title: 치과 AX - 평가 설계
 related:
   - "[[치과 AX - 기능 정의]]"
-  - "[[치과 AX - 데이터 설계]]"
+  - "[[치과 AX - 가상 데이터 생성 설계]]"
+  - "[[치과 AX - 앱 설계]]"
 created: 2026-10-16
 updated: 2026-10-19
 status: v2.2 (2026-10-19. 중복 규칙 단일화, 일정·마감 날짜 삭제, 검수 반영 — 판정 풀 배분·dev/test 순번, 거절은 `refuse` 채점, 준비표 회귀는 착수 시 스냅샷. 이전 판은 프로젝트 밖에 별도 보관)
@@ -11,7 +12,7 @@ tags:
   - 평가
 ---
 
-> **뭘 어떻게 측정하나.** `eval.py`와 사람 판정 절차가 읽는 문서. 데이터가 어떻게 만들어지는지는 [[치과 AX - 데이터 설계]], 기능별 완료 기준은 [[치과 AX - 기능 정의]].
+> **뭘 어떻게 측정하나.** `eval.py`와 사람 판정 절차가 읽는 문서. 데이터가 어떻게 만들어지는지는 [[치과 AX - 가상 데이터 생성 설계]], 기능별 완료 기준은 [[치과 AX - 기능 정의]].
 > 정답 저장소(`ground_truth/truth.sqlite`)의 테이블 정의는 **이 문서에만** 있다. 생성기는 그중 `truth_call_labels`·`truth_doc_meta`·`truth_claims`(·조건부 EOB 판독 정답)를 채우고, `truth_rag_qa`는 사람이 생성 후 작성한다.
 
 ## 1. 원칙
@@ -47,7 +48,7 @@ tags:
 - 모델 vs 골드 (1,000)
 - **사람 vs 골드 (300)** — 라벨 타당성. 낮으면 생성 라벨이 '의도'일 뿐 사실이 아니라는 뜻
 
-**버전 비교**: 두 버전 모두 `status='ok'`인 call_id **교집합**으로만, n 표시. 리포트는 버전마다 `model_actual` 쌍을 표기(`prompt_version` 정의는 [[치과 AX - 데이터 설계]] §3.1).
+**버전 비교**: 두 버전 모두 `status='ok'`인 call_id **교집합**으로만, n 표시. 리포트는 버전마다 `model_actual` 쌍을 표기(`prompt_version` 정의는 [[치과 AX - 앱 설계]] §1).
 
 ### 2.3 사람 판정 절차
 
@@ -55,7 +56,7 @@ tags:
 - 제시 순서 `eval_sort_order` 고정. dev(1~150) 먼저, test(151~300)는 `judge_upto` 설정을 300으로 올려 개방. 건너뛰기는 끝으로 복귀(영구 누락 없음)
 - 판정 큐는 **두 모델 모두 `ok`인 건만**(엇갈림 배지가 성립해야 함)
 - 공수: 건당 1.5~2분 → 300건 총 7~10시간
-- 데이터셋 재생성에도 판정 보존: `make export-human` / `import-human`(키는 [[치과 AX - 데이터 설계]] §5.4)
+- 데이터셋 재생성에도 판정 보존: `make export-human` / `import-human`(키는 [[치과 AX - 앱 설계]] §7)
 - 팀 합류 시 50건 이중 판정 → Cohen's κ 하나
 
 ### 2.4 블라인드 비교
@@ -132,12 +133,12 @@ tags:
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — test 1회 규칙 검증 |
-| `truth_claims` | 생성기(정형 5단계) | 9~10월 청구 줄 + `extra_in_eob` 줄: `claim_id?`(extra는 NULL), `chart_no, service_date, procedure_code, tooth_no`(대조 키, 전 행 비정규화), `claim_amount, outcome(paid_full/adjusted/denied/missing_in_eob/extra_in_eob), paid_amount?, adjust_code?`. 생성 규칙은 데이터 설계 §2.4 |
+| `truth_claims` | 생성기(정형 5단계) | 9~10월 청구 줄 + `extra_in_eob` 줄: `claim_id?`(extra는 NULL), `chart_no, service_date, procedure_code, tooth_no`(대조 키, 전 행 비정규화), `claim_amount, outcome(paid_full/adjusted/denied/missing_in_eob/extra_in_eob), paid_amount?, adjust_code?`. 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_eob_lines` | 생성기(조건부) | `doc_id, page, line_no → 정답 필드, claim_id, outcome` |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.
 
-**앱 DB 쪽 누출 검사**는 생성기 `make verify`에 있음([[치과 AX - 데이터 설계]] §5.3 '누출').
+**앱 DB 쪽 누출 검사**는 생성기 `make verify`에 있음([[치과 AX - 가상 데이터 생성 설계]] §5.3 '누출').
 
 ## 7. `eval.py`
 

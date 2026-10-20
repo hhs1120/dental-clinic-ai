@@ -51,7 +51,7 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction,
   (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-26 16:00:00', 140, 0);
 """
 
-# 9~10월 심사 결과 정답 (데이터 설계 §2.4). extra_in_eob 줄은 장부에 없는 키
+# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_eob 줄은 장부에 없는 키
 TRUTH_SEED = """
 INSERT INTO truth_claims VALUES
   (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),

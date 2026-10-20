@@ -1,4 +1,4 @@
-"""make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 데이터 설계.md §5.3.
+"""make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 리포트만.
 
 지금은 정형(emr_*)·ax_calls·truth_claims 필수 검사 + 분포·치아 경고. RAG·LLM 검사는 아직 없고,
@@ -330,7 +330,7 @@ def check_visit_payment_completed(conn, ctx):
 
 # ── 누출 ────────────────────────────────────────────────────
 
-# 데이터 설계 §3.1의 ax_calls 컬럼. 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
+# 가상 데이터 생성 설계 §3.1의 ax_calls 컬럼. 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
 AX_CALLS_COLUMNS = {
     "id", "call_uid", "source", "patient_id", "caller_phone", "caller_name", "direction", "started_at",
     "duration_sec", "has_transcript", "audio_path", "transcript", "in_eval_pool", "eval_sort_order",
