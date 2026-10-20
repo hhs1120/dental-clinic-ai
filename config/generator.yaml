@@ -17,7 +17,7 @@ eval_pool_size: 300
 blind_pool_size: 150
 documents: { core: 50, distractor: 27 }
 messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
-eob: { monthly_forms: 9, supplementary_ratio: 0.10 }
+eob: { monthly_forms: 9, supplementary_ratio: 0.10 }   # supplementary_ratio는 정형 5단계(보완 청구 배정), monthly_forms는 EOB 슬롯·large 기준(창 안 확정·제출 월 수)
 holidays: config/holidays_2026.json          # 출처: 한국천문연구원 2026 월력
 forbidden_topics: config/forbidden_topics.json  # TODO: make data 전 2개 선정
 # 규모: range.end 고정, 시작일만 늦춘다(확정월·제출월·전월·미래 구간 유지). visits_per_day는 유지.

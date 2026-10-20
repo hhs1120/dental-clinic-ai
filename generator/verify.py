@@ -550,10 +550,11 @@ def check_new_patient_share(conn, ctx):
     new_by_month = defaultdict(int)
     for month in first_visit.values():
         new_by_month[month] += 1
-    bad = []
+    bad, first_month = [], ctx.range_start.strftime("%Y-%m")
     for r in _rows(conn, "SELECT substr(scheduled_at, 1, 7) AS month, count(*) AS n FROM emr_appointments"
                          " WHERE status = 'completed' GROUP BY month ORDER BY month"):
-        if r["n"] < NEW_PATIENT_MIN_VISITS:
+        # 첫 달은 워밍업 등록 신환(구환으로 분류)이 섞여 낮게 나오므로 건너뜀
+        if r["n"] < NEW_PATIENT_MIN_VISITS or r["month"] == first_month:
             continue
         share = new_by_month[r["month"]] / r["n"]
         if abs(share - NEW_PATIENT_SHARE) > NEW_PATIENT_TOLERANCE:
@@ -590,9 +591,9 @@ def check_confirm_rate(conn, ctx):
 
 
 def check_unpaid_rate(conn, ctx):
-    """미수 발생(당일 수납 < 청구) 15% ±2%p — visit 수납 행 기준"""
+    """미수 발생(당일 수납 < 청구) 15% ±2%p — amount_due > 0인 visit 수납 행 기준(0원 내원은 미수가 생길 수 없음)"""
     n, unpaid = conn.execute("SELECT count(*), coalesce(sum(amount_paid < amount_due), 0) FROM emr_payments"
-                             " WHERE kind = 'visit'").fetchone()
+                             " WHERE kind = 'visit' AND amount_due > 0").fetchone()
     if not n:
         return []
     return [] if abs(unpaid / n - ctx.unpaid_rate) <= SHARE_TOLERANCE else [

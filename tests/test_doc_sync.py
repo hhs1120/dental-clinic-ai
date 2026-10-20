@@ -1,34 +1,44 @@
-"""문서 §5.3 '분포 목표' 표의 숫자가 코드 값과 같은지 — 설계 목표는 문서에서 읽히게 두고, 어긋나면 여기서 잡는다."""
+"""문서 §5.3 '분포 목표' 표·코드 이름 참조가 코드와 맞는지 — 설계 목표는 문서에서 읽히게 두고, 어긋나면 여기서 잡는다."""
 import re
 from pathlib import Path
 
 import pytest
 import yaml
 
-from generator import verify
+from generator import master, verify
 from generator.master import ACTIVE_SHARE, AGE_BANDS, NEW_PATIENT_SHARE, VISIT_MIX
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "치과 AX - 가상 데이터 생성 설계.md"
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 
-# 지표 이름(표 첫 칸의 앞부분) → (목표값들, 허용치). 허용치 None = 표에 허용 칸 없음
+# 문서가 이름으로 가리키지만 아직 구현 전인 값 (해당 단계 구현 때 코드에 추가)
+PENDING = {"ADJUST_CODES"}
+
+_BAND_LABEL = {"child": "소아", "teen": "청소년", "adult": "성인", "senior": "노인"}
+_MIX_LABEL = {"treatment": "진료", "hygiene": "위생", "consult": "상담"}
+
+# 지표 이름(표 첫 칸의 앞부분) → ({라벨: 목표값}, 허용치). 라벨 ""은 값이 하나인 칸. 허용치 None = 허용 칸 없음
 EXPECTED = {
-    "연령 구간 비중": ([share for *_, share in AGE_BANDS], verify.SHARE_TOLERANCE),
-    "활동": ([ACTIVE_SHARE], verify.ACTIVE_TOLERANCE),
-    "신환": ([NEW_PATIENT_SHARE], verify.NEW_PATIENT_TOLERANCE),
-    "노쇼·당일 취소": ([CFG["noshow_rate"], CFG["sameday_cancel_rate"]], verify.SHARE_TOLERANCE),
-    "변경": ([CFG["reschedule_rate"]], verify.SHARE_TOLERANCE),
-    "미확인": ([1 - CFG["confirm_rate"]], verify.SHARE_TOLERANCE),
-    "미수 발생": ([CFG["unpaid_rate"]], verify.SHARE_TOLERANCE),
-    "내원 구성": (list(VISIT_MIX.values()), verify.VISIT_MIX_TOLERANCE),
-    "하루 채움": ([verify.DAILY_MIN_FILL], None),
+    "연령 구간 비중": ({_BAND_LABEL[name]: share for name, *_, share in AGE_BANDS}, verify.SHARE_TOLERANCE),
+    "활동": ({"": ACTIVE_SHARE}, verify.ACTIVE_TOLERANCE),
+    "신환": ({"": NEW_PATIENT_SHARE}, verify.NEW_PATIENT_TOLERANCE),
+    "노쇼·당일 취소": ({"노쇼": CFG["noshow_rate"], "당일 취소": CFG["sameday_cancel_rate"]}, verify.SHARE_TOLERANCE),
+    "변경": ({"": CFG["reschedule_rate"]}, verify.SHARE_TOLERANCE),
+    "미확인": ({"": 1 - CFG["confirm_rate"]}, verify.SHARE_TOLERANCE),
+    "미수 발생": ({"": CFG["unpaid_rate"]}, verify.SHARE_TOLERANCE),
+    "내원 구성": ({_MIX_LABEL[t]: v for t, v in VISIT_MIX.items()}, verify.VISIT_MIX_TOLERANCE),
+    "하루 채움": ({"": verify.DAILY_MIN_FILL}, None),
 }
+
+
+def _doc() -> str:
+    return DOC.read_text(encoding="utf-8")
 
 
 def _target_rows() -> dict[str, list[str]]:
     """'경고 — 분포 목표' 표의 행 → 칸 목록"""
-    text = DOC.read_text(encoding="utf-8")
+    text = _doc()
     table = text[text.index("**경고 — 분포 목표**"):].split("\n\n")[1]
     rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.splitlines()]
     header, rows = rows[0], rows[2:]
@@ -36,16 +46,42 @@ def _target_rows() -> dict[str, list[str]]:
     return {r[0]: r for r in rows}
 
 
-def _percents(cell: str) -> list[float]:
-    return [float(n) / 100 for n in re.findall(r"\d+(?:\.\d+)?", cell)]
+def _labeled_percents(cell: str) -> dict[str, float]:
+    """'소아 15% · 청소년 8%' → {'소아': 0.15, '청소년': 0.08}, '70%' → {'': 0.70}"""
+    return {label.strip(): float(n) / 100 for label, n in re.findall(r"([^\d·%]*?)\s*(\d+(?:\.\d+)?)%", cell)}
 
 
 @pytest.mark.parametrize("name", EXPECTED)
 def test_target_table_matches_code(name):
-    rows = _target_rows()
-    row = next((r for key, r in rows.items() if key.startswith(name)), None)
+    row = next((r for key, r in _target_rows().items() if key.startswith(name)), None)
     assert row, f"§5.3 분포 목표 표에 '{name}' 행이 없음"
     targets, tolerance = EXPECTED[name]
-    assert _percents(row[1]) == pytest.approx(targets), f"{name} 목표: 문서 {row[1]} ≠ 코드 {targets}"
+    got = _labeled_percents(row[1])
+    assert got.keys() == targets.keys(), f"{name} 라벨: 문서 {list(got)} ≠ 코드 {list(targets)}"
+    for label, value in targets.items():
+        assert got[label] == pytest.approx(value), f"{name} {label}: 문서 {row[1]} ≠ 코드 {value}"
     if tolerance is not None:
-        assert _percents(row[2]) == pytest.approx([tolerance]), f"{name} 허용: 문서 {row[2]} ≠ 코드 {tolerance}"
+        assert list(_labeled_percents(row[2]).values()) == pytest.approx([tolerance]), f"{name} 허용: 문서 {row[2]}"
+
+
+def test_named_constants_exist():
+    """문서가 `master.X`·`verify.X`로 가리키는 이름은 코드에 실제로 있어야 한다"""
+    text = _doc()
+    missing = [f"{mod}.{name}" for mod, name in re.findall(r"`(master|verify)\.(\w+)`", text)
+               if name not in PENDING and not hasattr({"master": master, "verify": verify}[mod], name)]
+    assert not missing, missing
+
+
+def test_named_config_keys_exist():
+    """문서가 `config` `키`로 가리키는 키는 config/generator.yaml에 있어야 한다"""
+    keys = set()
+    for group in re.findall(r"`config` ((?:`[\w.]+`[·\s]*)+)", _doc()):
+        keys |= set(re.findall(r"`([\w.]+)`", group))
+    def exists(key):
+        node = CFG
+        for part in key.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return False
+            node = node[part]
+        return True
+    assert keys and not [k for k in keys if not exists(k)], sorted(k for k in keys if not exists(k))

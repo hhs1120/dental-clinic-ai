@@ -110,6 +110,8 @@ def test_new_patient_share(tmp_path):
     assert [v["month"] for v in verify.check_new_patient_share(conn, LARGE)] == ["2026-11"]
     # 창(10-01~) 시작 전 등록이면 워밍업 등록 = 구환 → 신환 0명으로 경고
     assert [v["share"] for v in verify.check_new_patient_share(conn, CTX)] == [0.0]
+    # 생성 기간 첫 달은 워밍업 등록 신환이 섞여 낮게 나오므로 건너뜀
+    assert verify.check_new_patient_share(conn, replace(CTX, range_start=date(2026, 11, 1))) == []
 
 
 def test_status_rates(tmp_path):
@@ -175,7 +177,11 @@ def test_unpaid_rate(tmp_path):
         conn.execute("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
                      " VALUES (1, 1, 'visit', 10000, ?, '2026-10-06 11:00:00', 'card')", (5000 if i < 15 else 10000,))
     assert verify.check_unpaid_rate(conn, CTX) == []
-    conn.execute("UPDATE emr_payments SET amount_paid = 5000 WHERE id <= 30")
+    for _ in range(30):  # 0원 내원(상담 등)은 미수가 생길 수 없으니 분모에서 뺀다
+        conn.execute("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
+                     " VALUES (1, 1, 'visit', 0, 0, '2026-10-06 11:00:00', 'card')")
+    assert verify.check_unpaid_rate(conn, CTX) == []
+    conn.execute("UPDATE emr_payments SET amount_paid = 5000 WHERE id <= 30 AND amount_due > 0")
     assert verify.check_unpaid_rate(conn, CTX)
 
 
