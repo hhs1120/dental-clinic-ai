@@ -1,6 +1,6 @@
 # dental-clinic-ai
 
-동네 치과 AX(AI 전환) 프로젝트 — 가짜 데이터로 치과 데스크·운영 업무의 AI 기능을 구현하고 평가한 포트폴리오. 설계는 `docs/`, 작업 규칙은 `CLAUDE.md`.
+동네 치과 AX(AI 전환) 프로젝트 — 가상 데이터로 치과 데스크·운영 업무의 AI 기능을 구현하고 평가한 포트폴리오. 설계는 `docs/`, 작업 규칙은 `CLAUDE.md`.
 
 ## 환경 세팅
 
@@ -37,7 +37,7 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 
 | 명령 | 설명 |
 |---|---|
-| `make data [SCALE=small\|medium\|large]` | 가짜 데이터 생성 (기본 small) |
+| `make data [SCALE=small\|medium\|large]` | 가상 데이터 생성 (기본 small) |
 | `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 

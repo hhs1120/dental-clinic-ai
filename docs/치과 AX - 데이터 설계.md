@@ -397,7 +397,7 @@ make data [--scale small|medium|large] [--regen-llm]
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
 | 결정성 | 같은 시드 2회 → 테이블 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외) |
-| 가짜 PII | 전화 `010-0000-xxxx`만 |
+| 가상 PII | 전화 `010-0000-xxxx`만 |
 
 **경고**(리포트만)
 | 영역 | 검사 |

@@ -306,7 +306,7 @@ def check_visit_payment_completed(conn, ctx):
                        " WHERE p.kind = 'visit' AND a.status IS NOT 'completed'")
 
 
-# ── 가짜 PII ────────────────────────────────────────────────
+# ── 가상 PII ────────────────────────────────────────────────
 
 def check_fake_phone(conn, ctx):
     """환자 전화는 010-0000-xxxx만"""
