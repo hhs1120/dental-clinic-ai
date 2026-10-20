@@ -2,7 +2,7 @@
 seed: 20261201
 today: 2026-12-01
 range: { start: 2026-02-01, end: 2026-12-15 }
-patients: 1000
+patients: 2000
 visits_per_day: 26          # 평일. 토요일 ×0.5
 reschedule_rate: 0.05
 noshow_rate: 0.06
