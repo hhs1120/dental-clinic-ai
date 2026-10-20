@@ -132,7 +132,7 @@ tags:
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — test 1회 규칙 검증 |
-| `truth_claims` | 생성기(정형 5단계) | 9~10월 `claim_id → outcome(paid_full/adjusted/denied/missing_in_eob), paid_amount, adjust_code` + `extra_in_eob` 줄 |
+| `truth_claims` | 생성기(정형 5단계) | 9~10월 청구 줄 + `extra_in_eob` 줄: `claim_id?`(extra는 NULL), `chart_no, service_date, procedure_code, tooth_no`(대조 키, 전 행 비정규화), `claim_amount, outcome(paid_full/adjusted/denied/missing_in_eob/extra_in_eob), paid_amount?, adjust_code?`. 생성 규칙은 데이터 설계 §2.4 |
 | `truth_eob_lines` | 생성기(조건부) | `doc_id, page, line_no → 정답 필드, claim_id, outcome` |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.

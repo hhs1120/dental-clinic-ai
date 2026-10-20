@@ -164,12 +164,22 @@ scale_presets:                                          # range.end 고정, 시�
 | 컬럼 | 설명 |
 |---|---|
 | id, treatment_id, patient_id, chart_no(비정규화), tooth_no NOT NULL | |
-| claim_month('2026-07'), batch_type | `monthly`(기본)/`supplementary`(~10%, 정형 5단계에서 배정) |
-| service_date, procedure_code, claim_amount(=insured_amount), submitted_at(익월 초) | |
+| claim_month('2026-07'), batch_type | `claim_month` = 진료월(보완 청구도 동일). `monthly`(기본)/`supplementary`(청구 줄 10% 무작위, 정형 5단계에서 배정 — 월 일괄 청구에서 빠져 나중에 보완 청구한 건) |
+| service_date, procedure_code, claim_amount(=insured_amount), submitted_at | monthly = 익월 **첫 진료일**(목·일·공휴일 제외) 10:00 / supplementary = monthly 제출일 + 7~20일(휴진일이면 다음 진료일) / 11월(`pending`)은 NULL |
 | status | `pending`(11월, 미제출) / `submitted`(9~10월) / `paid·adjusted·denied`(확정 월 2~8월, 생성기 추첨 — 병원이 이미 아는 과거 결과) |
 | paid_amount?, adjust_code? | 확정 월만 |
 
 **UNIQUE `(chart_no, service_date, procedure_code, tooth_no)`** — EOB 대조 키. 최근 월(9~10월)의 심사 결과는 이 테이블에 없고 `truth_claims`에만(정형 5단계에서 생성).
+
+**심사 결과 추첨**(정형 5단계. 확정 월 `emr_claims`와 9~10월 `truth_claims`가 같은 규칙)
+| 대상 | 분포(청구 줄 기준) |
+|---|---|
+| 확정 월 2~8월 → `emr_claims.status` | paid 88 / adjusted 8 / denied 4 (`missing`·`extra`는 통보서 대조 결과라 장부에 없음) |
+| 9~10월 → `truth_claims.outcome` | paid_full 85 / adjusted 8 / denied 4 / missing_in_eob 2 / extra_in_eob 1 |
+
+- 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount × U(0.5, 0.9)`, 10원 단위 내림 + `adjust_code` / denied → `paid_amount = 0` + `adjust_code`. missing_in_eob은 `paid_amount`·`adjust_code` NULL
+- 사유 코드 10개는 `generator/master.py`의 `ADJUST_CODES`
+- `extra_in_eob` 줄(장부에 없음, `claim_id` NULL): 9~10월 실제 내원(환자·진료일)에 그 내원에 없는 급여 시술 또는 다른 치아를 붙여 만든다 → 대조 키가 `emr_claims`와 겹치지 않음. `truth_claims` 컬럼은 평가 설계 §6
 
 ### 2.5 문자
 
@@ -328,7 +338,9 @@ LIMIT 1;
 
 **복수 주제 통화의 생성 제약**: `primary_purpose` 1개 + 부 주제는 불리언 플래그(가격·불만·응급·예약 희망)로 표현되는 조합만 생성. 플래그로 표현 불가한 조합(예: 예약 변경 + 서류 요청)은 만들지 않음. `accepted_purposes[]`에 주·부 모두 기록 → 채점은 평가 설계 §2.2.
 
-**메타 통화 5,000**: 시각·길이·방향·목적만(전사 없음). 통화 목록 볼륨·시간대 분포용. 분류·판정 대상 아님.
+**메타 통화 5,000**: 시각·길이·방향만(전사 없음). 통화 목록 볼륨·시간대 분포용. 분류·판정 대상 아님. 목적은 생성 시 추첨해 길이·방향·시간대를 정하는 데만 쓰고 **저장하지 않음**(`ax_calls`에 두면 누출, `truth_call_labels`는 전사 1,000건 전용).
+
+**`call_uid`는 정형 6단계에서 6,000건 전체**(메타 5,000 + 전사 슬롯 1,000)에 시드 셔플로 부여 — 7단계 LLM 캐시 키에 들어가므로 전사 전에 확정. 전사 슬롯은 6단계에서 `has_transcript=0` 빈 행으로 만들고 7단계가 채움.
 
 생성 분포는 현실대로(치우침 유지). 층화 추출 규칙·지표는 평가 설계 §2.
 
@@ -355,7 +367,7 @@ LIMIT 1;
 ### 4.3 EOB PDF (슬롯 ②, 조건부)
 
 - 최근 월(**9~10월**) outcome 추첨과 `truth_claims`(앱 DB 밖)는 정형 5단계에서 이미 생성 — 여기서는 `truth_claims` → 렌더링만. 11월은 `pending`이라 통보서 없음. 확정 월(2~8월)은 "이미 확인된 통보서"로 판독 벤치마크만
-- 분포(청구 줄 기준): paid_full 85 / adjusted 8 / denied 4 / missing_in_eob 2 / extra_in_eob 1. 사유 코드 10개 지어냄
+- outcome 분포·금액·사유 코드·`extra_in_eob` 생성 규칙은 §2.4 "심사 결과 추첨"(정형 5단계)
 - 월별 통보서 **9개**(2~10월, ~300줄, **페이지당 고정 25줄**, 양식 2~6월 A / 7~10월 B) + 건별(`supplementary`를 `(patient, service_date)`로 묶은 수 ≈ 200, 1~4줄, 양식 C)
 - Jinja → PDF(WeasyPrint, 실패 시 Playwright). 페이지 분할은 생성기가 슬라이싱 → `(page, line_no)` 정답 확정
 - 열화 30%: 200dpi → 블러·회전 ±1.5°·노이즈·JPEG 40~60
@@ -374,7 +386,7 @@ make data [--scale small|medium|large] [--regen-llm]
  4. 예약 + 상태    한 루프: 배치(60분↑ 비피크 우선) → 노쇼 6%·당일취소 4%·변경 5%(쌍)·confirmed 85%
  5. 진료·수납·청구 completed → treatments(치아당) → payments(미수 15%, 정산 80%) → insurance_usage → claims(확정 월 status 추첨, 11월 pending)
                    → supplementary 10% 배정 → 9~10월 outcome 추첨 → truth_claims   (EOB 청구 측. 나중에 넣으면 정형 재생성 → LLM 캐시 전량 미스)
- 6. 통화 메타      5,000 + call_uid(시드 셔플)                              (코드)
+ 6. 통화 메타      5,000 + 전사 슬롯 1,000 빈 행, call_uid 6,000(시드 셔플)  (코드)
  7. 통화 전사      1,000 (§4.1, 예약류는 4단계 이벤트에서 역산)              (LLM, 캐시)
  8. 문자           out 템플릿(doc_ready는 통화 이후) → in 20% LLM → 정제
  9. RAG 문서       코어 50 → 방해 27 → 정제. (이후 사람이 질문 60 작성 — 평가 설계 §3.1)  (LLM, 캐시)
@@ -400,7 +412,7 @@ make data [--scale small|medium|large] [--regen-llm]
 | 기준일 | TODAY 당일은 `scheduled/cancelled`만; 12/2~15는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date` ≤ TODAY(11월 claims `pending`) |
 | 용량·충돌 | 요일별 원장 슬롯 ≤ 32(토 16); 같은 체어·같은 시간 중복 없음; 동시 treatment ≤ 2, hygiene + treatment ≤ 3; 같은 환자 같은 날 중복 없음; 영업시간·휴진일 밖 없음 |
 | 예약 | 전 예약에 `planned_procedure_code`; 변경 쌍 ≥ 5% × 예약 수; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 예약 전날 날짜만) |
-| 시술·청구 | `performed_at` == 예약 일시; `service_date` == 진료일; 비급여 시술은 claims에 없음; 스케일링 급여 19세↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; 9~10월 청구는 `submitted`·결과(`paid_amount`·`adjust_code`) 없음 |
+| 시술·청구 | `performed_at` == 예약 일시; `service_date` == 진료일; 비급여 시술은 claims에 없음; 스케일링 급여 19세↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; 9~10월 청구는 `submitted`·결과(`paid_amount`·`adjust_code`) 없음; `truth_claims`의 `extra_in_eob` 대조 키가 `emr_claims`와 겹치지 않음 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
