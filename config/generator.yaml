@@ -3,7 +3,7 @@ seed: 20261201
 today: 2026-12-01
 range: { start: 2026-02-01, end: 2026-12-15 }
 patients: 2000
-visits_per_day: 26          # 평일. 토요일 ×0.5
+visits_per_day: 26          # 하루 비취소 예약 상한(평일). 토요일 ×0.5
 reschedule_rate: 0.05
 noshow_rate: 0.06
 sameday_cancel_rate: 0.04

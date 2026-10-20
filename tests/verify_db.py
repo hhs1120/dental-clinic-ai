@@ -11,6 +11,7 @@ SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
 CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), reschedule_rate=0.05,
+          noshow_rate=0.06, sameday_cancel_rate=0.04,
           visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15))
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토

@@ -13,9 +13,8 @@ HOURS = {
 SLOT_MIN = 30
 SATURDAY = 5
 
-# 동시성 (§1): 원장은 동시 2체어, 체어 작업(hygiene + treatment)은 동시 3 (위생사 3명)
-DOCTOR_CHAIRS = 2
-MAX_CHAIR_WORK = 3
+# 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
+MAX_APPOINTMENTS_PER_SLOT = 3
 
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
@@ -23,7 +22,7 @@ SCALING_MIN_AGE = 19
 # 피크 시간 (§1). [시작, 끝)
 PEAK_HOURS = [("10:00", "11:00"), ("15:00", "17:00")]
 
-# 토요일 내원 수 = 평일 visits_per_day × 이 비율 (§0)
+# 토요일 하루 상한 = 평일 visits_per_day × 이 비율 (§1)
 SATURDAY_VISIT_RATIO = 0.5
 
 # 연령 구간과 비중 (§2.2). (이름, 최소 나이, 최대 나이(포함, 노인은 None), 비중)
@@ -34,16 +33,15 @@ AGE_BANDS = [
     ("senior", 65, None, 0.15),
 ]
 
-# 활동·휴면 (§2.2·§2.6 ②). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회
+# 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
 ACTIVE_MONTHS = 6
 ACTIVE_SHARE = 0.70  # 예정 신환을 뺀 환자 중
-# 휴면 (a)(창 안에서 활동 기준일 이전에만 내원) = 휴면 × DORMANT_A_SHARE × min(1, 창 안 기준일 이전 일수 / DORMANT_A_FULL_DAYS)
-DORMANT_A_SHARE = 0.5
-DORMANT_A_FULL_DAYS = 120
 
-# FDI 치아 번호 (§2.6 ⑦). 전악 시술은 FULL_MOUTH 센티널
+# 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 목표 — 경고로만 확인
+NEW_PATIENT_SHARE = 0.12
+
+# 치아 번호 (§2.1). 치아 단위가 아닌 시술은 FULL_MOUTH 센티널
 PERMANENT_TEETH = frozenset(f"{q}{n}" for q in (1, 2, 3, 4) for n in range(1, 9))
-PRIMARY_TEETH = frozenset(f"{q}{n}" for q in (5, 6, 7, 8) for n in range(1, 6))
 FULL_MOUTH = "00"
 
 # 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
@@ -82,6 +80,15 @@ PROCEDURES = [
 ]
 
 SCALING_CODE = "U0001"
+
+# 치아 단위 시술의 치아 후보 (§2.1). 뽑기만 한다 — 순서 고정을 위해 정렬된 튜플(frozenset 순회 순서는 실행마다 다름)
+_WISDOM = tuple(f"{q}8" for q in (1, 2, 3, 4))
+_MOLARS_6_7 = tuple(f"{q}{n}" for q in (1, 2, 3, 4) for n in (6, 7))
+_DEFAULT_TEETH = tuple(sorted(PERMANENT_TEETH - set(_WISDOM)))
+TOOTH_CHOICES = {
+    p["code"]: {"사랑니 발치": _WISDOM, "실란트": _MOLARS_6_7}.get(p["name"], _DEFAULT_TEETH)
+    for p in PROCEDURES if p["is_tooth_level"]
+}
 
 
 def _minutes(hhmm: str) -> int:

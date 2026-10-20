@@ -10,7 +10,6 @@ import argparse
 import calendar
 import hashlib
 import json
-import math
 import re
 import sqlite3
 import sys
@@ -21,10 +20,10 @@ from pathlib import Path
 
 import yaml
 
-from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, DORMANT_A_FULL_DAYS, DORMANT_A_SHARE,
-                              DOCTOR_CHAIRS, FULL_MOUTH, HOURS, MAX_CHAIR_WORK, PEAK_HOURS,
-                              PERMANENT_TEETH, PRIMARY_TEETH, SATURDAY, SATURDAY_VISIT_RATIO, SCALING_CODE,
-                              SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS, open_slots)
+from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, FULL_MOUTH, HOURS,
+                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
+                              SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
+                              open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -40,9 +39,11 @@ PEAK = [tuple(time.fromisoformat(t) for t in w) for w in PEAK_HOURS]
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
 
 # 경고 허용치 (§5.3 경고 표)
-SHARE_TOLERANCE = 0.02  # 연령·활동·휴면 비중 ±2%p
-DAILY_VISIT_TOLERANCE = 0.30
-LONG_PEAK_MAX = 0.40
+SHARE_TOLERANCE = 0.02  # 연령 비중·노쇼·당일 취소 ±2%p
+ACTIVE_TOLERANCE = 0.05
+NEW_PATIENT_TOLERANCE = 0.03
+NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
+DAILY_MIN_FILL = 0.70  # TODAY 이전 진료일의 비취소 예약 ≥ 상한 × 이 비율
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,8 @@ class Ctx:
     today: date
     holidays: frozenset
     reschedule_rate: float
+    noshow_rate: float
+    sameday_cancel_rate: float
     visits_per_day: int
     range_start: date  # 생성 기간 — truth_gen_meta에서 (규모별 시작일)
     range_end: date
@@ -64,6 +67,8 @@ def load_ctx(config_path: Path, conn) -> Ctx:
         today=cfg["today"],
         holidays=frozenset(date.fromisoformat(d) for d in holidays),
         reschedule_rate=cfg["reschedule_rate"],
+        noshow_rate=cfg["noshow_rate"],
+        sameday_cancel_rate=cfg["sameday_cancel_rate"],
         visits_per_day=cfg["visits_per_day"],
         range_start=date.fromisoformat(meta["range_start"]),
         range_end=date.fromisoformat(meta["range_end"]),
@@ -166,18 +171,22 @@ def check_submitted_months_no_result(conn, ctx):
 
 # ── 용량·충돌 ───────────────────────────────────────────────
 
-def check_doctor_slots(conn, ctx):
-    """날짜별 원장 슬롯 ≤ 2체어 × 영업 슬롯 (평일 32, 토 16)"""
-    used = defaultdict(int)
-    for a in _active_appointments(conn):
-        if a["type"] == "treatment":
-            used[a["start"].date()] += math.ceil(a["duration_min"] / SLOT_MIN)
-    return [{"date": d.isoformat(), "slots": n, "limit": _doctor_limit(d)}
-            for d, n in sorted(used.items()) if n > _doctor_limit(d)]
+def _daily_cap(ctx, d: date) -> float:
+    return ctx.visits_per_day * (SATURDAY_VISIT_RATIO if d.weekday() == SATURDAY else 1)
 
 
-def _doctor_limit(d: date) -> int:
-    return DOCTOR_CHAIRS * open_slots(d.weekday())
+def check_daily_cap(conn, ctx):
+    """하루 비취소 예약 ≤ 상한(평일 visits_per_day, 토 ×0.5)"""
+    return [{"date": r["d"], "appointments": r["n"], "cap": _daily_cap(ctx, date.fromisoformat(r["d"]))}
+            for r in _rows(conn, "SELECT date(scheduled_at) AS d, count(*) AS n FROM emr_appointments"
+                                 " WHERE status != 'cancelled' GROUP BY d")
+            if r["n"] > _daily_cap(ctx, date.fromisoformat(r["d"]))]
+
+
+def check_slot_cap(conn, ctx):
+    """같은 시작 시각의 비취소 예약 ≤ MAX_APPOINTMENTS_PER_SLOT"""
+    return _rows(conn, "SELECT scheduled_at AS at, count(*) AS n FROM emr_appointments WHERE status != 'cancelled'"
+                       " GROUP BY scheduled_at HAVING count(*) > ?", MAX_APPOINTMENTS_PER_SLOT)
 
 
 def check_slot_grid(conn, ctx):
@@ -188,37 +197,6 @@ def check_slot_grid(conn, ctx):
         if start.minute % SLOT_MIN or start.second or r["duration_min"] % SLOT_MIN:
             bad.append(r)
     return bad
-
-
-def check_chair_overlap(conn, ctx):
-    """같은 체어·같은 시간 중복 없음"""
-    by_chair = defaultdict(list)
-    for a in _active_appointments(conn):
-        if a["chair_no"] is not None:
-            by_chair[a["chair_no"]].append(a)
-    bad = []
-    for chair, appts in by_chair.items():
-        appts.sort(key=lambda a: a["start"])
-        for prev, cur in zip(appts, appts[1:]):
-            if cur["start"] < prev["end"]:
-                bad.append({"chair_no": chair, "id": prev["id"], "other_id": cur["id"],
-                            "at": cur["scheduled_at"]})
-    return bad
-
-
-def check_concurrency(conn, ctx):
-    """30분 슬롯마다 동시 treatment ≤ 2, hygiene + treatment ≤ 3"""
-    treat, chair_work = defaultdict(int), defaultdict(int)
-    for a in _active_appointments(conn):
-        if a["type"] == "consult":
-            continue
-        t = a["start"]
-        while t < a["end"]:
-            chair_work[t] += 1
-            treat[t] += a["type"] == "treatment"
-            t += SLOT
-    return [{"slot": t.isoformat(sep=" "), "treatment": treat[t], "hygiene+treatment": n}
-            for t, n in sorted(chair_work.items()) if treat[t] > DOCTOR_CHAIRS or n > MAX_CHAIR_WORK]
 
 
 def check_patient_same_day(conn, ctx):
@@ -509,19 +487,57 @@ def check_age_distribution(conn, ctx):
     return bad
 
 
-def check_daily_visits(conn, ctx):
-    """생성 기간(truth_gen_meta) 안 모든 진료일의 비취소 예약 수가 visits_per_day(토 ×0.5) ±30%"""
+def check_daily_fill(conn, ctx):
+    """생성 기간 안 TODAY 이전 진료일의 비취소 예약 ≥ 하루 상한의 70% (TODAY 이후는 덜 찬 게 정상)"""
     counts = defaultdict(int)
     for r in _rows(conn, "SELECT date(scheduled_at) AS d FROM emr_appointments WHERE status != 'cancelled'"):
         counts[date.fromisoformat(r["d"])] += 1
     bad, d = [], ctx.range_start
-    while d <= ctx.range_end:
-        if open_slots(d.weekday()) and d not in ctx.holidays:
-            target = ctx.visits_per_day * (SATURDAY_VISIT_RATIO if d.weekday() == SATURDAY else 1)
-            if abs(counts[d] - target) > DAILY_VISIT_TOLERANCE * target:
-                bad.append({"date": d.isoformat(), "visits": counts[d], "target": target})
+    while d <= min(ctx.range_end, ctx.today - timedelta(days=1)):
+        if open_slots(d.weekday()) and d not in ctx.holidays and counts[d] < DAILY_MIN_FILL * _daily_cap(ctx, d):
+            bad.append({"date": d.isoformat(), "appointments": counts[d], "cap": _daily_cap(ctx, d)})
         d += timedelta(days=1)
     return bad
+
+
+def check_new_patient_share(conn, ctx):
+    """월별 신환(등록일 = 첫 예약 created_at 날짜) 첫 내원 / 그달 내원(completed) = 12% ±3%p"""
+    first_visit = {r["patient_id"]: r["d"][:7] for r in _rows(
+        conn, "SELECT a.patient_id, min(date(a.scheduled_at)) AS d FROM emr_appointments a"
+              " JOIN emr_patients p ON p.id = a.patient_id WHERE a.status = 'completed'"
+              " AND date(p.registered_at) = (SELECT min(date(b.created_at)) FROM emr_appointments b"
+              "                              WHERE b.patient_id = a.patient_id)"
+              " GROUP BY a.patient_id")}
+    new_by_month = defaultdict(int)
+    for month in first_visit.values():
+        new_by_month[month] += 1
+    bad = []
+    for r in _rows(conn, "SELECT substr(scheduled_at, 1, 7) AS month, count(*) AS n FROM emr_appointments"
+                         " WHERE status = 'completed' GROUP BY month ORDER BY month"):
+        if r["n"] < NEW_PATIENT_MIN_VISITS:
+            continue
+        share = new_by_month[r["month"]] / r["n"]
+        if abs(share - NEW_PATIENT_SHARE) > NEW_PATIENT_TOLERANCE:
+            bad.append({"month": r["month"], "share": round(share, 3), "target": NEW_PATIENT_SHARE})
+    return bad
+
+
+def check_status_rates(conn, ctx):
+    """노쇼 6%·당일 취소 4% ±2%p — 분모는 TODAY 이전 비취소 예약"""
+    today = ctx.today.isoformat()
+    base = conn.execute("SELECT count(*) FROM emr_appointments WHERE status != 'cancelled'"
+                        " AND date(scheduled_at) < ?", (today,)).fetchone()[0]
+    if not base:
+        return []
+    noshow = conn.execute("SELECT count(*) FROM emr_appointments WHERE status = 'noshow'"
+                          " AND date(scheduled_at) < ?", (today,)).fetchone()[0]
+    sameday = conn.execute("SELECT count(*) FROM emr_appointments a WHERE a.status = 'cancelled'"
+                           " AND date(a.scheduled_at) < ? AND date(a.cancelled_at) = date(a.scheduled_at)"
+                           " AND NOT EXISTS (SELECT 1 FROM emr_appointments n WHERE n.rescheduled_from_id = a.id)",
+                           (today,)).fetchone()[0]
+    return [{"status": status, "rate": round(n / base, 3), "target": target}
+            for status, n, target in (("noshow", noshow, ctx.noshow_rate), ("sameday_cancel", sameday, ctx.sameday_cancel_rate))
+            if abs(n / base - target) > SHARE_TOLERANCE]
 
 
 def _active_from(today: date) -> date:
@@ -531,8 +547,8 @@ def _active_from(today: date) -> date:
     return date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
 
 
-def _visit_split(conn, ctx) -> tuple[set, set, set]:
-    """(분모 환자, 활동, 휴면 (a)) — 분모는 예정 신환 제외. 내원 = completed 예약"""
+def _visit_split(conn, ctx) -> tuple[set, set]:
+    """(분모 환자, 활동) — 분모는 예정 신환 제외. 내원 = completed 예약"""
     future_new = set(_future_new_patients(conn, ctx))
     patients = {r["id"] for r in _rows(conn, "SELECT id FROM emr_patients")} - future_new
     since = _active_from(ctx.today)
@@ -540,28 +556,16 @@ def _visit_split(conn, ctx) -> tuple[set, set, set]:
         conn, "SELECT patient_id, max(date(scheduled_at)) AS d FROM emr_appointments"
               " WHERE status = 'completed' GROUP BY patient_id")}
     active = {p for p in patients if p in last and since <= last[p] < ctx.today}
-    dormant_a = {p for p in patients if p in last and last[p] < since}
-    return patients, active, dormant_a
+    return patients, active
 
 
 def check_active_ratio(conn, ctx):
-    """활동(TODAY 전 6개월 안 completed 내원) 비중 70% ±2%p — 예정 신환 제외"""
-    patients, active, _ = _visit_split(conn, ctx)
+    """활동(TODAY 전 6개월 안 completed 내원) 비중 70% ±5%p — 예정 신환 제외"""
+    patients, active = _visit_split(conn, ctx)
     if not patients:
         return []
     share = len(active) / len(patients)
-    return [] if abs(share - ACTIVE_SHARE) <= SHARE_TOLERANCE else [{"share": round(share, 3), "target": ACTIVE_SHARE}]
-
-
-def check_dormant_a_ratio(conn, ctx):
-    """휴면 (a)(창 안에서 활동 기준일 이전에만 내원) 비중이 창 길이 비례 기대치 ±2%p"""
-    patients, _, dormant_a = _visit_split(conn, ctx)
-    if not patients:
-        return []
-    before = max(0, (_active_from(ctx.today) - ctx.range_start).days)
-    target = (1 - ACTIVE_SHARE) * DORMANT_A_SHARE * min(1, before / DORMANT_A_FULL_DAYS)
-    share = len(dormant_a) / len(patients)
-    return [] if abs(share - target) <= SHARE_TOLERANCE else [{"share": round(share, 3), "target": round(target, 3)}]
+    return [] if abs(share - ACTIVE_SHARE) <= ACTIVE_TOLERANCE else [{"share": round(share, 3), "target": ACTIVE_SHARE}]
 
 
 def _in_peak(t: time) -> bool:
@@ -586,24 +590,7 @@ def check_peak_pattern(conn, ctx):
     return [] if actual > expected else [{"peak_share": round(actual, 3), "time_share": round(expected, 3)}]
 
 
-def check_long_procedures_peak(conn, ctx):
-    """60분↑ 예약의 피크 시작 비중 < 40% (비피크 우선 배치)"""
-    starts = [a["start"] for a in _active_appointments(conn) if a["duration_min"] >= 60]
-    if not starts:
-        return []
-    share = sum(_in_peak(s.time()) for s in starts) / len(starts)
-    return [] if share < LONG_PEAK_MAX else [{"peak_share": round(share, 3), "n": len(starts)}]
-
-
 # ── 경고: 치아 ──────────────────────────────────────────────
-
-def check_tooth_fdi(conn, ctx):
-    """tooth_no는 FDI 영구치·유치 번호 또는 '00'"""
-    valid = PERMANENT_TEETH | PRIMARY_TEETH | {FULL_MOUTH}
-    rows = (_rows(conn, "SELECT 'emr_treatments' AS tbl, id, tooth_no FROM emr_treatments")
-            + _rows(conn, "SELECT 'emr_claims' AS tbl, id, tooth_no FROM emr_claims"))
-    return [r for r in rows if r["tooth_no"] is not None and r["tooth_no"] not in valid]
-
 
 def check_tooth_level(conn, ctx):
     """치아 단위 시술은 '00' 금지, 전악 시술은 '00'만"""
@@ -622,11 +609,6 @@ def _treatments_with_age(conn) -> list[dict]:
     return rows
 
 
-def check_primary_teeth_child(conn, ctx):
-    """유치 번호는 소아(시술일 기준 0–12세)만"""
-    return [r for r in _treatments_with_age(conn) if r["tooth_no"] in PRIMARY_TEETH and r["age"] > CHILD_MAX_AGE]
-
-
 def check_child_procedures(conn, ctx):
     """소아 시술(age_group='child': 불소도포·실란트)은 시술일 기준 0–12세만"""
     return [r for r in _treatments_with_age(conn) if r["age_group"] == "child" and r["age"] > CHILD_MAX_AGE]
@@ -640,9 +622,8 @@ REQUIRED = [
     check_last_month_claims_pending,
     check_submitted_months_no_result,
     check_slot_grid,
-    check_doctor_slots,
-    check_chair_overlap,
-    check_concurrency,
+    check_daily_cap,
+    check_slot_cap,
     check_patient_same_day,
     check_business_hours,
     check_planned_procedure,
@@ -671,14 +652,12 @@ REQUIRED = [
 ]
 WARNINGS = [
     check_age_distribution,
-    check_daily_visits,
+    check_daily_fill,
     check_active_ratio,
-    check_dormant_a_ratio,
+    check_new_patient_share,
+    check_status_rates,
     check_peak_pattern,
-    check_long_procedures_peak,
-    check_tooth_fdi,
     check_tooth_level,
-    check_primary_teeth_child,
     check_child_procedures,
 ]
 

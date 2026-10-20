@@ -111,60 +111,43 @@ def test_break_is_caught(tmp_path, case):
     assert getattr(verify, check)(conn, CTX), f"{check}가 {case}를 못 잡음"
 
 
-def test_doctor_slots_weekday(tmp_path):
+# 11-24(화) 진료 시작 시각 16개 × 3건 — 하루 상한 검사용으로 시각대 제한(3)을 넘지 않게 채운다
+SLOTS_1124 = [f"2026-11-24 {h}:{m}:00" for h, m in
+              [("09", "30"), ("10", "00"), ("10", "30"), ("11", "00"), ("11", "30"), ("12", "00"), ("12", "30"),
+               ("14", "00"), ("14", "30"), ("15", "00"), ("15", "30"), ("16", "00"), ("16", "30"), ("17", "00"),
+               ("17", "30"), ("18", "00")] for _ in range(3)]
+
+
+def test_daily_cap_weekday(tmp_path):
+    conn = make_db(tmp_path)  # 11-24에는 시드 상담 예약 1건(noshow)
+    for at in SLOTS_1124[:25]:
+        appt(conn, at)
+    assert verify.check_daily_cap(conn, CTX) == []
+    appt(conn, SLOTS_1124[25])  # 27건 > 26
+    assert [v["date"] for v in verify.check_daily_cap(conn, CTX)] == ["2026-11-24"]
+
+
+def test_daily_cap_saturday_and_cancelled(tmp_path):
     conn = make_db(tmp_path)
-    for i in range(17):  # 60분 × 17 = 34슬롯 > 32
-        appt(conn, "2026-11-24 10:00:00", chair=i, duration=60)
-    assert verify.check_doctor_slots(conn, CTX)
+    sat = [f"2026-11-28 {h}:{m}:00" for h, m in [("09", "30"), ("10", "00"), ("10", "30"), ("11", "00"), ("11", "30")]
+           for _ in range(3)]
+    for at in sat[:13]:
+        appt(conn, at)
+    for at in sat[13:]:
+        appt(conn, at, status="cancelled")  # 취소는 세지 않음
+    assert verify.check_daily_cap(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET status = 'completed' WHERE status = 'cancelled' AND date(scheduled_at) = '2026-11-28'")
+    assert [v["date"] for v in verify.check_daily_cap(conn, CTX)] == ["2026-11-28"]
 
 
-def test_doctor_slots_saturday(tmp_path):
+def test_slot_cap(tmp_path):
     conn = make_db(tmp_path)
-    for i in range(9):  # 60분 × 9 = 18슬롯 > 16
-        appt(conn, "2026-11-28 10:00:00", chair=i, duration=60)
-    assert verify.check_doctor_slots(conn, CTX)
-
-
-def test_doctor_slots_ignore_cancelled(tmp_path):
-    conn = make_db(tmp_path)
-    for i in range(17):
-        appt(conn, "2026-11-24 10:00:00", chair=i, duration=60, status="cancelled")
-    assert verify.check_doctor_slots(conn, CTX) == []
-
-
-def test_chair_overlap(tmp_path):
-    conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 10:30:00", chair=1)  # 1번 예약(10:00~11:00)과 같은 체어
-    assert verify.check_chair_overlap(conn, CTX)
-
-
-def test_chair_overlap_ignores_cancelled(tmp_path):
-    conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 10:30:00", chair=1, status="cancelled")
-    assert verify.check_chair_overlap(conn, CTX) == []
-
-
-def test_three_treatments_at_once(tmp_path):
-    conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 10:30:00", chair=2)
-    appt(conn, "2026-10-06 10:30:00", chair=3)
-    assert verify.check_concurrency(conn, CTX)
-
-
-def test_hygiene_plus_treatment_over_three(tmp_path):
-    conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 10:30:00", chair=2)  # 1번 예약과 합쳐 10:30 슬롯에 treatment 2 + hygiene 2
-    appt(conn, "2026-10-06 10:30:00", type="hygiene", chair=3)
-    appt(conn, "2026-10-06 10:30:00", type="hygiene", chair=4)
-    assert verify.check_concurrency(conn, CTX)
-
-
-def test_consult_does_not_count_for_concurrency(tmp_path):
-    conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 10:00:00", chair=2)
-    appt(conn, "2026-10-06 10:00:00", type="hygiene", chair=3)
-    appt(conn, "2026-10-06 10:00:00", type="consult", chair=None)
-    assert verify.check_concurrency(conn, CTX) == []
+    for _ in range(3):
+        appt(conn, "2026-11-24 10:00:00")
+    appt(conn, "2026-11-24 10:00:00", status="cancelled")
+    assert verify.check_slot_cap(conn, CTX) == []
+    appt(conn, "2026-11-24 10:00:00")
+    assert [v["at"] for v in verify.check_slot_cap(conn, CTX)] == ["2026-11-24 10:00:00"]
 
 
 def test_patient_twice_same_day(tmp_path):

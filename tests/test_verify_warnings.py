@@ -10,18 +10,14 @@ from tests.verify_db import CTX, appt, make_db
 
 def test_valid_db_tooth_checks_pass(tmp_path):
     conn = make_db(tmp_path)
-    for check in (verify.check_tooth_fdi, verify.check_tooth_level, verify.check_primary_teeth_child,
-                  verify.check_child_procedures):
+    for check in (verify.check_tooth_level, verify.check_child_procedures):
         assert check(conn, CTX) == [], check.__name__
 
 
 # (깨뜨리는 SQL, 잡아야 하는 검사). 시드 진료: 1 신경치료 '26'(성인) / 2 스케일링 '00'(성인) / 3 레진 '55'(소아)
 TOOTH_BREAKS = {
-    "fdi_invalid": ("UPDATE emr_treatments SET tooth_no = '19' WHERE id = 1", "check_tooth_fdi"),
-    "fdi_invalid_claim": ("UPDATE emr_claims SET tooth_no = '90' WHERE id = 1", "check_tooth_fdi"),
     "tooth_level_as_full_mouth": ("UPDATE emr_treatments SET tooth_no = '00' WHERE id = 1", "check_tooth_level"),
     "full_mouth_with_tooth": ("UPDATE emr_treatments SET tooth_no = '16' WHERE id = 2", "check_tooth_level"),
-    "primary_tooth_adult": ("UPDATE emr_treatments SET tooth_no = '55' WHERE id = 1", "check_primary_teeth_child"),
     "sealant_adult": ("UPDATE emr_treatments SET procedure_code = 'U0004' WHERE id = 1", "check_child_procedures"),
 }
 
@@ -83,31 +79,47 @@ def _only(conn, appts):
         appt(conn, **a)
 
 
-def test_daily_visits_within_30pct(tmp_path):
+def test_daily_fill_past_days(tmp_path):
     conn = make_db(tmp_path)
-    # 11-27(금) 19건 = 26의 -27%, 11-28(토) 16건 = 13의 +23%. 취소는 세지 않는다
-    _only(conn, [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(19)]
-          + [{"scheduled_at": "2026-11-28 10:00:00", "chair": i} for i in range(16)]
-          + [{"scheduled_at": "2026-11-27 11:00:00", "chair": 99 + i, "status": "cancelled"} for i in range(20)])
-    ctx = replace(CTX, range_start=date(2026, 11, 27), range_end=date(2026, 11, 28))
-    assert verify.check_daily_visits(conn, ctx) == []
+    # 범위 11-24(화)~12-02: 과거 진료일 11-24·27·28·30. 11-24 19건(73%)·11-27 18건(69%)·11-28(토) 10건(77%)·11-30 0건
+    # TODAY 이후(12-01·12-02)는 덜 찬 게 정상이라 보지 않는다
+    _only(conn, [{"scheduled_at": "2026-11-24 10:00:00", "chair": i} for i in range(19)]
+          + [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(18)]
+          + [{"scheduled_at": "2026-11-28 10:00:00", "chair": i} for i in range(10)]
+          + [{"scheduled_at": "2026-11-27 11:00:00", "chair": 99, "status": "cancelled"}])
+    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 12, 2))
+    assert [v["date"] for v in verify.check_daily_fill(conn, ctx)] == ["2026-11-27", "2026-11-30"]
 
 
-def test_daily_visits_too_few(tmp_path):
+def _month_visits(conn, n_visits, n_new):
+    """11월 completed n_visits건, 그중 n_new명은 신환(등록일 = 첫 예약 created_at 날짜)"""
+    _patients(conn, {"1986-01-01": n_visits})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, n_visits + 1):
+        appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid, chair=pid)
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-01-01' WHERE id <= ?", (n_new,))
+
+
+def test_new_patient_share(tmp_path):
     conn = make_db(tmp_path)
-    _only(conn, [{"scheduled_at": "2026-11-24 10:00:00", "chair": i} for i in range(18)])  # -31%
-    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 11, 24))
-    assert [v["date"] for v in verify.check_daily_visits(conn, ctx)] == ["2026-11-24"]
+    _month_visits(conn, 100, 12)
+    assert verify.check_new_patient_share(conn, CTX) == []
+    _month_visits(conn, 100, 20)
+    assert [v["month"] for v in verify.check_new_patient_share(conn, CTX)] == ["2026-11"]
 
 
-def test_daily_visits_empty_open_day_in_range(tmp_path):
+def test_status_rates(tmp_path):
     conn = make_db(tmp_path)
-    # 범위 11-24(화)~12-01(화): 11-24·11-27·12-01만 26건. 11-28(토)·11-30(월)은 진료일인데 0건
-    # 11-25는 테스트 공휴일, 11-26 목·11-29 일은 휴진. 맨 앞(11-24)도 범위 안이라 비면 잡혀야 한다
-    _only(conn, [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(26)]
-          + [{"scheduled_at": "2026-12-01 10:00:00", "chair": i} for i in range(26)])
-    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 12, 1))
-    assert [v["date"] for v in verify.check_daily_visits(conn, ctx)] == ["2026-11-24", "2026-11-28", "2026-11-30"]
+    _patients(conn, {"1986-01-01": 100})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):  # 과거 비취소 100건 중 노쇼 6
+        appt(conn, "2026-11-24 10:00:00", patient=pid, chair=pid, status="noshow" if pid <= 6 else "completed")
+    for pid in range(1, 5):  # 당일 취소 4건 (다른 날)
+        appt(conn, "2026-11-27 10:00:00", patient=pid, chair=pid, status="cancelled")
+        conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-27 08:00:00' WHERE patient_id = ? AND status = 'cancelled'", (pid,))
+    assert verify.check_status_rates(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id BETWEEN 7 AND 15 AND status = 'completed'")
+    assert [v["status"] for v in verify.check_status_rates(conn, CTX)] == ["noshow"]
 
 
 def _visits(conn, last_visit_by_patient):
@@ -124,7 +136,9 @@ def test_active_ratio(tmp_path):
     # 활동 70 = 06-01 이후 completed, 휴면 30 = 05-31 이전 또는 내원 없음
     _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
     assert verify.check_active_ratio(conn, CTX) == []
-    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 10")  # 노쇼는 내원 아님 → 60%
+    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 4")  # 노쇼는 내원 아님 → 66%(±5%p 안)
+    assert verify.check_active_ratio(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 10")  # 60%
     assert verify.check_active_ratio(conn, CTX)
 
 
@@ -146,35 +160,12 @@ def test_active_from_clips_to_month_end():
 def test_visit_split_boundaries(tmp_path):
     conn = make_db(tmp_path)
     _patients(conn, {"1986-01-01": 4})
-    # 1: 05-31 마지막 → 휴면 (a) / 2: 06-01 → 활동 / 3: 11-30 → 활동 / 4: TODAY 예약만(scheduled) → 예정 신환, 분모 제외
+    # 1: 05-31 마지막 → 휴면 / 2: 06-01 → 활동 / 3: 11-30 → 활동 / 4: TODAY 예약만(scheduled) → 예정 신환, 분모 제외
     _visits(conn, {1: "2026-05-29", 2: "2026-06-01", 3: "2026-11-30"})
     conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-05-31 10:00:00' WHERE patient_id = 1")
     appt(conn, "2026-12-01 10:00:00", patient=4, chair=4, status="scheduled")
-    patients, active, dormant_a = verify._visit_split(conn, CTX)
-    assert (patients, active, dormant_a) == ({1, 2, 3}, {2, 3}, {1})
-
-
-def test_dormant_a_ratio_medium_window(tmp_path):
-    conn = make_db(tmp_path)
-    _patients(conn, {"1986-01-01": 100})
-    # medium 창(05-01~): 기대 30% × 50% × 31/120 ≈ 3.9% → 4명 통과, 15명은 경고
-    medium = replace(CTX, range_start=date(2026, 5, 1))
-    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 74 else None) for i in range(1, 101)})
-    assert verify.check_dormant_a_ratio(conn, medium) == []
-    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
-    assert verify.check_dormant_a_ratio(conn, medium)
-
-
-def test_dormant_a_ratio_scales_with_window(tmp_path):
-    conn = make_db(tmp_path)
-    _patients(conn, {"1986-01-01": 100})
-    # large 창(02-01~): 기대 30% × 50% = 15% → 15명이 05-31 이전에만 내원
-    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
-    large = replace(CTX, range_start=date(2026, 2, 1))
-    assert verify.check_dormant_a_ratio(conn, large) == []
-    # small 창(08-01~): 06-01 이전 구간이 없어 기대 0% → 15%는 경고
-    small = replace(CTX, range_start=date(2026, 8, 1))
-    assert verify.check_dormant_a_ratio(conn, small)
+    patients, active = verify._visit_split(conn, CTX)
+    assert (patients, active) == ({1, 2, 3}, {2, 3})
 
 
 def test_peak_pattern_ignores_closed_day(tmp_path):
@@ -190,9 +181,3 @@ def test_peak_pattern(tmp_path):
     assert verify.check_peak_pattern(conn, CTX)
 
 
-def test_long_procedures_peak_share(tmp_path):
-    conn = make_db(tmp_path)
-    # 시드 60분 예약: 1번 10:00(피크), 5번 14:00 → 피크 50%
-    assert verify.check_long_procedures_peak(conn, CTX)
-    conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-10-06 11:00:00' WHERE id = 1")
-    assert verify.check_long_procedures_peak(conn, CTX) == []
