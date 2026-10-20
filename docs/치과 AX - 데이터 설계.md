@@ -63,6 +63,8 @@ scale_presets: { small, medium, large }                 # small = 테스트 fixt
 
 ## 2. `emr_*`
 
+> 슬롯 기능의 추가 데이터(⑪ 통장·카드 거래, 지출 등)는 기존 `emr_*`를 수정하지 않는 **새 테이블**로만 만든다. 기존 테이블이 바뀌면 정형 데이터 → LLM 캐시 → 전사 → 사람 판정까지 연쇄로 무효가 된다.
+
 ### 2.1 마스터
 
 **`emr_clinic`**(1행): `name, chairs, hours_json`
@@ -376,6 +378,7 @@ make data [--scale small|medium|large] [--regen-llm]
 11. EOB PDF        truth_claims → PDF → 열화 → truth_eob_lines   (청구·outcome은 5단계)
 ```
 
+- **단계별 독립 시드**: 각 단계는 `seed`와 단계 이름으로 파생한 자기 난수 생성기를 쓴다(예: `hash(seed, "patients")`). 단계를 추가·삭제해도 다른 단계의 결과는 바뀌지 않는다
 - **LLM 캐시 키** = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴. 정형(1~6) 완성·verify 후 LLM(7~9) 1회
 - 생성기 LLM 호출도 게이트웨이 경유 → `llm_calls_gen.jsonl`, 상한 `DAILY_GEN_USD_LIMIT`(런타임 상한과 분리, 금액은 [[치과 AX - 기능 정의]] §7). 전사는 프론티어 실시간(`Semaphore(20)` + 백오프), 1,200~1,500 호출. 문자 답장은 경량
 

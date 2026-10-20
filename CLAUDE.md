@@ -7,6 +7,7 @@
 - `docs/치과 AX - 데이터 설계.md` — 스키마, 생성 규칙, `make verify` 검사 목록
 - `docs/치과 AX - 평가 설계.md` — 지표, 채점, 정답 저장소(`truth_*`) 테이블 정의
 - `docs/치과 AX - 전환의 의미.md` — 전환 전후 업무 변화 (배경, 구현 스펙 아님)
+- `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
@@ -17,6 +18,8 @@
 - `backend/`는 `ground_truth/`·`generator/`를 import하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
 - 정답은 `app.sqlite`에 한 줄도 넣지 않는다
 - 시드 고정(`config/generator.yaml`). 같은 시드 → 같은 결과
+- 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다). 단계를 추가해도 기존 결과가 바뀌지 않게 하기 위함 (데이터 설계 §5.1)
+- 기존 `emr_*` 테이블은 슬롯 기능을 위해 수정하지 않는다. 추가 데이터는 새 테이블로 (데이터 설계 §2)
 - 정형 데이터(1~6단계) 완성 + `make verify` 통과 → LLM 생성(7~9단계) 1회. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기 입력은 `classify(transcript, direction)`만
