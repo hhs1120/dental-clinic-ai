@@ -60,7 +60,7 @@ CREATE TABLE emr_appointments (
     id                     INTEGER PRIMARY KEY,
     patient_id             INTEGER NOT NULL REFERENCES emr_patients(id),
     staff_id               INTEGER NOT NULL REFERENCES emr_staff(id),
-    chair_no               INTEGER,  -- 상담은 NULL (체어 불필요)
+    chair_no               INTEGER,  -- 생성기는 채우지 않음(NULL) — 체어 배정은 범위 밖
     scheduled_at           TEXT NOT NULL,
     duration_min           INTEGER NOT NULL,
     type                   TEXT NOT NULL CHECK (type IN ('treatment', 'hygiene', 'consult')),

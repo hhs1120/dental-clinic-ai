@@ -52,7 +52,7 @@ BREAKS = {
     "call_uid_purpose": ("UPDATE ax_calls SET call_uid = 'reschedule:0001' WHERE id = 1", "check_call_uid_format"),
     "call_uid_suffix": ("UPDATE ax_calls SET call_uid = 'c-0001-book' WHERE id = 1", "check_call_uid_format"),
     "call_label_column": ("ALTER TABLE ax_calls ADD COLUMN primary_purpose TEXT", "check_ax_calls_columns"),
-    # truth_claims (5단계)
+    # truth_claims (EOB 슬롯)
     "extra_eob_in_ledger": (
         "UPDATE truth.truth_claims SET service_date = '2026-11-03', procedure_code = 'U0001'"
         " WHERE outcome = 'extra_in_eob'",

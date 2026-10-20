@@ -84,8 +84,8 @@ def _dt(s: str) -> datetime:
 
 
 def _active_appointments(conn) -> list[dict]:
-    """취소되지 않은 예약 — 체어·원장 시간을 실제로 차지한 것 (노쇼 포함)."""
-    rows = _rows(conn, "SELECT id, patient_id, chair_no, type, scheduled_at, duration_min"
+    """취소되지 않은 예약 — 그 시간대를 실제로 차지한 것 (노쇼 포함)."""
+    rows = _rows(conn, "SELECT id, scheduled_at, duration_min"
                        " FROM emr_appointments WHERE status != 'cancelled'")
     for r in rows:
         r["start"] = _dt(r["scheduled_at"])
@@ -190,7 +190,7 @@ def check_slot_cap(conn, ctx):
 
 
 def check_slot_grid(conn, ctx):
-    """예약 시작은 SLOT_MIN분 격자(:00·:30), 소요는 SLOT_MIN의 배수 — 동시성 검사의 전제"""
+    """예약 시작은 SLOT_MIN분 격자(:00·:30), 소요는 SLOT_MIN의 배수 — 시각대 상한 검사의 전제"""
     bad = []
     for r in _rows(conn, "SELECT id, scheduled_at, duration_min FROM emr_appointments"):
         start = _dt(r["scheduled_at"])
@@ -262,7 +262,7 @@ def _future_new_patients(conn, ctx) -> list[int]:
 
 
 def check_future_new_patient_single(conn, ctx):
-    """예정 신환은 비취소 예약 1건뿐 (코스 다음 내원은 직전 내원이 TODAY 이전일 때만 — §2.6 ⑧)"""
+    """예정 신환은 비취소 예약 1건뿐 (코스 다음 내원은 직전 내원 completed 뒤에야 잡힌다 — §2.6 ③)"""
     ids = _future_new_patients(conn, ctx)
     if not ids:
         return []
