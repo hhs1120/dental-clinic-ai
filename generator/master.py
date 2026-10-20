@@ -73,7 +73,7 @@ _ROWS = [
 _KEYS = ("code", "name", "category", "is_insured", "fee_total", "duration_min",
          "insured_limit", "limit_scope", "age_group", "is_tooth_level")
 
-# typical_sessions·aliases는 생성기 전사 단계에서 채운다 (스키마 기본값 1, '[]')
+# aliases는 생성기 전사 단계에서 채운다 (스키마 기본값 '[]')
 PROCEDURES = [
     {**dict(zip(_KEYS, row)), "patient_share_rate": 1.0 if row[3] == "no" else 0.3}
     for row in _ROWS

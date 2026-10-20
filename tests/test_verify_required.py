@@ -303,10 +303,10 @@ def test_canonical_hash_detects_change(tmp_path):
 
 def test_canonical_hash_ignores_insertion_order(tmp_path):
     a, b = _two_dbs(tmp_path)
-    # emr_insurance_usage는 복합 PK라 rowid가 삽입 순서를 따른다 → 정렬 없이는 순서가 갈림
-    rows = [(2, 'scaling', 2026, 0, 1), (1, 'scaling', 2025, 1, 1)]
-    a.executemany("INSERT INTO emr_insurance_usage VALUES (?, ?, ?, ?, ?)", rows)
-    b.executemany("INSERT INTO emr_insurance_usage VALUES (?, ?, ?, ?, ?)", rows[::-1])
+    # emr_procedures는 TEXT PK라 rowid가 삽입 순서를 따른다 → 정렬 없이는 순서가 갈림
+    rows = [tuple(r) for r in b.execute("SELECT * FROM emr_procedures ORDER BY code")]
+    b.execute("DELETE FROM emr_procedures")
+    b.executemany(f"INSERT INTO emr_procedures VALUES ({', '.join('?' * len(rows[0]))})", rows[::-1])
     assert verify.canonical_hash(a) == verify.canonical_hash(b)
 
 

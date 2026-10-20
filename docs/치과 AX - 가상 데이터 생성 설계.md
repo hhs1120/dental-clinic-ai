@@ -83,7 +83,6 @@ scale_presets:                                          # range.end 고정, 시�
 | is_insured | `yes/no/conditional` |
 | fee_total, patient_share_rate | 급여 0.3, 비급여 1.0 |
 | duration_min | 내원 1회 소요(아래 표) |
-| typical_sessions | 보통 몇 회(전사 소재용. 회차 추적은 안 함) |
 | insured_limit, limit_scope | 스케일링 1/`year` |
 | age_group | `child/adult/senior/null` |
 | is_tooth_level | 치아 단위 → `tooth_no` 필수 |
@@ -131,6 +130,8 @@ scale_presets:                                          # range.end 고정, 시�
 | 활동 | 목표: 활동(TODAY 전 6개월 = 06-01~11-30에 내원 ≥ 1회) 70% / 휴면 30% — 미래 예약만 있는 예정 신환은 분모에서 제외. 신환 = 월 내원의 12%(§1). 둘 다 시뮬레이션 파라미터(§2.6)로 맞추고 **경고로만** 확인 |
 | 실손 | 50% / 메모 10% / 이름 전부 한국 이름 |
 
+**메모**(`note`): 환자 10%에 고정 문구 목록(생성기 코드 — 예: "치과 공포 있음", "고혈압 약 복용", "오전 진료 선호", "보호자 동반 필요")에서 1개. ⑧ 준비표 fact와 `query_patient` 요약에 포함 → 제안 문장의 근거가 된다(예: 고혈압 → 발치 전 혈압 확인)
+
 **등록일**: 구환(창 이전 등록) = 2015 ~ `range_start` 전날, 그 환자의 창 이전 마지막 위생일보다 앞. 신환(창 안 첫 예약) = 첫 예약 `created_at`의 날짜(전화 예약 때 차트 생성).
 
 연령별 시술 가중: 소아 → 불소·실란트·아말감 / 청소년 → 교정 / 노인 → 임플란트·발치·잇몸 (표는 §2.6 ④)
@@ -148,7 +149,7 @@ scale_presets:                                          # range.end 고정, 시�
 | confirmed | 전날 리마인드 응답(85%). 예약일 ≤ TODAY+1만(리마인드가 아직 안 간 예약은 0) |
 | created_at, cancelled_at? | 예약을 잡은·취소한 시각(≤ TODAY, `created_at` < `scheduled_at`) — 통화 시각·as-of의 근거 |
 
-**`emr_treatments`** — completed 예약에 1~N행: `id, appointment_id, patient_id, procedure_code, tooth_no('00' 센티널), performed_at, fee_total, insured_amount, patient_amount`
+**`emr_treatments`** — completed 예약에 1행: `id, appointment_id, patient_id, procedure_code, tooth_no('00' 센티널), performed_at, fee_total, insured_amount, patient_amount`
 
 ### 2.4 수납·보험
 
@@ -161,7 +162,7 @@ scale_presets:                                          # range.end 고정, 시�
 
 환자 잔액 = Σ(amount_due − amount_paid). **미수 규칙**: 내원의 15%에서 일부만 수납 → 그중 80%는 다음 내원 시 `settlement` 행으로 정산, 20%는 잔류. (발생률만 두면 잔액이 누적돼 준비표 미수 칩이 절반 점등 — 6차 검증)
 
-**`emr_insurance_usage`** (PK `patient_id, benefit, year`): `benefit='scaling'`, `year`, `used`, `limit=1`. 19세↑ 연 1회. 준비표 "보험 잔여" 칩의 근거
+**보험 잔여**(준비표 칩): 별도 테이블 없이 `emr_claims`의 그해 스케일링 급여 청구 유무로 계산한다(19세↑ 연 1회). 같은 사실을 두 곳에 두지 않기 위함
 
 **`emr_claims`** — 청구 장부
 | 컬럼 | 설명 |
@@ -195,9 +196,9 @@ scale_presets:                                          # range.end 고정, 시�
 | noshow | 노쇼 시 | ≈ 280 |
 | balance | 미수 발생의 50% | ≈ 320 |
 | doc_ready | 서류 요청 **통화 이후** | ~40 |
-| reply(in) | out의 20%, LLM 짧은 생성 | ≈ 2,200 |
+| reply(in) | out의 20%, 고정 문구에서 추첨("네", "확인했습니다", "시간 변경 가능할까요?" 등) | ≈ 2,200 |
 
-`out`은 템플릿(LLM 없음). 색인 방식은 [[치과 AX - 앱 설계]] §3.
+문자는 전부 템플릿(LLM 없음). 색인 방식은 [[치과 AX - 앱 설계]] §3.
 
 ### 2.6 정형 생성 규칙 (2~5단계) — 정방향 시뮬레이션
 
@@ -236,7 +237,7 @@ scale_presets:                                          # range.end 고정, 시�
 | consult | 상담 100 | 교정 상담 70 · 상담 30 | 상담 85 · 교정 상담 15 | 상담 100 |
 
 - **임플란트 1차(`conditional`)**: 시술일 기준 65세↑ 급여(본인부담 0.3, 청구 대상), 65세 미만 비급여(청구 없음)
-- 스케일링: 19세 미만은 비급여(청구 없음, `insurance_usage` 미반영). 성인은 그해 이미 썼으면 hygiene이 구강검진으로 바뀌므로 2회째가 생기지 않음
+- 스케일링: 19세 미만은 비급여(청구 없음). 성인은 그해 이미 썼으면 hygiene이 구강검진으로 바뀌므로 2회째가 생기지 않음
 
 **⑤ `created_at` 리드타임**
 | 경우 | `created_at` |
@@ -344,7 +345,7 @@ scale_presets:                                          # range.end 고정, 시�
 | 직원 매뉴얼 | 12 | LLM, 정답 문단 심기 |
 | FAQ | 10 | LLM |
 | 보험 안내 | 6 | LLM + 마스터 값 주입 |
-| 원내 공지 | 12 (2~3개 PDF) | 템플릿 + LLM. 날짜·버전 |
+| 원내 공지 | 12 | 템플릿 + LLM. 날짜·버전 (전부 마크다운) |
 | 치과 상식 | 10 | LLM |
 | 공지 옛 버전 | 12 (공지마다 1개) | 파생, 다른 수치·이전 날짜 |
 | 유사 주제 무답 | 10 | LLM |
@@ -370,13 +371,13 @@ make data [--scale small|medium|large] [--regen-llm]
  0. 시드 로드      holidays, forbidden_topics                               (정적)
  1. 마스터         clinic, staff, procedures(19)                            (코드)
  2. 환자           구환(창 이전 등록·마지막 위생일 시드) + 신환 후보 풀(§2.6 ①)
- 3. 첫 수요        환자별 첫 리콜 기한·리콜 응답 여부·교정 여부·치료 수요 시드
+ 3. 첫 수요        환자별 첫 리콜 기한·리콜 응답 여부·치료 수요 시드
  4. 예약 시뮬레이션 range_start → TODAY 하루씩(§2.6 ③): 예약 잡기 → 신환 → 변경 → 그날 처리(노쇼·당일 취소) → 리마인드
- 5. 진료·수납·청구 completed → treatments(내원당 1행) → payments(미수 15%, 정산 80%) → insurance_usage → claims(확정 월 status 추첨, 11월 pending)
+ 5. 진료·수납·청구 completed → treatments(내원당 1행) → payments(미수 15%, 정산 80%) → claims(확정 월 status 추첨, 11월 pending)
                    → supplementary 10% 배정
  6. 통화 메타      5,000 + 전사 슬롯 1,000 빈 행, call_uid 6,000(시드 셔플)  (코드)
  7. 통화 전사      1,000 (§4.1, 예약류는 4단계 이벤트에서 역산)              (LLM, 캐시)
- 8. 문자           out 템플릿(doc_ready는 통화 이후) → in 20% LLM → 정제
+ 8. 문자           out 템플릿(doc_ready는 통화 이후) → in 20% 고정 문구                (코드)
  9. RAG 문서       코어 50 → 방해 27 → 정제. (이후 사람이 질문 60 작성 — 평가 설계 §3.1)  (LLM, 캐시)
 10. 적재·색인·검증 app.sqlite → make index(FTS5 + Chroma, 앱 설계 §3) → make verify
 ━━ 조건부 ━━
@@ -384,8 +385,8 @@ make data [--scale small|medium|large] [--regen-llm]
 ```
 
 - **단계별 독립 시드**: 각 단계는 `seed`와 단계 이름으로 파생한 자기 난수 생성기를 쓴다(예: `hash(seed, "patients")`). 단계를 추가·삭제해도 다른 단계의 결과는 바뀌지 않는다
-- **LLM 캐시 키** = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴. 정형(1~6) 완성·verify 후 LLM(7~9) 1회
-- 생성기 LLM 호출도 게이트웨이 경유 → `llm_calls_gen.jsonl`, 상한 `DAILY_GEN_USD_LIMIT`(런타임 상한과 분리, 금액은 [[치과 AX - 기능 정의]] §7). 전사는 프론티어 실시간(`Semaphore(20)` + 백오프), 1,200~1,500 호출. 문자 답장은 경량
+- **LLM 캐시 키** = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴. 정형(1~6) 완성·verify 후 LLM(7·9) 1회
+- 생성기 LLM 호출도 게이트웨이 경유 → `llm_calls_gen.jsonl`, 상한 `DAILY_GEN_USD_LIMIT`(런타임 상한과 분리, 금액은 [[치과 AX - 기능 정의]] §7). 전사는 프론티어 실시간(`Semaphore(20)` + 백오프), 1,200~1,500 호출
 
 ### 5.2 정답 출력 `ground_truth/`
 

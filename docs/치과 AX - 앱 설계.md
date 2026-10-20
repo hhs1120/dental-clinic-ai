@@ -52,7 +52,7 @@ UNIQUE `(call_id, model_alias, prompt_version)`. **`prompt_version`은 (프롬�
 | 도구 | 인자 | 반환 |
 |---|---|---|
 | `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?=5` | 청크 목록 |
-| `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·마지막 내원·잔액·다음 예약·가족 리콜 |
+| `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보(메모 포함)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`) |
 | `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?` | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
@@ -103,7 +103,7 @@ LIMIT 1;
 | DB | SQLite 1파일 + **Chroma PersistentClient**. `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
 | FTS | `unicode61` + 조사 제거 OR prefix. 복합어는 적재 시 공백 정규화 |
 | 리랭커·임베딩 | **비교 후 확정**: `text-embedding-3-small` vs `bge-m3`, 로컬 `bge-reranker-v2-m3` vs Cohere. dev 질문 10개로 비교 |
-| LLM | 게이트웨이 모듈 1개(`shared/`, 생성기 7~9단계도 경유), 내부 LiteLLM 라이브러리. 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
+| LLM | 게이트웨이 모듈 1개(`shared/`, 생성기 7·9단계도 경유), 내부 LiteLLM 라이브러리. 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
 | 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 분류 300×2 적재 + 해시 기반 결정적 fake 임베딩으로 Chroma까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | `export-human/import-human`: 판정은 `hash(transcript)`로만 복원 — 미스 시 버리고 "복원 실패 N건" 리포트(전사가 바뀐 건에 `call_uid`로 붙이면 다른 대화에 라벨이 붙음). 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계 |

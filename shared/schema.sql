@@ -27,7 +27,6 @@ CREATE TABLE emr_procedures (
     fee_total          INTEGER NOT NULL,
     patient_share_rate REAL NOT NULL,
     duration_min       INTEGER NOT NULL,
-    typical_sessions   INTEGER NOT NULL DEFAULT 1,
     insured_limit      INTEGER,
     limit_scope        TEXT,
     age_group          TEXT CHECK (age_group IN ('child', 'adult', 'senior')),
@@ -91,15 +90,6 @@ CREATE TABLE emr_payments (
     amount_paid    INTEGER NOT NULL,
     paid_at        TEXT NOT NULL,
     method         TEXT NOT NULL CHECK (method IN ('card', 'cash', 'transfer'))
-);
-
-CREATE TABLE emr_insurance_usage (
-    patient_id INTEGER NOT NULL REFERENCES emr_patients(id),
-    benefit    TEXT NOT NULL,
-    year       INTEGER NOT NULL,
-    used       INTEGER NOT NULL,
-    "limit"    INTEGER NOT NULL,
-    PRIMARY KEY (patient_id, benefit, year)
 );
 
 CREATE TABLE emr_claims (

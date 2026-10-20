@@ -40,7 +40,6 @@ INSERT INTO emr_payments VALUES
   (2, 1, 2, 'visit', 18000, 18000, '2026-11-03 10:30:00', 'card'),
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
-INSERT INTO emr_insurance_usage VALUES (1, 'scaling', 2026, 1, 1);
 INSERT INTO emr_claims VALUES
   (1, 1, 1, 'C-00001', '26', '2026-10', 'monthly', '2026-10-06', 'U0008', 84000, '2026-11-05 09:00:00', 'submitted', NULL, NULL),
   (2, 2, 1, 'C-00001', '00', '2026-11', 'monthly', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL);
