@@ -34,6 +34,13 @@ AGE_BANDS = [
     ("senior", 65, None, 0.15),
 ]
 
+# 활동·휴면 (§2.2·§2.6 ②). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회
+ACTIVE_MONTHS = 6
+ACTIVE_SHARE = 0.70  # 예정 신환을 뺀 환자 중
+# 휴면 (a)(창 안에서 활동 기준일 이전에만 내원) = 휴면 × DORMANT_A_SHARE × min(1, 창 안 기준일 이전 일수 / DORMANT_A_FULL_DAYS)
+DORMANT_A_SHARE = 0.5
+DORMANT_A_FULL_DAYS = 120
+
 # FDI 치아 번호 (§2.6 ⑦). 전악 시술은 FULL_MOUTH 센티널
 PERMANENT_TEETH = frozenset(f"{q}{n}" for q in (1, 2, 3, 4) for n in range(1, 9))
 PRIMARY_TEETH = frozenset(f"{q}{n}" for q in (5, 6, 7, 8) for n in range(1, 6))

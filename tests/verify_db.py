@@ -57,7 +57,7 @@ INSERT INTO truth_claims VALUES
   (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),
   (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_eob', 24500, NULL);
 INSERT INTO truth_gen_meta VALUES
-  ('seed', '20261201'), ('scale', 'small'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
+  ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """
 
 

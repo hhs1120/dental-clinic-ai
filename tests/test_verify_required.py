@@ -72,6 +72,8 @@ BREAKS = {
         " (2, 2, 2, '2026-12-01 15:00:00', 30, 'hygiene', 'U0002', 'cancelled', '2026-11-20 11:00:00', '2026-12-01 09:00:00')",
         "check_cancellation_kind",
     ),
+    "cancelled_without_time": ("UPDATE emr_appointments SET cancelled_at = NULL WHERE id = 3", "check_cancelled_at_status"),
+    "time_on_not_cancelled": ("UPDATE emr_appointments SET cancelled_at = '2026-11-20 10:00:00' WHERE id = 7", "check_cancelled_at_status"),
     # 진료 기록 ↔ completed
     "treatment_on_noshow": ("UPDATE emr_treatments SET appointment_id = 7 WHERE id = 1", "check_treatment_on_completed"),
     "completed_without_treatment": ("DELETE FROM emr_treatments WHERE id = 3", "check_completed_has_treatment"),
@@ -82,6 +84,8 @@ BREAKS = {
     "truth_claim_missing": ("DELETE FROM truth.truth_claims WHERE claim_id = 1", "check_truth_claims_match"),
     "truth_amount_mismatch": ("UPDATE truth.truth_claims SET claim_amount = 1 WHERE claim_id = 1", "check_truth_claims_match"),
     "truth_points_to_pending": ("UPDATE truth.truth_claims SET claim_id = 2 WHERE claim_id = 1", "check_truth_claims_match"),
+    "extra_eob_outside_months": (
+        "UPDATE truth.truth_claims SET service_date = '2026-08-06' WHERE outcome = 'extra_in_eob'", "check_truth_claims_match"),
     "real_phone": ("UPDATE emr_patients SET phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
     # 영업시간·휴진일 (상담 예약 7번을 옮긴다)
     "thursday": ("UPDATE emr_appointments SET scheduled_at = '2026-11-19 10:00:00' WHERE id = 7", "check_business_hours"),
@@ -214,6 +218,35 @@ def test_missing_gen_meta_exits(tmp_path, capsys):
     conn.commit()
     assert verify.main(["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]) == 1
     assert "truth_gen_meta" in capsys.readouterr().out
+
+
+def test_missing_gen_meta_table_exits(tmp_path, capsys):
+    make_db(tmp_path).commit()
+    truth = sqlite3.connect(tmp_path / "truth.sqlite")
+    truth.execute("DROP TABLE truth_gen_meta")
+    truth.commit()
+    assert verify.main(["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]) == 1
+    assert "truth_gen_meta" in capsys.readouterr().out
+
+
+def _future_new_patient(conn, n_appts):
+    """첫 예약이 TODAY 이후인 신환(예정 신환) — 비취소 예약 n_appts건"""
+    conn.execute("INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, registered_at)"
+                 " VALUES (3, 'C-00003', '이신환', '1990-01-01', 'F', '010-0000-0003', '2026-11-28')")
+    for day in ("2026-12-04", "2026-12-11")[:n_appts]:
+        appt(conn, f"{day} 10:00:00", patient=3, status="scheduled")
+
+
+def test_future_new_patient_single_appointment(tmp_path):
+    conn = make_db(tmp_path)
+    _future_new_patient(conn, 1)
+    assert verify.check_future_new_patient_single(conn, CTX) == []
+
+
+def test_future_new_patient_two_appointments(tmp_path):
+    conn = make_db(tmp_path)
+    _future_new_patient(conn, 2)
+    assert [v["patient_id"] for v in verify.check_future_new_patient_single(conn, CTX)] == [3]
 
 
 def test_load_ctx_reads_range_from_gen_meta(tmp_path):

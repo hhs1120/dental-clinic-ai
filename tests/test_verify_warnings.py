@@ -110,6 +110,46 @@ def test_daily_visits_empty_open_day_in_range(tmp_path):
     assert [v["date"] for v in verify.check_daily_visits(conn, ctx)] == ["2026-11-24", "2026-11-28", "2026-11-30"]
 
 
+def _visits(conn, last_visit_by_patient):
+    """환자별 completed 내원 1건만 남긴다 (None이면 내원 없음). 시드 예약은 지운다."""
+    conn.execute("DELETE FROM emr_appointments")
+    for pid, day in last_visit_by_patient.items():
+        if day:
+            appt(conn, f"{day} 10:00:00", patient=pid, chair=pid)
+
+
+def test_active_ratio(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    # 활동 70 = 06-01 이후 completed, 휴면 30 = 05-31 이전 또는 내원 없음
+    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
+    assert verify.check_active_ratio(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id <= 10")  # 노쇼는 내원 아님 → 60%
+    assert verify.check_active_ratio(conn, CTX)
+
+
+def test_active_ratio_excludes_future_new_patients(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 110})
+    visits = {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)}
+    _visits(conn, visits)
+    for pid in range(101, 111):  # 예정 신환 10명: 미래 예약만 → 분모에서 제외
+        appt(conn, "2026-12-04 10:00:00", patient=pid, chair=pid, status="scheduled")
+    assert verify.check_active_ratio(conn, CTX) == []
+
+
+def test_dormant_a_ratio_scales_with_window(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    # large 창(02-01~): 기대 30% × 50% = 15% → 15명이 05-31 이전에만 내원
+    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
+    large = replace(CTX, range_start=date(2026, 2, 1))
+    assert verify.check_dormant_a_ratio(conn, large) == []
+    # small 창(08-01~): 06-01 이전 구간이 없어 기대 0% → 15%는 경고
+    small = replace(CTX, range_start=date(2026, 8, 1))
+    assert verify.check_dormant_a_ratio(conn, small)
+
+
 def test_peak_pattern_ignores_closed_day(tmp_path):
     conn = make_db(tmp_path)
     conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-11-19 15:00:00' WHERE id = 7")  # 목요일
