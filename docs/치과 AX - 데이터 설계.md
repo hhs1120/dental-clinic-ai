@@ -18,7 +18,9 @@ tags:
 
 | 항목 | 결정 |
 |---|---|
-| 규모 | 환자 1,000 / 2026-02-01~12-15 / 평일 26명·토 13명 / 통화 전사 1,000 + 메타 5,000 / 문서 50 + 방해 27 / 문자 ~1.5만 / (조건부) EOB 월별 9 + 건별 파생 |
+| 규모 | 환자 1,000 / 2026-02-01~12-15 / 평일 26명·토 13명 / 통화 전사 1,000 + 메타 5,000 / 문서 50 + 방해 27 / 문자 ~1.5만 / (조건부) EOB 월별 9 + 건별 파생 (= large) |
+| 축소 규모 | `--scale small\|medium`은 **하루 밀도(평일 26명) 유지**, 끝(12-15) 고정·시작일만 늦춤(small 08-01 / medium 05-01) → TODAY 기준 구간(확정월·제출월 9~10·전월 11·미래 12/2~15)이 모두 남음. 환자 수·통화 전사·메타·판정/블라인드 풀은 기간 비율(달력 일수)로 축소·반올림. **문서는 모든 규모에서 77개(core 50 + distractor 27) 고정**. 판정 풀 층화는 고정 숫자가 아니라 비율 규칙(희귀 60% 상한 + 나머지 비례, 평가 설계 §2.1)으로 계산 — 문서의 숫자는 large 기준 결과값 |
+| 평가 규모 | **사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 모두 large 하나에서만**. small·medium은 개발·테스트용 |
 | 기준일 | `TODAY = 2026-12-01 (화)` 고정. 앱은 설정값을 읽음(환경변수로 변경 = 타임머신) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만 |
 | 스키마 | `emr_*` = 미니 EMR(생성기가 만들고 앱은 읽기 전용) / `ax_*` = 앱이 쓰는 것 |
@@ -47,7 +49,10 @@ messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_r
 eob: { monthly_forms: 9, supplementary_ratio: 0.10 }   # supplementary_ratio는 정형 5단계, monthly_forms는 PDF(조건부)
 holidays: config/holidays_2026.json
 forbidden_topics: config/forbidden_topics.json
-scale_presets: { small, medium, large }                 # small = 테스트 fixture
+scale_presets:                                          # range.end 고정, 시작일만 늦춤
+  small:  { start: 2026-08-01 }                         # 137/318 ≈ 0.43 — 테스트 fixture
+  medium: { start: 2026-05-01 }                         # 229/318 ≈ 0.72
+  large:  { start: 2026-02-01 }                         # 1.0 (= range)
 ```
 
 ## 1. 병원 프로필
@@ -196,7 +201,7 @@ scale_presets: { small, medium, large }                 # small = 테스트 fixt
 | patient_id?, caller_phone, caller_name? | **분류기 입력에 쓰지 않음** |
 | direction | `inbound/outbound` |
 | started_at, duration_sec, has_transcript, audio_path?, transcript? | 전사는 화자 구분된 **순수 대화만**(prefix 없음, 차트번호 발화 없음) |
-| in_eval_pool, eval_sort_order? | 생성기가 층화 추출해 마킹(300). **카테고리 정보 없음**. 순번 **dev = 1~150, test = 151~300**(각 split 안에서 고정 셔플, `truth_call_labels.split`과 일치) |
+| in_eval_pool, eval_sort_order? | 생성기가 층화 추출해 마킹(300). **카테고리 정보 없음**. 순번 **dev = 1~150, test = 151~300**(large 기준. 코드는 고정 숫자 대신 풀 앞쪽 절반 = dev, 홀수면 dev가 1건 더. 각 split 안에서 고정 셔플, `truth_call_labels.split`과 일치) |
 | judge_status | `none/pending/skipped/done` — 생성기는 풀 300만 `pending`, 나머지 `none`. 붙여넣기는 `pending` |
 | in_blind_pool, blind_sort_order?, blind_status | 150. **판정 풀 300의 부분집합** |
 | indexed_at? | |
@@ -257,7 +262,7 @@ UNIQUE `(call_id, model_alias, prompt_version)`. **`prompt_version`은 (프롬�
 
 ### 3.6 설정·작업·인덱스·고정 쿼리
 
-**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(A·B의 model_actual), `today_override`, `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위. 기본 150 = dev만, test 판정 시 300)
+**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(A·B의 model_actual), `today_override`, `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위. 기본 = dev 크기(large 150), test 판정 시 풀 전체(large 300))
 **`ax_jobs(id, kind, status, step, progress, result_json, error, created_at, updated_at)`**: 30초 넘는 작업(배치 분류·준비표 재생성)
 
 | 테이블 | 인덱스 |

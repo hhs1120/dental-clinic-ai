@@ -181,7 +181,7 @@ tags:
 3. ③ `eval.py --split dev` exit 0 + 도구 선택 ≥ 3/6 + `--retrieval-only` Hit@5 ≥ 10/20
 4. `next build` exit 0
 
-`make ci`(매 커밋: small fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright)와 `make gate`(medium DB + 캐시된 실모델 분류 + dev 수치)는 다른 타겟.
+`make ci`(매 커밋: small fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright)와 `make gate`(최종 large DB + 캐시된 실모델 분류 + dev 수치)는 다른 타겟.
 
 
 ## 7. 운영 결정
