@@ -283,20 +283,21 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외) |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
-**경고 — 분포 목표**(리포트만. 목표값은 코드, 허용치는 `verify.py`)
-| 지표 | 목표값 | 분모 | 건너뛰는 경우 |
-|---|---|---|---|
-| 연령 구간 비중 | `master.AGE_BANDS` | 전체 환자(TODAY 기준 나이) | — |
-| 활동(TODAY 전 6개월 안 내원) | `master.ACTIVE_SHARE` | 예정 신환을 뺀 환자 | 생성 기간 < 6개월(small) |
-| 신환 = 월 내원의 비율 | `master.NEW_PATIENT_SHARE` | 그달 completed | 그달 completed가 적을 때 |
-| 노쇼·당일 취소 | `config` `noshow_rate`·`sameday_cancel_rate` | TODAY 이전 전체 예약(취소 포함) | — |
-| 변경 | `config` `reschedule_rate` | 전체 예약 − 변경으로 생긴 새 예약 | — |
-| 미확인 | 1 − `config` `confirm_rate` | TODAY 이전 비취소 예약 | — |
-| 미수 발생 | `config` `unpaid_rate` | `visit` 수납 행 | — |
-| 내원 구성 | `master.VISIT_MIX` | completed | — |
-| 하루 채움 | 상한의 70% 이상 | TODAY 이전 진료일 | — |
-| 피크 패턴 | 피크 시작 비중 > 피크의 영업시간 비중 | 비취소 예약 | — |
-| 통화 목적·노이즈 | §4.1 | 전사 | — |
+**경고 — 분포 목표**(리포트만. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)
+
+| 지표 | 목표 | 허용 | 값 위치 | 분모 | 건너뛰는 경우 |
+|---|---|---|---|---|---|
+| 연령 구간 비중 | 소아 15% · 청소년 8% · 성인 62% · 노인 15% | ±2%p | `master.AGE_BANDS` | 전체 환자(TODAY 기준 나이) | — |
+| 활동(TODAY 전 6개월 안 내원) | 70% | ±5%p | `master.ACTIVE_SHARE` | 예정 신환을 뺀 환자 | 생성 기간 < 6개월(small) |
+| 신환 = 월 내원의 비율 | 12% | ±3%p | `master.NEW_PATIENT_SHARE` | 그달 completed | 그달 completed가 적을 때 |
+| 노쇼·당일 취소 | 6% · 4% | ±2%p | `config` `noshow_rate`·`sameday_cancel_rate` | TODAY 이전 전체 예약(취소 포함) | — |
+| 변경 | 5% | ±2%p | `config` `reschedule_rate` | 전체 예약 − 변경으로 생긴 새 예약 | — |
+| 미확인 | 15% | ±2%p | 1 − `config` `confirm_rate` | TODAY 이전 비취소 예약 | — |
+| 미수 발생 | 15% | ±2%p | `config` `unpaid_rate` | `visit` 수납 행 | — |
+| 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | completed | — |
+| 하루 채움 | 상한의 70% 이상 | — | `verify.DAILY_MIN_FILL` | TODAY 이전 진료일 | — |
+| 피크 패턴 | 피크 시작 비중 > 피크의 영업시간 비중 | — | `master.PEAK_HOURS` | 비취소 예약 | — |
+| 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 
 **경고 — 기타**
 | 영역 | 검사 |
