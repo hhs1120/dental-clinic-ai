@@ -138,6 +138,33 @@ def test_active_ratio_excludes_future_new_patients(tmp_path):
     assert verify.check_active_ratio(conn, CTX) == []
 
 
+def test_active_from_clips_to_month_end():
+    assert verify._active_from(date(2026, 12, 1)) == date(2026, 6, 1)
+    assert verify._active_from(date(2026, 8, 31)) == date(2026, 2, 28)
+
+
+def test_visit_split_boundaries(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 4})
+    # 1: 05-31 마지막 → 휴면 (a) / 2: 06-01 → 활동 / 3: 11-30 → 활동 / 4: TODAY 예약만(scheduled) → 예정 신환, 분모 제외
+    _visits(conn, {1: "2026-05-29", 2: "2026-06-01", 3: "2026-11-30"})
+    conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-05-31 10:00:00' WHERE patient_id = 1")
+    appt(conn, "2026-12-01 10:00:00", patient=4, chair=4, status="scheduled")
+    patients, active, dormant_a = verify._visit_split(conn, CTX)
+    assert (patients, active, dormant_a) == ({1, 2, 3}, {2, 3}, {1})
+
+
+def test_dormant_a_ratio_medium_window(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    # medium 창(05-01~): 기대 30% × 50% × 31/120 ≈ 3.9% → 4명 통과, 15명은 경고
+    medium = replace(CTX, range_start=date(2026, 5, 1))
+    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 74 else None) for i in range(1, 101)})
+    assert verify.check_dormant_a_ratio(conn, medium) == []
+    _visits(conn, {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)})
+    assert verify.check_dormant_a_ratio(conn, medium)
+
+
 def test_dormant_a_ratio_scales_with_window(tmp_path):
     conn = make_db(tmp_path)
     _patients(conn, {"1986-01-01": 100})

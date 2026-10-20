@@ -74,6 +74,11 @@ BREAKS = {
     ),
     "cancelled_without_time": ("UPDATE emr_appointments SET cancelled_at = NULL WHERE id = 3", "check_cancelled_at_status"),
     "time_on_not_cancelled": ("UPDATE emr_appointments SET cancelled_at = '2026-11-20 10:00:00' WHERE id = 7", "check_cancelled_at_status"),
+    # 변경 쌍: 새 예약은 원래 날짜 뒤 1~14일, 같은 유형·시술, 새 created_at = 원래 cancelled_at
+    "reschedule_too_far": ("UPDATE emr_appointments SET scheduled_at = '2026-12-02 10:00:00' WHERE id = 4", "check_reschedule_pair"),
+    "reschedule_earlier": ("UPDATE emr_appointments SET scheduled_at = '2026-11-16 10:00:00' WHERE id = 4", "check_reschedule_pair"),
+    "reschedule_other_procedure": ("UPDATE emr_appointments SET planned_procedure_code = 'U0006' WHERE id = 4", "check_reschedule_pair"),
+    "reschedule_created_mismatch": ("UPDATE emr_appointments SET created_at = '2026-11-13 09:00:00' WHERE id = 4", "check_reschedule_pair"),
     # 진료 기록 ↔ completed
     "treatment_on_noshow": ("UPDATE emr_treatments SET appointment_id = 7 WHERE id = 1", "check_treatment_on_completed"),
     "completed_without_treatment": ("DELETE FROM emr_treatments WHERE id = 3", "check_completed_has_treatment"),
@@ -235,6 +240,7 @@ def _future_new_patient(conn, n_appts):
                  " VALUES (3, 'C-00003', '이신환', '1990-01-01', 'F', '010-0000-0003', '2026-11-28')")
     for day in ("2026-12-04", "2026-12-11")[:n_appts]:
         appt(conn, f"{day} 10:00:00", patient=3, status="scheduled")
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-28 10:00:00' WHERE patient_id = 3")
 
 
 def test_future_new_patient_single_appointment(tmp_path):
@@ -247,6 +253,15 @@ def test_future_new_patient_two_appointments(tmp_path):
     conn = make_db(tmp_path)
     _future_new_patient(conn, 2)
     assert [v["patient_id"] for v in verify.check_future_new_patient_single(conn, CTX)] == [3]
+
+
+def test_future_new_patient_registered_at_first_booking(tmp_path):
+    conn = make_db(tmp_path)
+    _future_new_patient(conn, 1)
+    assert verify.check_future_new_patient_registered(conn, CTX) == []
+    # 오래전 등록된 구환에게 미래 예약만 있으면 예정 신환이 아니다 — 휴면 (b)에 예약이 생긴 생성기 버그
+    conn.execute("UPDATE emr_patients SET registered_at = '2019-03-01' WHERE id = 3")
+    assert [v["patient_id"] for v in verify.check_future_new_patient_registered(conn, CTX)] == [3]
 
 
 def test_load_ctx_reads_range_from_gen_meta(tmp_path):

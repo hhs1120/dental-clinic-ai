@@ -62,7 +62,7 @@ tags:
 - `make data` / `make index` / `make verify` / `make fixture`(테스트용 small DB)
 
 **완료 기준**
-- `make verify` 필수 검사 전부 통과
+- `make verify` 필수 검사 전부 통과 — small과 large 둘 다(large에서만 드러나는 예산 문제가 있음)
 - 같은 시드 2회 → 테이블 내용 해시 동일(LLM 캐시 포함)
 - 규모: 환자 2,000 / 2026-02-01~12-15 / 평일 26명·토 13명 / `TODAY=2026-12-01`
 

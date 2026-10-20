@@ -7,6 +7,7 @@
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
 """
 import argparse
+import calendar
 import hashlib
 import json
 import math
@@ -301,6 +302,28 @@ def check_future_new_patient_single(conn, ctx):
                        " GROUP BY patient_id HAVING count(*) > 1", *ids)
 
 
+def check_future_new_patient_registered(conn, ctx):
+    """예정 신환의 registered_at = 첫 예약 created_at의 날짜 (구환에게 미래 예약만 생긴 버그를 잡는다)"""
+    ids = _future_new_patients(conn, ctx)
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    return _rows(conn, "SELECT p.id AS patient_id, p.registered_at, min(date(a.created_at)) AS first_booked"
+                       " FROM emr_patients p JOIN emr_appointments a ON a.patient_id = p.id"
+                       f" WHERE p.id IN ({marks}) GROUP BY p.id"
+                       " HAVING date(p.registered_at) IS NOT min(date(a.created_at))", *ids)
+
+
+def check_reschedule_pair(conn, ctx):
+    """변경 쌍: 새 예약은 원래 날짜 뒤 1~14일, 같은 유형·예정 시술, 새 created_at = 원래 cancelled_at"""
+    return _rows(conn, "SELECT n.id, n.rescheduled_from_id, o.scheduled_at AS original_at, n.scheduled_at,"
+                       " o.cancelled_at, n.created_at FROM emr_appointments n"
+                       " JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
+                       " WHERE julianday(date(n.scheduled_at)) - julianday(date(o.scheduled_at)) NOT BETWEEN 1 AND 14"
+                       " OR n.type IS NOT o.type OR n.planned_procedure_code IS NOT o.planned_procedure_code"
+                       " OR n.created_at IS NOT o.cancelled_at")
+
+
 def check_cancellation_kind(conn, ctx):
     """취소는 변경 쌍의 원래 예약 또는 당일 취소(TODAY 이전 날짜)뿐"""
     return _rows(conn, "SELECT a.id, a.scheduled_at, a.cancelled_at FROM emr_appointments a"
@@ -504,7 +527,8 @@ def check_daily_visits(conn, ctx):
 def _active_from(today: date) -> date:
     """활동 기준일 = TODAY − ACTIVE_MONTHS개월 (2026-12-01 → 2026-06-01)"""
     months = today.year * 12 + today.month - 1 - ACTIVE_MONTHS
-    return today.replace(year=months // 12, month=months % 12 + 1)
+    year, month = months // 12, months % 12 + 1
+    return date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
 
 
 def _visit_split(conn, ctx) -> tuple[set, set, set]:
@@ -627,6 +651,8 @@ REQUIRED = [
     check_cancelled_at_status,
     check_cancellation_kind,
     check_future_new_patient_single,
+    check_future_new_patient_registered,
+    check_reschedule_pair,
     check_treatment_on_completed,
     check_completed_has_treatment,
     check_performed_at,
