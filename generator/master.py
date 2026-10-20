@@ -16,6 +16,25 @@ MAX_CHAIR_WORK = 3
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
 
+# 피크 시간 (§1). [시작, 끝)
+PEAK_HOURS = [("10:00", "11:00"), ("15:00", "17:00")]
+
+# 토요일 내원 수 = 평일 visits_per_day × 이 비율 (§0)
+SATURDAY_VISIT_RATIO = 0.5
+
+# 연령 구간과 비중 (§2.2). (이름, 최소 나이, 최대 나이(포함, 노인은 None), 비중)
+AGE_BANDS = [
+    ("child", 0, 12, 0.15),
+    ("teen", 13, 18, 0.08),
+    ("adult", 19, 64, 0.62),
+    ("senior", 65, None, 0.15),
+]
+
+# FDI 치아 번호 (§2.6 ⑦). 전악 시술은 FULL_MOUTH 센티널
+PERMANENT_TEETH = frozenset(f"{q}{n}" for q in (1, 2, 3, 4) for n in range(1, 9))
+PRIMARY_TEETH = frozenset(f"{q}{n}" for q in (5, 6, 7, 8) for n in range(1, 6))
+FULL_MOUTH = "00"
+
 # 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
 SUBMITTED_MONTHS = 2
 

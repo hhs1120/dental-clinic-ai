@@ -141,3 +141,33 @@ CREATE INDEX ix_pay_patient        ON emr_payments(patient_id);
 CREATE UNIQUE INDEX ux_claims_match_key ON emr_claims(chart_no, service_date, procedure_code, tooth_no);
 CREATE INDEX ix_claims_month       ON emr_claims(claim_month);
 CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
+
+-- ── ax_* (§3) ───────────────────────────────────────────────
+-- 생성기는 ax_calls(6~7단계)·ax_documents·ax_chunks만 적재. 나머지는 해당 기능 구현 때 추가
+
+-- 라벨·노이즈·카테고리 컬럼을 두지 않는다 (정답 누출 — truth_call_labels에만)
+CREATE TABLE ax_calls (
+    id               INTEGER PRIMARY KEY,
+    call_uid         TEXT NOT NULL UNIQUE,  -- 'c-0481' 시드 셔플 순번
+    source           TEXT NOT NULL CHECK (source IN ('generated', 'pasted', 'sample_audio', 'uploaded')),
+    patient_id       INTEGER REFERENCES emr_patients(id),
+    caller_phone     TEXT,
+    caller_name      TEXT,
+    direction        TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+    started_at       TEXT NOT NULL,
+    duration_sec     INTEGER NOT NULL,
+    has_transcript   INTEGER NOT NULL DEFAULT 0,
+    audio_path       TEXT,
+    transcript       TEXT,
+    in_eval_pool     INTEGER NOT NULL DEFAULT 0,
+    eval_sort_order  INTEGER,
+    judge_status     TEXT NOT NULL DEFAULT 'none' CHECK (judge_status IN ('none', 'pending', 'skipped', 'done')),
+    in_blind_pool    INTEGER NOT NULL DEFAULT 0,
+    blind_sort_order INTEGER,
+    blind_status     TEXT NOT NULL DEFAULT 'none' CHECK (blind_status IN ('none', 'pending', 'done')),
+    indexed_at       TEXT
+);
+
+CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
+CREATE INDEX ix_calls_blind   ON ax_calls(blind_status, blind_sort_order);
+CREATE INDEX ix_calls_started ON ax_calls(started_at);

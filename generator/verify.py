@@ -1,12 +1,16 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 데이터 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 리포트만.
 
-지금은 정형(emr_*) 필수 검사만. ax_*·RAG·LLM·누출·결정성 검사는 아직 없다.
+지금은 정형(emr_*)·ax_calls·truth_claims 필수 검사 + 분포·치아 경고. RAG·LLM 검사는 아직 없고,
+결정성은 canonical_hash만 있다(같은 시드 2회 비교는 생성기 구현 후).
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과.
+conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
 """
 import argparse
+import hashlib
 import json
 import math
+import re
 import sqlite3
 import sys
 from collections import defaultdict
@@ -16,8 +20,9 @@ from pathlib import Path
 
 import yaml
 
-from generator.master import (DOCTOR_CHAIRS, HOURS, MAX_CHAIR_WORK, SCALING_CODE, SCALING_MIN_AGE,
-                              SUBMITTED_MONTHS, open_slots)
+from generator.master import (AGE_BANDS, DOCTOR_CHAIRS, FULL_MOUTH, HOURS, MAX_CHAIR_WORK, PEAK_HOURS,
+                              PERMANENT_TEETH, PRIMARY_TEETH, SATURDAY_VISIT_RATIO, SCALING_CODE,
+                              SCALING_MIN_AGE, SUBMITTED_MONTHS, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -30,6 +35,13 @@ LUNCH = tuple(time.fromisoformat(t) for t in HOURS["lunch"])
 CLOSED_WEEKDAYS = set(HOURS["closed_weekdays"])
 SATURDAY = 5
 SLOT = timedelta(minutes=30)
+PEAK = [tuple(time.fromisoformat(t) for t in w) for w in PEAK_HOURS]
+CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
+
+# 경고 허용치 (§5.3 경고 표)
+AGE_TOLERANCE = 0.02
+DAILY_VISIT_TOLERANCE = 0.30
+LONG_PEAK_MAX = 0.40
 
 
 @dataclass(frozen=True)
@@ -37,6 +49,7 @@ class Ctx:
     today: date
     holidays: frozenset
     reschedule_rate: float
+    visits_per_day: int
 
 
 def load_ctx(config_path: Path) -> Ctx:
@@ -46,6 +59,7 @@ def load_ctx(config_path: Path) -> Ctx:
         today=cfg["today"],
         holidays=frozenset(date.fromisoformat(d) for d in holidays),
         reschedule_rate=cfg["reschedule_rate"],
+        visits_per_day=cfg["visits_per_day"],
     )
 
 
@@ -70,10 +84,9 @@ def _active_appointments(conn) -> list[dict]:
 # ── 참조 ────────────────────────────────────────────────────
 
 def check_foreign_keys(conn, ctx):
-    """FK 전부 유효 (스키마에 선언된 emr_* 참조)"""
+    """FK 전부 유효 (스키마에 선언된 emr_*·ax_* 참조)"""
     return [{"table": t, "rowid": rowid, "parent": parent}
-            for t, rowid, parent, _ in conn.execute("PRAGMA foreign_key_check")
-            if t.startswith("emr_")]
+            for t, rowid, parent, _ in conn.execute("PRAGMA foreign_key_check")]
 
 
 # ── 기준일 ──────────────────────────────────────────────────
@@ -99,13 +112,15 @@ def check_no_records_after_today(conn, ctx):
 
 
 def check_timestamps_not_future(conn, ctx):
-    """submitted_at·sent_at ≤ TODAY"""
+    """submitted_at·sent_at·started_at ≤ TODAY"""
     today = ctx.today.isoformat()
     return (
         _rows(conn, "SELECT 'emr_claims' AS tbl, id, submitted_at AS at FROM emr_claims"
                     " WHERE submitted_at IS NOT NULL AND date(submitted_at) > ?", today)
         + _rows(conn, "SELECT 'emr_messages' AS tbl, id, sent_at AS at FROM emr_messages"
                       " WHERE date(sent_at) > ?", today)
+        + _rows(conn, "SELECT 'ax_calls' AS tbl, id, started_at AS at FROM ax_calls"
+                      " WHERE date(started_at) > ?", today)
     )
 
 
@@ -286,6 +301,13 @@ def check_claim_key_unique(conn, ctx):
                        " HAVING count(*) > 1")
 
 
+def check_extra_eob_not_in_ledger(conn, ctx):
+    """truth_claims의 extra_in_eob 대조 키가 emr_claims와 겹치지 않음"""
+    return _rows(conn, "SELECT t.id, t.chart_no, t.service_date, t.procedure_code, t.tooth_no, c.id AS claim_id"
+                       " FROM truth.truth_claims t JOIN emr_claims c USING (chart_no, service_date, procedure_code, tooth_no)"
+                       " WHERE t.outcome = 'extra_in_eob'")
+
+
 # ── 수납 ────────────────────────────────────────────────────
 
 def check_balance_non_negative(conn, ctx):
@@ -306,12 +328,143 @@ def check_visit_payment_completed(conn, ctx):
                        " WHERE p.kind = 'visit' AND a.status IS NOT 'completed'")
 
 
+# ── 누출 ────────────────────────────────────────────────────
+
+# 데이터 설계 §3.1의 ax_calls 컬럼. 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
+AX_CALLS_COLUMNS = {
+    "id", "call_uid", "source", "patient_id", "caller_phone", "caller_name", "direction", "started_at",
+    "duration_sec", "has_transcript", "audio_path", "transcript", "in_eval_pool", "eval_sort_order",
+    "judge_status", "in_blind_pool", "blind_sort_order", "blind_status", "indexed_at",
+}
+CALL_UID = re.compile(r"c-\d{4,}")
+
+
+def check_ax_calls_columns(conn, ctx):
+    """ax_calls에 §3.1 밖의 컬럼(라벨·노이즈·카테고리) 없음"""
+    return [{"column": r["name"]} for r in conn.execute("PRAGMA main.table_info(ax_calls)")
+            if r["name"] not in AX_CALLS_COLUMNS]
+
+
+def check_call_uid_format(conn, ctx):
+    """call_uid는 'c-' + 순번 숫자만 (목적 enum 등 의미 있는 문자열 누출 방지)"""
+    return [r for r in _rows(conn, "SELECT id, call_uid FROM ax_calls")
+            if not CALL_UID.fullmatch(r["call_uid"])]
+
+
 # ── 가상 PII ────────────────────────────────────────────────
 
 def check_fake_phone(conn, ctx):
     """환자 전화는 010-0000-xxxx만"""
     return _rows(conn, "SELECT id, chart_no, phone FROM emr_patients"
                        " WHERE phone NOT GLOB '010-0000-[0-9][0-9][0-9][0-9]'")
+
+
+# ── 경고: 분포 ──────────────────────────────────────────────
+
+def _band(age: int) -> str:
+    return next(name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi))
+
+
+def check_age_distribution(conn, ctx):
+    """연령 구간 비중 ±2%p (TODAY 기준 나이)"""
+    ages = [_age(date.fromisoformat(r["birth_date"]), ctx.today)
+            for r in _rows(conn, "SELECT birth_date FROM emr_patients")]
+    if not ages:
+        return []
+    counts = defaultdict(int)
+    for a in ages:
+        counts[_band(a)] += 1
+    bad = []
+    for name, _, _, target in AGE_BANDS:
+        share = counts[name] / len(ages)
+        if abs(share - target) > AGE_TOLERANCE:
+            bad.append({"band": name, "share": round(share, 3), "target": target})
+    return bad
+
+
+def check_daily_visits(conn, ctx):
+    """진료일별 비취소 예약 수가 visits_per_day(토 ×0.5) ±30% — 첫 예약일~마지막 예약일 사이 모든 진료일"""
+    counts = defaultdict(int)
+    for r in _rows(conn, "SELECT date(scheduled_at) AS d FROM emr_appointments WHERE status != 'cancelled'"):
+        counts[date.fromisoformat(r["d"])] += 1
+    if not counts:
+        return []
+    bad, d = [], min(counts)
+    while d <= max(counts):
+        if open_slots(d.weekday()) and d not in ctx.holidays:
+            target = ctx.visits_per_day * (SATURDAY_VISIT_RATIO if d.weekday() == SATURDAY else 1)
+            if abs(counts[d] - target) > DAILY_VISIT_TOLERANCE * target:
+                bad.append({"date": d.isoformat(), "visits": counts[d], "target": target})
+        d += timedelta(days=1)
+    return bad
+
+
+def _in_peak(t: time) -> bool:
+    return any(start <= t < end for start, end in PEAK)
+
+
+def _peak_time_share(weekday: int) -> float:
+    """그 요일 영업시간 중 피크 시간의 비율 (토요일은 15–17시가 영업 밖)"""
+    close = SATURDAY_CLOSE if weekday == SATURDAY else WEEKDAY_CLOSE
+    minutes = lambda t: t.hour * 60 + t.minute
+    peak = sum(max(0, minutes(min(end, close)) - minutes(max(start, OPEN))) for start, end in PEAK)
+    return peak / (open_slots(weekday) * 30)
+
+
+def check_peak_pattern(conn, ctx):
+    """피크(10–11·15–17시) 시작 비중이 피크의 영업시간 비중보다 큼"""
+    starts = [a["start"] for a in _active_appointments(conn)]
+    if not starts:
+        return []
+    actual = sum(_in_peak(s.time()) for s in starts) / len(starts)
+    expected = sum(_peak_time_share(s.weekday()) for s in starts) / len(starts)
+    return [] if actual > expected else [{"peak_share": round(actual, 3), "time_share": round(expected, 3)}]
+
+
+def check_long_procedures_peak(conn, ctx):
+    """60분↑ 예약의 피크 시작 비중 < 40% (비피크 우선 배치)"""
+    starts = [a["start"] for a in _active_appointments(conn) if a["duration_min"] >= 60]
+    if not starts:
+        return []
+    share = sum(_in_peak(s.time()) for s in starts) / len(starts)
+    return [] if share < LONG_PEAK_MAX else [{"peak_share": round(share, 3), "n": len(starts)}]
+
+
+# ── 경고: 치아 ──────────────────────────────────────────────
+
+def check_tooth_fdi(conn, ctx):
+    """tooth_no는 FDI 영구치·유치 번호 또는 '00'"""
+    valid = PERMANENT_TEETH | PRIMARY_TEETH | {FULL_MOUTH}
+    rows = (_rows(conn, "SELECT 'emr_treatments' AS tbl, id, tooth_no FROM emr_treatments")
+            + _rows(conn, "SELECT 'emr_claims' AS tbl, id, tooth_no FROM emr_claims"))
+    return [r for r in rows if r["tooth_no"] is not None and r["tooth_no"] not in valid]
+
+
+def check_tooth_level(conn, ctx):
+    """치아 단위 시술은 '00' 금지, 전악 시술은 '00'만"""
+    return _rows(conn, "SELECT t.id, t.procedure_code, p.name, p.is_tooth_level, t.tooth_no"
+                       " FROM emr_treatments t JOIN emr_procedures p ON p.code = t.procedure_code"
+                       " WHERE (p.is_tooth_level = 1) = (t.tooth_no = ?)", FULL_MOUTH)
+
+
+def _treatments_with_age(conn) -> list[dict]:
+    rows = _rows(conn, "SELECT t.id, t.patient_id, t.procedure_code, p.age_group, t.tooth_no, t.performed_at,"
+                       " pt.birth_date FROM emr_treatments t"
+                       " JOIN emr_procedures p ON p.code = t.procedure_code"
+                       " JOIN emr_patients pt ON pt.id = t.patient_id")
+    for r in rows:
+        r["age"] = _age(date.fromisoformat(r["birth_date"]), _dt(r["performed_at"]).date())
+    return rows
+
+
+def check_primary_teeth_child(conn, ctx):
+    """유치 번호는 소아(시술일 기준 0–12세)만"""
+    return [r for r in _treatments_with_age(conn) if r["tooth_no"] in PRIMARY_TEETH and r["age"] > CHILD_MAX_AGE]
+
+
+def check_child_procedures(conn, ctx):
+    """소아 시술(age_group='child': 불소도포·실란트)은 시술일 기준 0–12세만"""
+    return [r for r in _treatments_with_age(conn) if r["age_group"] == "child" and r["age"] > CHILD_MAX_AGE]
 
 
 REQUIRED = [
@@ -334,11 +487,43 @@ REQUIRED = [
     check_scaling_limit,
     check_tooth_no_not_null,
     check_claim_key_unique,
+    check_extra_eob_not_in_ledger,
     check_balance_non_negative,
     check_visit_payment_completed,
+    check_ax_calls_columns,
+    check_call_uid_format,
     check_fake_phone,
 ]
-WARNINGS = []
+WARNINGS = [
+    check_age_distribution,
+    check_daily_visits,
+    check_peak_pattern,
+    check_long_procedures_peak,
+    check_tooth_fdi,
+    check_tooth_level,
+    check_primary_teeth_child,
+    check_child_procedures,
+]
+
+
+# ── 결정성 ──────────────────────────────────────────────────
+
+# 실행할 때마다 바뀌는 컬럼 (§5.3 결정성: indexed_at 제외)
+HASH_EXCLUDED = {("ax_calls", "indexed_at")}
+
+
+def canonical_hash(conn) -> str:
+    """main 스키마 전 테이블의 내용 해시 — 테이블·컬럼 이름순, 행은 정렬. 같은 시드 2회 비교용"""
+    h = hashlib.sha256()
+    tables = [r[0] for r in conn.execute("SELECT name FROM main.sqlite_master WHERE type = 'table'"
+                                         " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    for table in tables:
+        cols = sorted(r[1] for r in conn.execute(f"PRAGMA main.table_info({table})")
+                      if (table, r[1]) not in HASH_EXCLUDED)
+        rows = sorted(repr(tuple(r)) for r in conn.execute(
+            f"SELECT {', '.join(f'[{c}]' for c in cols)} FROM main.[{table}]"))
+        h.update(json.dumps([table, cols, rows], ensure_ascii=False).encode())
+    return h.hexdigest()
 
 
 def run(conn, ctx) -> bool:
@@ -361,13 +546,16 @@ def run(conn, ctx) -> bool:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=ROOT / "data" / "app.sqlite")
+    parser.add_argument("--truth", type=Path, default=ROOT / "ground_truth" / "truth.sqlite")
     parser.add_argument("--config", type=Path, default=ROOT / "config" / "generator.yaml")
     args = parser.parse_args(argv)
-    if not args.db.exists():
-        print(f"DB 없음: {args.db} — make data 먼저")
-        return 1
+    for path in (args.db, args.truth):
+        if not path.exists():
+            print(f"DB 없음: {path} — make data 먼저")
+            return 1
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
+    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{args.truth}?mode=ro",))
     ok = run(conn, load_ctx(args.config))
     print("verify 통과" if ok else "verify 실패 — 필수 검사 위반")
     return 0 if ok else 1
