@@ -7,7 +7,7 @@ visits_per_day: 26          # 하루 비취소 예약 상한(평일). 토요일 
 reschedule_rate: 0.05
 noshow_rate: 0.06
 sameday_cancel_rate: 0.04
-confirm_rate: 0.85
+confirm_rate: 0.85          # 직전 진료일 리마인드 응답
 unpaid_rate: 0.15
 settle_next_visit: 0.80
 calls_with_transcript: 1000

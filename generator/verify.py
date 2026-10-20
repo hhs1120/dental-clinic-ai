@@ -1,8 +1,11 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 리포트만.
 
-지금은 정형(emr_*)·ax_calls·truth_claims 필수 검사 + 분포·치아 경고. RAG·LLM 검사는 아직 없고,
-결정성은 canonical_hash만 있다(같은 시드 2회 비교는 생성기 구현 후).
+구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고.
+§5.3 중 아직 없는 것(해당 단계 구현 때 추가):
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각,
+         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
+  경고 — 목적·노이즈 분포, 문자, 통화, RAG
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과.
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
 """
@@ -20,10 +23,10 @@ from pathlib import Path
 
 import yaml
 
-from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, FULL_MOUTH, HOURS,
+from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
                               MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
-                              open_slots)
+                              VISIT_MIX, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -42,6 +45,7 @@ CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
 SHARE_TOLERANCE = 0.02  # 연령 비중·노쇼·당일 취소 ±2%p
 ACTIVE_TOLERANCE = 0.05
 NEW_PATIENT_TOLERANCE = 0.03
+VISIT_MIX_TOLERANCE = 0.03
 NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
 DAILY_MIN_FILL = 0.70  # TODAY 이전 진료일의 비취소 예약 ≥ 상한 × 이 비율
 
@@ -53,6 +57,8 @@ class Ctx:
     reschedule_rate: float
     noshow_rate: float
     sameday_cancel_rate: float
+    confirm_rate: float
+    unpaid_rate: float
     visits_per_day: int
     range_start: date  # 생성 기간 — truth_gen_meta에서 (규모별 시작일)
     range_end: date
@@ -69,6 +75,8 @@ def load_ctx(config_path: Path, conn) -> Ctx:
         reschedule_rate=cfg["reschedule_rate"],
         noshow_rate=cfg["noshow_rate"],
         sameday_cancel_rate=cfg["sameday_cancel_rate"],
+        confirm_rate=cfg["confirm_rate"],
+        unpaid_rate=cfg["unpaid_rate"],
         visits_per_day=cfg["visits_per_day"],
         range_start=date.fromisoformat(meta["range_start"]),
         range_end=date.fromisoformat(meta["range_end"]),
@@ -242,10 +250,18 @@ def check_planned_procedure(conn, ctx):
                        " WHERE planned_procedure_code IS NULL")
 
 
+def _prev_open_day(d: date, holidays) -> date:
+    """d 직전의 진료일 (휴진 요일·공휴일 건너뜀)"""
+    d -= timedelta(days=1)
+    while not open_slots(d.weekday()) or d in holidays:
+        d -= timedelta(days=1)
+    return d
+
+
 def check_confirmed_not_future(conn, ctx):
-    """confirmed는 전날 리마인드 응답 — 전날이 TODAY 이후인 예약(TODAY+2일~)은 0"""
-    return _rows(conn, "SELECT id, scheduled_at, confirmed FROM emr_appointments"
-                       " WHERE confirmed = 1 AND date(scheduled_at, '-1 day') > ?", ctx.today.isoformat())
+    """confirmed는 직전 진료일 리마인드 응답 — 직전 진료일이 TODAY 이후인 예약은 0"""
+    return [r for r in _rows(conn, "SELECT id, scheduled_at, confirmed FROM emr_appointments WHERE confirmed = 1")
+            if _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays) > ctx.today]
 
 
 def check_cancelled_at_status(conn, ctx):
@@ -294,6 +310,14 @@ def check_reschedule_pair(conn, ctx):
                        " OR n.created_at IS NOT o.cancelled_at")
 
 
+def check_reschedule_once(conn, ctx):
+    """변경은 예약당 최대 1회 — 원래 예약은 새 예약 하나만, 변경으로 생긴 새 예약은 다시 변경되지 않음"""
+    return (_rows(conn, "SELECT rescheduled_from_id AS original_id, count(*) AS n FROM emr_appointments"
+                        " WHERE rescheduled_from_id IS NOT NULL GROUP BY rescheduled_from_id HAVING count(*) > 1")
+            + _rows(conn, "SELECT m.id AS appointment_id FROM emr_appointments m"
+                          " JOIN emr_appointments n ON n.rescheduled_from_id = m.id WHERE m.rescheduled_from_id IS NOT NULL"))
+
+
 def check_cancellation_kind(conn, ctx):
     """취소는 변경 쌍의 원래 예약 또는 당일 취소(TODAY 이전 날짜)뿐"""
     return _rows(conn, "SELECT a.id, a.scheduled_at, a.cancelled_at FROM emr_appointments a"
@@ -319,11 +343,11 @@ def check_treatment_on_completed(conn, ctx):
                        " WHERE a.status IS NOT 'completed'")
 
 
-def check_completed_has_treatment(conn, ctx):
-    """completed 예약은 진료 기록 ≥ 1행"""
-    return _rows(conn, "SELECT a.id, a.scheduled_at, a.planned_procedure_code FROM emr_appointments a"
-                       " WHERE a.status = 'completed'"
-                       " AND NOT EXISTS (SELECT 1 FROM emr_treatments t WHERE t.appointment_id = a.id)")
+def check_completed_one_treatment(conn, ctx):
+    """completed 예약은 진료 기록 정확히 1행"""
+    return _rows(conn, "SELECT a.id, a.scheduled_at, count(t.id) AS treatments FROM emr_appointments a"
+                       " LEFT JOIN emr_treatments t ON t.appointment_id = a.id"
+                       " WHERE a.status = 'completed' GROUP BY a.id HAVING count(t.id) != 1")
 
 
 def check_service_date(conn, ctx):
@@ -334,10 +358,12 @@ def check_service_date(conn, ctx):
 
 
 def check_uninsured_not_claimed(conn, ctx):
-    """비급여 시술은 claims에 없음"""
-    return _rows(conn, "SELECT c.id, c.chart_no, c.service_date, c.procedure_code, p.name"
+    """비급여 시술은 claims에 없음 (conditional은 시술일 65세 미만이면 비급여)"""
+    rows = _rows(conn, "SELECT c.id, c.chart_no, c.service_date, c.procedure_code, p.name, p.is_insured, pt.birth_date"
                        " FROM emr_claims c JOIN emr_procedures p ON p.code = c.procedure_code"
-                       " WHERE p.is_insured = 'no'")
+                       " JOIN emr_patients pt ON pt.id = c.patient_id WHERE p.is_insured IN ('no', 'conditional')")
+    return [r for r in rows if r["is_insured"] == "no"
+            or _age(date.fromisoformat(r["birth_date"]), date.fromisoformat(r["service_date"])) < CONDITIONAL_INSURED_MIN_AGE]
 
 
 def check_scaling_limit(conn, ctx):
@@ -364,7 +390,7 @@ def _age(birth: date, on: date) -> int:
 
 
 def check_tooth_no_not_null(conn, ctx):
-    """tooth_no NULL 없음 (전악은 '00')"""
+    """tooth_no NULL 없음 (치아 단위가 아닌 시술은 '00')"""
     return (_rows(conn, "SELECT 'emr_treatments' AS tbl, id FROM emr_treatments WHERE tooth_no IS NULL")
             + _rows(conn, "SELECT 'emr_claims' AS tbl, id FROM emr_claims WHERE tooth_no IS NULL"))
 
@@ -451,9 +477,11 @@ def check_call_uid_format(conn, ctx):
 # ── 가상 PII ────────────────────────────────────────────────
 
 def check_fake_phone(conn, ctx):
-    """환자 전화는 010-0000-xxxx만"""
-    return _rows(conn, "SELECT id, chart_no, phone FROM emr_patients"
-                       " WHERE phone NOT GLOB '010-0000-[0-9][0-9][0-9][0-9]'")
+    """환자 전화·통화 상대 번호는 010-0000-xxxx만"""
+    fake = "'010-0000-[0-9][0-9][0-9][0-9]'"
+    return (_rows(conn, f"SELECT 'emr_patients' AS tbl, id, phone FROM emr_patients WHERE phone NOT GLOB {fake}")
+            + _rows(conn, "SELECT 'ax_calls' AS tbl, id, caller_phone AS phone FROM ax_calls"
+                          f" WHERE caller_phone IS NOT NULL AND caller_phone NOT GLOB {fake}"))
 
 
 # ── 경고: 분포 ──────────────────────────────────────────────
@@ -517,10 +545,9 @@ def check_new_patient_share(conn, ctx):
 
 
 def check_status_rates(conn, ctx):
-    """노쇼 6%·당일 취소 4% ±2%p — 분모는 TODAY 이전 비취소 예약"""
+    """노쇼 6%·당일 취소 4% ±2%p — 분모는 TODAY 이전 전체 예약(취소 포함)"""
     today = ctx.today.isoformat()
-    base = conn.execute("SELECT count(*) FROM emr_appointments WHERE status != 'cancelled'"
-                        " AND date(scheduled_at) < ?", (today,)).fetchone()[0]
+    base = conn.execute("SELECT count(*) FROM emr_appointments WHERE date(scheduled_at) < ?", (today,)).fetchone()[0]
     if not base:
         return []
     noshow = conn.execute("SELECT count(*) FROM emr_appointments WHERE status = 'noshow'"
@@ -532,6 +559,38 @@ def check_status_rates(conn, ctx):
     return [{"status": status, "rate": round(n / base, 3), "target": target}
             for status, n, target in (("noshow", noshow, ctx.noshow_rate), ("sameday_cancel", sameday, ctx.sameday_cancel_rate))
             if abs(n / base - target) > SHARE_TOLERANCE]
+
+
+def check_confirm_rate(conn, ctx):
+    """리마인드 응답(confirmed) 85% ±2%p — TODAY 이전 비취소 예약 기준"""
+    n, confirmed = conn.execute("SELECT count(*), coalesce(sum(confirmed), 0) FROM emr_appointments"
+                                " WHERE status != 'cancelled' AND date(scheduled_at) < ?",
+                                (ctx.today.isoformat(),)).fetchone()
+    if not n:
+        return []
+    return [] if abs(confirmed / n - ctx.confirm_rate) <= SHARE_TOLERANCE else [
+        {"rate": round(confirmed / n, 3), "target": ctx.confirm_rate}]
+
+
+def check_unpaid_rate(conn, ctx):
+    """미수 발생(당일 수납 < 청구) 15% ±2%p — visit 수납 행 기준"""
+    n, unpaid = conn.execute("SELECT count(*), coalesce(sum(amount_paid < amount_due), 0) FROM emr_payments"
+                             " WHERE kind = 'visit'").fetchone()
+    if not n:
+        return []
+    return [] if abs(unpaid / n - ctx.unpaid_rate) <= SHARE_TOLERANCE else [
+        {"rate": round(unpaid / n, 3), "target": ctx.unpaid_rate}]
+
+
+def check_visit_mix(conn, ctx):
+    """내원(completed) 유형 구성 진료 70 / 위생 25 / 상담 5 ±3%p"""
+    counts = {r["type"]: r["n"] for r in _rows(conn, "SELECT type, count(*) AS n FROM emr_appointments"
+                                                      " WHERE status = 'completed' GROUP BY type")}
+    total = sum(counts.values())
+    if not total:
+        return []
+    return [{"type": t, "share": round(counts.get(t, 0) / total, 3), "target": target}
+            for t, target in VISIT_MIX.items() if abs(counts.get(t, 0) / total - target) > VISIT_MIX_TOLERANCE]
 
 
 def _active_from(today: date) -> date:
@@ -598,7 +657,7 @@ def check_peak_pattern(conn, ctx):
 # ── 경고: 치아 ──────────────────────────────────────────────
 
 def check_tooth_level(conn, ctx):
-    """치아 단위 시술은 '00' 금지, 전악 시술은 '00'만"""
+    """치아 단위 시술은 '00' 금지, 치아 단위가 아닌 시술은 '00'만"""
     return _rows(conn, "SELECT t.id, t.procedure_code, p.name, p.is_tooth_level, t.tooth_no"
                        " FROM emr_treatments t JOIN emr_procedures p ON p.code = t.procedure_code"
                        " WHERE (p.is_tooth_level = 1) = (t.tooth_no = ?)", FULL_MOUTH)
@@ -638,8 +697,9 @@ REQUIRED = [
     check_future_new_patient_single,
     check_future_new_patient_registered,
     check_reschedule_pair,
+    check_reschedule_once,
     check_treatment_on_completed,
-    check_completed_has_treatment,
+    check_completed_one_treatment,
     check_performed_at,
     check_service_date,
     check_uninsured_not_claimed,
@@ -661,6 +721,9 @@ WARNINGS = [
     check_new_patient_share,
     check_status_rates,
     check_reschedule_rate,
+    check_confirm_rate,
+    check_unpaid_rate,
+    check_visit_mix,
     check_peak_pattern,
     check_tooth_level,
     check_child_procedures,

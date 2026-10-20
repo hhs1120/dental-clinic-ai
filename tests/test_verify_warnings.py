@@ -14,7 +14,7 @@ def test_valid_db_tooth_checks_pass(tmp_path):
         assert check(conn, CTX) == [], check.__name__
 
 
-# (깨뜨리는 SQL, 잡아야 하는 검사). 시드 진료: 1 신경치료 '26'(성인) / 2 스케일링 '00'(성인) / 3 레진 '55'(소아)
+# (깨뜨리는 SQL, 잡아야 하는 검사). 시드 진료: 1 신경치료 '26'(성인) / 2 스케일링 '00'(성인) / 3 레진 '16'(소아)
 TOOTH_BREAKS = {
     "tooth_level_as_full_mouth": ("UPDATE emr_treatments SET tooth_no = '00' WHERE id = 1", "check_tooth_level"),
     "full_mouth_with_tooth": ("UPDATE emr_treatments SET tooth_no = '16' WHERE id = 2", "check_tooth_level"),
@@ -97,7 +97,7 @@ def _month_visits(conn, n_visits, n_new):
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, n_visits + 1):
         appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid)
-    conn.execute("UPDATE emr_patients SET registered_at = '2026-01-01' WHERE id <= ?", (n_new,))
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-03-03' WHERE id <= ?", (n_new,))
 
 
 def test_new_patient_share(tmp_path):
@@ -137,6 +137,54 @@ def test_reschedule_rate_excludes_new_appointments(tmp_path):
     assert verify.check_reschedule_rate(conn, CTX) == []
     conn.execute("UPDATE emr_appointments SET rescheduled_from_id = NULL")
     assert verify.check_reschedule_rate(conn, CTX)
+
+
+def test_status_rates_denominator_includes_cancelled(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 150})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):  # 비취소 100건 중 노쇼 9
+        appt(conn, "2026-11-24 10:00:00", patient=pid, status="noshow" if pid <= 9 else "completed")
+    for pid in range(101, 151):  # 미리 취소된 예약 50건(당일 취소 아님)
+        appt(conn, "2026-11-27 10:00:00", patient=pid, status="cancelled")
+    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-20 10:00:00' WHERE status = 'cancelled'")
+    # 분모 = TODAY 이전 전체 예약 150 → 노쇼 6% (비취소만 분모면 9%로 경고)
+    assert [v["status"] for v in verify.check_status_rates(conn, CTX)] == ["sameday_cancel"]
+
+
+def test_confirm_rate(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):
+        appt(conn, "2026-11-24 10:00:00", patient=pid)
+    conn.execute("UPDATE emr_appointments SET confirmed = 1 WHERE patient_id <= 85")
+    assert verify.check_confirm_rate(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET confirmed = 0 WHERE patient_id > 70")
+    assert verify.check_confirm_rate(conn, CTX)
+
+
+def test_unpaid_rate(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute("DELETE FROM emr_payments")
+    for i in range(100):
+        conn.execute("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
+                     " VALUES (1, 1, 'visit', 10000, ?, '2026-10-06 11:00:00', 'card')", (5000 if i < 15 else 10000,))
+    assert verify.check_unpaid_rate(conn, CTX) == []
+    conn.execute("UPDATE emr_payments SET amount_paid = 5000 WHERE id <= 30")
+    assert verify.check_unpaid_rate(conn, CTX)
+
+
+def test_visit_mix(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):
+        kind = "treatment" if pid <= 70 else "hygiene" if pid <= 95 else "consult"
+        appt(conn, "2026-11-24 10:00:00", type=kind, patient=pid)
+    assert verify.check_visit_mix(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET type = 'hygiene', staff_id = 2 WHERE patient_id BETWEEN 51 AND 70")
+    assert {v["type"] for v in verify.check_visit_mix(conn, CTX)} == {"treatment", "hygiene"}
 
 
 def _visits(conn, last_visit_by_patient):

@@ -19,6 +19,12 @@ MAX_APPOINTMENTS_PER_SLOT = 3
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
 
+# 임플란트 1차(conditional)는 시술일 기준 이 나이 이상이면 급여, 미만이면 비급여(본인부담 1.0·청구 없음) (§2.6 ④)
+CONDITIONAL_INSURED_MIN_AGE = 65
+
+# 내원 구성 목표 (§1). 목표 — 경고로만 확인
+VISIT_MIX = {"treatment": 0.70, "hygiene": 0.25, "consult": 0.05}
+
 # 피크 시간 (§1). [시작, 끝)
 PEAK_HOURS = [("10:00", "11:00"), ("15:00", "17:00")]
 
@@ -49,8 +55,9 @@ SUBMITTED_MONTHS = 2
 
 # 시술 19개 (§2.1 표). 코드는 표 순번 기반 가상 코드
 # (code, name, category, is_insured, fee_total, duration_min, insured_limit, limit_scope, age_group, is_tooth_level)
+# age_group: child = 0–12세, age19plus = 19세 이상(노인 포함), senior = 65세 이상 — AGE_BANDS의 구간 이름과 별개
 _ROWS = [
-    ("U0001", "스케일링",      "preventive",  "yes",         60_000,    30, 1,    "year", "adult",  0),
+    ("U0001", "스케일링",      "preventive",  "yes",         60_000,    30, 1,    "year", "age19plus", 0),
     ("U0002", "구강검진",      "preventive",  "yes",         15_000,    30, None, None,   None,     0),
     ("U0003", "불소도포",      "preventive",  "no",          30_000,    30, None, None,   "child",  0),
     ("U0004", "실란트",        "preventive",  "yes",         40_000,    30, None, None,   "child",  1),

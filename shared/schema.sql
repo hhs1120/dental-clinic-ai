@@ -29,7 +29,7 @@ CREATE TABLE emr_procedures (
     duration_min       INTEGER NOT NULL,
     insured_limit      INTEGER,
     limit_scope        TEXT,
-    age_group          TEXT CHECK (age_group IN ('child', 'adult', 'senior')),
+    age_group          TEXT CHECK (age_group IN ('child', 'age19plus', 'senior')),
     is_tooth_level     INTEGER NOT NULL,
     aliases            TEXT NOT NULL DEFAULT '[]'
 );
@@ -61,7 +61,7 @@ CREATE TABLE emr_appointments (
     scheduled_at           TEXT NOT NULL,
     duration_min           INTEGER NOT NULL,
     type                   TEXT NOT NULL CHECK (type IN ('treatment', 'hygiene', 'consult')),
-    planned_procedure_code TEXT REFERENCES emr_procedures(code),
+    planned_procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
     status                 TEXT NOT NULL CHECK (status IN ('scheduled', 'completed', 'cancelled', 'noshow')),
     rescheduled_from_id    INTEGER REFERENCES emr_appointments(id),
     confirmed              INTEGER NOT NULL DEFAULT 0,
@@ -74,7 +74,7 @@ CREATE TABLE emr_treatments (
     appointment_id INTEGER NOT NULL REFERENCES emr_appointments(id),
     patient_id     INTEGER NOT NULL REFERENCES emr_patients(id),
     procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
-    tooth_no       TEXT NOT NULL,  -- 전악은 '00' 센티널
+    tooth_no       TEXT NOT NULL,  -- 치아 단위가 아닌 시술은 '00' 센티널
     performed_at   TEXT NOT NULL,
     fee_total      INTEGER NOT NULL,
     insured_amount INTEGER NOT NULL,
@@ -160,3 +160,14 @@ CREATE TABLE ax_calls (
 CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
 CREATE INDEX ix_calls_blind   ON ax_calls(blind_status, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
+
+-- RAG 문서 (9단계). 방해 여부·심은 QA는 truth_doc_meta에만
+CREATE TABLE ax_documents (
+    id             INTEGER PRIMARY KEY,
+    type           TEXT NOT NULL CHECK (type IN ('manual', 'faq', 'insurance_guide', 'notice', 'education', 'external')),
+    title          TEXT NOT NULL,
+    version        TEXT NOT NULL,
+    effective_date TEXT,
+    path           TEXT NOT NULL,
+    body           TEXT NOT NULL
+);
