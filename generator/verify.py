@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
-                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
+                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, REMINDER_TIME, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
                               VISIT_MIX, open_slots)
 
@@ -582,10 +582,13 @@ def check_status_rates(conn, ctx):
 
 
 def check_confirm_rate(conn, ctx):
-    """리마인드 응답(confirmed) 85% ±2%p — TODAY 이전 비취소 예약 기준"""
-    n, confirmed = conn.execute("SELECT count(*), coalesce(sum(confirmed), 0) FROM emr_appointments"
-                                " WHERE status != 'cancelled' AND date(scheduled_at) < ?",
-                                (ctx.today.isoformat(),)).fetchone()
+    """리마인드 응답(confirmed) 85% ±2%p — 리마인드를 받은 예약 기준: TODAY 이전 비취소 예약 중
+    직전 진료일 REMINDER_TIME에 이미 있던 것(그 뒤에 잡힌 예약은 리마인드가 가지 않음)"""
+    reminder = time.fromisoformat(REMINDER_TIME)
+    rows = [r for r in _rows(conn, "SELECT scheduled_at, created_at, confirmed FROM emr_appointments"
+                                   " WHERE status != 'cancelled' AND date(scheduled_at) < ?", ctx.today.isoformat())
+            if _dt(r["created_at"]) <= datetime.combine(_prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays), reminder)]
+    n, confirmed = len(rows), sum(r["confirmed"] for r in rows)
     if not n:
         return []
     return [] if abs(confirmed / n - ctx.confirm_rate) <= SHARE_TOLERANCE else [
@@ -633,8 +636,8 @@ def _visit_split(conn, ctx) -> tuple[set, set]:
 
 
 def check_active_ratio(conn, ctx):
-    """활동(TODAY 전 6개월 안 completed 내원) 비중 70% ±5%p — 예정 신환 제외.
-    생성 기간이 6개월보다 짧으면(small) 활동 창을 다 덮지 못해 건너뜀"""
+    """활동(TODAY 전 ACTIVE_MONTHS개월 안 completed 내원) 비중 = ACTIVE_SHARE ± ACTIVE_TOLERANCE — 예정 신환 제외.
+    생성 기간이 ACTIVE_MONTHS개월보다 짧으면(small) 활동 창을 다 덮지 못해 건너뜀"""
     if ctx.range_start > _active_from(ctx.today):
         return []
     patients, active = _visit_split(conn, ctx)
@@ -657,12 +660,16 @@ def _peak_time_share(weekday: int) -> float:
 
 
 def check_reschedule_rate(conn, ctx):
-    """변경 쌍 / 변경 가능한 예약 = reschedule_rate ±2%p.
-    변경 가능 = created_at 다음 날 ~ 예약 전날이 하루 이상(리드 ≥ 2일), 변경으로 생긴 새 예약은 제외.
+    """변경 쌍 / 변경 가능한 예약 = reschedule_rate ±2%p — 추첨이 실현된 모집단만 센다.
+    변경 가능 = TODAY 이전 예약 중 created_at 다음 날 ~ 예약 전날 사이에 진료일이 있는 것(변경일은 진료일에서 추첨),
+    변경으로 생긴 새 예약은 제외. 분자는 원래 예약이 TODAY 이전인 쌍(원래 예약이 창 밖이면 쌍이 아님).
     빈자리가 없어 못 바꾼 예약은 분모에 남는다(허용치로 흡수)"""
-    eligible, = conn.execute("SELECT count(*) FROM emr_appointments WHERE rescheduled_from_id IS NULL"
-                             " AND julianday(date(scheduled_at)) - julianday(date(created_at)) >= 2").fetchone()
-    pairs, = conn.execute("SELECT count(rescheduled_from_id) FROM emr_appointments").fetchone()
+    today = ctx.today.isoformat()
+    eligible = sum(_prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays) > _dt(r["created_at"]).date()
+                   for r in _rows(conn, "SELECT scheduled_at, created_at FROM emr_appointments"
+                                        " WHERE rescheduled_from_id IS NULL AND date(scheduled_at) < ?", today))
+    pairs, = conn.execute("SELECT count(*) FROM emr_appointments n JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
+                          " WHERE date(o.scheduled_at) < ?", (today,)).fetchone()
     if not eligible:
         return []
     rate = pairs / eligible

@@ -13,6 +13,9 @@ HOURS = {
 SLOT_MIN = 30
 SATURDAY = 5
 
+# 리마인드 발송 시각 (§2.5) — 직전 진료일의 이 시각에 그때 있던 예약에만 보낸다
+REMINDER_TIME = "17:00"
+
 # 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
 MAX_APPOINTMENTS_PER_SLOT = 3
 

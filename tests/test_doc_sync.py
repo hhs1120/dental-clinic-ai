@@ -85,3 +85,23 @@ def test_named_config_keys_exist():
             node = node[part]
         return True
     assert keys and not [k for k in keys if not exists(k)], sorted(k for k in keys if not exists(k))
+
+
+def _config_key_names() -> set[str]:
+    """config 최상위 키와 그 아래 키(`messages.balance` 형태)"""
+    names = set()
+    for key, value in CFG.items():
+        names.add(key)
+        if isinstance(value, dict):
+            names |= {f"{key}.{sub}" for sub in value}
+    return names
+
+
+def test_config_keys_always_prefixed():
+    """문서에서 config 키는 항상 `config` `키` 형태로 쓴다 — 그래야 test_named_config_keys_exist가 이름 바꿈을 잡는다"""
+    text = _doc()
+    covered = [m.span() for m in re.finditer(r"`config` ((?:`[\w.]+`[·\s]*)+)", text)]
+    names = _config_key_names()
+    bare = sorted({m.group(1) for m in re.finditer(r"`([\w.]+)`", text)
+                   if m.group(1) in names and not any(a <= m.start() < b for a, b in covered)})
+    assert not bare, f"`config` 접두어 없이 쓴 config 키: {bare}"
