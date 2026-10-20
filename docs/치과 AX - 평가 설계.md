@@ -6,7 +6,6 @@ related:
   - "[[치과 AX - 앱 설계]]"
 created: 2026-10-16
 updated: 2026-10-20
-status: v2.3 (2026-10-20. 앱 설계 분리·truth_gen_meta·truth_claims 조건부 반영. 이전 판은 프로젝트 밖에 별도 보관)
 tags:
   - 치과AX
   - 평가
