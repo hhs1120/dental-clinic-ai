@@ -60,7 +60,7 @@ scale_presets:                                          # range.end 고정, 시�
 
 영업시간·운영 제약·시술 마스터의 코드상 원본은 `generator/master.py` (이 절과 어긋나면 둘 다 고친다).
 
-- 원장 1, 위생사 3, 데스크 2, 상담실장 1. 체어 4(병원 정보 — 체어 배정은 생성하지 않음)
+- 원장 1, 위생사 3, 데스크 2, 상담실장 1
 - 평일 09:30–18:30(점심 13–14), 토 09:30–13:30, **목·일·공휴일 휴진**. 30분 슬롯(예약 시작 :00·:30, 소요 30분 배수)
 - 내원 구성 목표: 진료 70% / 위생(스케일링·검진) 25% / 상담 5%. 피크 10–11시·15–17시(예약 시각을 고를 때 ×2 가중)
 - **생성 시 강제하는 운영 제약은 셋뿐**: ① 영업시간 안(휴진일·점심시간 밖, 끝나는 시각까지) ② 하루 비취소 예약 ≤ 상한(평일 `visits_per_day` = 26, 토 ×0.5 = 13) ③ 같은 시작 시각의 비취소 예약 ≤ 3. 체어 중복·원장/위생사 동시성·원장 슬롯은 모델링하지 않는다
@@ -72,7 +72,7 @@ scale_presets:                                          # range.end 고정, 시�
 
 ### 2.1 마스터
 
-**`emr_clinic`**(1행): `name, chairs, hours_json`
+**`emr_clinic`**(1행): `name, hours_json`
 **`emr_staff`**: `id, name, role(doctor/hygienist/desk/consultant), active`
 
 **`emr_procedures`** — 19개 고정
@@ -111,7 +111,7 @@ scale_presets:                                          # range.end 고정, 시�
 | 16 | ortho | 교정 월 체크 | no | 80,000 | 30 | |
 | 17 | cosmetic | 미백 | no | 300,000 | 60 | 가격 문의 소재 |
 | 18 | perio | 잇몸치료 | yes | 35,000 | 30 | |
-| 19 | consult | 상담 | no | 0 | 30 | 상담실장, 체어 불필요 |
+| 19 | consult | 상담 | no | 0 | 30 | 상담실장 |
 
 **치아 행 규칙**: 내원당 시술 1행(청구 1줄). 치아 단위 시술은 **시술별 후보 목록(`master.TOOTH_CHOICES`)에서 치아 1개를 뽑기만** 한다(사랑니 발치 = x8, 실란트 = 6·7번 대구치, 나머지 = 사랑니 뺀 영구치 28개). 치아 단위가 아닌 시술(`is_tooth_level=0` — 전악 1·2·3·18과 10·14·15·16·17·19)은 `tooth_no='00'`(센티널, NULL 아님).
 
@@ -140,7 +140,7 @@ scale_presets:                                          # range.end 고정, 시�
 **`emr_appointments`**
 | 컬럼 | 설명 |
 |---|---|
-| id, patient_id, staff_id, chair_no | 진료=원장, 위생=위생사(3명 순환), 상담=상담실장. `chair_no`는 생성하지 않음(NULL — 체어 배정은 범위 밖) |
+| id, patient_id, staff_id | 진료=원장, 위생=위생사(3명 순환), 상담=상담실장. 체어 배정은 범위 밖(컬럼 없음) |
 | scheduled_at, duration_min, type | `treatment/hygiene/consult` |
 | planned_procedure_code FK | 예정 시술(준비표·전사가 읽음). 전 예약 필수 |
 | status | `scheduled/completed/cancelled/noshow` |

@@ -66,9 +66,9 @@ BREAKS = {
     "confirmed_before_reminder": ("UPDATE emr_appointments SET confirmed = 1 WHERE id = 6", "check_confirmed_not_future"),
     "cancel_neither_kind": ("UPDATE emr_appointments SET rescheduled_from_id = NULL WHERE id = 4", "check_cancellation_kind"),
     "sameday_cancel_on_today": (
-        "INSERT INTO emr_appointments (patient_id, staff_id, chair_no, scheduled_at, duration_min, type,"
+        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
         " planned_procedure_code, status, created_at, cancelled_at) VALUES"
-        " (2, 2, 2, '2026-12-01 15:00:00', 30, 'hygiene', 'U0002', 'cancelled', '2026-11-20 11:00:00', '2026-12-01 09:00:00')",
+        " (2, 2, '2026-12-01 15:00:00', 30, 'hygiene', 'U0002', 'cancelled', '2026-11-20 11:00:00', '2026-12-01 09:00:00')",
         "check_cancellation_kind",
     ),
     "cancelled_without_time": ("UPDATE emr_appointments SET cancelled_at = NULL WHERE id = 3", "check_cancelled_at_status"),
@@ -151,7 +151,7 @@ def test_slot_cap(tmp_path):
 
 def test_patient_twice_same_day(tmp_path):
     conn = make_db(tmp_path)
-    appt(conn, "2026-10-06 15:00:00", type="hygiene", chair=2, patient=1)
+    appt(conn, "2026-10-06 15:00:00", type="hygiene", patient=1)
     assert verify.check_patient_same_day(conn, CTX)
 
 

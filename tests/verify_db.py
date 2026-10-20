@@ -16,21 +16,21 @@ CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), res
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토
 SEED = """
-INSERT INTO emr_clinic VALUES ('테스트치과', 4, '{}');
+INSERT INTO emr_clinic VALUES ('테스트치과', '{}');
 INSERT INTO emr_staff VALUES (1, '원장', 'doctor', 1), (2, '위생사', 'hygienist', 1), (3, '실장', 'consultant', 1);
 INSERT INTO emr_families VALUES (1, '김');
 INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id, guardian_patient_id, registered_at) VALUES
   (1, 'C-00001', '김철수', '1980-05-10', 'M', '010-0000-0001', 1, NULL, '2025-01-01'),
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
-INSERT INTO emr_appointments (id, patient_id, staff_id, chair_no, scheduled_at, duration_min, type,
+INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
                               planned_procedure_code, status, rescheduled_from_id, created_at, cancelled_at) VALUES
-  (1, 1, 1, 1,    '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, '2026-09-30 11:00:00', NULL),
-  (2, 1, 2, 2,    '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, '2026-10-20 11:00:00', NULL),
-  (3, 2, 1, 1,    '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, '2026-11-01 11:00:00', '2026-11-14 09:00:00'),
-  (4, 2, 1, 1,    '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    '2026-11-14 09:00:00', NULL),
-  (5, 1, 1, 1,    '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
-  (6, 2, 2, 2,    '2026-12-05 10:00:00', 30, 'hygiene',   'U0001', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
-  (7, 1, 3, NULL, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, '2026-11-20 11:00:00', NULL);
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, '2026-09-30 11:00:00', NULL),
+  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, '2026-10-20 11:00:00', NULL),
+  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, '2026-11-01 11:00:00', '2026-11-14 09:00:00'),
+  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    '2026-11-14 09:00:00', NULL),
+  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
+  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0001', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
+  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, '2026-11-20 11:00:00', NULL);
 INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),
   (2, 2, 1, 'U0001', '00', '2026-11-03 10:00:00', 60000, 42000, 18000),
@@ -83,10 +83,10 @@ def make_db(tmp_path, relaxed=False) -> sqlite3.Connection:
     return conn
 
 
-def appt(conn, scheduled_at, type="treatment", chair=1, patient=2, duration=30, status="completed"):
+def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="completed"):
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
     conn.execute(
-        "INSERT INTO emr_appointments (patient_id, staff_id, chair_no, scheduled_at, duration_min, type,"
-        " planned_procedure_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'U0008', ?, '2026-01-01 09:00:00')",
-        (patient, staff, chair, scheduled_at, duration, type, status),
+        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, '2026-01-01 09:00:00')",
+        (patient, staff, scheduled_at, duration, type, status),
     )

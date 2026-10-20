@@ -83,10 +83,10 @@ def test_daily_fill_past_days(tmp_path):
     conn = make_db(tmp_path)
     # 범위 11-24(화)~12-02: 과거 진료일 11-24·27·28·30. 11-24 19건(73%)·11-27 18건(69%)·11-28(토) 10건(77%)·11-30 0건
     # TODAY 이후(12-01·12-02)는 덜 찬 게 정상이라 보지 않는다
-    _only(conn, [{"scheduled_at": "2026-11-24 10:00:00", "chair": i} for i in range(19)]
-          + [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(18)]
-          + [{"scheduled_at": "2026-11-28 10:00:00", "chair": i} for i in range(10)]
-          + [{"scheduled_at": "2026-11-27 11:00:00", "chair": 99, "status": "cancelled"}])
+    _only(conn, [{"scheduled_at": "2026-11-24 10:00:00"} for i in range(19)]
+          + [{"scheduled_at": "2026-11-27 10:00:00"} for i in range(18)]
+          + [{"scheduled_at": "2026-11-28 10:00:00"} for i in range(10)]
+          + [{"scheduled_at": "2026-11-27 11:00:00", "status": "cancelled"}])
     ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 12, 2))
     assert [v["date"] for v in verify.check_daily_fill(conn, ctx)] == ["2026-11-27", "2026-11-30"]
 
@@ -96,7 +96,7 @@ def _month_visits(conn, n_visits, n_new):
     _patients(conn, {"1986-01-01": n_visits})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, n_visits + 1):
-        appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid, chair=pid)
+        appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid)
     conn.execute("UPDATE emr_patients SET registered_at = '2026-01-01' WHERE id <= ?", (n_new,))
 
 
@@ -113,9 +113,9 @@ def test_status_rates(tmp_path):
     _patients(conn, {"1986-01-01": 100})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, 101):  # 과거 비취소 100건 중 노쇼 6
-        appt(conn, "2026-11-24 10:00:00", patient=pid, chair=pid, status="noshow" if pid <= 6 else "completed")
+        appt(conn, "2026-11-24 10:00:00", patient=pid, status="noshow" if pid <= 6 else "completed")
     for pid in range(1, 5):  # 당일 취소 4건 (다른 날)
-        appt(conn, "2026-11-27 10:00:00", patient=pid, chair=pid, status="cancelled")
+        appt(conn, "2026-11-27 10:00:00", patient=pid, status="cancelled")
         conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-27 08:00:00' WHERE patient_id = ? AND status = 'cancelled'", (pid,))
     assert verify.check_status_rates(conn, CTX) == []
     conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE patient_id BETWEEN 7 AND 15 AND status = 'completed'")
@@ -127,10 +127,10 @@ def test_reschedule_rate_excludes_new_appointments(tmp_path):
     _patients(conn, {"1986-01-01": 100})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, 101):  # 예약 100건 중 5건을 변경 → 원래 5(cancelled) + 새 예약 5
-        appt(conn, "2026-11-24 10:00:00", patient=pid, chair=pid, status="cancelled" if pid <= 5 else "completed")
+        appt(conn, "2026-11-24 10:00:00", patient=pid, status="cancelled" if pid <= 5 else "completed")
     for pid in range(1, 6):
         original = conn.execute("SELECT id FROM emr_appointments WHERE patient_id = ?", (pid,)).fetchone()[0]
-        appt(conn, "2026-11-27 10:00:00", patient=pid, chair=pid)
+        appt(conn, "2026-11-27 10:00:00", patient=pid)
         conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE patient_id = ? AND id != ?",
                      (original, pid, original))
     # 분모 = 전체 105행 − 새 예약 5 = 100 → 5%
@@ -144,7 +144,7 @@ def _visits(conn, last_visit_by_patient):
     conn.execute("DELETE FROM emr_appointments")
     for pid, day in last_visit_by_patient.items():
         if day:
-            appt(conn, f"{day} 10:00:00", patient=pid, chair=pid)
+            appt(conn, f"{day} 10:00:00", patient=pid)
 
 
 def test_active_ratio(tmp_path):
@@ -165,7 +165,7 @@ def test_active_ratio_excludes_future_new_patients(tmp_path):
     visits = {i: ("2026-07-07" if i <= 70 else "2026-05-12" if i <= 85 else None) for i in range(1, 101)}
     _visits(conn, visits)
     for pid in range(101, 111):  # 예정 신환 10명: 미래 예약만 → 분모에서 제외
-        appt(conn, "2026-12-04 10:00:00", patient=pid, chair=pid, status="scheduled")
+        appt(conn, "2026-12-04 10:00:00", patient=pid, status="scheduled")
     assert verify.check_active_ratio(conn, CTX) == []
 
 
@@ -180,7 +180,7 @@ def test_visit_split_boundaries(tmp_path):
     # 1: 05-31 마지막 → 휴면 / 2: 06-01 → 활동 / 3: 11-30 → 활동 / 4: TODAY 예약만(scheduled) → 예정 신환, 분모 제외
     _visits(conn, {1: "2026-05-29", 2: "2026-06-01", 3: "2026-11-30"})
     conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-05-31 10:00:00' WHERE patient_id = 1")
-    appt(conn, "2026-12-01 10:00:00", patient=4, chair=4, status="scheduled")
+    appt(conn, "2026-12-01 10:00:00", patient=4, status="scheduled")
     patients, active = verify._visit_split(conn, CTX)
     assert (patients, active) == ({1, 2, 3}, {2, 3})
 
