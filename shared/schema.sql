@@ -144,7 +144,8 @@ CREATE INDEX ix_claims_month       ON emr_claims(claim_month);
 CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
--- 생성기는 ax_calls(6~7단계)·ax_documents·ax_chunks만 적재. 나머지는 해당 기능 구현 때 추가
+-- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks는 make index(앱 색인 코드)가 채움.
+-- 나머지는 해당 기능 구현 때 추가
 
 -- 라벨·노이즈·카테고리 컬럼을 두지 않는다 (정답 누출 — truth_call_labels에만)
 CREATE TABLE ax_calls (

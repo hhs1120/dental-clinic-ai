@@ -5,7 +5,7 @@ related:
   - "[[치과 AX - 가상 데이터 생성 설계]]"
   - "[[치과 AX - 앱 설계]]"
 created: 2026-10-16
-updated: 2026-10-19
+updated: 2026-10-20
 status: v2.2 (2026-10-19. 중복 규칙 단일화, 일정·마감 날짜 삭제, 검수 반영 — 판정 풀 배분·dev/test 순번, 거절은 `refuse` 채점, 준비표 회귀는 착수 시 스냅샷. 이전 판은 프로젝트 밖에 별도 보관)
 tags:
   - 치과AX
@@ -13,7 +13,7 @@ tags:
 ---
 
 > **뭘 어떻게 측정하나.** `eval.py`와 사람 판정 절차가 읽는 문서. 데이터가 어떻게 만들어지는지는 [[치과 AX - 가상 데이터 생성 설계]], 기능별 완료 기준은 [[치과 AX - 기능 정의]].
-> 정답 저장소(`ground_truth/truth.sqlite`)의 테이블 정의는 **이 문서에만** 있다. 생성기는 그중 `truth_call_labels`·`truth_doc_meta`·`truth_claims`(·조건부 EOB 판독 정답)를 채우고, `truth_rag_qa`는 사람이 생성 후 작성한다.
+> 정답 저장소(`ground_truth/truth.sqlite`)의 테이블 정의는 **이 문서에만** 있다. 생성기는 그중 `truth_gen_meta`·`truth_call_labels`·`truth_doc_meta`·`truth_claims`(·조건부 EOB 판독 정답)를 채우고, `truth_rag_qa`는 사람이 생성 후 작성한다.
 
 ## 1. 원칙
 
@@ -132,6 +132,7 @@ tags:
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
+| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `scale`, `range_start`, `range_end`. verify가 규모별 기간을 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — test 1회 규칙 검증 |
 | `truth_claims` | 생성기(정형 5단계) | 9~10월 청구 줄 + `extra_in_eob` 줄: `claim_id?`(extra는 NULL), `chart_no, service_date, procedure_code, tooth_no`(대조 키, 전 행 비정규화), `claim_amount, outcome(paid_full/adjusted/denied/missing_in_eob/extra_in_eob), paid_amount?, adjust_code?`. 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_eob_lines` | 생성기(조건부) | `doc_id, page, line_no → 정답 필드, claim_id, outcome` |

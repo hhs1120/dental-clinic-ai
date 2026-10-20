@@ -1,5 +1,8 @@
 """verify 경고 검사(분포·치아)가 위반을 잡는지 — 가상 데이터 생성 설계 §5.3 경고 표."""
+from dataclasses import replace
+
 import pytest
+from datetime import date
 
 from generator import verify
 from tests.verify_db import CTX, appt, make_db
@@ -62,6 +65,16 @@ def test_age_band_boundary_is_birthday(tmp_path):
     _patients(conn, {"2007-12-02": 1})
     shares = {v["band"]: v["share"] for v in verify.check_age_distribution(conn, CTX)}
     assert shares["teen"] == 1.0
+    _patients(conn, {"2007-12-01": 1})
+    shares = {v["band"]: v["share"] for v in verify.check_age_distribution(conn, CTX)}
+    assert shares["adult"] == 1.0
+
+
+def test_age_distribution_skips_unborn(tmp_path):
+    conn = make_db(tmp_path)
+    # 미래 출생은 필수 검사(check_timestamps_not_future)가 잡고, 분포는 나머지로 계산
+    _patients(conn, {"2027-01-01": 1, "2020-01-01": 15, "2011-01-01": 8, "1986-01-01": 62, "1956-01-01": 15})
+    assert verify.check_age_distribution(conn, CTX) == []
 
 
 def _only(conn, appts):
@@ -76,21 +89,31 @@ def test_daily_visits_within_30pct(tmp_path):
     _only(conn, [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(19)]
           + [{"scheduled_at": "2026-11-28 10:00:00", "chair": i} for i in range(16)]
           + [{"scheduled_at": "2026-11-27 11:00:00", "chair": 99 + i, "status": "cancelled"} for i in range(20)])
-    assert verify.check_daily_visits(conn, CTX) == []
+    ctx = replace(CTX, range_start=date(2026, 11, 27), range_end=date(2026, 11, 28))
+    assert verify.check_daily_visits(conn, ctx) == []
 
 
 def test_daily_visits_too_few(tmp_path):
     conn = make_db(tmp_path)
     _only(conn, [{"scheduled_at": "2026-11-24 10:00:00", "chair": i} for i in range(18)])  # -31%
-    assert [v["date"] for v in verify.check_daily_visits(conn, CTX)] == ["2026-11-24"]
+    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 11, 24))
+    assert [v["date"] for v in verify.check_daily_visits(conn, ctx)] == ["2026-11-24"]
 
 
-def test_daily_visits_empty_open_day_in_span(tmp_path):
+def test_daily_visits_empty_open_day_in_range(tmp_path):
     conn = make_db(tmp_path)
-    # 11-27(금)~12-01(화) 사이: 11-28(토)·11-30(월)은 진료일인데 0건, 11-29(일)은 휴진
+    # 범위 11-24(화)~12-01(화): 11-24·11-27·12-01만 26건. 11-28(토)·11-30(월)은 진료일인데 0건
+    # 11-25는 테스트 공휴일, 11-26 목·11-29 일은 휴진. 맨 앞(11-24)도 범위 안이라 비면 잡혀야 한다
     _only(conn, [{"scheduled_at": "2026-11-27 10:00:00", "chair": i} for i in range(26)]
           + [{"scheduled_at": "2026-12-01 10:00:00", "chair": i} for i in range(26)])
-    assert [v["date"] for v in verify.check_daily_visits(conn, CTX)] == ["2026-11-28", "2026-11-30"]
+    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 12, 1))
+    assert [v["date"] for v in verify.check_daily_visits(conn, ctx)] == ["2026-11-24", "2026-11-28", "2026-11-30"]
+
+
+def test_peak_pattern_ignores_closed_day(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-11-19 15:00:00' WHERE id = 7")  # 목요일
+    assert verify.check_peak_pattern(conn, CTX) == []  # 휴진일 예약은 필수 검사가 잡는다
 
 
 def test_peak_pattern(tmp_path):

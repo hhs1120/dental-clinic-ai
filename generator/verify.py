@@ -21,8 +21,8 @@ from pathlib import Path
 import yaml
 
 from generator.master import (AGE_BANDS, DOCTOR_CHAIRS, FULL_MOUTH, HOURS, MAX_CHAIR_WORK, PEAK_HOURS,
-                              PERMANENT_TEETH, PRIMARY_TEETH, SATURDAY_VISIT_RATIO, SCALING_CODE,
-                              SCALING_MIN_AGE, SUBMITTED_MONTHS, open_slots)
+                              PERMANENT_TEETH, PRIMARY_TEETH, SATURDAY, SATURDAY_VISIT_RATIO, SCALING_CODE,
+                              SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -33,8 +33,7 @@ WEEKDAY_CLOSE = time.fromisoformat(HOURS["weekday_close"])
 SATURDAY_CLOSE = time.fromisoformat(HOURS["saturday_close"])
 LUNCH = tuple(time.fromisoformat(t) for t in HOURS["lunch"])
 CLOSED_WEEKDAYS = set(HOURS["closed_weekdays"])
-SATURDAY = 5
-SLOT = timedelta(minutes=30)
+SLOT = timedelta(minutes=SLOT_MIN)
 PEAK = [tuple(time.fromisoformat(t) for t in w) for w in PEAK_HOURS]
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
 
@@ -50,16 +49,22 @@ class Ctx:
     holidays: frozenset
     reschedule_rate: float
     visits_per_day: int
+    range_start: date  # 생성 기간 — truth_gen_meta에서 (규모별 시작일)
+    range_end: date
 
 
-def load_ctx(config_path: Path) -> Ctx:
+def load_ctx(config_path: Path, conn) -> Ctx:
+    """설정 + truth_gen_meta(생성기가 남긴 규모별 기간). 메타 키가 없으면 KeyError."""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
+    meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta").fetchall())
     return Ctx(
         today=cfg["today"],
         holidays=frozenset(date.fromisoformat(d) for d in holidays),
         reschedule_rate=cfg["reschedule_rate"],
         visits_per_day=cfg["visits_per_day"],
+        range_start=date.fromisoformat(meta["range_start"]),
+        range_end=date.fromisoformat(meta["range_end"]),
     )
 
 
@@ -112,10 +117,18 @@ def check_no_records_after_today(conn, ctx):
 
 
 def check_timestamps_not_future(conn, ctx):
-    """submitted_at·sent_at·started_at ≤ TODAY"""
+    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date ≤ TODAY"""
     today = ctx.today.isoformat()
     return (
-        _rows(conn, "SELECT 'emr_claims' AS tbl, id, submitted_at AS at FROM emr_claims"
+        _rows(conn, "SELECT 'emr_appointments.created_at' AS tbl, id, created_at AS at FROM emr_appointments"
+                    " WHERE date(created_at) > ?", today)
+        + _rows(conn, "SELECT 'emr_appointments.cancelled_at' AS tbl, id, cancelled_at AS at FROM emr_appointments"
+                      " WHERE cancelled_at IS NOT NULL AND date(cancelled_at) > ?", today)
+        + _rows(conn, "SELECT 'emr_patients.registered_at' AS tbl, id, registered_at AS at FROM emr_patients"
+                      " WHERE date(registered_at) > ?", today)
+        + _rows(conn, "SELECT 'emr_patients.birth_date' AS tbl, id, birth_date AS at FROM emr_patients"
+                      " WHERE date(birth_date) > ?", today)
+        + _rows(conn, "SELECT 'emr_claims' AS tbl, id, submitted_at AS at FROM emr_claims"
                     " WHERE submitted_at IS NOT NULL AND date(submitted_at) > ?", today)
         + _rows(conn, "SELECT 'emr_messages' AS tbl, id, sent_at AS at FROM emr_messages"
                       " WHERE date(sent_at) > ?", today)
@@ -131,13 +144,18 @@ def check_last_month_claims_pending(conn, ctx):
                        " WHERE claim_month >= ? AND status != 'pending'", last_month)
 
 
-def check_submitted_months_no_result(conn, ctx):
-    """전월 이전 SUBMITTED_MONTHS개월(9~10월) 청구는 submitted, 결과(paid_amount·adjust_code) 없음 — 정답 누출 방지"""
+def _submitted_months(ctx) -> list[str]:
+    """전월(pending) 이전 SUBMITTED_MONTHS개월 — 9~10월"""
     months, first = [], ctx.today.replace(day=1)
     for _ in range(SUBMITTED_MONTHS + 1):
         first = (first - timedelta(days=1)).replace(day=1)
         months.append(first.strftime("%Y-%m"))
-    months = months[1:]  # 전월(pending)은 제외
+    return months[1:]
+
+
+def check_submitted_months_no_result(conn, ctx):
+    """전월 이전 SUBMITTED_MONTHS개월(9~10월) 청구는 submitted, 결과(paid_amount·adjust_code) 없음 — 정답 누출 방지"""
+    months = _submitted_months(ctx)
     marks = ",".join("?" * len(months))
     return _rows(conn, "SELECT id, claim_month, status, paid_amount, adjust_code FROM emr_claims"
                        f" WHERE claim_month IN ({marks}) AND (status != 'submitted'"
@@ -151,13 +169,23 @@ def check_doctor_slots(conn, ctx):
     used = defaultdict(int)
     for a in _active_appointments(conn):
         if a["type"] == "treatment":
-            used[a["start"].date()] += math.ceil(a["duration_min"] / 30)
+            used[a["start"].date()] += math.ceil(a["duration_min"] / SLOT_MIN)
     return [{"date": d.isoformat(), "slots": n, "limit": _doctor_limit(d)}
             for d, n in sorted(used.items()) if n > _doctor_limit(d)]
 
 
 def _doctor_limit(d: date) -> int:
     return DOCTOR_CHAIRS * open_slots(d.weekday())
+
+
+def check_slot_grid(conn, ctx):
+    """예약 시작은 SLOT_MIN분 격자(:00·:30), 소요는 SLOT_MIN의 배수 — 동시성 검사의 전제"""
+    bad = []
+    for r in _rows(conn, "SELECT id, scheduled_at, duration_min FROM emr_appointments"):
+        start = _dt(r["scheduled_at"])
+        if start.minute % SLOT_MIN or start.second or r["duration_min"] % SLOT_MIN:
+            bad.append(r)
+    return bad
 
 
 def check_chair_overlap(conn, ctx):
@@ -242,6 +270,21 @@ def check_reschedule_ratio(conn, ctx):
     return [] if pairs >= need else [{"pairs": pairs, "appointments": total, "need": need}]
 
 
+def check_confirmed_not_future(conn, ctx):
+    """confirmed는 전날 리마인드 응답 — 전날이 TODAY 이후인 예약(TODAY+2일~)은 0"""
+    return _rows(conn, "SELECT id, scheduled_at, confirmed FROM emr_appointments"
+                       " WHERE confirmed = 1 AND date(scheduled_at, '-1 day') > ?", ctx.today.isoformat())
+
+
+def check_cancellation_kind(conn, ctx):
+    """취소는 변경 쌍의 원래 예약 또는 당일 취소(TODAY 이전 날짜)뿐"""
+    return _rows(conn, "SELECT a.id, a.scheduled_at, a.cancelled_at FROM emr_appointments a"
+                       " WHERE a.status = 'cancelled'"
+                       " AND NOT EXISTS (SELECT 1 FROM emr_appointments n WHERE n.rescheduled_from_id = a.id)"
+                       " AND NOT (date(a.cancelled_at) = date(a.scheduled_at) AND date(a.scheduled_at) < ?)",
+                 ctx.today.isoformat())
+
+
 # ── 시술·청구 ───────────────────────────────────────────────
 
 def check_performed_at(conn, ctx):
@@ -249,6 +292,20 @@ def check_performed_at(conn, ctx):
     return _rows(conn, "SELECT t.id, t.appointment_id, t.performed_at, a.scheduled_at"
                        " FROM emr_treatments t JOIN emr_appointments a ON a.id = t.appointment_id"
                        " WHERE datetime(t.performed_at) IS NOT datetime(a.scheduled_at)")
+
+
+def check_treatment_on_completed(conn, ctx):
+    """진료 기록은 completed 예약에만"""
+    return _rows(conn, "SELECT t.id, t.appointment_id, a.status FROM emr_treatments t"
+                       " LEFT JOIN emr_appointments a ON a.id = t.appointment_id"
+                       " WHERE a.status IS NOT 'completed'")
+
+
+def check_completed_has_treatment(conn, ctx):
+    """completed 예약은 진료 기록 ≥ 1행"""
+    return _rows(conn, "SELECT a.id, a.scheduled_at, a.planned_procedure_code FROM emr_appointments a"
+                       " WHERE a.status = 'completed'"
+                       " AND NOT EXISTS (SELECT 1 FROM emr_treatments t WHERE t.appointment_id = a.id)")
 
 
 def check_service_date(conn, ctx):
@@ -308,6 +365,22 @@ def check_extra_eob_not_in_ledger(conn, ctx):
                        " WHERE t.outcome = 'extra_in_eob'")
 
 
+def check_truth_claims_match(conn, ctx):
+    """9~10월 emr_claims마다 truth_claims 1행(claim_id·대조 키·금액 일치), 그 밖을 가리키는 truth 행 없음"""
+    months = _submitted_months(ctx)
+    marks = ",".join("?" * len(months))
+    unmatched = _rows(conn, "SELECT c.id AS claim_id, c.claim_month, t.id AS truth_id FROM emr_claims c"
+                            " LEFT JOIN truth.truth_claims t ON t.claim_id = c.id"
+                            f" WHERE c.claim_month IN ({marks}) AND (t.id IS NULL"
+                            " OR t.chart_no IS NOT c.chart_no OR t.service_date IS NOT c.service_date"
+                            " OR t.procedure_code IS NOT c.procedure_code OR t.tooth_no IS NOT c.tooth_no"
+                            " OR t.claim_amount IS NOT c.claim_amount)", *months)
+    stray = _rows(conn, "SELECT t.id AS truth_id, t.claim_id FROM truth.truth_claims t"
+                        f" LEFT JOIN emr_claims c ON c.id = t.claim_id AND c.claim_month IN ({marks})"
+                        " WHERE t.outcome != 'extra_in_eob' AND c.id IS NULL", *months)
+    return unmatched + stray
+
+
 # ── 수납 ────────────────────────────────────────────────────
 
 def check_balance_non_negative(conn, ctx):
@@ -361,36 +434,36 @@ def check_fake_phone(conn, ctx):
 
 # ── 경고: 분포 ──────────────────────────────────────────────
 
-def _band(age: int) -> str:
-    return next(name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi))
+def _band(age: int) -> str | None:
+    """나이가 음수(미래 출생)면 None — 필수 검사가 따로 잡는다"""
+    return next((name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi)), None)
 
 
 def check_age_distribution(conn, ctx):
     """연령 구간 비중 ±2%p (TODAY 기준 나이)"""
-    ages = [_age(date.fromisoformat(r["birth_date"]), ctx.today)
-            for r in _rows(conn, "SELECT birth_date FROM emr_patients")]
-    if not ages:
+    bands = [_band(_age(date.fromisoformat(r["birth_date"]), ctx.today))
+             for r in _rows(conn, "SELECT birth_date FROM emr_patients")]
+    bands = [b for b in bands if b is not None]
+    if not bands:
         return []
     counts = defaultdict(int)
-    for a in ages:
-        counts[_band(a)] += 1
+    for b in bands:
+        counts[b] += 1
     bad = []
     for name, _, _, target in AGE_BANDS:
-        share = counts[name] / len(ages)
+        share = counts[name] / len(bands)
         if abs(share - target) > AGE_TOLERANCE:
             bad.append({"band": name, "share": round(share, 3), "target": target})
     return bad
 
 
 def check_daily_visits(conn, ctx):
-    """진료일별 비취소 예약 수가 visits_per_day(토 ×0.5) ±30% — 첫 예약일~마지막 예약일 사이 모든 진료일"""
+    """생성 기간(truth_gen_meta) 안 모든 진료일의 비취소 예약 수가 visits_per_day(토 ×0.5) ±30%"""
     counts = defaultdict(int)
     for r in _rows(conn, "SELECT date(scheduled_at) AS d FROM emr_appointments WHERE status != 'cancelled'"):
         counts[date.fromisoformat(r["d"])] += 1
-    if not counts:
-        return []
-    bad, d = [], min(counts)
-    while d <= max(counts):
+    bad, d = [], ctx.range_start
+    while d <= ctx.range_end:
         if open_slots(d.weekday()) and d not in ctx.holidays:
             target = ctx.visits_per_day * (SATURDAY_VISIT_RATIO if d.weekday() == SATURDAY else 1)
             if abs(counts[d] - target) > DAILY_VISIT_TOLERANCE * target:
@@ -408,12 +481,12 @@ def _peak_time_share(weekday: int) -> float:
     close = SATURDAY_CLOSE if weekday == SATURDAY else WEEKDAY_CLOSE
     minutes = lambda t: t.hour * 60 + t.minute
     peak = sum(max(0, minutes(min(end, close)) - minutes(max(start, OPEN))) for start, end in PEAK)
-    return peak / (open_slots(weekday) * 30)
+    return peak / (open_slots(weekday) * SLOT_MIN)
 
 
 def check_peak_pattern(conn, ctx):
-    """피크(10–11·15–17시) 시작 비중이 피크의 영업시간 비중보다 큼"""
-    starts = [a["start"] for a in _active_appointments(conn)]
+    """피크(10–11·15–17시) 시작 비중이 피크의 영업시간 비중보다 큼 (휴진 요일 예약은 필수 검사 몫이라 제외)"""
+    starts = [a["start"] for a in _active_appointments(conn) if open_slots(a["start"].weekday())]
     if not starts:
         return []
     actual = sum(_in_peak(s.time()) for s in starts) / len(starts)
@@ -474,6 +547,7 @@ REQUIRED = [
     check_timestamps_not_future,
     check_last_month_claims_pending,
     check_submitted_months_no_result,
+    check_slot_grid,
     check_doctor_slots,
     check_chair_overlap,
     check_concurrency,
@@ -481,6 +555,10 @@ REQUIRED = [
     check_business_hours,
     check_planned_procedure,
     check_reschedule_ratio,
+    check_confirmed_not_future,
+    check_cancellation_kind,
+    check_treatment_on_completed,
+    check_completed_has_treatment,
     check_performed_at,
     check_service_date,
     check_uninsured_not_claimed,
@@ -488,6 +566,7 @@ REQUIRED = [
     check_tooth_no_not_null,
     check_claim_key_unique,
     check_extra_eob_not_in_ledger,
+    check_truth_claims_match,
     check_balance_non_negative,
     check_visit_payment_completed,
     check_ax_calls_columns,
@@ -556,7 +635,12 @@ def main(argv=None) -> int:
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (f"file:{args.truth}?mode=ro",))
-    ok = run(conn, load_ctx(args.config))
+    try:
+        ctx = load_ctx(args.config, conn)
+    except KeyError as e:
+        print(f"truth_gen_meta에 {e} 없음 — make data 먼저")
+        return 1
+    ok = run(conn, ctx)
     print("verify 통과" if ok else "verify 실패 — 필수 검사 위반")
     return 0 if ok else 1
 

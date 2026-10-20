@@ -9,6 +9,10 @@ HOURS = {
     "closed_weekdays": [3, 6],    # 목, 일 (+ 공휴일)
 }
 
+# 진료 슬롯 길이(분)와 토요일 (§1). 요일은 월=0
+SLOT_MIN = 30
+SATURDAY = 5
+
 # 동시성 (§1): 원장은 동시 2체어, 체어 작업(hygiene + treatment)은 동시 3 (위생사 3명)
 DOCTOR_CHAIRS = 2
 MAX_CHAIR_WORK = 3
@@ -79,10 +83,10 @@ def _minutes(hhmm: str) -> int:
 
 
 def open_slots(weekday: int) -> int:
-    """그 요일의 30분 진료 슬롯 수 (월=0). 휴진 요일은 0. 공휴일은 호출하는 쪽에서 거른다."""
+    """그 요일의 진료 슬롯(SLOT_MIN분) 수 (월=0). 휴진 요일은 0. 공휴일은 호출하는 쪽에서 거른다."""
     if weekday in HOURS["closed_weekdays"]:
         return 0
-    if weekday == 5:
-        return (_minutes(HOURS["saturday_close"]) - _minutes(HOURS["open"])) // 30
+    if weekday == SATURDAY:
+        return (_minutes(HOURS["saturday_close"]) - _minutes(HOURS["open"])) // SLOT_MIN
     lunch = _minutes(HOURS["lunch"][1]) - _minutes(HOURS["lunch"][0])
-    return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // 30
+    return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN

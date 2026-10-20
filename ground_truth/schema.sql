@@ -5,7 +5,7 @@
 -- 9~10월 청구 심사 결과 + 장부에 없는 통보서 줄(extra_in_eob)
 CREATE TABLE truth_claims (
     id             INTEGER PRIMARY KEY,
-    claim_id       INTEGER,  -- app.sqlite emr_claims.id (다른 DB라 FK 없음). extra_in_eob는 NULL
+    claim_id       INTEGER UNIQUE,  -- app.sqlite emr_claims.id (다른 DB라 FK 없음). extra_in_eob는 NULL
     chart_no       TEXT NOT NULL,
     service_date   TEXT NOT NULL,
     procedure_code TEXT NOT NULL,
@@ -19,3 +19,10 @@ CREATE TABLE truth_claims (
 );
 
 CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_date, procedure_code, tooth_no);
+
+-- 생성 설정 기록 (seed·scale·range_start·range_end). verify가 규모별 기간을 여기서 읽는다.
+-- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
+CREATE TABLE truth_gen_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
