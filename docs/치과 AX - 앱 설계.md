@@ -61,9 +61,9 @@ tags:
 **`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행(`id` PK). `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid` + 사람 채점 `human_rating(useful/ok/wrong)`·`rated_by`("다시 만들기"로 제안이 바뀌면 둘 다 초기화). UNIQUE `(sheet_date, patient_id, appointment_id)`
 리포트 테이블(슬롯 ⑥)은 슬롯 착수 시 추가.
 
-## 5. EOB (슬롯 ②, 조건부)
+## 5. 심사결과통보서 (슬롯 ②, 조건부)
 
-EOB 테이블은 슬롯 착수 시 추가.
+심사결과 테이블(코드명 `claim_review`)은 슬롯 착수 시 추가.
 
 ## 6. 설정·작업·인덱스·고정 쿼리
 

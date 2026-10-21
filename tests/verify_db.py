@@ -51,11 +51,11 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction,
   (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-27 16:00:00', 140, 0);
 """
 
-# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_eob 줄은 장부에 없는 키
+# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
 TRUTH_SEED = """
 INSERT INTO truth_claims VALUES
   (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),
-  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_eob', 24500, NULL);
+  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL);
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """

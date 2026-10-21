@@ -395,16 +395,16 @@ def check_claim_key_unique(conn, ctx):
                        " HAVING count(*) > 1")
 
 
-def check_extra_eob_not_in_ledger(conn, ctx):
-    """truth_claims의 extra_in_eob 대조 키가 emr_claims와 겹치지 않음"""
+def check_extra_claim_review_not_in_ledger(conn, ctx):
+    """truth_claims의 extra_in_claim_review 대조 키가 emr_claims와 겹치지 않음"""
     return _rows(conn, "SELECT t.id, t.chart_no, t.service_date, t.procedure_code, t.tooth_no, c.id AS claim_id"
                        " FROM truth.truth_claims t JOIN emr_claims c USING (chart_no, service_date, procedure_code, tooth_no)"
-                       " WHERE t.outcome = 'extra_in_eob'")
+                       " WHERE t.outcome = 'extra_in_claim_review'")
 
 
 def check_truth_claims_match(conn, ctx):
     """9~10월 emr_claims마다 truth_claims 1행(claim_id·대조 키·금액 일치), 그 밖을 가리키는 truth 행 없음,
-    extra_in_eob 줄도 9~10월 진료일. truth_claims는 EOB 슬롯 착수 때 생성 — 비어 있으면 건너뜀"""
+    extra_in_claim_review 줄도 9~10월 진료일. truth_claims는 심사결과 슬롯 착수 때 생성 — 비어 있으면 건너뜀"""
     if not conn.execute("SELECT 1 FROM truth.truth_claims LIMIT 1").fetchone():
         return []
     months = _submitted_months(ctx)
@@ -417,9 +417,9 @@ def check_truth_claims_match(conn, ctx):
                             " OR t.claim_amount IS NOT c.claim_amount)", *months)
     stray = _rows(conn, "SELECT t.id AS truth_id, t.claim_id FROM truth.truth_claims t"
                         f" LEFT JOIN emr_claims c ON c.id = t.claim_id AND c.claim_month IN ({marks})"
-                        " WHERE t.outcome != 'extra_in_eob' AND c.id IS NULL", *months)
+                        " WHERE t.outcome != 'extra_in_claim_review' AND c.id IS NULL", *months)
     extra_outside = _rows(conn, "SELECT id AS truth_id, service_date FROM truth.truth_claims"
-                                f" WHERE outcome = 'extra_in_eob' AND substr(service_date, 1, 7) NOT IN ({marks})",
+                                f" WHERE outcome = 'extra_in_claim_review' AND substr(service_date, 1, 7) NOT IN ({marks})",
                           *months)
     return unmatched + stray + extra_outside
 
@@ -705,7 +705,7 @@ REQUIRED = [
     check_scaling_limit,
     check_tooth_no_not_null,
     check_claim_key_unique,
-    check_extra_eob_not_in_ledger,
+    check_extra_claim_review_not_in_ledger,
     check_truth_claims_match,
     check_balance_non_negative,
     check_visit_payment_completed,

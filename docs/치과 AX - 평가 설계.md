@@ -118,9 +118,9 @@ tags:
 - **제안 후검증**(코드, 건별): `used_facts`의 모든 (key, value)가 입력 `facts`와 일치 **and** `text`에 등장하는 숫자가 전부 `used_facts.value`(단위 정규화 후)에 속함 → `suggestion_valid`. 실패율을 리포트에
 - **사람 채점**: 30행(환자 중복 없이) `유용 / 무난 / 틀림`. 대상은 준비표 범위(최근 7일 + 오늘)에서 칩(미수·보험 잔여·가족 리콜 — 예약 칩은 모든 행에 켜져 제외)이 켜진 행 15 + 안 켜진 행 15를 고정 시드로 — 결과는 두 묶음 따로 보고 — `ax_prep_sheets.human_rating`(`useful/ok/wrong`)·`rated_by`에 기록([[치과 AX - 앱 설계]] §4)
 
-## 5. EOB (슬롯 ②, 조건부)
+## 5. 심사결과통보서 (슬롯 ②, 조건부)
 
-판독 재현율·대조 정확도·자동 확정률(`truth_eob_lines`·`truth_claims` 대비). 지표 정의는 슬롯 착수 시.
+판독 재현율·대조 정확도·자동 확정률(`truth_claim_review_lines`·`truth_claims` 대비). 지표 정의는 슬롯 착수 시.
 
 ## 6. 정답 저장소 `ground_truth/`
 
@@ -131,8 +131,8 @@ tags:
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
 | `truth_gen_meta` | 생성기 | `key → value`: `seed`, `scale`, `range_start`, `range_end`. verify가 규모별 기간을 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — test 1회 규칙 검증 |
-| `truth_claims` | 생성기(EOB 슬롯 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
-| `truth_eob_lines` | 생성기(조건부) | 통보서 줄 정답. 슬롯 착수 시 정의 |
+| `truth_claims` | 생성기(심사결과 슬롯 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
+| `truth_claim_review_lines` | 생성기(조건부) | 통보서 줄 정답. 슬롯 착수 시 정의 |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.
 

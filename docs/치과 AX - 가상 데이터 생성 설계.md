@@ -72,20 +72,20 @@ tags:
 
 - **잔액** = Σ(`amount_due − amount_paid`). 창 안 completed 내원마다 `visit` 수납 행 1개(0원이어도). 미수는 `amount_due > 0`인 내원 중 `config` `unpaid_rate`에서 일부만 수납 → 그중 `config` `settle_next_visit`은 다음 내원 때 `settlement` 행(`amount_due = 0`)으로 정산, 나머지는 잔류. 발생률만 두면 잔액이 누적돼 준비표 미수 칩이 절반 넘게 켜진다
 - **보험 잔여**(준비표 칩): 별도 테이블 없이 `emr_claims`의 그해 스케일링 급여 청구 유무로 계산 — 같은 사실을 두 곳에 두지 않는다
-- **청구**: 급여 시술 completed마다 1줄. `claim_month` = 진료월(보완 청구도 같음). `batch_type` = `monthly` / `supplementary`(청구 줄의 `config` `eob.supplementary_ratio`를 무작위로 — 월 일괄 청구에서 빠져 나중에 낸 건)
+- **청구**: 급여 시술 completed마다 1줄. `claim_month` = 진료월(보완 청구도 같음). `batch_type` = `monthly` / `supplementary`(청구 줄의 `config` `claim_review.supplementary_ratio`를 무작위로 — 월 일괄 청구에서 빠져 나중에 낸 건)
   - `submitted_at`: monthly = 익월 첫 진료일 10:00, supplementary = 그 + 14일(휴진일이면 다음 진료일), 전월분(`pending`)은 NULL
   - `status`: 전월 = `pending`(미제출) / 그 전 `SUBMITTED_MONTHS`개월 = `submitted`(결과는 장부에 없음) / 그 이전 = 확정(`paid·adjusted·denied`, 병원이 이미 아는 과거 결과)
-- **대조 키** `(chart_no, service_date, procedure_code, tooth_no)` UNIQUE — EOB 대조용. 제출 월의 심사 결과는 `truth_claims`에만(EOB 슬롯 착수 때 생성 — 정답 DB라 나중에 만들어도 `app.sqlite`·LLM 캐시가 바뀌지 않음)
+- **대조 키** `(chart_no, service_date, procedure_code, tooth_no)` UNIQUE — 심사결과 대조용. 제출 월의 심사 결과는 `truth_claims`에만(심사결과 슬롯 착수 때 생성 — 정답 DB라 나중에 만들어도 `app.sqlite`·LLM 캐시가 바뀌지 않음)
 
-**심사 결과 추첨**(확정 월 `emr_claims`는 정형 5단계, 제출 월 `truth_claims`는 EOB 슬롯 — 같은 규칙)
+**심사 결과 추첨**(확정 월 `emr_claims`는 정형 5단계, 제출 월 `truth_claims`는 심사결과 슬롯 — 같은 규칙)
 | 대상 | 분포(청구 줄 기준) |
 |---|---|
 | 확정 월 → `emr_claims.status` | paid 88 / adjusted 8 / denied 4 (`missing`·`extra`는 통보서 대조 결과라 장부에 없음) |
-| 제출 월 → `truth_claims.outcome` | paid_full 85 / adjusted 8 / denied 4 / missing_in_eob 2 / extra_in_eob 1 |
+| 제출 월 → `truth_claims.outcome` | paid_full 85 / adjusted 8 / denied 4 / missing_in_claim_review 2 / extra_in_claim_review 1 |
 
-- 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount × U(0.5, 0.9)`, 10원 단위 내림 + `adjust_code` / denied → `paid_amount = 0` + `adjust_code` / missing_in_eob → 둘 다 NULL
+- 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount × U(0.5, 0.9)`, 10원 단위 내림 + `adjust_code` / denied → `paid_amount = 0` + `adjust_code` / missing_in_claim_review → 둘 다 NULL
 - 사유 코드 10개는 `master.ADJUST_CODES`(5단계 구현 때 추가)
-- `extra_in_eob` 줄(장부에 없음, `claim_id` NULL): 제출 월 실제 내원(환자·진료일)에 그 내원에 없는 급여 시술 또는 다른 치아를 붙여 만든다 → 대조 키가 `emr_claims`와 겹치지 않음
+- `extra_in_claim_review` 줄(장부에 없음, `claim_id` NULL): 제출 월 실제 내원(환자·진료일)에 그 내원에 없는 급여 시술 또는 다른 치아를 붙여 만든다 → 대조 키가 `emr_claims`와 겹치지 않음
 
 ### 2.5 문자
 
@@ -249,7 +249,7 @@ make data [SCALE=small|large] [REGEN_LLM=1]
  9. RAG 문서       §4.2                                          (LLM, 캐시)
 10. 적재·색인·검증 app.sqlite → make index(앱 설계 §3, 앱 색인 코드 전엔 건너뜀) → make verify
 ━━ 조건부 ━━
-11. EOB PDF        슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
+11. 심사결과 PDF   슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
 ```
 
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 자기 난수 생성기를 만든다 — 단계를 추가·삭제해도 다른 단계의 결과가 바뀌지 않게(구현 방법은 `generator/seeding.py`)
@@ -271,7 +271,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 운영 제약(§1) | 영업시간·휴진일 밖 없음; 예약 시작 :00·:30, 소요 30분 배수; 하루 비취소 예약 ≤ 상한; 같은 시작 시각 비취소 예약 ≤ `master.MAX_APPOINTMENTS_PER_SLOT`; 같은 환자 같은 날 중복 없음 |
 | 예약 | `planned_procedure_code` 필수; `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`, 변경은 예약당 1회(새 예약은 다시 원래 예약이 되지 않음); 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날 영업시간 안); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전) |
-| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; (`truth_claims`가 있을 때만) `extra_in_eob` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_eob`도 제출 월 진료일 |
+| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
@@ -309,11 +309,11 @@ Python · Faker(ko_KR) · numpy 시드(lock 파일 커밋 — Faker 버전이 �
 
 - [ ] 거절형 금지 토픽 2개 선정(`make data` 전 — 평가 설계 §3.1)
 
-## 슬롯 메모 — EOB(②, 조건부)
+## 슬롯 메모 — 심사결과통보서(②, 조건부)
 
 착수 전까지 정형 단계에 영향 없음. 이미 정한 것:
 - 제출 월 outcome 추첨 → `truth_claims`(§2.4 규칙) → 렌더링. 전월은 `pending`이라 통보서 없음. 확정 월은 "이미 확인된 통보서"로 판독 벤치마크만
 - 월별 통보서(창 안 확정·제출 월, 페이지당 고정 25줄, 양식 상반기 A / 하반기 B) + 건별(`supplementary`를 `(patient, service_date)`로 묶음, 1~4줄, 양식 C)
-- Jinja2 → PDF(WeasyPrint + Nanum 폰트, 실패 시 Playwright). 페이지 분할은 생성기가 슬라이싱 → `(page, line_no)` 정답 확정 → `truth_eob_lines`
+- Jinja2 → PDF(WeasyPrint + Nanum 폰트, 실패 시 Playwright). 페이지 분할은 생성기가 슬라이싱 → `(page, line_no)` 정답 확정 → `truth_claim_review_lines`
 - 열화 30%(Pillow): 200dpi → 블러·회전 ±1.5°·노이즈·JPEG 40~60
 - 현실 프레이밍: 심사 결과를 EDI 자동 반영하지 않고 통보서(스캔·팩스)로 받아 수기 반영하는 병원 가정

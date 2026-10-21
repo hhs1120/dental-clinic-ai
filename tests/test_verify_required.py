@@ -52,11 +52,11 @@ BREAKS = {
     "call_uid_purpose": ("UPDATE ax_calls SET call_uid = 'reschedule:0001' WHERE id = 1", "check_call_uid_format"),
     "call_uid_suffix": ("UPDATE ax_calls SET call_uid = 'c-0001-book' WHERE id = 1", "check_call_uid_format"),
     "call_label_column": ("ALTER TABLE ax_calls ADD COLUMN primary_purpose TEXT", "check_ax_calls_columns"),
-    # truth_claims (EOB 슬롯)
-    "extra_eob_in_ledger": (
+    # truth_claims (심사결과 슬롯)
+    "extra_claim_review_in_ledger": (
         "UPDATE truth.truth_claims SET service_date = '2026-11-03', procedure_code = 'U0001'"
-        " WHERE outcome = 'extra_in_eob'",
-        "check_extra_eob_not_in_ledger",
+        " WHERE outcome = 'extra_in_claim_review'",
+        "check_extra_claim_review_not_in_ledger",
     ),
     # TODAY 구간 (가상 데이터 생성 설계 §5.3)
     "created_future": ("UPDATE emr_appointments SET created_at = '2026-12-02 10:00:00' WHERE id = 6", "check_timestamps_not_future"),
@@ -109,8 +109,8 @@ BREAKS = {
     "truth_claim_missing": ("DELETE FROM truth.truth_claims WHERE claim_id = 1", "check_truth_claims_match"),
     "truth_amount_mismatch": ("UPDATE truth.truth_claims SET claim_amount = 1 WHERE claim_id = 1", "check_truth_claims_match"),
     "truth_points_to_pending": ("UPDATE truth.truth_claims SET claim_id = 2 WHERE claim_id = 1", "check_truth_claims_match"),
-    "extra_eob_outside_months": (
-        "UPDATE truth.truth_claims SET service_date = '2026-08-06' WHERE outcome = 'extra_in_eob'", "check_truth_claims_match"),
+    "extra_claim_review_outside_months": (
+        "UPDATE truth.truth_claims SET service_date = '2026-08-06' WHERE outcome = 'extra_in_claim_review'", "check_truth_claims_match"),
     "caller_phone_real": ("UPDATE ax_calls SET caller_phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
     "real_phone": ("UPDATE emr_patients SET phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
     # 영업시간·휴진일 (상담 예약 7번을 옮긴다)
@@ -315,15 +315,15 @@ def test_run_survives_closed_day_and_unborn_patient(tmp_path, capsys):
 
 def test_truth_checks_skip_until_truth_claims_exist(tmp_path):
     conn = make_db(tmp_path)
-    conn.execute("DELETE FROM truth.truth_claims")  # EOB 슬롯 착수 전에는 비어 있다
+    conn.execute("DELETE FROM truth.truth_claims")  # 심사결과 슬롯 착수 전에는 비어 있다
     assert verify.check_truth_claims_match(conn, CTX) == []
-    assert verify.check_extra_eob_not_in_ledger(conn, CTX) == []
+    assert verify.check_extra_claim_review_not_in_ledger(conn, CTX) == []
 
 
 def test_truth_claims_extra_must_have_no_claim_id(tmp_path):
     conn = make_db(tmp_path)
     with pytest.raises(sqlite3.IntegrityError):
-        conn.execute("UPDATE truth.truth_claims SET claim_id = 1 WHERE outcome = 'extra_in_eob'")
+        conn.execute("UPDATE truth.truth_claims SET claim_id = 1 WHERE outcome = 'extra_in_claim_review'")
 
 
 def _two_dbs(tmp_path):
