@@ -33,9 +33,9 @@ def _doc() -> str:
 
 
 def _target_rows() -> dict[str, list[str]]:
-    """'경고 — 분포 목표' 표의 행 → 칸 목록"""
+    """'경고' 첫 표(분포 목표)의 행 → 칸 목록"""
     text = _doc()
-    table = text[text.index("**경고 — 분포 목표**"):].split("\n\n")[1]
+    table = text[text.index("**경고**("):].split("\n\n")[1]
     rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.splitlines()]
     header, rows = rows[0], rows[2:]
     assert header[:3] == ["지표", "목표", "허용"], header

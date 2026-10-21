@@ -58,7 +58,7 @@ tags:
 
 ## 4. 준비표·리포트
 
-**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행. `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid` + 사람 채점 `human_rating(useful/ok/wrong)`·`rated_by`("다시 만들기"로 제안이 바뀌면 둘 다 초기화). UNIQUE `(sheet_date, patient_id, appointment_id)`
+**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행(`id` PK). `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid` + 사람 채점 `human_rating(useful/ok/wrong)`·`rated_by`("다시 만들기"로 제안이 바뀌면 둘 다 초기화). UNIQUE `(sheet_date, patient_id, appointment_id)`
 리포트 테이블(슬롯 ⑥)은 슬롯 착수 시 추가.
 
 ## 5. EOB (슬롯 ②, 조건부)
@@ -92,7 +92,7 @@ EOB 테이블은 슬롯 착수 시 추가.
 | 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 판정 풀 전체 × 2(A/B) 분류 적재 + 해시 기반 결정적 fake 임베딩으로 Chroma까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | `export-human/import-human`: 판정은 `hash(transcript)`로만 복원 — 미스 시 버리고 "복원 실패 N건" 리포트(전사가 바뀐 건에 `call_uid`로 붙이면 다른 대화에 라벨이 붙음). 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |
-| 실행 | `make index / fixture / save-demo / reset-demo` |
+| 실행 | `make index / fixture / save-demo / reset-demo / set KEY=… VALUE=…`(설정 변경, 허용 키는 [[치과 AX - 기능 정의]] §7) |
 
 ## 8. 미결
 

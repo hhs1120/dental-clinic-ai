@@ -5,7 +5,8 @@
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날 영업시간 안),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
-         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
+         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음 — 생성기 완성 후,
+         두 번은 서로 다른 PYTHONHASHSEED(0과 1)로: 같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
@@ -48,7 +49,7 @@ ACTIVE_TOLERANCE = 0.05
 NEW_PATIENT_TOLERANCE = 0.03
 VISIT_MIX_TOLERANCE = 0.03
 NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
-PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = TODAY 포함 최근 7일 (기능 정의 ⑧)
+PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = 최근 7일 + 오늘 (기능 정의 ⑧)
 
 
 @dataclass(frozen=True)
@@ -579,7 +580,7 @@ def report_unpaid_rate(conn, ctx):
 
 
 def report_balance_holder_share(conn, ctx):
-    """잔액 있음 비율 — 준비표 범위(TODAY 포함 최근 PREP_SHEET_DAYS일)의 비취소 예약(환자 × 날짜) 중 미수 칩이 켜지는 것.
+    """잔액 있음 비율 — 준비표 범위(최근 PREP_SHEET_DAYS일 + 오늘)의 비취소 예약(환자 × 날짜) 중 미수 칩이 켜지는 것.
     잔액 있음 = 그 예약일 개원 전 잔액 > 0 (정의 원본: 앱 설계 §3 has_unpaid_balance)"""
     since = ctx.today - timedelta(days=PREP_SHEET_DAYS)
     rows = _rows(conn, "SELECT DISTINCT patient_id, date(scheduled_at) AS d FROM emr_appointments"
@@ -764,7 +765,8 @@ def run(conn, ctx) -> bool:
             print(f"[{level}] {name}: {len(violations)}건 — {(check.__doc__ or '').strip()}")
             for v in violations[:EXAMPLES]:
                 print(f"         {v}")
-    # RAG 필수 검사는 9단계·앱 색인 코드와 함께 구현 — 그 전엔 건너뜀으로 표시(§5.1)
+    # RAG 필수 검사는 9단계·앱 색인 코드와 함께 구현 — 그 전엔 건너뜀으로 표시(§5.1 파이프라인 10단계)
+    # — 청크가 생겨도 검사 없이 통과한 것처럼 보이지 않게 항상 출력
     print("[SKIP] RAG — 미구현(9단계·앱 색인 코드 후)")
     for report in REPORTS:
         print(f"[INFO] {report.__name__}: {report(conn, ctx)}")
