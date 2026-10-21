@@ -34,9 +34,6 @@ CONDITIONAL_INSURED_MIN_AGE = 65
 # 내원 구성 목표 (§1). 목표 — 경고로만 확인
 VISIT_MIX = {"treatment": 0.70, "hygiene": 0.25, "consult": 0.05}
 
-# 피크 시간 (§1). [시작, 끝)
-PEAK_HOURS = [("10:00", "11:00"), ("15:00", "17:00")]
-
 # 토요일 하루 상한 = 평일 visits_per_day × 이 비율 (§1)
 SATURDAY_VISIT_RATIO = 0.5
 

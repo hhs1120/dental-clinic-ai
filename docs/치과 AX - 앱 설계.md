@@ -58,7 +58,7 @@ tags:
 
 ## 4. 준비표·리포트
 
-**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행. `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid`. UNIQUE `(sheet_date, patient_id, appointment_id)`
+**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행. `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid` + 사람 채점 `human_rating(useful/ok/wrong)`·`rated_by`("다시 만들기"로 제안이 바뀌면 둘 다 초기화). UNIQUE `(sheet_date, patient_id, appointment_id)`
 리포트 테이블(슬롯 ⑥)은 슬롯 착수 시 추가.
 
 ## 5. EOB (슬롯 ②, 조건부)
@@ -88,6 +88,7 @@ EOB 테이블은 슬롯 착수 시 추가.
 | FTS | `unicode61` + 조사 제거 OR prefix. 복합어는 적재 시 공백 정규화 |
 | 리랭커·임베딩 | **비교 후 확정**: `text-embedding-3-small` vs `bge-m3`, 로컬 `bge-reranker-v2-m3` vs Cohere. dev 질문 10개로 비교 |
 | LLM (원본은 여기) | 게이트웨이 모듈 1개(`shared/`, 생성기 7·9단계도 경유), 내부 LiteLLM 라이브러리(서버 아님). 이름(A/B)으로 호출, 폴백, 호출 로그(`ax_llm_calls`), 일일 비용 상한(금액은 [[치과 AX - 기능 정의]] §7). 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
+| 프롬프트 | `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `gen_transcript`·`gen_document`(생성기). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — A·B 쌍이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정, 생성기는 생성기 코드에 고정(LLM 캐시 키의 `prompt_template_hash` = 그 파일 해시) |
 | 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 판정 풀 전체 × 2(A/B) 분류 적재 + 해시 기반 결정적 fake 임베딩으로 Chroma까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | `export-human/import-human`: 판정은 `hash(transcript)`로만 복원 — 미스 시 버리고 "복원 실패 N건" 리포트(전사가 바뀐 건에 `call_uid`로 붙이면 다른 대화에 라벨이 붙음). 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |
@@ -98,3 +99,4 @@ EOB 테이블은 슬롯 착수 시 추가.
 - [ ] 리랭커·임베딩 모델
 - [ ] 프로바이더 조합 A/B — 생성기 7단계(통화 전사) 전에 필요
 - [ ] 홈 화면·네비 (와이어프레임에서)
+- [ ] `prep_facts` fact 키 목록 (⑧ 착수 시 — 후검증·회귀 테스트의 기준)

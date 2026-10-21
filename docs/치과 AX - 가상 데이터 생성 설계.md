@@ -18,7 +18,7 @@ tags:
 | 항목 | 결정 |
 |---|---|
 | 규모 | large = `config/generator.yaml` 기본값(기간·환자·하루 상한·통화·문서 수) |
-| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 구환 수는 모든 규모에서 같다**(신환만 기간에 비례) — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
+| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 구환 수는 모든 규모에서 같다**(신환만 기간에 비례) — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
 | 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small은 개발·테스트용 |
 | 기준일 | `TODAY`(config) 고정. 앱에서는 바꾸지 않는다(원본 [[치과 AX - 앱 설계]] §6) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만(급여 청구액 = fee × 0.7, 소아 급여 특례 없음) |
@@ -27,7 +27,7 @@ tags:
 ## 1. 병원 프로필
 
 - 원장 1, 위생사 3, 데스크 2, 상담실장 1. 진료=원장, 위생=위생사(순환), 상담=상담실장
-- 영업시간·휴진(목·일·공휴일)·30분 슬롯·피크 시간은 `master.HOURS`·`SLOT_MIN`·`PEAK_HOURS`, 공휴일은 `config/holidays_2026.json`
+- 영업시간·휴진(목·일·공휴일)·30분 슬롯은 `master.HOURS`·`SLOT_MIN`, 공휴일은 `config/holidays_2026.json`
 - **생성 시 강제하는 운영 제약은 셋뿐**: ① 영업시간 안 ② 하루 비취소 예약 ≤ 상한(평일 `config` `visits_per_day`, 토 `master.SATURDAY_VISIT_RATIO` 내림) ③ 같은 시작 시각의 비취소 예약 ≤ `MAX_APPOINTMENTS_PER_SLOT`. 체어·원장/위생사 동시성·원장 슬롯은 모델링하지 않는다
 - 비율 목표(노쇼·변경·신환·활동 등)는 시뮬레이션 파라미터로 맞추고 경고로만 확인 — 목록은 §5.3
 
@@ -129,7 +129,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
      - completed → (진료·수납·청구는 5단계) 코스 다음 회차가 있으면 그 자리에서 데스크 예약(booked_via = desk, created_at = 내원 종료 시각, 희망 간격 ② 뒤 첫 가능일)
      - noshow·당일 취소 → 그 수요는 남고, 재예약 지연 뒤 다시 전화 예약
   2. 전화 예약(booked_via = phone): 그날 기한이 된 수요(리콜·치료 시작·재예약)와 신환
-     - created_at = 그날 영업시간 안 임의 시각, 희망 리드 1~`master.MAX_LEAD_DAYS`일 뒤 첫 가능한 진료일·시각(피크 ×2 가중)
+     - created_at = 그날 영업시간 안 임의 시각, 희망 리드 1~`master.MAX_LEAD_DAYS`일 뒤 첫 가능한 진료일, 시각은 그날 가능한 슬롯 중 균등 추첨
      - 가능 = §1 운영 제약 셋 + 같은 환자 같은 날 예약 없음 + 날짜 ≤ range_end. 그때까지 가능일이 없으면 다음 날 다시
      - 신환: 신환 첫 내원이 월 내원의 목표 비율이 되도록 후보 풀에서 꺼냄(registered_at = 그날). 첫 유형은 내원 구성 목표(VISIT_MIX)대로
      - 새 예약마다(전화·데스크 모두) reschedule_rate 확률로 "변경 예정" + 변경일(created_at 다음 날 ~ 예약 전날 중 진료일) 추첨.
@@ -213,9 +213,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 
 **복수 주제 통화의 생성 제약**: `primary_purpose` 1개 + 부 주제는 불리언 플래그(가격·불만·응급·예약 희망)로 표현되는 조합만 생성. 플래그로 표현 불가한 조합(예: 예약 변경 + 서류 요청)은 만들지 않음. `accepted_purposes[]`에 주·부 모두 기록 → 채점은 평가 설계 §2.2
 
-**메타 통화**: 시각·길이·방향만(전사 없음). 통화 목록 볼륨·시간대 분포용, 분류·판정 대상 아님. 목적은 생성 시 추첨해 길이·방향·시간대를 정하는 데만 쓰고 **저장하지 않음**(`ax_calls`에 두면 누출, `truth_call_labels`는 전사 전용)
-
-**`call_uid`는 6단계에서 전체(메타 + 전사 슬롯)에 부여** — 7단계 LLM 캐시 키에 들어가므로 전사 전에 확정. 전사 슬롯은 6단계에서 `has_transcript=0` 빈 행으로 만들고 7단계가 채움
+**`call_uid`는 6단계에서 전사 슬롯에 부여** — 7단계 LLM 캐시 키에 들어가므로 전사 전에 확정. 전사 슬롯은 6단계에서 `has_transcript=0` 빈 행으로 만들고(시각은 §2.6 사건 시각) 7단계가 채움
 
 생성 분포는 현실대로(치우침 유지).
 
@@ -250,7 +248,7 @@ make data [SCALE=small|large] [REGEN_LLM=1]
  3. 첫 수요        §2.6 ①                                        (코드)
  4. 예약 시뮬레이션 §2.6 ③                                        (코드)
  5. 진료·수납·청구 §2.4, §2.6 ④                                   (코드)
- 6. 통화 메타      §4.1 메타 통화, call_uid                       (코드)
+ 6. 통화 슬롯      §4.1 절차 1~3·예약 역산·call_uid               (코드)
  7. 통화 전사      §4.1                                          (LLM, 캐시)
  8. 문자           §2.5                                          (코드)
  9. RAG 문서       §4.2                                          (LLM, 캐시)
@@ -301,7 +299,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | completed | — |
 | 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 
-**리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 리마인드 확인률(목표 `config` `confirm_rate`), 미수 발생률(`config` `unpaid_rate`), 변경률(`config` `reschedule_rate`), 피크 시작 비중 vs 피크 영업시간 비중(`master.PEAK_HOURS`), 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외), 잔액 있음 비율(준비표 범위 = TODAY 포함 최근 `verify.PREP_SHEET_DAYS`일의 예약, 잔액 있음 정의는 [[치과 AX - 앱 설계]] §3 `has_unpaid_balance`)
+**리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 리마인드 확인률(목표 `config` `confirm_rate`), 미수 발생률(`config` `unpaid_rate`), 변경률(`config` `reschedule_rate`), 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외), 잔액 있음 비율(준비표 범위 = TODAY 포함 최근 `verify.PREP_SHEET_DAYS`일의 예약, 잔액 있음 정의는 [[치과 AX - 앱 설계]] §3 `has_unpaid_balance`)
 
 **경고 — 기타**
 | 영역 | 검사 |

@@ -115,7 +115,7 @@ tags:
 
 - **집계**: ⑧ 착수 시 `prep_facts(date)` 첫 출력을 스냅샷으로 고정해 회귀 테스트
 - **제안 후검증**(코드, 건별): `used_facts`의 모든 (key, value)가 입력 `facts`와 일치 **and** `text`에 등장하는 숫자가 전부 `used_facts.value`(단위 정규화 후)에 속함 → `suggestion_valid`. 실패율을 리포트에
-- **사람 채점**: 30명분 `유용 / 무난 / 틀림`
+- **사람 채점**: 30행(환자 중복 없이) `유용 / 무난 / 틀림` — `ax_prep_sheets.human_rating`(`useful/ok/wrong`)·`rated_by`에 기록([[치과 AX - 앱 설계]] §4)
 
 ## 5. EOB (슬롯 ②, 조건부)
 

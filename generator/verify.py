@@ -26,7 +26,7 @@ import yaml
 
 from generator.paths import SCALES, output_paths
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
-                              MAX_APPOINTMENTS_PER_SLOT, MAX_LEAD_DAYS, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
+                              MAX_APPOINTMENTS_PER_SLOT, MAX_LEAD_DAYS, NEW_PATIENT_SHARE, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
                               VISIT_MIX, open_slots, reminder_time)
 
@@ -40,7 +40,6 @@ SATURDAY_CLOSE = time.fromisoformat(HOURS["saturday_close"])
 LUNCH = tuple(time.fromisoformat(t) for t in HOURS["lunch"])
 CLOSED_WEEKDAYS = set(HOURS["closed_weekdays"])
 SLOT = timedelta(minutes=SLOT_MIN)
-PEAK = [tuple(time.fromisoformat(t) for t in w) for w in PEAK_HOURS]
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
 
 # 경고 허용치 (§5.3 경고 표)
@@ -636,18 +635,6 @@ def check_active_ratio(conn, ctx):
     return [] if abs(share - ACTIVE_SHARE) <= ACTIVE_TOLERANCE else [{"share": round(share, 3), "target": ACTIVE_SHARE}]
 
 
-def _in_peak(t: time) -> bool:
-    return any(start <= t < end for start, end in PEAK)
-
-
-def _peak_time_share(weekday: int) -> float:
-    """그 요일 영업시간 중 피크 시간의 비율 (토요일은 15–17시가 영업 밖)"""
-    close = SATURDAY_CLOSE if weekday == SATURDAY else WEEKDAY_CLOSE
-    minutes = lambda t: t.hour * 60 + t.minute
-    peak = sum(max(0, minutes(min(end, close)) - minutes(max(start, OPEN))) for start, end in PEAK)
-    return peak / (open_slots(weekday) * SLOT_MIN)
-
-
 def report_reschedule_rate(conn, ctx):
     """변경 쌍 / 변경 가능한 예약 — 추첨이 실현된 모집단만 센다.
     변경 가능 = TODAY 이전 예약 중 created_at 다음 날 ~ 예약 전날 사이에 진료일이 있는 것(변경일은 진료일에서 추첨),
@@ -662,17 +649,6 @@ def report_reschedule_rate(conn, ctx):
     if not eligible:
         return {"n": 0}
     return {"n": eligible, "pairs": pairs, "rate": round(pairs / eligible, 3), "target": ctx.reschedule_rate}
-
-
-def report_peak_pattern(conn, ctx):
-    """피크(10–11·15–17시) 시작 비중 vs 피크의 영업시간 비중 — 앞이 커야 피크 가중이 먹은 것
-    (휴진 요일 예약은 필수 검사 몫이라 제외)"""
-    starts = [a["start"] for a in _active_appointments(conn) if open_slots(a["start"].weekday())]
-    if not starts:
-        return {"n": 0}
-    actual = sum(_in_peak(s.time()) for s in starts) / len(starts)
-    expected = sum(_peak_time_share(s.weekday()) for s in starts) / len(starts)
-    return {"n": len(starts), "peak_share": round(actual, 3), "time_share": round(expected, 3)}
 
 
 # ── 경고: 치아 ──────────────────────────────────────────────
@@ -748,7 +724,6 @@ REPORTS = [
     report_confirm_rate,
     report_unpaid_rate,
     report_reschedule_rate,
-    report_peak_pattern,
     report_daily_fill,
     report_balance_holder_share,
 ]

@@ -343,24 +343,6 @@ def test_visit_split_boundaries(tmp_path):
     assert (patients, active) == ({1, 2, 3}, {2, 3})
 
 
-def test_peak_pattern_ignores_closed_day(tmp_path):
-    conn = make_db(tmp_path)
-    before = verify.report_peak_pattern(conn, CTX)
-    conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-11-19 15:00:00' WHERE id = 7")  # 목요일
-    # 휴진일 예약은 필수 검사가 잡고 리포트는 센다 — 7번(피크 시작)이 빠진 만큼만 바뀐다
-    after = verify.report_peak_pattern(conn, CTX)
-    assert after["n"] == before["n"] - 1
-
-
-def test_peak_pattern(tmp_path):
-    conn = make_db(tmp_path)
-    r = verify.report_peak_pattern(conn, CTX)  # 시드: 취소 제외 6건 중 5건이 10시·15시 시작
-    assert r["n"] == 6 and r["peak_share"] == round(5 / 6, 3) and r["peak_share"] > r["time_share"]
-    conn.execute("UPDATE emr_appointments SET scheduled_at = substr(scheduled_at, 1, 11) || '14:00:00'")
-    assert verify.report_peak_pattern(conn, CTX)["peak_share"] == 0
-
-
-
 def test_balance_holder_report(tmp_path):
     conn = make_db(tmp_path)
     # 준비표 범위 = TODAY 포함 최근 7일(11-24~12-01)의 비취소 예약: 환자 1의 7번(11-24)·5번(12-01).
