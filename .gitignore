@@ -7,4 +7,11 @@ __pycache__/
 # 생성 결과물 (재생성 가능). LLM 캐시와 ground_truth/*.json은 커밋한다
 data/*.sqlite
 data/chroma/
+data/small/
 ground_truth/*.sqlite
+ground_truth/small/
+
+# 편집기 임시 파일
+*.swp
+*.swo
+*~
