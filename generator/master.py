@@ -92,6 +92,7 @@ _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
 COURSE_VISITS = (2, 4)  # 양 끝 포함
+COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
 # 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
 ACTIVE_MONTHS = 6
@@ -170,3 +171,29 @@ def open_slots(weekday: int) -> int:
         return (_minutes(HOURS["saturday_close"]) - _minutes(HOURS["open"])) // SLOT_MIN
     lunch = _minutes(HOURS["lunch"][1]) - _minutes(HOURS["lunch"][0])
     return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN
+
+
+# 유형별 예정 시술 가중 (§2.6 ④). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
+# 성인·노인 hygiene은 표가 아니라 규칙: 그해 스케일링을 이미 했으면 구강검진, 아니면 스케일링 (HYGIENE_SCALING_BANDS)
+PLANNED_WEIGHTS = {
+    "hygiene": {
+        "child": {"구강검진": 40, "불소도포": 60},
+        "teen": {"구강검진": 60, "스케일링": 40},  # 19세 미만 스케일링은 비급여 (5단계)
+    },
+    "treatment": {
+        "child": {"아말감/GI": 35, "실란트": 30, "레진": 20, "단순발치": 15},
+        "teen": {"교정 월 체크": 50, "레진": 30, "아말감/GI": 10, "사랑니 발치": 10},
+        "adult": {"레진": 27, "잇몸치료": 15, "아말감/GI": 10, "신경치료": 9, "단순발치": 8, "크라운": 7,
+                  "교정 월 체크": 7, "사랑니 발치": 6, "인레이": 5, "임플란트 1차": 3, "미백": 2, "브릿지": 1},
+        "senior": {"잇몸치료": 26, "단순발치": 18, "임플란트 1차": 14, "레진": 12, "아말감/GI": 10, "신경치료": 8,
+                   "크라운": 8, "브릿지": 4},
+    },
+    "consult": {
+        "child": {"상담": 100},
+        "teen": {"교정 상담": 70, "상담": 30},
+        "adult": {"상담": 85, "교정 상담": 15},
+        "senior": {"상담": 100},
+    },
+}
+HYGIENE_SCALING_BANDS = ("adult", "senior")
+CHECKUP_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "구강검진")

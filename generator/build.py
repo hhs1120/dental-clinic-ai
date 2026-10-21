@@ -1,4 +1,5 @@
 """생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체. 단계는 가상 데이터 생성 설계 §5.1."""
+import json
 import os
 import sqlite3
 from dataclasses import dataclass, field
@@ -7,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from generator import clinic, demand, patients
+from generator import clinic, demand, patients, schedule
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -24,6 +25,7 @@ class Run:
     range_start: date  # 규모별 시작일 (config scale_presets)
     range_end: date
     today: date
+    holidays: frozenset  # 공휴일 (config holidays 파일)
     state: dict = field(default_factory=dict)  # 단계 사이에 넘기는 메모리 상태 (DB에 없는 것 — 리콜 기한 등)
 
 
@@ -32,16 +34,19 @@ STAGES: list = [
     ("master", clinic.stage),
     ("patients", patients.stage),
     ("demand", demand.stage),
+    ("appointments", schedule.stage),
 ]
 
 
 def new_run(conn: sqlite3.Connection, cfg: dict, scale: str) -> Run:
+    holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
     return Run(conn=conn, cfg=cfg, seed=cfg["seed"], scale=scale, range_start=cfg["scale_presets"][scale]["start"],
-               range_end=cfg["range"]["end"], today=cfg["today"])
+               range_end=cfg["range"]["end"], today=cfg["today"],
+               holidays=frozenset(date.fromisoformat(d) for d in holidays))
 
 
-def generate(scale: str, app_path: Path, truth_path: Path, config_path: Path) -> None:
-    """임시 파일에 전부 쓴 뒤 교체 — 중간에 실패하면 기존 DB는 그대로."""
+def generate(scale: str, app_path: Path, truth_path: Path, config_path: Path) -> Run:
+    """임시 파일에 전부 쓴 뒤 교체 — 단계 실행 중에 실패하면 기존 DB는 그대로. 단계 상태(run.state)를 보려고 Run을 돌려준다"""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     tmp_app, tmp_truth = (p.with_name(p.name + ".tmp") for p in (app_path, truth_path))
     for p in (tmp_app, tmp_truth):
@@ -68,3 +73,4 @@ def generate(scale: str, app_path: Path, truth_path: Path, config_path: Path) ->
         conn.close()
     os.replace(tmp_app, app_path)
     os.replace(tmp_truth, truth_path)
+    return run
