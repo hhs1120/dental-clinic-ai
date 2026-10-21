@@ -256,7 +256,7 @@ make data [SCALE=small|large] [REGEN_LLM=1]
 11. EOB PDF        슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
 ```
 
-- **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 자기 난수 생성기를 만든다 — 단계를 추가·삭제해도 다른 단계의 결과가 바뀌지 않게(구현 방법은 `generator/__main__.py`)
+- **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 자기 난수 생성기를 만든다 — 단계를 추가·삭제해도 다른 단계의 결과가 바뀌지 않게(구현 방법은 `generator/seeding.py`)
 - **정형 먼저, LLM 한 번**: 정형(1~6) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9)을 한 번 돌린다. 정형 로직을 고치면 LLM 캐시가 전량 미스. **LLM은 large에서만** — small의 7·9단계는 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서)를 써서 과금 없이 구조만 채운다(테스트 픽스처용)
 - **LLM 캐시**: 생성물은 파일 캐시로 커밋, `make data REGEN_LLM=1`로만 재생성. 키 = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴
 
@@ -279,7 +279,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
-| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외) |
+| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외). `make verify` 밖 — `tests/test_generator.py` |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
 **경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만 둔다. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일·리마인드 시각 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)

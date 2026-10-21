@@ -5,9 +5,10 @@
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날 영업시간 안),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
-         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음 — 생성기 완성 후,
-         두 번은 서로 다른 PYTHONHASHSEED(0과 1)로: 같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
+         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
+결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
+PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
 """
