@@ -1,5 +1,12 @@
 """병원 마스터 — 생성기와 verify가 함께 쓰는 값의 원본. 의미·규칙은 docs/치과 AX - 가상 데이터 생성 설계.md §1·§2"""
 
+from datetime import date, timedelta
+
+CLINIC_NAME = "AX치과"  # 가상 병원
+
+# 직원 구성 (§1). (role, 인원). 진료=원장, 위생=위생사(순환), 상담=상담실장
+STAFF = [("doctor", 1), ("hygienist", 3), ("desk", 2), ("consultant", 1)]
+
 # 영업시간 (§1). emr_clinic.hours_json에 그대로 저장한다. 요일은 월=0
 HOURS = {
     "open": "09:30",
@@ -44,6 +51,47 @@ AGE_BANDS = [
     ("adult", 19, 64, 0.62),
     ("senior", 65, None, 0.15),
 ]
+
+# 나이 상한 (§2.2) — 노인 구간(최대 나이 None)을 뽑을 때만
+MAX_AGE = 90
+
+
+def add_years(d: date, years: int) -> date:
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:  # 2월 29일
+        return d.replace(year=d.year + years, day=28)
+
+
+def age_on(birth: date, on: date) -> int:
+    return on.year - birth.year - ((on.month, on.day) < (birth.month, birth.day))
+
+
+def age_band(age: int) -> str | None:
+    """AGE_BANDS 구간 이름. 음수(미래 출생)면 None"""
+    return next((name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi)), None)
+
+
+# 환자 (§2.2). 비중은 추첨 없이 비중 × 인원을 반올림한 인원으로 맞춘다(가족은 ±1명, 소아가 많으면 넘을 수 있음)
+FAMILY_SHARE = 0.35            # 가족으로 묶인 환자 비중
+FAMILY_SIZE = (2, 4)           # 가족 인원 (양 끝 포함)
+GUARDIAN_MIN_AGE_GAP = 20      # 보호자는 가족의 소아·청소년보다 이 나이 이상 많다
+PRIVATE_INSURANCE_SHARE = 0.50
+NOTE_SHARE = 0.10
+NOTES = ("치과 공포 있음", "고혈압 약 복용", "당뇨 있음", "오전 진료 선호", "항응고제 복용",
+         "마취 시 어지러움 호소", "저녁 연락 선호")
+REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
+
+# 리콜 (§2.6 ①): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
+RECALL_CYCLE_MONTHS = 6
+RECALL_JITTER_DAYS = 30
+RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
+
+# 치료 수요의 에피소드 유형 비중 (§2.6 ②). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
+_EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
+_EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
+EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
+COURSE_VISITS = (2, 4)  # 양 끝 포함
 
 # 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
 ACTIVE_MONTHS = 6

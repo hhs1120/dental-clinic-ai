@@ -3,9 +3,10 @@ import os
 import sqlite3
 import subprocess
 import sys
+import pytest
 import yaml
 
-from generator import verify
+from generator import build, verify
 from generator.build import generate
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
@@ -33,13 +34,19 @@ def test_stage_faker_differs_by_stage():
     assert [patients.name() for _ in range(5)] != [staff.name() for _ in range(5)]
 
 
+@pytest.fixture
+def no_stages(monkeypatch):
+    """뼈대 테스트는 단계와 떼어 둔다 — 단계가 늘어도 빠르게. 실제 단계는 결정성 테스트만 돌린다"""
+    monkeypatch.setattr(build, "STAGES", [])
+
+
 def _generate(tmp_path, scale):
     app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
     generate(scale, app, truth, CONFIG)
     return app, truth
 
 
-def test_gen_meta_records_seed_scale_and_range(tmp_path):
+def test_gen_meta_records_seed_scale_and_range(tmp_path, no_stages):
     for scale in ("small", "large"):
         _, truth = _generate(tmp_path / scale, scale)
         meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
@@ -51,7 +58,7 @@ def test_gen_meta_records_seed_scale_and_range(tmp_path):
         }
 
 
-def test_verify_load_ctx_reads_generated_meta(tmp_path):
+def test_verify_load_ctx_reads_generated_meta(tmp_path, no_stages):
     app, truth = _generate(tmp_path, "small")
     conn = sqlite3.connect(app)
     conn.execute("ATTACH DATABASE ? AS truth", (str(truth),))
@@ -60,7 +67,7 @@ def test_verify_load_ctx_reads_generated_meta(tmp_path):
     assert ctx.range_end == CFG["range"]["end"]
 
 
-def test_schemas_applied_to_both_dbs(tmp_path):
+def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
     app, truth = _generate(tmp_path, "small")
     app_tables = {r[0] for r in sqlite3.connect(app).execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     truth_tables = {r[0] for r in sqlite3.connect(truth).execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
@@ -69,7 +76,7 @@ def test_schemas_applied_to_both_dbs(tmp_path):
     assert not any(t.startswith("truth_") for t in app_tables)  # 정답은 app.sqlite에 넣지 않는다
 
 
-def test_regenerate_replaces_existing_db(tmp_path):
+def test_regenerate_replaces_existing_db(tmp_path, no_stages):
     app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
     for path in (app, truth):
         conn = sqlite3.connect(path)
