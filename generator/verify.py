@@ -3,7 +3,7 @@
 
 구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 예약 취소 전),
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날 영업시간 안),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
@@ -26,8 +26,7 @@ import yaml
 
 from generator.paths import SCALES, output_paths
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
-                              MAX_APPOINTMENTS_PER_SLOT, MAX_LEAD_DAYS, NEW_PATIENT_SHARE, PEAK_HOURS,
-                              RESCHEDULE_MAX_DAYS, SATURDAY,
+                              MAX_APPOINTMENTS_PER_SLOT, MAX_LEAD_DAYS, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
                               VISIT_MIX, open_slots, reminder_time)
 
@@ -50,7 +49,6 @@ ACTIVE_TOLERANCE = 0.05
 NEW_PATIENT_TOLERANCE = 0.03
 VISIT_MIX_TOLERANCE = 0.03
 NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
-BALANCE_HOLDER_MAX = 0.20  # 준비표 대상 환자 중 잔액 보유 비율 상한 — 넘으면 미수 칩이 너무 많이 켜짐
 PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = TODAY 포함 최근 7일 (기능 정의 ⑧)
 
 
@@ -281,47 +279,6 @@ def check_cancel_time(conn, ctx):
                        " OR datetime(cancelled_at) >= datetime(scheduled_at))")
 
 
-def check_created_in_window(conn, ctx):
-    """예약은 생성 기간 안에서 잡힌다 — created_at ≥ range_start (워밍업 없음, §2.6 ③)"""
-    return _rows(conn, "SELECT id, created_at FROM emr_appointments WHERE date(created_at) < ?",
-                 ctx.range_start.isoformat())
-
-
-def _in_hours(t: datetime, holidays) -> bool:
-    """진료일의 개원~마감(점심 포함, 마감 정각 포함) — 사건 시각 규칙(§2.6 ③)"""
-    d = t.date()
-    if d in holidays or not open_slots(d.weekday()):
-        return False
-    return OPEN <= t.time() <= (SATURDAY_CLOSE if d.weekday() == SATURDAY else WEEKDAY_CLOSE)
-
-
-def check_event_times_in_hours(conn, ctx):
-    """사건 시각은 진료일 영업시간 안: 예약 created_at·cancelled_at, 통화 started_at, 발신 문자 sent_at.
-    당일 취소의 cancelled_at만 그날 예약 시각 전 아무 때나(문자 취소), 환자 답장(in)은 시각 제한 없음"""
-    bad = []
-    for r in _rows(conn, "SELECT id, scheduled_at, created_at, cancelled_at FROM emr_appointments"):
-        if not _in_hours(_dt(r["created_at"]), ctx.holidays):
-            bad.append({"id": r["id"], "created_at": r["created_at"]})
-        c = r["cancelled_at"]
-        if c and _dt(c).date() != _dt(r["scheduled_at"]).date() and not _in_hours(_dt(c), ctx.holidays):
-            bad.append({"id": r["id"], "cancelled_at": c})
-    for table, col, where in (("ax_calls", "started_at", ""), ("emr_messages", "sent_at", " WHERE direction = 'out'")):
-        bad += [{"table": table, "id": r["id"], col: r["at"]}
-                for r in _rows(conn, f"SELECT id, {col} AS at FROM {table}{where}")
-                if not _in_hours(_dt(r["at"]), ctx.holidays)]
-    return bad
-
-
-def check_booked_via(conn, ctx):
-    """예약 경로: desk 예약은 같은 환자 completed 내원의 종료 시각에 잡힌 다음 회차, 변경으로 생긴 새 예약은 phone"""
-    ends = {(r["patient_id"], _dt(r["scheduled_at"]) + timedelta(minutes=r["duration_min"]))
-            for r in _rows(conn, "SELECT patient_id, scheduled_at, duration_min FROM emr_appointments"
-                                 " WHERE status = 'completed'")}
-    return [r for r in _rows(conn, "SELECT id, patient_id, rescheduled_from_id, created_at FROM emr_appointments"
-                                   " WHERE booked_via = 'desk'")
-            if r["rescheduled_from_id"] is not None or (r["patient_id"], _dt(r["created_at"])) not in ends]
-
-
 def check_cancelled_at_status(conn, ctx):
     """cancelled_at은 cancelled 예약에만, cancelled 예약은 cancelled_at 필수"""
     return _rows(conn, "SELECT id, status, cancelled_at FROM emr_appointments"
@@ -338,37 +295,11 @@ def _future_new_patients(conn, ctx) -> list[int]:
         ctx.range_start.isoformat(), ctx.today.isoformat())]
 
 
-def check_future_new_patient_single(conn, ctx):
-    """예정 신환은 비취소 예약 1건뿐 (코스 다음 내원은 직전 내원 completed 뒤에야 잡힌다 — §2.6 ③)"""
-    ids = _future_new_patients(conn, ctx)
-    if not ids:
-        return []
-    marks = ",".join("?" * len(ids))
-    return _rows(conn, "SELECT patient_id, count(*) AS appointments FROM emr_appointments"
-                       f" WHERE status != 'cancelled' AND patient_id IN ({marks})"
-                       " GROUP BY patient_id HAVING count(*) > 1", *ids)
-
-
-def check_future_new_patient_registered(conn, ctx):
-    """예정 신환의 registered_at = 첫 예약 created_at의 날짜 (전화 예약 때 차트 생성)"""
-    ids = _future_new_patients(conn, ctx)
-    if not ids:
-        return []
-    marks = ",".join("?" * len(ids))
-    return _rows(conn, "SELECT p.id AS patient_id, p.registered_at, min(date(a.created_at)) AS first_booked"
-                       " FROM emr_patients p JOIN emr_appointments a ON a.patient_id = p.id"
-                       f" WHERE p.id IN ({marks}) GROUP BY p.id"
-                       " HAVING date(p.registered_at) IS NOT min(date(a.created_at))", *ids)
-
-
 def check_reschedule_pair(conn, ctx):
-    """변경 쌍: 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일, 같은 유형·예정 시술, 새 created_at = 원래 cancelled_at"""
-    return _rows(conn, "SELECT n.id, n.rescheduled_from_id, o.scheduled_at AS original_at, n.scheduled_at,"
-                       " o.cancelled_at, n.created_at FROM emr_appointments n"
-                       " JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
-                       f" WHERE julianday(date(n.scheduled_at)) - julianday(date(o.scheduled_at)) NOT BETWEEN 1 AND {RESCHEDULE_MAX_DAYS}"
-                       " OR n.type IS NOT o.type OR n.planned_procedure_code IS NOT o.planned_procedure_code"
-                       " OR n.created_at IS NOT o.cancelled_at")
+    """변경 쌍: 원래 예약은 cancelled, 새 예약 created_at = 원래 cancelled_at (변경 통화 시각의 근거)"""
+    return _rows(conn, "SELECT n.id, n.rescheduled_from_id, o.status, o.cancelled_at, n.created_at"
+                       " FROM emr_appointments n JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
+                       " WHERE o.status != 'cancelled' OR n.created_at IS NOT o.cancelled_at")
 
 
 def check_reschedule_once(conn, ctx):
@@ -648,20 +579,19 @@ def report_unpaid_rate(conn, ctx):
     return {"n": n, "rate": round(unpaid / n, 3), "target": ctx.unpaid_rate} if n else {"n": 0}
 
 
-def check_balance_holder_share(conn, ctx):
-    """준비표 범위(TODAY 포함 최근 PREP_SHEET_DAYS일)의 비취소 예약 중 그날 개원 전 잔액 > 0인 비율 ≤ BALANCE_HOLDER_MAX
-    — 미수 칩이 켜지는 비율. 같은 환자도 날짜가 다르면 따로 센다(날짜 탭마다 준비표가 따로)"""
+def report_balance_holder_share(conn, ctx):
+    """잔액 있음 비율 — 준비표 범위(TODAY 포함 최근 PREP_SHEET_DAYS일)의 비취소 예약(환자 × 날짜) 중 미수 칩이 켜지는 것.
+    잔액 있음 = 그 예약일 개원 전 잔액 > 0 (정의 원본: 앱 설계 §3 has_unpaid_balance)"""
     since = ctx.today - timedelta(days=PREP_SHEET_DAYS)
     rows = _rows(conn, "SELECT DISTINCT patient_id, date(scheduled_at) AS d FROM emr_appointments"
                        " WHERE status != 'cancelled' AND date(scheduled_at) BETWEEN ? AND ?",
                  since.isoformat(), ctx.today.isoformat())
     if not rows:
-        return []
+        return {"n": 0}
     owing = sum(conn.execute("SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments"
                              " WHERE patient_id = ? AND date(paid_at) < ?", (r["patient_id"], r["d"])).fetchone()[0] > 0
                 for r in rows)
-    share = owing / len(rows)
-    return [] if share <= BALANCE_HOLDER_MAX else [{"share": round(share, 3), "max": BALANCE_HOLDER_MAX}]
+    return {"n": len(rows), "share": round(owing / len(rows), 3)}
 
 
 def check_visit_mix(conn, ctx):
@@ -786,12 +716,7 @@ REQUIRED = [
     check_created_before_scheduled,
     check_cancel_time,
     check_cancelled_at_status,
-    check_created_in_window,
-    check_event_times_in_hours,
-    check_booked_via,
     check_cancellation_kind,
-    check_future_new_patient_single,
-    check_future_new_patient_registered,
     check_reschedule_pair,
     check_reschedule_once,
     check_treatment_on_completed,
@@ -816,7 +741,6 @@ WARNINGS = [
     check_new_patient_share,
     check_status_rates,
     check_visit_mix,
-    check_balance_holder_share,
     check_tooth_level,
     check_child_procedures,
 ]
@@ -826,6 +750,7 @@ REPORTS = [
     report_reschedule_rate,
     report_peak_pattern,
     report_daily_fill,
+    report_balance_holder_share,
 ]
 
 

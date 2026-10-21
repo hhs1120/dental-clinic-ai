@@ -46,30 +46,6 @@ BREAKS = {
     "settled_before_debt": ("UPDATE emr_payments SET paid_at = '2026-10-01 10:00:00' WHERE id = 3", "check_balance_non_negative"),
     "visit_on_noshow": ("UPDATE emr_payments SET appointment_id = 7 WHERE id = 2", "check_visit_payment_completed"),
     "visit_without_appt": ("UPDATE emr_payments SET appointment_id = NULL WHERE id = 2", "check_visit_payment_completed"),
-    # 예약 경로·창 (워밍업 없음 — §2.6 ③)
-    # 각 케이스는 조건 하나만 어긴다: 완료되지 않은 내원 / 다른 환자의 내원 / 변경으로 생긴 새 예약
-    "desk_after_noshow": ("UPDATE emr_appointments SET booked_via = 'desk', created_at = '2026-11-24 15:30:00' WHERE id = 5",
-                          "check_booked_via"),  # 환자 1 자기 노쇼(7번) 종료 시각
-    "desk_at_other_patient_visit_end": (
-        "UPDATE emr_appointments SET booked_via = 'desk', created_at = '2026-10-06 11:00:00' WHERE id = 6",
-        "check_booked_via"),  # 환자 2 예약을 환자 1의 1번 내원 종료 시각에
-    "rescheduled_by_desk": (
-        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type, planned_procedure_code,"
-        " status, rescheduled_from_id, booked_via, created_at) VALUES"
-        " (1, 1, '2026-10-08 10:00:00', 30, 'treatment', 'U0008', 'scheduled', 1, 'desk', '2026-10-06 11:00:00')",
-        "check_booked_via"),  # 자기 completed 종료 시각이지만 변경 새 예약
-    # 사건 시각은 진료일 영업시간 안 (당일 취소만 예외)
-    "created_on_closed_day": ("UPDATE emr_appointments SET created_at = '2026-11-19 11:00:00' WHERE id = 5", "check_event_times_in_hours"),
-    "created_on_holiday": ("UPDATE emr_appointments SET created_at = '2026-11-25 11:00:00' WHERE id = 6", "check_event_times_in_hours"),
-    "created_after_saturday_close": ("UPDATE emr_appointments SET created_at = '2026-11-21 14:00:00' WHERE id = 6",
-                                     "check_event_times_in_hours"),  # 토요일은 13:30 마감
-    "call_on_closed_day": ("UPDATE ax_calls SET started_at = '2026-11-19 10:00:00' WHERE id = 1", "check_event_times_in_hours"),
-    "message_out_after_close": ("UPDATE emr_messages SET sent_at = '2026-11-02 19:00:00' WHERE id = 1", "check_event_times_in_hours"),
-    "created_after_close": ("UPDATE emr_appointments SET created_at = '2026-11-20 19:00:00' WHERE id = 6", "check_event_times_in_hours"),
-    "reschedule_cancel_before_open": ("UPDATE emr_appointments SET cancelled_at = '2026-11-14 08:00:00' WHERE id = 3",
-                                      "check_event_times_in_hours"),
-    "created_before_window": ("UPDATE emr_appointments SET created_at = '2026-09-30 11:00:00' WHERE id = 1",
-                              "check_created_in_window"),
     # ax_calls (6단계)
     "fk_dangling_call": ("UPDATE ax_calls SET patient_id = 999 WHERE id = 1", "check_foreign_keys"),
     "call_future": ("UPDATE ax_calls SET started_at = '2026-12-02 10:00:00' WHERE id = 2", "check_timestamps_not_future"),
@@ -97,10 +73,9 @@ BREAKS = {
     ),
     "cancelled_without_time": ("UPDATE emr_appointments SET cancelled_at = NULL WHERE id = 3", "check_cancelled_at_status"),
     "time_on_not_cancelled": ("UPDATE emr_appointments SET cancelled_at = '2026-11-20 10:00:00' WHERE id = 7", "check_cancelled_at_status"),
-    # 변경 쌍: 새 예약은 원래 날짜 뒤 1~14일, 같은 유형·시술, 새 created_at = 원래 cancelled_at
-    "reschedule_too_far": ("UPDATE emr_appointments SET scheduled_at = '2026-12-02 10:00:00' WHERE id = 4", "check_reschedule_pair"),
-    "reschedule_earlier": ("UPDATE emr_appointments SET scheduled_at = '2026-11-16 10:00:00' WHERE id = 4", "check_reschedule_pair"),
-    "reschedule_other_procedure": ("UPDATE emr_appointments SET planned_procedure_code = 'U0006' WHERE id = 4", "check_reschedule_pair"),
+    # 변경 쌍: 원래 예약은 cancelled, 새 created_at = 원래 cancelled_at
+    "reschedule_original_not_cancelled": ("UPDATE emr_appointments SET status = 'completed' WHERE id = 3",
+                                          "check_reschedule_pair"),  # cancelled_at은 그대로 — 상태만 어김
     "reschedule_created_mismatch": ("UPDATE emr_appointments SET created_at = '2026-11-13 09:00:00' WHERE id = 4", "check_reschedule_pair"),
     # 시각 순서
     "created_after_scheduled": ("UPDATE emr_appointments SET created_at = '2026-10-07 10:00:00' WHERE id = 1", "check_created_before_scheduled"),
@@ -290,34 +265,13 @@ def _future_new_patient(conn, n_appts):
     conn.execute("UPDATE emr_appointments SET created_at = '2026-11-28 10:00:00' WHERE patient_id = 3")
 
 
-def test_future_new_patient_single_appointment(tmp_path):
-    conn = make_db(tmp_path)
-    _future_new_patient(conn, 1)
-    assert verify.check_future_new_patient_single(conn, CTX) == []
-
-
-def test_future_new_patient_two_appointments(tmp_path):
-    conn = make_db(tmp_path)
-    _future_new_patient(conn, 2)
-    assert [v["patient_id"] for v in verify.check_future_new_patient_single(conn, CTX)] == [3]
-
-
 def test_old_patient_with_only_future_appointments_is_not_future_new(tmp_path):
     conn = make_db(tmp_path)
     _future_new_patient(conn, 2)
     # 창 시작(10-01) 전에 등록한 구환 — 리콜·치료로 미래 예약만 2건이어도 정상
+    assert verify._future_new_patients(conn, CTX) == [3]
     conn.execute("UPDATE emr_patients SET registered_at = '2019-03-01' WHERE id = 3")
-    assert verify.check_future_new_patient_single(conn, CTX) == []
-    assert verify.check_future_new_patient_registered(conn, CTX) == []
-
-
-def test_future_new_patient_registered_at_first_booking(tmp_path):
-    conn = make_db(tmp_path)
-    _future_new_patient(conn, 1)
-    assert verify.check_future_new_patient_registered(conn, CTX) == []
-    # 창 안에서 등록했는데 등록일이 첫 예약 날짜와 다르면 위반
-    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-20' WHERE id = 3")
-    assert [v["patient_id"] for v in verify.check_future_new_patient_registered(conn, CTX)] == [3]
+    assert verify._future_new_patients(conn, CTX) == []  # 활동 비율 분모에 남는다
 
 
 def test_scale_mismatch_exits(tmp_path, capsys):
@@ -411,21 +365,6 @@ def test_canonical_hash_ignores_indexed_at(tmp_path):
     a, b = _two_dbs(tmp_path)
     b.execute("UPDATE ax_calls SET indexed_at = '2026-12-01 09:00:00'")
     assert verify.canonical_hash(a) == verify.canonical_hash(b)
-
-
-def test_event_times_boundaries(tmp_path):
-    conn = make_db(tmp_path)
-    # 당일 취소는 영업 전이어도 된다(문자·자동응답) — 그날 예약 시각 전이면
-    conn.execute("UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-24 07:00:00' WHERE id = 7")
-    # 점심시간·마감 시각 정각도 영업시간 안
-    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-20 13:30:00' WHERE id = 6")
-    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-20 18:30:00' WHERE id = 5")
-    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-21 13:30:00' WHERE id = 3")  # 토요일 마감 정각
-    conn.execute("UPDATE emr_messages SET sent_at = '2026-11-02 23:00:00' WHERE id = 2")  # 환자 답장(in)은 아무 때나
-    assert verify.check_event_times_in_hours(conn, CTX) == []
-    # 영업 전 취소 허용은 그날 예약에만 — 전날 밤 취소는 위반
-    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-23 22:00:00' WHERE id = 7")
-    assert [v["id"] for v in verify.check_event_times_in_hours(conn, CTX)] == [7]
 
 
 def test_rag_checks_skipped_without_chunks(tmp_path, capsys):

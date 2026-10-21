@@ -9,7 +9,7 @@ noshow_rate: 0.06
 sameday_cancel_rate: 0.04
 confirm_rate: 0.85          # 직전 진료일 리마인드 응답
 unpaid_rate: 0.15
-settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 첫 large 실행에서 잔액 보유 비율 보고 확정
+settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 첫 large 실행에서 잔액 있음 비율 리포트 보고 확정
 calls_with_transcript: 1000
 calls_meta_only: 5000
 eval_pool_size: 300

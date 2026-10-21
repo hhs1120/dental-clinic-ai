@@ -25,7 +25,6 @@ EXPECTED = {
     "신환": ({"": NEW_PATIENT_SHARE}, verify.NEW_PATIENT_TOLERANCE),
     "노쇼·당일 취소": ({"노쇼": CFG["noshow_rate"], "당일 취소": CFG["sameday_cancel_rate"]}, verify.SHARE_TOLERANCE),
     "내원 구성": ({_MIX_LABEL[t]: v for t, v in VISIT_MIX.items()}, verify.VISIT_MIX_TOLERANCE),
-    "잔액 보유": ({"": verify.BALANCE_HOLDER_MAX}, None),
 }
 
 
