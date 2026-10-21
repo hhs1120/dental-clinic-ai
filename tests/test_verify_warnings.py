@@ -1,4 +1,4 @@
-"""verify 경고 검사(분포·치아)가 위반을 잡는지 — 가상 데이터 생성 설계 §5.3 경고 표."""
+"""verify 경고 검사(분포·치아)가 위반을 잡는지, 리포트(수치만)가 분모를 맞게 세는지 — 가상 데이터 생성 설계 §5.3."""
 from dataclasses import replace
 
 import pytest
@@ -82,16 +82,16 @@ def _only(conn, appts):
         appt(conn, **a)
 
 
-def test_daily_fill_past_days(tmp_path):
+def test_daily_fill_report_skips_ramp_up(tmp_path):
     conn = make_db(tmp_path)
-    # 범위 11-24(화)~12-02: 과거 진료일 11-24·27·28·30. 11-24 19건(73%)·11-27 18건(69%)·11-28(토) 10건(77%)·11-30 0건
-    # TODAY 이후(12-01·12-02)는 덜 찬 게 정상이라 보지 않는다
+    # 시작 11-10 → 처음 MAX_LEAD_DAYS(14일)는 미리 잡힌 예약이 없어 덜 찬 게 정상 → 11-24부터 센다
+    # 과거 진료일 11-24·27·28·30: 19/26 · 18/26(취소 제외) · 10/13(토) · 0/26. TODAY 이후는 보지 않는다
     _only(conn, [{"scheduled_at": "2026-11-24 10:00:00"} for i in range(19)]
           + [{"scheduled_at": "2026-11-27 10:00:00"} for i in range(18)]
           + [{"scheduled_at": "2026-11-28 10:00:00"} for i in range(10)]
           + [{"scheduled_at": "2026-11-27 11:00:00", "status": "cancelled"}])
-    ctx = replace(CTX, range_start=date(2026, 11, 24), range_end=date(2026, 12, 2))
-    assert [v["date"] for v in verify.check_daily_fill(conn, ctx)] == ["2026-11-27", "2026-11-30"]
+    ctx = replace(CTX, range_start=date(2026, 11, 10), range_end=date(2026, 12, 2))
+    assert verify.report_daily_fill(conn, ctx) == {"days": 4, "mean": round((19 / 26 + 18 / 26 + 10 / 13) / 4, 3), "min": 0.0}
 
 
 def _month_visits(conn, n_visits, n_new):
@@ -109,10 +109,12 @@ def test_new_patient_share(tmp_path):
     assert verify.check_new_patient_share(conn, LARGE) == []
     _month_visits(conn, 100, 20)
     assert [v["month"] for v in verify.check_new_patient_share(conn, LARGE)] == ["2026-11"]
-    # 창(10-01~) 시작 전 등록이면 워밍업 등록 = 구환 → 신환 0명으로 경고
+    # 창(10-01~) 시작 전 등록이면 구환 → 신환 0명으로 경고
     assert [v["share"] for v in verify.check_new_patient_share(conn, CTX)] == [0.0]
-    # 생성 기간 첫 달은 워밍업 등록 신환이 섞여 낮게 나오므로 건너뜀
-    assert verify.check_new_patient_share(conn, replace(CTX, range_start=date(2026, 11, 1))) == []
+    # 워밍업이 없으니 생성 기간 첫 달도 본다
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-02' WHERE id <= 20")
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-02 10:00:00'")
+    assert [v["month"] for v in verify.check_new_patient_share(conn, replace(CTX, range_start=date(2026, 11, 1)))] == ["2026-11"]
 
 
 def test_status_rates(tmp_path):
@@ -141,13 +143,13 @@ def test_reschedule_rate_excludes_new_appointments(tmp_path):
         conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE patient_id = ? AND id != ?",
                      (original, pid, original))
     # 분모 = 전체 105행 − 새 예약 5 = 100 → 5%
-    assert verify.check_reschedule_rate(conn, CTX) == []
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0.05
     for pid in range(1, 101):  # 리드 1일 예약 100건 — 변경일(created 다음 날 ~ 예약 전날)이 없어 분모에서 뺀다
         appt(conn, "2026-11-30 10:00:00", patient=pid, status="completed")
     conn.execute("UPDATE emr_appointments SET created_at = '2026-11-29 10:00:00' WHERE scheduled_at = '2026-11-30 10:00:00'")
-    assert verify.check_reschedule_rate(conn, CTX) == []  # 그대로 5% (변경 불가 예약까지 넣으면 2.5%로 경고)
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0.05  # 그대로 5% (변경 불가 예약까지 넣으면 2.5%)
     conn.execute("UPDATE emr_appointments SET rescheduled_from_id = NULL")
-    assert verify.check_reschedule_rate(conn, CTX)
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0
 
 
 def _five_pairs(conn):
@@ -169,7 +171,7 @@ def test_reschedule_rate_needs_open_day_between(tmp_path):
     for pid in range(101, 201):  # 수(11-18) 예약 → 금(11-20) 내원: 사이 목요일은 휴진이라 변경할 날이 없음
         appt(conn, "2026-11-20 10:00:00", patient=pid)
     conn.execute("UPDATE emr_appointments SET created_at = '2026-11-18 10:00:00' WHERE scheduled_at = '2026-11-20 10:00:00'")
-    assert verify.check_reschedule_rate(conn, CTX) == []  # 5/100 (휴진일만 사이에 있는 예약까지 넣으면 2.5%로 경고)
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0.05  # 5/100 (휴진일만 사이에 있는 예약까지 넣으면 2.5%)
 
 
 def test_reschedule_rate_ignores_future_appointments(tmp_path):
@@ -177,7 +179,7 @@ def test_reschedule_rate_ignores_future_appointments(tmp_path):
     _five_pairs(conn)
     for pid in range(101, 201):  # TODAY 이후 예약 — 시뮬레이션이 TODAY 전날 멈춰 변경이 실현되지 않음
         appt(conn, "2026-12-11 10:00:00", patient=pid, status="scheduled")
-    assert verify.check_reschedule_rate(conn, CTX) == []  # 5/100 (미래 예약까지 넣으면 2.5%로 경고)
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0.05  # 5/100 (미래 예약까지 넣으면 2.5%)
 
 
 def test_confirm_rate_excludes_booked_after_reminder(tmp_path):
@@ -190,7 +192,7 @@ def test_confirm_rate_excludes_booked_after_reminder(tmp_path):
     for pid in range(101, 151):  # 리마인드 뒤(11-23 17:30)에 잡혀 리마인드를 못 받은 예약 — 분모에서 뺀다
         appt(conn, "2026-11-24 11:00:00", patient=pid)
     conn.execute("UPDATE emr_appointments SET created_at = '2026-11-23 17:30:00' WHERE patient_id > 100")
-    assert verify.check_confirm_rate(conn, CTX) == []  # 85% (못 받은 예약까지 넣으면 57%로 경고)
+    assert verify.report_confirm_rate(conn, CTX)["rate"] == 0.85  # 85% (못 받은 예약까지 넣으면 57%)
 
 
 def test_confirm_rate_saturday_reminder_before_close(tmp_path):
@@ -203,7 +205,7 @@ def test_confirm_rate_saturday_reminder_before_close(tmp_path):
     for pid in range(101, 151):  # 토 13:00에 잡힌 예약 — 토요일 리마인드 뒤라 못 받음(평일 시각 17:00 기준이면 받은 것으로 셈)
         appt(conn, "2026-11-30 11:00:00", patient=pid)
     conn.execute("UPDATE emr_appointments SET created_at = '2026-11-28 13:00:00' WHERE patient_id > 100")
-    assert verify.check_confirm_rate(conn, CTX) == []  # 85% (17:00 기준이면 57%로 경고)
+    assert verify.report_confirm_rate(conn, CTX)["rate"] == 0.85  # 85% (17:00 기준이면 57%)
 
 
 def test_reschedule_rate_numerator_only_past_originals(tmp_path):
@@ -216,7 +218,7 @@ def test_reschedule_rate_numerator_only_past_originals(tmp_path):
         appt(conn, "2026-12-10 10:00:00", patient=pid, status="scheduled")
         conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE id = (SELECT max(id) FROM emr_appointments)",
                      (original,))
-    assert verify.check_reschedule_rate(conn, CTX) == []  # 5/100 (미래 쌍까지 세면 10%로 경고)
+    assert verify.report_reschedule_rate(conn, CTX)["rate"] == 0.05  # 5/100 (미래 쌍까지 세면 10%)
 
 
 def test_status_rates_denominator_excludes_reschedule_originals(tmp_path):
@@ -246,9 +248,9 @@ def test_confirm_rate(tmp_path):
     for pid in range(1, 101):
         appt(conn, "2026-11-24 10:00:00", patient=pid)
     conn.execute("UPDATE emr_appointments SET confirmed = 1 WHERE patient_id <= 85")
-    assert verify.check_confirm_rate(conn, CTX) == []
+    assert verify.report_confirm_rate(conn, CTX)["rate"] == 0.85
     conn.execute("UPDATE emr_appointments SET confirmed = 0 WHERE patient_id > 70")
-    assert verify.check_confirm_rate(conn, CTX)
+    assert verify.report_confirm_rate(conn, CTX)["rate"] == 0.7
 
 
 def test_unpaid_rate(tmp_path):
@@ -257,13 +259,13 @@ def test_unpaid_rate(tmp_path):
     for i in range(100):
         conn.execute("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
                      " VALUES (1, 1, 'visit', 10000, ?, '2026-10-06 11:00:00', 'card')", (5000 if i < 15 else 10000,))
-    assert verify.check_unpaid_rate(conn, CTX) == []
+    assert verify.report_unpaid_rate(conn, CTX)["rate"] == 0.15
     for _ in range(30):  # 0원 내원(상담 등)은 미수가 생길 수 없으니 분모에서 뺀다
         conn.execute("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
                      " VALUES (1, 1, 'visit', 0, 0, '2026-10-06 11:00:00', 'card')")
-    assert verify.check_unpaid_rate(conn, CTX) == []
+    assert verify.report_unpaid_rate(conn, CTX)["rate"] == 0.15
     conn.execute("UPDATE emr_payments SET amount_paid = 5000 WHERE id <= 30 AND amount_due > 0")
-    assert verify.check_unpaid_rate(conn, CTX)
+    assert verify.report_unpaid_rate(conn, CTX)["rate"] == 0.3
 
 
 def test_visit_mix(tmp_path):
@@ -343,14 +345,34 @@ def test_visit_split_boundaries(tmp_path):
 
 def test_peak_pattern_ignores_closed_day(tmp_path):
     conn = make_db(tmp_path)
+    before = verify.report_peak_pattern(conn, CTX)
     conn.execute("UPDATE emr_appointments SET scheduled_at = '2026-11-19 15:00:00' WHERE id = 7")  # 목요일
-    assert verify.check_peak_pattern(conn, CTX) == []  # 휴진일 예약은 필수 검사가 잡는다
+    # 휴진일 예약은 필수 검사가 잡고 리포트는 센다 — 7번(피크 시작)이 빠진 만큼만 바뀐다
+    after = verify.report_peak_pattern(conn, CTX)
+    assert after["n"] == before["n"] - 1
 
 
 def test_peak_pattern(tmp_path):
     conn = make_db(tmp_path)
-    assert verify.check_peak_pattern(conn, CTX) == []  # 시드: 취소 제외 6건 중 5건이 10시·15시 시작
+    r = verify.report_peak_pattern(conn, CTX)  # 시드: 취소 제외 6건 중 5건이 10시·15시 시작
+    assert r["n"] == 6 and r["peak_share"] == round(5 / 6, 3) and r["peak_share"] > r["time_share"]
     conn.execute("UPDATE emr_appointments SET scheduled_at = substr(scheduled_at, 1, 11) || '14:00:00'")
-    assert verify.check_peak_pattern(conn, CTX)
+    assert verify.report_peak_pattern(conn, CTX)["peak_share"] == 0
 
 
+
+def test_balance_holder_share(tmp_path):
+    conn = make_db(tmp_path)
+    # 준비표 대상 = TODAY 이후 비취소 예약이 있는 환자(시드 1·2). 1의 미수 16,000원은 11-03에 정산 → 둘 다 잔액 0
+    assert verify.check_balance_holder_share(conn, CTX) == []
+    conn.execute("DELETE FROM emr_payments WHERE kind = 'settlement'")  # 1의 잔액이 남음 → 1/2 = 50% > 상한
+    assert verify.check_balance_holder_share(conn, CTX) == [{"share": 0.5, "max": verify.BALANCE_HOLDER_MAX}]
+    conn.execute("UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-25 10:00:00' WHERE id = 5")
+    assert verify.check_balance_holder_share(conn, CTX) == []  # 1은 미래 예약이 취소돼 준비표에 안 나옴
+
+
+def test_reports_print_without_failing(tmp_path, capsys):
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_appointments SET confirmed = 0")  # 확인률 0% — 리포트는 실패시키지 않는다
+    assert verify.run(conn, CTX) is True
+    assert "[INFO] report_confirm_rate" in capsys.readouterr().out

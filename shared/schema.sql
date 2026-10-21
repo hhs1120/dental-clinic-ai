@@ -64,6 +64,7 @@ CREATE TABLE emr_appointments (
     planned_procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
     status                 TEXT NOT NULL CHECK (status IN ('scheduled', 'completed', 'cancelled', 'noshow')),
     rescheduled_from_id    INTEGER REFERENCES emr_appointments(id),
+    booked_via             TEXT NOT NULL CHECK (booked_via IN ('phone', 'desk')),  -- 예약 경로. desk = 내원 종료 때 데스크에서 잡은 다음 회차
     confirmed              INTEGER NOT NULL DEFAULT 0,
     created_at             TEXT NOT NULL,
     cancelled_at           TEXT

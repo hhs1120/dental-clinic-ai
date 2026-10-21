@@ -23,14 +23,14 @@ INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id,
   (1, 'C-00001', '김철수', '1980-05-10', 'M', '010-0000-0001', 1, NULL, '2025-01-01'),
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
-                              planned_procedure_code, status, rescheduled_from_id, created_at, cancelled_at) VALUES
-  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, '2026-09-30 11:00:00', NULL),
-  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, '2026-10-20 11:00:00', NULL),
-  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
-  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    '2026-11-14 10:00:00', NULL),
-  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
-  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, '2026-11-20 11:00:00', NULL),
-  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, '2026-11-20 11:00:00', NULL);
+                              planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-01 11:07:00', NULL),
+  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL),
+  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
+  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL),
+  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL),
+  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL),
+  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL);
 INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),
   (2, 2, 1, 'U0001', '00', '2026-11-03 10:00:00', 60000, 42000, 18000),
@@ -88,6 +88,6 @@ def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="c
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
     conn.execute(
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
-        " planned_procedure_code, status, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, '2026-03-03 10:00:00')",
+        " planned_procedure_code, status, booked_via, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, 'phone', '2026-03-03 10:00:00')",
         (patient, staff, scheduled_at, duration, type, status),
     )

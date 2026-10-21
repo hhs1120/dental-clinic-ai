@@ -3,7 +3,6 @@ seed: 20261201
 today: 2026-12-01
 range: { start: 2026-02-01, end: 2026-12-15 }
 patients: 2000              # 모든 규모 고정 (1인당 수요를 규모와 무관하게)
-warmup_days: 30             # 시뮬레이션은 range_start − 30일부터, 창 안 예약만 남김
 visits_per_day: 26          # 하루 비취소 예약 상한(평일). 토요일 ×0.5
 reschedule_rate: 0.05
 noshow_rate: 0.06

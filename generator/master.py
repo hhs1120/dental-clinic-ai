@@ -21,6 +21,10 @@ SATURDAY_REMINDER_TIME = "12:30"
 # 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
 MAX_APPOINTMENTS_PER_SLOT = 3
 
+# 예약 시점 (§2.6 ③): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
+MAX_LEAD_DAYS = 14
+RESCHEDULE_MAX_DAYS = 14
+
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
 

@@ -46,6 +46,20 @@ BREAKS = {
     "settled_before_debt": ("UPDATE emr_payments SET paid_at = '2026-10-01 10:00:00' WHERE id = 3", "check_balance_non_negative"),
     "visit_on_noshow": ("UPDATE emr_payments SET appointment_id = 7 WHERE id = 2", "check_visit_payment_completed"),
     "visit_without_appt": ("UPDATE emr_payments SET appointment_id = NULL WHERE id = 2", "check_visit_payment_completed"),
+    # 예약 경로·창 (워밍업 없음 — §2.6 ③)
+    # 각 케이스는 조건 하나만 어긴다: 완료되지 않은 내원 / 다른 환자의 내원 / 변경으로 생긴 새 예약
+    "desk_after_noshow": ("UPDATE emr_appointments SET booked_via = 'desk', created_at = '2026-11-24 15:30:00' WHERE id = 5",
+                          "check_booked_via"),  # 환자 1 자기 노쇼(7번) 종료 시각
+    "desk_at_other_patient_visit_end": (
+        "UPDATE emr_appointments SET booked_via = 'desk', created_at = '2026-10-06 11:00:00' WHERE id = 6",
+        "check_booked_via"),  # 환자 2 예약을 환자 1의 1번 내원 종료 시각에
+    "rescheduled_by_desk": (
+        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type, planned_procedure_code,"
+        " status, rescheduled_from_id, booked_via, created_at) VALUES"
+        " (1, 1, '2026-10-08 10:00:00', 30, 'treatment', 'U0008', 'scheduled', 1, 'desk', '2026-10-06 11:00:00')",
+        "check_booked_via"),  # 자기 completed 종료 시각이지만 변경 새 예약
+    "created_before_window": ("UPDATE emr_appointments SET created_at = '2026-09-30 11:00:00' WHERE id = 1",
+                              "check_created_in_window"),
     # ax_calls (6단계)
     "fk_dangling_call": ("UPDATE ax_calls SET patient_id = 999 WHERE id = 1", "check_foreign_keys"),
     "call_future": ("UPDATE ax_calls SET started_at = '2026-12-02 10:00:00' WHERE id = 2", "check_timestamps_not_future"),
@@ -67,8 +81,8 @@ BREAKS = {
     "cancel_neither_kind": ("UPDATE emr_appointments SET rescheduled_from_id = NULL WHERE id = 4", "check_cancellation_kind"),
     "sameday_cancel_on_today": (
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
-        " planned_procedure_code, status, created_at, cancelled_at) VALUES"
-        " (2, 2, '2026-12-01 15:00:00', 30, 'hygiene', 'U0002', 'cancelled', '2026-11-20 11:00:00', '2026-12-01 09:00:00')",
+        " planned_procedure_code, status, booked_via, created_at, cancelled_at) VALUES"
+        " (2, 2, '2026-12-01 15:00:00', 30, 'hygiene', 'U0002', 'cancelled', 'phone', '2026-11-20 11:00:00', '2026-12-01 09:00:00')",
         "check_cancellation_kind",
     ),
     "cancelled_without_time": ("UPDATE emr_appointments SET cancelled_at = NULL WHERE id = 3", "check_cancelled_at_status"),
@@ -95,12 +109,12 @@ BREAKS = {
     ),
     "reschedule_chain": (  # 4번은 3번을 변경한 새 예약 — 다시 변경하지 않는다
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type, planned_procedure_code,"
-        " status, rescheduled_from_id, created_at) VALUES (2, 1, '2026-11-20 10:00:00', 30, 'treatment', 'U0005', 'scheduled', 4, '2026-11-14 10:00:00')",
+        " status, rescheduled_from_id, booked_via, created_at) VALUES (2, 1, '2026-11-20 10:00:00', 30, 'treatment', 'U0005', 'scheduled', 4, 'phone', '2026-11-14 10:00:00')",
         "check_reschedule_once",
     ),
     "reschedule_original_twice": (
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type, planned_procedure_code,"
-        " status, rescheduled_from_id, created_at) VALUES (2, 1, '2026-11-20 10:00:00', 30, 'treatment', 'U0005', 'scheduled', 3, '2026-11-14 10:00:00')",
+        " status, rescheduled_from_id, booked_via, created_at) VALUES (2, 1, '2026-11-20 10:00:00', 30, 'treatment', 'U0005', 'scheduled', 3, 'phone', '2026-11-14 10:00:00')",
         "check_reschedule_once",
     ),
     # 30분 격자

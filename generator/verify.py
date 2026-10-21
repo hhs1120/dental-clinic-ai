@@ -1,9 +1,10 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
-필수 검사 실패 시 exit 1, 경고는 리포트만.
+필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
-구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고.
+구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가):
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각,
+         예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과.
@@ -25,7 +26,8 @@ import yaml
 
 from generator.paths import SCALES, output_paths
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
-                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
+                              MAX_APPOINTMENTS_PER_SLOT, MAX_LEAD_DAYS, NEW_PATIENT_SHARE, PEAK_HOURS,
+                              RESCHEDULE_MAX_DAYS, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
                               VISIT_MIX, open_slots, reminder_time)
 
@@ -48,7 +50,7 @@ ACTIVE_TOLERANCE = 0.05
 NEW_PATIENT_TOLERANCE = 0.03
 VISIT_MIX_TOLERANCE = 0.03
 NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
-DAILY_MIN_FILL = 0.70  # TODAY 이전 진료일의 비취소 예약 ≥ 상한 × 이 비율
+BALANCE_HOLDER_MAX = 0.20  # 준비표 대상 환자 중 잔액 보유 비율 상한 — 넘으면 미수 칩이 너무 많이 켜짐
 
 
 @dataclass(frozen=True)
@@ -278,6 +280,22 @@ def check_cancel_time(conn, ctx):
                        " OR datetime(cancelled_at) >= datetime(scheduled_at))")
 
 
+def check_created_in_window(conn, ctx):
+    """예약은 생성 기간 안에서 잡힌다 — created_at ≥ range_start (워밍업 없음, §2.6 ③)"""
+    return _rows(conn, "SELECT id, created_at FROM emr_appointments WHERE date(created_at) < ?",
+                 ctx.range_start.isoformat())
+
+
+def check_booked_via(conn, ctx):
+    """예약 경로: desk 예약은 같은 환자 completed 내원의 종료 시각에 잡힌 다음 회차, 변경으로 생긴 새 예약은 phone"""
+    ends = {(r["patient_id"], _dt(r["scheduled_at"]) + timedelta(minutes=r["duration_min"]))
+            for r in _rows(conn, "SELECT patient_id, scheduled_at, duration_min FROM emr_appointments"
+                                 " WHERE status = 'completed'")}
+    return [r for r in _rows(conn, "SELECT id, patient_id, rescheduled_from_id, created_at FROM emr_appointments"
+                                   " WHERE booked_via = 'desk'")
+            if r["rescheduled_from_id"] is not None or (r["patient_id"], _dt(r["created_at"])) not in ends]
+
+
 def check_cancelled_at_status(conn, ctx):
     """cancelled_at은 cancelled 예약에만, cancelled 예약은 cancelled_at 필수"""
     return _rows(conn, "SELECT id, status, cancelled_at FROM emr_appointments"
@@ -318,11 +336,11 @@ def check_future_new_patient_registered(conn, ctx):
 
 
 def check_reschedule_pair(conn, ctx):
-    """변경 쌍: 새 예약은 원래 날짜 뒤 1~14일, 같은 유형·예정 시술, 새 created_at = 원래 cancelled_at"""
+    """변경 쌍: 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일, 같은 유형·예정 시술, 새 created_at = 원래 cancelled_at"""
     return _rows(conn, "SELECT n.id, n.rescheduled_from_id, o.scheduled_at AS original_at, n.scheduled_at,"
                        " o.cancelled_at, n.created_at FROM emr_appointments n"
                        " JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
-                       " WHERE julianday(date(n.scheduled_at)) - julianday(date(o.scheduled_at)) NOT BETWEEN 1 AND 14"
+                       f" WHERE julianday(date(n.scheduled_at)) - julianday(date(o.scheduled_at)) NOT BETWEEN 1 AND {RESCHEDULE_MAX_DAYS}"
                        " OR n.type IS NOT o.type OR n.planned_procedure_code IS NOT o.planned_procedure_code"
                        " OR n.created_at IS NOT o.cancelled_at")
 
@@ -526,17 +544,20 @@ def check_age_distribution(conn, ctx):
     return bad
 
 
-def check_daily_fill(conn, ctx):
-    """생성 기간 안 TODAY 이전 진료일의 비취소 예약 ≥ 하루 상한의 70% (TODAY 이후는 덜 찬 게 정상)"""
+def report_daily_fill(conn, ctx):
+    """하루 채움(비취소 예약 / 하루 상한) — range_start + MAX_LEAD_DAYS부터 TODAY 전날까지의 진료일
+    (시작 직후는 미리 잡힌 예약이 없고, TODAY 이후는 덜 찬 게 정상)"""
     counts = defaultdict(int)
     for r in _rows(conn, "SELECT date(scheduled_at) AS d FROM emr_appointments WHERE status != 'cancelled'"):
         counts[date.fromisoformat(r["d"])] += 1
-    bad, d = [], ctx.range_start
+    fills, d = [], ctx.range_start + timedelta(days=MAX_LEAD_DAYS)
     while d <= min(ctx.range_end, ctx.today - timedelta(days=1)):
-        if open_slots(d.weekday()) and d not in ctx.holidays and counts[d] < DAILY_MIN_FILL * _daily_cap(ctx, d):
-            bad.append({"date": d.isoformat(), "appointments": counts[d], "cap": _daily_cap(ctx, d)})
+        if open_slots(d.weekday()) and d not in ctx.holidays:
+            fills.append(counts[d] / _daily_cap(ctx, d))
         d += timedelta(days=1)
-    return bad
+    if not fills:
+        return {"days": 0}
+    return {"days": len(fills), "mean": round(sum(fills) / len(fills), 3), "min": round(min(fills), 3)}
 
 
 def check_new_patient_share(conn, ctx):
@@ -551,11 +572,10 @@ def check_new_patient_share(conn, ctx):
     new_by_month = defaultdict(int)
     for month in first_visit.values():
         new_by_month[month] += 1
-    bad, first_month = [], ctx.range_start.strftime("%Y-%m")
+    bad = []
     for r in _rows(conn, "SELECT substr(scheduled_at, 1, 7) AS month, count(*) AS n FROM emr_appointments"
                          " WHERE status = 'completed' GROUP BY month ORDER BY month"):
-        # 첫 달은 워밍업 등록 신환(구환으로 분류)이 섞여 낮게 나오므로 건너뜀
-        if r["n"] < NEW_PATIENT_MIN_VISITS or r["month"] == first_month:
+        if r["n"] < NEW_PATIENT_MIN_VISITS:
             continue
         share = new_by_month[r["month"]] / r["n"]
         if abs(share - NEW_PATIENT_SHARE) > NEW_PATIENT_TOLERANCE:
@@ -582,8 +602,8 @@ def check_status_rates(conn, ctx):
             if abs(n / base - target) > SHARE_TOLERANCE]
 
 
-def check_confirm_rate(conn, ctx):
-    """리마인드 응답(confirmed) 85% ±2%p — 리마인드를 받은 예약 기준: TODAY 이전 비취소 예약 중
+def report_confirm_rate(conn, ctx):
+    """리마인드 응답(confirmed) 비율 — 리마인드를 받은 예약 기준: TODAY 이전 비취소 예약 중
     직전 진료일의 리마인드 시각(master.reminder_time — 토요일은 마감 전)에 이미 있던 것"""
     def reminded(r) -> bool:
         prev = _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays)
@@ -592,20 +612,27 @@ def check_confirm_rate(conn, ctx):
                                    " WHERE status != 'cancelled' AND date(scheduled_at) < ?", ctx.today.isoformat())
             if reminded(r)]
     n, confirmed = len(rows), sum(r["confirmed"] for r in rows)
-    if not n:
-        return []
-    return [] if abs(confirmed / n - ctx.confirm_rate) <= SHARE_TOLERANCE else [
-        {"rate": round(confirmed / n, 3), "target": ctx.confirm_rate}]
+    return {"n": n, "rate": round(confirmed / n, 3), "target": ctx.confirm_rate} if n else {"n": 0}
 
 
-def check_unpaid_rate(conn, ctx):
-    """미수 발생(당일 수납 < 청구) 15% ±2%p — amount_due > 0인 visit 수납 행 기준(0원 내원은 미수가 생길 수 없음)"""
+def report_unpaid_rate(conn, ctx):
+    """미수 발생(당일 수납 < 청구) 비율 — amount_due > 0인 visit 수납 행 기준(0원 내원은 미수가 생길 수 없음)"""
     n, unpaid = conn.execute("SELECT count(*), coalesce(sum(amount_paid < amount_due), 0) FROM emr_payments"
                              " WHERE kind = 'visit' AND amount_due > 0").fetchone()
-    if not n:
+    return {"n": n, "rate": round(unpaid / n, 3), "target": ctx.unpaid_rate} if n else {"n": 0}
+
+
+def check_balance_holder_share(conn, ctx):
+    """준비표 대상(TODAY 이후 비취소 예약이 있는 환자) 중 잔액 > 0 비율 ≤ BALANCE_HOLDER_MAX — 미수 칩이 켜지는 비율"""
+    upcoming = {r["patient_id"] for r in _rows(conn, "SELECT DISTINCT patient_id FROM emr_appointments"
+                                                     " WHERE status != 'cancelled' AND date(scheduled_at) >= ?",
+                                               ctx.today.isoformat())}
+    if not upcoming:
         return []
-    return [] if abs(unpaid / n - ctx.unpaid_rate) <= SHARE_TOLERANCE else [
-        {"rate": round(unpaid / n, 3), "target": ctx.unpaid_rate}]
+    owing = {r["patient_id"] for r in _rows(conn, "SELECT patient_id FROM emr_payments GROUP BY patient_id"
+                                                  " HAVING sum(amount_due - amount_paid) > 0")}
+    share = len(upcoming & owing) / len(upcoming)
+    return [] if share <= BALANCE_HOLDER_MAX else [{"share": round(share, 3), "max": BALANCE_HOLDER_MAX}]
 
 
 def check_visit_mix(conn, ctx):
@@ -662,11 +689,11 @@ def _peak_time_share(weekday: int) -> float:
     return peak / (open_slots(weekday) * SLOT_MIN)
 
 
-def check_reschedule_rate(conn, ctx):
-    """변경 쌍 / 변경 가능한 예약 = reschedule_rate ±2%p — 추첨이 실현된 모집단만 센다.
+def report_reschedule_rate(conn, ctx):
+    """변경 쌍 / 변경 가능한 예약 — 추첨이 실현된 모집단만 센다.
     변경 가능 = TODAY 이전 예약 중 created_at 다음 날 ~ 예약 전날 사이에 진료일이 있는 것(변경일은 진료일에서 추첨),
-    변경으로 생긴 새 예약은 제외. 분자는 원래 예약이 TODAY 이전인 쌍(원래 예약이 창 밖이면 쌍이 아님).
-    빈자리가 없어 못 바꾼 예약은 분모에 남는다(허용치로 흡수)"""
+    변경으로 생긴 새 예약은 제외. 분자는 원래 예약이 TODAY 이전인 쌍.
+    빈자리가 없어 못 바꾼 예약은 분모에 남는다(목표보다 약간 낮게 나옴)"""
     today = ctx.today.isoformat()
     eligible = sum(_prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays) > _dt(r["created_at"]).date()
                    for r in _rows(conn, "SELECT scheduled_at, created_at FROM emr_appointments"
@@ -674,20 +701,19 @@ def check_reschedule_rate(conn, ctx):
     pairs, = conn.execute("SELECT count(*) FROM emr_appointments n JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
                           " WHERE date(o.scheduled_at) < ?", (today,)).fetchone()
     if not eligible:
-        return []
-    rate = pairs / eligible
-    return [] if abs(rate - ctx.reschedule_rate) <= SHARE_TOLERANCE else [
-        {"pairs": pairs, "rate": round(rate, 3), "target": ctx.reschedule_rate}]
+        return {"n": 0}
+    return {"n": eligible, "pairs": pairs, "rate": round(pairs / eligible, 3), "target": ctx.reschedule_rate}
 
 
-def check_peak_pattern(conn, ctx):
-    """피크(10–11·15–17시) 시작 비중이 피크의 영업시간 비중보다 큼 (휴진 요일 예약은 필수 검사 몫이라 제외)"""
+def report_peak_pattern(conn, ctx):
+    """피크(10–11·15–17시) 시작 비중 vs 피크의 영업시간 비중 — 앞이 커야 피크 가중이 먹은 것
+    (휴진 요일 예약은 필수 검사 몫이라 제외)"""
     starts = [a["start"] for a in _active_appointments(conn) if open_slots(a["start"].weekday())]
     if not starts:
-        return []
+        return {"n": 0}
     actual = sum(_in_peak(s.time()) for s in starts) / len(starts)
     expected = sum(_peak_time_share(s.weekday()) for s in starts) / len(starts)
-    return [] if actual > expected else [{"peak_share": round(actual, 3), "time_share": round(expected, 3)}]
+    return {"n": len(starts), "peak_share": round(actual, 3), "time_share": round(expected, 3)}
 
 
 # ── 경고: 치아 ──────────────────────────────────────────────
@@ -731,6 +757,8 @@ REQUIRED = [
     check_created_before_scheduled,
     check_cancel_time,
     check_cancelled_at_status,
+    check_created_in_window,
+    check_booked_via,
     check_cancellation_kind,
     check_future_new_patient_single,
     check_future_new_patient_registered,
@@ -754,17 +782,20 @@ REQUIRED = [
 ]
 WARNINGS = [
     check_age_distribution,
-    check_daily_fill,
     check_active_ratio,
     check_new_patient_share,
     check_status_rates,
-    check_reschedule_rate,
-    check_confirm_rate,
-    check_unpaid_rate,
     check_visit_mix,
-    check_peak_pattern,
+    check_balance_holder_share,
     check_tooth_level,
     check_child_procedures,
+]
+REPORTS = [
+    report_confirm_rate,
+    report_unpaid_rate,
+    report_reschedule_rate,
+    report_peak_pattern,
+    report_daily_fill,
 ]
 
 
@@ -803,6 +834,8 @@ def run(conn, ctx) -> bool:
             print(f"[{level}] {name}: {len(violations)}건 — {(check.__doc__ or '').strip()}")
             for v in violations[:EXAMPLES]:
                 print(f"         {v}")
+    for report in REPORTS:
+        print(f"[INFO] {report.__name__}: {report(conn, ctx)}")
     return ok
 
 

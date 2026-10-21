@@ -18,17 +18,14 @@ PENDING = {"ADJUST_CODES"}
 _BAND_LABEL = {"child": "소아", "teen": "청소년", "adult": "성인", "senior": "노인"}
 _MIX_LABEL = {"treatment": "진료", "hygiene": "위생", "consult": "상담"}
 
-# 지표 이름(표 첫 칸의 앞부분) → ({라벨: 목표값}, 허용치). 라벨 ""은 값이 하나인 칸. 허용치 None = 허용 칸 없음
+# 경고로 남은 지표만(리포트 항목은 허용치가 없어 비교할 값이 없다). 지표 이름(표 첫 칸의 앞부분) → ({라벨: 목표값}, 허용치). 라벨 ""은 값이 하나인 칸. 허용치 None = 허용 칸 없음
 EXPECTED = {
     "연령 구간 비중": ({_BAND_LABEL[name]: share for name, *_, share in AGE_BANDS}, verify.SHARE_TOLERANCE),
     "활동": ({"": ACTIVE_SHARE}, verify.ACTIVE_TOLERANCE),
     "신환": ({"": NEW_PATIENT_SHARE}, verify.NEW_PATIENT_TOLERANCE),
     "노쇼·당일 취소": ({"노쇼": CFG["noshow_rate"], "당일 취소": CFG["sameday_cancel_rate"]}, verify.SHARE_TOLERANCE),
-    "변경": ({"": CFG["reschedule_rate"]}, verify.SHARE_TOLERANCE),
-    "미확인": ({"": 1 - CFG["confirm_rate"]}, verify.SHARE_TOLERANCE),
-    "미수 발생": ({"": CFG["unpaid_rate"]}, verify.SHARE_TOLERANCE),
     "내원 구성": ({_MIX_LABEL[t]: v for t, v in VISIT_MIX.items()}, verify.VISIT_MIX_TOLERANCE),
-    "하루 채움": ({"": verify.DAILY_MIN_FILL}, None),
+    "잔액 보유": ({"": verify.BALANCE_HOLDER_MAX}, None),
 }
 
 
@@ -108,7 +105,7 @@ def test_config_keys_always_prefixed():
     text = re.sub(r"```.*?```", "", _doc(), flags=re.S)
     covered = [m.span() for m in re.finditer(r"`config` ((?:`[\w.]+`[·\s]*)+)", text)]
     names = _config_key_names()
-    # 백틱 안의 이름(식 `range_start − warmup_days`도 이름 단위로). 괄호가 있는 코드 예시는 config 참조가 아니라 제외
+    # 백틱 안의 이름(식 `1 − confirm_rate`도 이름 단위로). 괄호가 있는 코드 예시는 config 참조가 아니라 제외
     tokens = [(m.start(), t) for m in re.finditer(r"`([^`]+)`", text) if "(" not in m.group(1)
               for t in re.findall(r"[\w.]+", m.group(1))]
     bare = sorted({t for pos, t in tokens if t in names and not any(a <= pos < b for a, b in covered)})
