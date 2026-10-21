@@ -10,6 +10,9 @@ sameday_cancel_rate: 0.04
 confirm_rate: 0.85          # 직전 진료일 리마인드 응답
 unpaid_rate: 0.15
 settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 첫 large 실행에서 잔액 있음 비율 리포트 보고 확정
+lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 ①) — 초기값, large 튜닝 때 확정
+rebook_delay_days: [1, 14]   # 노쇼·당일 취소 뒤 다시 전화하기까지(양 끝 포함, 균등) — 초기값, large 튜닝 때 확정
+treatment_demand_monthly: { child: 0.06, teen: 0.08, adult: 0.08, senior: 0.10 }   # 연령 구간별 환자 1인 월 치료 수요 발생률 — 초기값, large 튜닝 때 확정
 calls_with_transcript: 1000
 eval_pool_size: 300
 blind_pool_size: 150
