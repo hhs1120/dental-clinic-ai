@@ -214,7 +214,7 @@ def test_reschedule_rate_numerator_only_past_originals(tmp_path):
     for pid in range(101, 106):  # 원래 예약이 TODAY 이후인 쌍 — 시뮬레이션에서 실현될 수 없어 분자에서 뺀다
         appt(conn, "2026-12-04 10:00:00", patient=pid, status="cancelled")
         original = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
-        conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-25 10:00:00' WHERE id = ?", (original,))
+        conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-24 10:00:00' WHERE id = ?", (original,))
         appt(conn, "2026-12-10 10:00:00", patient=pid, status="scheduled")
         conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE id = (SELECT max(id) FROM emr_appointments)",
                      (original,))
@@ -228,8 +228,8 @@ def test_status_rates_denominator_excludes_reschedule_originals(tmp_path):
     for pid in range(1, 97):  # 비취소 96건 중 노쇼 6
         appt(conn, "2026-11-24 10:00:00", patient=pid, status="noshow" if pid <= 6 else "completed")
     for pid in range(97, 101):  # 당일 취소 4건 — 분모에 포함
-        appt(conn, "2026-11-25 10:00:00", patient=pid, status="cancelled")
-    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-25 08:00:00' WHERE status = 'cancelled'")
+        appt(conn, "2026-11-24 11:00:00", patient=pid, status="cancelled")
+    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-24 08:00:00' WHERE status = 'cancelled'")
     for pid in range(101, 201):  # 변경 원래 예약 100건(새 예약은 TODAY 이후) — 분모에서 뺀다
         appt(conn, "2026-11-27 10:00:00", patient=pid, status="cancelled")
         original = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]

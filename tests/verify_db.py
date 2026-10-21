@@ -14,7 +14,7 @@ CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), res
           noshow_rate=0.06, sameday_cancel_rate=0.04, confirm_rate=0.85, unpaid_rate=0.15,
           visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15))
 
-# 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토
+# 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
 SEED = """
 INSERT INTO emr_clinic VALUES ('테스트치과', '{}');
 INSERT INTO emr_staff VALUES (1, '원장', 'doctor', 1), (2, '위생사', 'hygienist', 1), (3, '실장', 'consultant', 1);
@@ -24,7 +24,7 @@ INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id,
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
                               planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
-  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-01 11:00:00', NULL),
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL),
   (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL),
   (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
   (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL),
@@ -48,7 +48,7 @@ INSERT INTO emr_messages VALUES
   (2, 1, 'in',  '2026-11-02 18:10:00', '네', 'reply', 2);
 INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction, started_at, duration_sec, has_transcript) VALUES
   (1, 'c-0002', 'generated', 1, '010-0000-0001', 'inbound',  '2026-11-20 10:55:00', 95, 0),
-  (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-26 16:00:00', 140, 0);
+  (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-27 16:00:00', 140, 0);
 """
 
 # 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_eob 줄은 장부에 없는 키
@@ -85,7 +85,7 @@ def make_db(tmp_path, relaxed=False) -> sqlite3.Connection:
 
 
 def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="completed",
-         created_at="2026-10-01 10:00:00"):
+         created_at="2026-10-02 10:00:00"):
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
     conn.execute(
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"

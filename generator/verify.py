@@ -2,8 +2,8 @@
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
 구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고 + 리포트.
-§5.3 중 아직 없는 것(해당 단계 구현 때 추가):
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각,
+§5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 예약 취소 전),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
@@ -285,6 +285,31 @@ def check_created_in_window(conn, ctx):
     """예약은 생성 기간 안에서 잡힌다 — created_at ≥ range_start (워밍업 없음, §2.6 ③)"""
     return _rows(conn, "SELECT id, created_at FROM emr_appointments WHERE date(created_at) < ?",
                  ctx.range_start.isoformat())
+
+
+def _in_hours(t: datetime, holidays) -> bool:
+    """진료일의 개원~마감(점심 포함, 마감 정각 포함) — 사건 시각 규칙(§2.6 ③)"""
+    d = t.date()
+    if d in holidays or not open_slots(d.weekday()):
+        return False
+    return OPEN <= t.time() <= (SATURDAY_CLOSE if d.weekday() == SATURDAY else WEEKDAY_CLOSE)
+
+
+def check_event_times_in_hours(conn, ctx):
+    """사건 시각은 진료일 영업시간 안: 예약 created_at·cancelled_at, 통화 started_at, 발신 문자 sent_at.
+    당일 취소의 cancelled_at만 그날 예약 시각 전 아무 때나(문자 취소), 환자 답장(in)은 시각 제한 없음"""
+    bad = []
+    for r in _rows(conn, "SELECT id, scheduled_at, created_at, cancelled_at FROM emr_appointments"):
+        if not _in_hours(_dt(r["created_at"]), ctx.holidays):
+            bad.append({"id": r["id"], "created_at": r["created_at"]})
+        c = r["cancelled_at"]
+        if c and _dt(c).date() != _dt(r["scheduled_at"]).date() and not _in_hours(_dt(c), ctx.holidays):
+            bad.append({"id": r["id"], "cancelled_at": c})
+    for table, col, where in (("ax_calls", "started_at", ""), ("emr_messages", "sent_at", " WHERE direction = 'out'")):
+        bad += [{"table": table, "id": r["id"], col: r["at"]}
+                for r in _rows(conn, f"SELECT id, {col} AS at FROM {table}{where}")
+                if not _in_hours(_dt(r["at"]), ctx.holidays)]
+    return bad
 
 
 def check_booked_via(conn, ctx):
@@ -762,6 +787,7 @@ REQUIRED = [
     check_cancel_time,
     check_cancelled_at_status,
     check_created_in_window,
+    check_event_times_in_hours,
     check_booked_via,
     check_cancellation_kind,
     check_future_new_patient_single,
@@ -838,6 +864,8 @@ def run(conn, ctx) -> bool:
             print(f"[{level}] {name}: {len(violations)}건 — {(check.__doc__ or '').strip()}")
             for v in violations[:EXAMPLES]:
                 print(f"         {v}")
+    # RAG 필수 검사는 9단계·앱 색인 코드와 함께 구현 — 그 전엔 건너뜀으로 표시(§5.1)
+    print("[SKIP] RAG — 미구현(9단계·앱 색인 코드 후)")
     for report in REPORTS:
         print(f"[INFO] {report.__name__}: {report(conn, ctx)}")
     return ok

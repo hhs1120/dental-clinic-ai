@@ -88,7 +88,7 @@ tags:
 - `make export-human` / `import-human`(보존 키는 [[치과 AX - 앱 설계]] §7)
 
 **완료 기준**
-- Playwright: 키 시퀀스 10회 → `ax_judgments` +10, 블라인드 5회 → `ax_blind_votes` +5
+- Playwright(`make fixture` DB 또는 large 복사본에서 — 진짜 판정 DB를 오염시키지 않게): 키 시퀀스 10회 → `ax_judgments` +10, 블라인드 5회 → `ax_blind_votes` +5
 - 정확도 뷰 2개 SQL이 행 ≥ 9(pytest)
 
 **설계 근거**: 전사 기본 노출(A 요약을 읽고 판정하면 정답지가 A에 앵커링). 판정 풀·판정·블라인드 절차와 정확도 3종은 [[치과 AX - 평가 설계]] §2.
@@ -138,7 +138,7 @@ tags:
 생성·평가셋 작성의 순서 제약은 [[치과 AX - 가상 데이터 생성 설계]] §0·§5.1, [[치과 AX - 평가 설계]] §3.1.
 
 **`make gate`** (스크립트 종료 코드. ⑧ 착수 조건)
-1. ①·⑤·③ 완료 기준 전부(§4 — large DB, 캐시된 실모델 분류, dev 수치)
+1. ①·⑤·③ 완료 기준 전부(§4) — 분류·평가 수치는 large DB(캐시된 실모델 분류, dev 수치), UI 테스트(Playwright)는 `make fixture` DB 또는 large 복사본
 2. `next build` exit 0
 
 `make ci`(매 커밋: small fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright)와는 다른 타겟.
@@ -167,4 +167,4 @@ tags:
 - [ ] 준비 3 — 평가셋 작성 + `eval.py`
 - [ ] 준비 4 — Claude Code 세팅
 - [ ] 준비 5 — 와이어프레임 3개
-- [ ] 사람 판정 시작 전 — 생성기 쓰기 보호(판정·투표 있으면 거부, `FORCE=1` + 자동 `export-human`)·판정 후 재생성 조건([[치과 AX - 가상 데이터 생성 설계]] §5.1)
+- [ ] 사람 판정 시작 전 — 생성기 쓰기 보호(판정·투표 있으면 거부, `FORCE=1`이면 자동 `export-human` 후 진행 — [[치과 AX - 가상 데이터 생성 설계]] §5.1)

@@ -58,6 +58,16 @@ BREAKS = {
         " status, rescheduled_from_id, booked_via, created_at) VALUES"
         " (1, 1, '2026-10-08 10:00:00', 30, 'treatment', 'U0008', 'scheduled', 1, 'desk', '2026-10-06 11:00:00')",
         "check_booked_via"),  # 자기 completed 종료 시각이지만 변경 새 예약
+    # 사건 시각은 진료일 영업시간 안 (당일 취소만 예외)
+    "created_on_closed_day": ("UPDATE emr_appointments SET created_at = '2026-11-19 11:00:00' WHERE id = 5", "check_event_times_in_hours"),
+    "created_on_holiday": ("UPDATE emr_appointments SET created_at = '2026-11-25 11:00:00' WHERE id = 6", "check_event_times_in_hours"),
+    "created_after_saturday_close": ("UPDATE emr_appointments SET created_at = '2026-11-21 14:00:00' WHERE id = 6",
+                                     "check_event_times_in_hours"),  # 토요일은 13:30 마감
+    "call_on_closed_day": ("UPDATE ax_calls SET started_at = '2026-11-19 10:00:00' WHERE id = 1", "check_event_times_in_hours"),
+    "message_out_after_close": ("UPDATE emr_messages SET sent_at = '2026-11-02 19:00:00' WHERE id = 1", "check_event_times_in_hours"),
+    "created_after_close": ("UPDATE emr_appointments SET created_at = '2026-11-20 19:00:00' WHERE id = 6", "check_event_times_in_hours"),
+    "reschedule_cancel_before_open": ("UPDATE emr_appointments SET cancelled_at = '2026-11-14 08:00:00' WHERE id = 3",
+                                      "check_event_times_in_hours"),
     "created_before_window": ("UPDATE emr_appointments SET created_at = '2026-09-30 11:00:00' WHERE id = 1",
                               "check_created_in_window"),
     # ax_calls (6단계)
@@ -401,3 +411,29 @@ def test_canonical_hash_ignores_indexed_at(tmp_path):
     a, b = _two_dbs(tmp_path)
     b.execute("UPDATE ax_calls SET indexed_at = '2026-12-01 09:00:00'")
     assert verify.canonical_hash(a) == verify.canonical_hash(b)
+
+
+def test_event_times_boundaries(tmp_path):
+    conn = make_db(tmp_path)
+    # 당일 취소는 영업 전이어도 된다(문자·자동응답) — 그날 예약 시각 전이면
+    conn.execute("UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-24 07:00:00' WHERE id = 7")
+    # 점심시간·마감 시각 정각도 영업시간 안
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-20 13:30:00' WHERE id = 6")
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-20 18:30:00' WHERE id = 5")
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-21 13:30:00' WHERE id = 3")  # 토요일 마감 정각
+    conn.execute("UPDATE emr_messages SET sent_at = '2026-11-02 23:00:00' WHERE id = 2")  # 환자 답장(in)은 아무 때나
+    assert verify.check_event_times_in_hours(conn, CTX) == []
+    # 영업 전 취소 허용은 그날 예약에만 — 전날 밤 취소는 위반
+    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-23 22:00:00' WHERE id = 7")
+    assert [v["id"] for v in verify.check_event_times_in_hours(conn, CTX)] == [7]
+
+
+def test_rag_checks_skipped_without_chunks(tmp_path, capsys):
+    conn = make_db(tmp_path)
+    assert verify.run(conn, CTX) is True  # 앱 색인 코드 전 — ax_chunks가 없어도 실패가 아니다
+    assert "[SKIP] RAG" in capsys.readouterr().out
+    # 청크가 생겨도 RAG 검사가 구현되기 전에는 건너뜀 — 검사 없이 통과한 것처럼 보이지 않게
+    conn.execute("CREATE TABLE ax_chunks (id INTEGER PRIMARY KEY)")
+    conn.execute("INSERT INTO ax_chunks VALUES (1)")
+    verify.run(conn, CTX)
+    assert "[SKIP] RAG" in capsys.readouterr().out

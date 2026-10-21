@@ -18,7 +18,7 @@ tags:
 | 항목 | 결정 |
 |---|---|
 | 규모 | large = `config/generator.yaml` 기본값(기간·환자·하루 상한·통화·문서 수) |
-| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
+| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 구환 수는 모든 규모에서 같다**(신환만 기간에 비례) — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
 | 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small은 개발·테스트용 |
 | 기준일 | `TODAY`(config) 고정. 앱에서는 바꾸지 않는다(원본 [[치과 AX - 앱 설계]] §6) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만(급여 청구액 = fee × 0.7, 소아 급여 특례 없음) |
@@ -106,7 +106,7 @@ tags:
 
 **① 환자와 수요** (2·3단계)
 - **구환**: 창 이전 마지막 위생 내원일을 **시뮬레이션 시작 전 6개월에 고르게** 시드 → 첫 리콜 기한 = 그날 + 6개월 ±1개월(첫날에 기한이 몰리지 않게). 일부(`lapse_rate`)는 리콜에 응하지 않아 휴면이 된다
-- **구환 수** = `config` `patients` − 예상 신환 수. 예상 신환 = `master.NEW_PATIENT_SHARE` × 예상 completed(창 안 TODAY 이전 하루 상한 합계 × 채움·완료 가정 0.8) — 신환 목표가 completed 대비라서. 환자 총수는 `config` `patients` 근처면 되고 정확히 맞추지 않는다
+- **구환 수** = `config` `returning_patients`(규모와 무관하게 고정). 신환은 시뮬레이션이 목표 비율대로 만든 만큼이고, 환자 총수는 결과값이다
 - **신환 후보 풀**: 이름·연령 등만 미리 만들어 두고 필요할 때 꺼내 등록. 모자라면 더 만들고, 쓰지 않은 후보는 버림
 - **치료 수요**: 연령별 월 발생률로 '치료 필요'가 생기면 에피소드 하나(②)를 시작. **환자당 열린 수요는 동시에 1개**(진행 중인 에피소드·잡힌 예약이 있으면 새 수요는 그 뒤로) — 신환은 첫 내원 전에 다른 수요가 없다
 - **리콜 시드**: completed 내원이 생기면 다음 리콜 기한 = 마지막 위생 내원(없으면 그 내원) + 6개월 ±1개월
@@ -125,16 +125,16 @@ tags:
 ```
 for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생성·처리 없음
   1. 그날 예약 처리 (영업시간 순)
-     - 상태 추첨: completed / noshow / 당일 취소(cancelled_at = 그날 08:00 ~ 예약 30분 전 — 영업 전 문자·전화 허용)
+     - 상태 추첨: completed / noshow / 당일 취소(cancelled_at = 그날 0시 ~ 예약 시각 전 — 사건 시각 규칙의 유일한 예외)
      - completed → (진료·수납·청구는 5단계) 코스 다음 회차가 있으면 그 자리에서 데스크 예약(booked_via = desk, created_at = 내원 종료 시각, 희망 간격 ② 뒤 첫 가능일)
      - noshow·당일 취소 → 그 수요는 남고, 재예약 지연 뒤 다시 전화 예약
   2. 전화 예약(booked_via = phone): 그날 기한이 된 수요(리콜·치료 시작·재예약)와 신환
-     - created_at = 그날 영업시간 안(평일 점심 제외) 임의 시각, 희망 리드 1~`master.MAX_LEAD_DAYS`일 뒤 첫 가능한 진료일·시각(피크 ×2 가중)
+     - created_at = 그날 영업시간 안 임의 시각, 희망 리드 1~`master.MAX_LEAD_DAYS`일 뒤 첫 가능한 진료일·시각(피크 ×2 가중)
      - 가능 = §1 운영 제약 셋 + 같은 환자 같은 날 예약 없음 + 날짜 ≤ range_end. 그때까지 가능일이 없으면 다음 날 다시
      - 신환: 신환 첫 내원이 월 내원의 목표 비율이 되도록 후보 풀에서 꺼냄(registered_at = 그날). 첫 유형은 내원 구성 목표(VISIT_MIX)대로
      - 새 예약마다(전화·데스크 모두) reschedule_rate 확률로 "변경 예정" + 변경일(created_at 다음 날 ~ 예약 전날 중 진료일) 추첨.
        그 사이에 진료일이 없으면(리드 1일, 수→금처럼 휴진일만 낀 경우) 변경 없음
-  3. 변경: 오늘이 변경일인 예약 → 원래 예약 cancelled(cancelled_at = 오늘 영업 시작 ~ 그날 리마인드 시각 전, 평일 점심 제외), 새 예약은 원래 날짜 뒤 1~`master.RESCHEDULE_MAX_DAYS`일의
+  3. 변경: 오늘이 변경일인 예약 → 원래 예약 cancelled(cancelled_at = 오늘 영업시간 안), 새 예약은 원래 날짜 뒤 1~`master.RESCHEDULE_MAX_DAYS`일의
      첫 가능일(같은 유형·시술, booked_via = phone, created_at = 같은 시각, 다시 변경하지 않음). 가능일이 없으면 변경하지 않음
   4. 리마인드: 그날 리마인드 시각(master.reminder_time — 토요일은 마감 전), 그 시점에 있고 취소되지 않은 다음 진료일 예약에
      발송 → confirm_rate 확률로 confirmed
@@ -142,10 +142,11 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 5단계(진료·수납·청구): 창 안 completed마다 진료 기록 1행, visit 수납(paid_at = 내원 종료 시각), 미수 정산은 다음 completed
 내원 종료 시각에 settlement 행, 급여 시술은 청구 1줄(§2.4)
 ```
+- **사건 시각 규칙**: 예약을 잡고 취소하는 시각(`created_at`·`cancelled_at`)과 통화·발신 문자(환자 답장 제외)는 진료일 영업시간 안(개원~마감, 점심 포함)에 일어나고, 순서는 `created_at` < `scheduled_at`, `created_at` ≤ `cancelled_at` < `scheduled_at`. 예외는 당일 취소의 `cancelled_at` 하나 — 그날 예약 시각 전이면 영업 전이어도 된다(문자·자동응답 취소). 이 밖의 세부 시간 창은 두지 않는다
 - **시작 직후**: 워밍업 없이 `range_start`부터 돌아 모든 사건이 창 안에 있다. 처음 최대 리드(`master.MAX_LEAD_DAYS`)는 미리 잡힌 예약이 없어 덜 찬다 — large에선 2월 초(확정 청구 월)라 기능 영향 없고, 하루 채움 리포트에서 뺀다. 리콜 기한이 이미 지난 구환 수요는 첫날 몰리지 않게 첫 리드 기간에 나눠 받는다
 - TODAY 이후에는 TODAY 전날까지 잡힌 예약만 남는다 — 미래 일정이 덜 찬 상태가 정상
 - 하루 상한이 차면 수요는 뒤로 밀린다(희망 리드보다 늦어질 수 있음). 과거 진료일이 상한에 크게 못 미치면 수요 파라미터를 올림
-- **위생 비중·활동 비율·리콜 6개월은 서로 걸려 있어** 튜닝 때 같이 본다. 활동 비율이 안 맞으면 파라미터를 비틀지 말고 목표(`master.ACTIVE_SHARE`, 평가에 안 쓰는 값)를 첫 large 결과에 맞춰 낮춘다. 0.5 아래가 필요하면 목표 대신 환자 수부터 조정(활동 환자 1인당 내원이 너무 잦아짐)
+- **위생 비중·활동 비율·리콜 6개월은 서로 걸려 있어** 튜닝 때 같이 본다. 활동 비율이 안 맞으면 파라미터를 비틀지 말고 목표(`master.ACTIVE_SHARE`, 평가에 안 쓰는 값)를 첫 large 결과에 맞춰 낮춘다. 0.5 아래가 필요하면 목표 대신 구환 수부터 조정(활동 환자 1인당 내원이 너무 잦아짐)
 - 예약 이벤트 수는 그걸로 역산하는 통화 전사 수 이상이어야 한다(필수 검사 §5.3)
 - 연령 기준일은 예약일(= 시술일)
 
@@ -189,7 +190,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 8. 저장: 전사 → `ax_calls`, 라벨·fact·노이즈 → `truth_call_labels`
 9. 층화 추출 → 판정 풀·블라인드 풀 마킹(평가 설계 §2.1)
 
-**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. `booked_via = phone` 예약(변경으로 생긴 새 예약은 변경 통화로 쓰이므로 제외) → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소, confirmed(직전 진료일) → 확인. **확인 통화**: 시각 = 직전 진료일의 리마인드 시각 ~ 그날 마감(영업시간 안, 평일 점심 제외). 수신은 리마인드를 받고 전화로 응답한 confirmed 예약, 발신은 **리마인드를 받았는데 미확인**인 예약에 병원이 거는 확인 전화. `confirmed`는 4단계에서 이미 정해져 있고 통화는 거기서 역산할 뿐이라 통화가 `confirmed`를 바꾸지 않는다. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담는다.
+**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. `booked_via = phone` 예약(변경으로 생긴 새 예약은 변경 통화로 쓰이므로 제외) → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소(영업 전 취소는 문자로 받은 것이라 통화 없음 — 영업시간 안 취소만 역산), confirmed(직전 진료일) → 확인. **확인 통화**: 시각 = 직전 진료일의 리마인드 시각 이후 그날 영업시간 안, 그 예약이 취소되기 전(리마인드 뒤 같은 날 변경된 예약은 취소 시각 전까지만, 취소된 뒤엔 확인 전화 대상 아님). 수신은 리마인드를 받고 전화로 응답한 confirmed 예약, 발신은 **리마인드를 받았는데 미확인**인 예약에 병원이 거는 확인 전화. `confirmed`는 4단계에서 이미 정해져 있고 통화는 거기서 역산할 뿐이라 통화가 `confirmed`를 바꾸지 않는다. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담는다.
 
 **목적 분포**(%)
 | 목적 | % | | 목적 | % |
@@ -253,14 +254,15 @@ make data [SCALE=small|large] [REGEN_LLM=1]
  7. 통화 전사      §4.1                                          (LLM, 캐시)
  8. 문자           §2.5                                          (코드)
  9. RAG 문서       §4.2                                          (LLM, 캐시)
-10. 적재·색인·검증 app.sqlite → make index(앱 설계 §3) → make verify
+10. 적재·색인·검증 app.sqlite → make index(앱 설계 §3, 앱 색인 코드 전엔 건너뜀) → make verify
 ━━ 조건부 ━━
 11. EOB PDF        슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
 ```
 
 - **규모별 출력**: 경로는 `generator/paths.py` 한 곳. large가 기본(앱·평가가 보는 경로), small은 하위 폴더에 따로 — 서로 덮어쓰지 않는다. verify는 `truth_gen_meta.scale`이 검사하려는 규모와 다르면 실패
 - **작업 순서**: ① 생성기 작성(디버깅은 small도 가능) → ② large로 `make data`·`make verify`를 돌리며 필수 위반을 고치고, 경고를 보며 시뮬레이션 파라미터(`lapse_rate`, 연령별 수요 발생률, 재예약·리콜 응답 지연)를 맞춰 `config/generator.yaml`에 기록 → ③ 같은 코드·파라미터로 small 생성 → 필수 검사 통과 확인(짧은 기간에서 깨지는 코드가 없는지, 테스트 픽스처 재료) → ④ large 재생성(같은 결과) → LLM 7·9단계 → 사람 판정 시작. 데이터 파일은 ④ 전까지 언제든 지우고 다시 만드는 일회용이다
-- **사람 판정 시작 전에 구현**([[치과 AX - 기능 정의]] §8): 판정·투표가 있는 DB엔 쓰기 거부(`FORCE=1` + 자동 `export-human`), 판정 후 재생성은 기존 테이블 해시가 그대로일 때만(판정이 `call_id`에 묶임)
+- **사람 판정 시작 전에 구현**([[치과 AX - 기능 정의]] §8): 판정·투표가 있는 DB엔 쓰기 거부, `FORCE=1`이면 자동 `export-human` 후 진행(판정은 `import-human`이 전사 해시로 다시 붙인다 — 앱 설계 §7)
+- **10단계 색인·RAG 검사는 앱 색인 코드가 생긴 뒤부터**: 그 전에는 `make index`를 건너뛰고, verify의 RAG 필수 검사(청크 prefix 등)는 구현될 때까지 리포트에 `[SKIP]`으로 표시한다 — 청크가 생겨도 검사 없이 통과한 것처럼 보이지 않게
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 파생한 자기 난수 생성기를 쓴다 — 예: `np.random.default_rng([seed, zlib.crc32(b"patients")])`. 파이썬 내장 `hash()`는 문자열에 실행마다 다른 솔트가 붙어 결정성이 깨지므로 쓰지 않는다. Faker도 전역 `Faker.seed`가 아니라 단계별 인스턴스에 `seed_instance`. 문자열 `set`·`dict` 키 순회에 기대지 말고 정렬해서 쓴다(`make data`는 `PYTHONHASHSEED=0`으로도 막아 둔다). 단계를 추가·삭제해도 다른 단계의 결과는 바뀌지 않는다
 - **정형 먼저, LLM 한 번**: 정형(1~6) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9)을 한 번 돌린다. 정형 로직을 고치면 LLM 캐시가 전량 미스. **LLM은 large에서만** — small의 7·9단계는 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서)를 써서 과금 없이 구조만 채운다(테스트 픽스처용)
 - **LLM 캐시**: 생성물은 파일 캐시로 커밋, `make data REGEN_LLM=1`로만 재생성. 키 = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴
@@ -280,7 +282,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.source_*`)는 타입별 조인 |
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 운영 제약(§1) | 영업시간·휴진일 밖 없음; 예약 시작 :00·:30, 소요 30분 배수; 하루 비취소 예약 ≤ 상한; 같은 시작 시각 비취소 예약 ≤ `master.MAX_APPOINTMENTS_PER_SLOT`; 같은 환자 같은 날 중복 없음 |
-| 예약 | `planned_procedure_code` 필수; `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 새 예약이 원래 날짜 뒤 1~`master.RESCHEDULE_MAX_DAYS`일·같은 유형·시술·새 `created_at` = 원래 `cancelled_at`, 변경은 예약당 1회(새 예약은 다시 원래 예약이 되지 않음); 예정 신환(창 안 등록 + 비취소 예약이 전부 TODAY 이후)은 비취소 예약 1건·`registered_at` = 첫 예약 `created_at`의 날짜; `created_at` ≥ `range_start`(워밍업 없음); `desk` 예약은 같은 환자 completed 내원 종료 시각에 잡힘, 변경으로 생긴 새 예약은 `phone`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 예약 직전 진료일의 리마인드 시각 ~ 그날 마감); 예약 이벤트 공급 — 목적별 역산 가능한 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전에 확인) |
+| 예약 | `planned_procedure_code` 필수; `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 새 예약이 원래 날짜 뒤 1~`master.RESCHEDULE_MAX_DAYS`일·같은 유형·시술·새 `created_at` = 원래 `cancelled_at`, 변경은 예약당 1회(새 예약은 다시 원래 예약이 되지 않음); 예정 신환(창 안 등록 + 비취소 예약이 전부 TODAY 이후)은 비취소 예약 1건·`registered_at` = 첫 예약 `created_at`의 날짜; `created_at` ≥ `range_start`(워밍업 없음); `created_at`·`cancelled_at`·통화 `started_at`·발신 문자 `sent_at`은 진료일 영업시간 안(당일 취소의 `cancelled_at`만 그날 예약 시각 전 아무 때나, 환자 답장은 제한 없음); `desk` 예약은 같은 환자 completed 내원 종료 시각에 잡힘, 변경으로 생긴 새 예약은 `phone`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 예약 직전 진료일의 리마인드 시각 이후 그날 영업시간 안, 예약 취소 전); 예약 이벤트 공급 — 목적별 역산 가능한 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전에 확인) |
 | 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; `tooth_no` NULL 없음; 대조 키 UNIQUE; (`truth_claims`가 있을 때만) `extra_in_eob` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_eob`도 제출 월 진료일 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
@@ -306,7 +308,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 영역 | 검사 |
 |---|---|
 | 치아 | 치아 단위 시술은 `'00'` 금지, 치아 단위가 아닌 시술은 `'00'`만; 소아 시술(`age_group='child'`)은 소아만 |
-| 문자 | out은 트리거 이후, in은 out 이후; trigger별 건수가 규칙(§2.5)으로 계산한 값 ±10% |
+| 문자 | out은 트리거 이후, in은 out 이후 |
 | 통화 | 라벨 enum 유효; 화자 형식; 길이 2~4분; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 < 20%; 복수 주제는 `accepted_purposes` ≥ 2 |
 | RAG | (`rag_qa.json` 있을 때) 거절형 답이 어느 문서에도 없음(키워드 + LLM 1회); 질문 어휘가 정답 문단에 그대로 있는 비율 < 30% |
 
