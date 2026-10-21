@@ -24,9 +24,9 @@ from pathlib import Path
 import yaml
 
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
-                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, REMINDER_TIME, SATURDAY,
+                              MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
-                              VISIT_MIX, open_slots)
+                              VISIT_MIX, open_slots, reminder_time)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -583,11 +583,13 @@ def check_status_rates(conn, ctx):
 
 def check_confirm_rate(conn, ctx):
     """리마인드 응답(confirmed) 85% ±2%p — 리마인드를 받은 예약 기준: TODAY 이전 비취소 예약 중
-    직전 진료일 REMINDER_TIME에 이미 있던 것(그 뒤에 잡힌 예약은 리마인드가 가지 않음)"""
-    reminder = time.fromisoformat(REMINDER_TIME)
+    직전 진료일의 리마인드 시각(master.reminder_time — 토요일은 마감 전)에 이미 있던 것"""
+    def reminded(r) -> bool:
+        prev = _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays)
+        return _dt(r["created_at"]) <= datetime.combine(prev, time.fromisoformat(reminder_time(prev.weekday())))
     rows = [r for r in _rows(conn, "SELECT scheduled_at, created_at, confirmed FROM emr_appointments"
                                    " WHERE status != 'cancelled' AND date(scheduled_at) < ?", ctx.today.isoformat())
-            if _dt(r["created_at"]) <= datetime.combine(_prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays), reminder)]
+            if reminded(r)]
     n, confirmed = len(rows), sum(r["confirmed"] for r in rows)
     if not n:
         return []

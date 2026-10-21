@@ -87,21 +87,29 @@ def test_named_config_keys_exist():
     assert keys and not [k for k in keys if not exists(k)], sorted(k for k in keys if not exists(k))
 
 
+# 하위 키 중 다른 뜻의 백틱 토큰(문자 trigger·예약 상태 enum, 규모 이름 등)과 이름이 겹쳐 단독으로는 보지 않는 것
+_AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", "end", "small", "medium", "large"}
+
+
 def _config_key_names() -> set[str]:
-    """config 최상위 키와 그 아래 키(`messages.balance` 형태)"""
+    """config 최상위 키, 하위 키(`messages.balance` 형태), 이름이 겹치지 않는 하위 키 단독(`supplementary_ratio`)"""
     names = set()
     for key, value in CFG.items():
         names.add(key)
         if isinstance(value, dict):
             names |= {f"{key}.{sub}" for sub in value}
+            names |= set(value) - _AMBIGUOUS_SUBKEYS
     return names
 
 
 def test_config_keys_always_prefixed():
-    """문서에서 config 키는 항상 `config` `키` 형태로 쓴다 — 그래야 test_named_config_keys_exist가 이름 바꿈을 잡는다"""
-    text = _doc()
+    """문서에서 config 키는 항상 `config` `키` 형태로 쓴다 — 그래야 test_named_config_keys_exist가 이름 바꿈을 잡는다.
+    코드 블록(```) 안은 백틱을 쓸 수 없어 제외"""
+    text = re.sub(r"```.*?```", "", _doc(), flags=re.S)
     covered = [m.span() for m in re.finditer(r"`config` ((?:`[\w.]+`[·\s]*)+)", text)]
     names = _config_key_names()
-    bare = sorted({m.group(1) for m in re.finditer(r"`([\w.]+)`", text)
-                   if m.group(1) in names and not any(a <= m.start() < b for a, b in covered)})
+    # 백틱 안의 이름(식 `range_start − warmup_days`도 이름 단위로). 괄호가 있는 코드 예시는 config 참조가 아니라 제외
+    tokens = [(m.start(), t) for m in re.finditer(r"`([^`]+)`", text) if "(" not in m.group(1)
+              for t in re.findall(r"[\w.]+", m.group(1))]
+    bare = sorted({t for pos, t in tokens if t in names and not any(a <= pos < b for a, b in covered)})
     assert not bare, f"`config` 접두어 없이 쓴 config 키: {bare}"

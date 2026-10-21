@@ -13,8 +13,10 @@ HOURS = {
 SLOT_MIN = 30
 SATURDAY = 5
 
-# 리마인드 발송 시각 (§2.5) — 직전 진료일의 이 시각에 그때 있던 예약에만 보낸다
+# 리마인드 발송 시각 (§2.5) — 직전 진료일의 이 시각에 그때 있던 예약에만 보낸다.
+# 토요일은 마감(13:30)이 이르므로 마감 전 시각 — 확인 통화가 그날 영업시간 안에 들어오게
 REMINDER_TIME = "17:00"
+SATURDAY_REMINDER_TIME = "12:30"
 
 # 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
 MAX_APPOINTMENTS_PER_SLOT = 3
@@ -104,6 +106,11 @@ TOOTH_CHOICES = {
 def _minutes(hhmm: str) -> int:
     h, m = hhmm.split(":")
     return int(h) * 60 + int(m)
+
+
+def reminder_time(weekday: int) -> str:
+    """그 요일(월=0)에 보내는 리마인드 시각"""
+    return SATURDAY_REMINDER_TIME if weekday == SATURDAY else REMINDER_TIME
 
 
 def open_slots(weekday: int) -> int:

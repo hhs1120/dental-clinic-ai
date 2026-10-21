@@ -193,6 +193,32 @@ def test_confirm_rate_excludes_booked_after_reminder(tmp_path):
     assert verify.check_confirm_rate(conn, CTX) == []  # 85% (못 받은 예약까지 넣으면 57%로 경고)
 
 
+def test_confirm_rate_saturday_reminder_before_close(tmp_path):
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 150})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):  # 11-30(월) 예약, 직전 진료일 11-28(토) — 토요일 리마인드는 마감(13:30) 전 시각
+        appt(conn, "2026-11-30 10:00:00", patient=pid)
+    conn.execute("UPDATE emr_appointments SET confirmed = 1 WHERE patient_id <= 85")
+    for pid in range(101, 151):  # 토 13:00에 잡힌 예약 — 토요일 리마인드 뒤라 못 받음(평일 시각 17:00 기준이면 받은 것으로 셈)
+        appt(conn, "2026-11-30 11:00:00", patient=pid)
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-28 13:00:00' WHERE patient_id > 100")
+    assert verify.check_confirm_rate(conn, CTX) == []  # 85% (17:00 기준이면 57%로 경고)
+
+
+def test_reschedule_rate_numerator_only_past_originals(tmp_path):
+    conn = make_db(tmp_path)
+    _five_pairs(conn)
+    for pid in range(101, 106):  # 원래 예약이 TODAY 이후인 쌍 — 시뮬레이션에서 실현될 수 없어 분자에서 뺀다
+        appt(conn, "2026-12-04 10:00:00", patient=pid, status="cancelled")
+        original = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+        conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-25 10:00:00' WHERE id = ?", (original,))
+        appt(conn, "2026-12-10 10:00:00", patient=pid, status="scheduled")
+        conn.execute("UPDATE emr_appointments SET rescheduled_from_id = ? WHERE id = (SELECT max(id) FROM emr_appointments)",
+                     (original,))
+    assert verify.check_reschedule_rate(conn, CTX) == []  # 5/100 (미래 쌍까지 세면 10%로 경고)
+
+
 def test_status_rates_denominator_excludes_reschedule_originals(tmp_path):
     conn = make_db(tmp_path)
     _patients(conn, {"1986-01-01": 200})
