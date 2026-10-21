@@ -23,7 +23,7 @@ tags:
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
 | `ax_call_classifications` | 모델별 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. UNIQUE `(call_id, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델 쌍)의 버전** — 모델만 바꿔도 올림(`v3-final`). 대시보드는 버전마다 `model_actual` 쌍 표기 |
-| `ax_call_disagreements` | A·B 분류 불일치. PK `(call_id, prompt_version)`, `is_core`(목적·급함·응급 불일치) |
+| `ax_call_disagreements` | A·B 분류 불일치(9항목 중 하나라도 다를 때만 1행). PK `(call_id, prompt_version)`, `is_core`(목적·급함·응급 불일치) |
 | `ax_judgments` | 사람 판정. `judged_at`은 실제 시계, `shown_model`(판정 중 요약을 펼쳤으면 어느 모델) |
 | `ax_blind_votes` | 블라인드 투표. 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 

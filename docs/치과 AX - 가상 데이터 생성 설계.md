@@ -72,7 +72,7 @@ tags:
 
 - **잔액** = Σ(`amount_due − amount_paid`). 창 안 completed 내원마다 `visit` 수납 행 1개(0원이어도). 미수는 `amount_due > 0`인 내원 중 `config` `unpaid_rate`에서 일부만 수납 → 그중 `config` `settle_next_visit`은 다음 내원 때 `settlement` 행(`amount_due = 0`)으로 정산, 나머지는 잔류. 발생률만 두면 잔액이 누적돼 준비표 미수 칩이 절반 넘게 켜진다
 - **보험 잔여**(준비표 칩): 별도 테이블 없이 `emr_claims`의 그해 스케일링 급여 청구 유무로 계산 — 같은 사실을 두 곳에 두지 않는다
-- **청구**: 급여 시술 completed마다 1줄. `claim_month` = 진료월(보완 청구도 같음). `batch_type` = `monthly` / `supplementary`(청구 줄의 `config` `claim_review.supplementary_ratio`를 무작위로 — 월 일괄 청구에서 빠져 나중에 낸 건)
+- **청구**: 급여 시술 completed마다 1줄. `claim_month` = 진료월(보완 청구도 같음). `batch_type` = `monthly` / `supplementary`(청구 줄의 `config` `claims.supplementary_ratio`를 무작위로 — 월 일괄 청구에서 빠져 나중에 낸 건)
   - `submitted_at`: monthly = 익월 첫 진료일 10:00, supplementary = 그 + 14일(휴진일이면 다음 진료일), 전월분(`pending`)은 NULL
   - `status`: 전월 = `pending`(미제출) / 그 전 `SUBMITTED_MONTHS`개월 = `submitted`(결과는 장부에 없음) / 그 이전 = 확정(`paid·adjusted·denied`, 병원이 이미 아는 과거 결과)
 - **대조 키** `(chart_no, service_date, procedure_code, tooth_no)` UNIQUE — 심사결과 대조용. 제출 월의 심사 결과는 `truth_claims`에만(심사결과 슬롯 착수 때 생성 — 정답 DB라 나중에 만들어도 `app.sqlite`·LLM 캐시가 바뀌지 않음)
