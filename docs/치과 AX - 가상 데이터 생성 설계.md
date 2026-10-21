@@ -11,7 +11,7 @@ tags:
   - 데이터
 ---
 
-> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§2.6 ④ 가중표, §4.1 분포)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/test_doc_sync.py`가 검사).
+> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§2.6 ④ 가중표, §4.1 분포 등)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/test_doc_sync.py`가 검사).
 
 ## 0. 전제
 
@@ -20,7 +20,7 @@ tags:
 | 규모 | large = `config/generator.yaml` 기본값(기간·환자·하루 상한·통화·문서 수) |
 | 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
 | 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small은 개발·테스트용 |
-| 기준일 | `TODAY`(config) 고정. 앱에서 바꾸는 방법은 [[치과 AX - 앱 설계]] §6 |
+| 기준일 | `TODAY`(config) 고정. 앱에서는 바꾸지 않는다(원본 [[치과 AX - 앱 설계]] §6) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만(급여 청구액 = fee × 0.7, 소아 급여 특례 없음) |
 | 테이블 접두어 | 현실의 소속 시스템 기준: `emr_*` 병원 원본(앱은 읽기 전용) / `ax_*` AX 시스템(앱이 읽고 씀) / `truth_*` 정답 별도 DB. `ax_calls`·`ax_documents`는 생성기가 채우지만 현실에선 AX 도입 후 쌓이므로 `ax_`. 슬롯 데이터도 같은 기준(통장·카드 거래 → `emr_`). **기존 `emr_*`는 수정하지 않고 새 테이블로** — 바뀌면 LLM 캐시·전사·사람 판정까지 연쇄 무효(재생성 규칙 §5.1) |
 
@@ -297,7 +297,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 신환 = 월 내원의 비율 | 12% | ±3%p | `master.NEW_PATIENT_SHARE` | 그달 completed | 그달 completed < `verify.NEW_PATIENT_MIN_VISITS` |
 | 노쇼·당일 취소 | 노쇼 6% · 당일 취소 4% | ±2%p | `config` `noshow_rate`·`sameday_cancel_rate` | TODAY 이전 예약 − 변경 원래 예약(당일 취소는 포함) | — |
 | 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | completed | — |
-| 잔액 보유(준비표 미수 칩 — 임시값, 첫 large 실행에서 실제 비율을 보고 `config` `settle_next_visit`·상한을 확정) | 20% 이하 | — | `verify.BALANCE_HOLDER_MAX` | TODAY 이후 비취소 예약이 있는 환자(준비표 대상) | — |
+| 잔액 보유(준비표 미수 칩 — 임시값, 첫 large 실행에서 실제 비율을 보고 `config` `settle_next_visit`·상한을 확정) | 20% 이하 | — | `verify.BALANCE_HOLDER_MAX` | 준비표 범위(TODAY 포함 최근 `verify.PREP_SHEET_DAYS`일)의 비취소 예약(환자 × 날짜), 잔액은 그날 개원 전 기준. 직전 내원 미수(≈ `config` `unpaid_rate`)는 정산 비율과 무관한 바닥이라 `config` `settle_next_visit`은 영구 잔류분만 줄인다 — 넘으면 `config` `unpaid_rate`나 상한을 본다 | — |
 | 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 
 **리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 리마인드 확인률(목표 `config` `confirm_rate`), 미수 발생률(`config` `unpaid_rate`), 변경률(`config` `reschedule_rate`), 피크 시작 비중 vs 피크 영업시간 비중(`master.PEAK_HOURS`), 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외)

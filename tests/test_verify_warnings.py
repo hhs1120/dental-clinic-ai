@@ -99,7 +99,7 @@ def _month_visits(conn, n_visits, n_new):
     _patients(conn, {"1986-01-01": n_visits})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, n_visits + 1):
-        appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid)
+        appt(conn, f"2026-11-{2 + pid % 20:02d} 10:00:00", patient=pid, created_at="2026-03-03 10:00:00")
     conn.execute("UPDATE emr_patients SET registered_at = '2026-03-03' WHERE id <= ?", (n_new,))
 
 
@@ -363,12 +363,14 @@ def test_peak_pattern(tmp_path):
 
 def test_balance_holder_share(tmp_path):
     conn = make_db(tmp_path)
-    # 준비표 대상 = TODAY 이후 비취소 예약이 있는 환자(시드 1·2). 1의 미수 16,000원은 11-03에 정산 → 둘 다 잔액 0
+    # 준비표 범위 = TODAY 포함 최근 7일(11-24~12-01)의 비취소 예약: 환자 1의 7번(11-24)·5번(12-01).
+    # 11-18 예약(환자 2)은 범위 밖. 1의 미수 16,000원은 11-03에 정산 → 두 행 모두 잔액 0
     assert verify.check_balance_holder_share(conn, CTX) == []
-    conn.execute("DELETE FROM emr_payments WHERE kind = 'settlement'")  # 1의 잔액이 남음 → 1/2 = 50% > 상한
+    conn.execute("UPDATE emr_payments SET paid_at = '2026-11-26 10:00:00' WHERE kind = 'settlement'")
+    # 잔액은 그날 기준: 11-24엔 아직 미정산(칩 켜짐), 12-01엔 정산됨 → 1/2 (범위 밖 11-18까지 세면 1/3)
     assert verify.check_balance_holder_share(conn, CTX) == [{"share": 0.5, "max": verify.BALANCE_HOLDER_MAX}]
-    conn.execute("UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-25 10:00:00' WHERE id = 5")
-    assert verify.check_balance_holder_share(conn, CTX) == []  # 1은 미래 예약이 취소돼 준비표에 안 나옴
+    conn.execute("UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-23 10:00:00' WHERE id = 7")
+    assert verify.check_balance_holder_share(conn, CTX) == []  # 취소된 예약은 준비표에 안 나옴 → 12-01 한 행, 잔액 0
 
 
 def test_reports_print_without_failing(tmp_path, capsys):

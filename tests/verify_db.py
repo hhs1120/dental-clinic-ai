@@ -24,7 +24,7 @@ INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id,
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
                               planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
-  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-01 11:07:00', NULL),
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-01 11:00:00', NULL),
   (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL),
   (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
   (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL),
@@ -84,10 +84,11 @@ def make_db(tmp_path, relaxed=False) -> sqlite3.Connection:
     return conn
 
 
-def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="completed"):
+def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="completed",
+         created_at="2026-10-01 10:00:00"):
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
     conn.execute(
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
-        " planned_procedure_code, status, booked_via, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, 'phone', '2026-03-03 10:00:00')",
-        (patient, staff, scheduled_at, duration, type, status),
+        " planned_procedure_code, status, booked_via, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, 'phone', ?)",
+        (patient, staff, scheduled_at, duration, type, status, created_at),
     )

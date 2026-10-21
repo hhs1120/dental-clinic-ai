@@ -7,7 +7,7 @@
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부, 결정성 2회 비교(canonical_hash만 있음)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG
-검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과.
+검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
 """
 import argparse
@@ -51,6 +51,7 @@ NEW_PATIENT_TOLERANCE = 0.03
 VISIT_MIX_TOLERANCE = 0.03
 NEW_PATIENT_MIN_VISITS = 50  # 그달 completed가 이보다 적으면 신환 비중을 보지 않음
 BALANCE_HOLDER_MAX = 0.20  # 준비표 대상 환자 중 잔액 보유 비율 상한 — 넘으면 미수 칩이 너무 많이 켜짐
+PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = TODAY 포함 최근 7일 (기능 정의 ⑧)
 
 
 @dataclass(frozen=True)
@@ -623,15 +624,18 @@ def report_unpaid_rate(conn, ctx):
 
 
 def check_balance_holder_share(conn, ctx):
-    """준비표 대상(TODAY 이후 비취소 예약이 있는 환자) 중 잔액 > 0 비율 ≤ BALANCE_HOLDER_MAX — 미수 칩이 켜지는 비율"""
-    upcoming = {r["patient_id"] for r in _rows(conn, "SELECT DISTINCT patient_id FROM emr_appointments"
-                                                     " WHERE status != 'cancelled' AND date(scheduled_at) >= ?",
-                                               ctx.today.isoformat())}
-    if not upcoming:
+    """준비표 범위(TODAY 포함 최근 PREP_SHEET_DAYS일)의 비취소 예약 중 그날 개원 전 잔액 > 0인 비율 ≤ BALANCE_HOLDER_MAX
+    — 미수 칩이 켜지는 비율. 같은 환자도 날짜가 다르면 따로 센다(날짜 탭마다 준비표가 따로)"""
+    since = ctx.today - timedelta(days=PREP_SHEET_DAYS)
+    rows = _rows(conn, "SELECT DISTINCT patient_id, date(scheduled_at) AS d FROM emr_appointments"
+                       " WHERE status != 'cancelled' AND date(scheduled_at) BETWEEN ? AND ?",
+                 since.isoformat(), ctx.today.isoformat())
+    if not rows:
         return []
-    owing = {r["patient_id"] for r in _rows(conn, "SELECT patient_id FROM emr_payments GROUP BY patient_id"
-                                                  " HAVING sum(amount_due - amount_paid) > 0")}
-    share = len(upcoming & owing) / len(upcoming)
+    owing = sum(conn.execute("SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments"
+                             " WHERE patient_id = ? AND date(paid_at) < ?", (r["patient_id"], r["d"])).fetchone()[0] > 0
+                for r in rows)
+    share = owing / len(rows)
     return [] if share <= BALANCE_HOLDER_MAX else [{"share": round(share, 3), "max": BALANCE_HOLDER_MAX}]
 
 
