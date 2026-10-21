@@ -297,7 +297,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 신환 = 월 내원의 비율 | 12% | ±3%p | `master.NEW_PATIENT_SHARE` | 그달 completed | 그달 completed < `verify.NEW_PATIENT_MIN_VISITS` |
 | 노쇼·당일 취소 | 노쇼 6% · 당일 취소 4% | ±2%p | `config` `noshow_rate`·`sameday_cancel_rate` | TODAY 이전 예약 − 변경 원래 예약(당일 취소는 포함) | — |
 | 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | completed | — |
-| 잔액 보유(준비표 미수 칩) | 20% 이하 | — | `verify.BALANCE_HOLDER_MAX` | TODAY 이후 비취소 예약이 있는 환자(준비표 대상) | — |
+| 잔액 보유(준비표 미수 칩 — 임시값, 첫 large 실행에서 실제 비율을 보고 `config` `settle_next_visit`·상한을 확정) | 20% 이하 | — | `verify.BALANCE_HOLDER_MAX` | TODAY 이후 비취소 예약이 있는 환자(준비표 대상) | — |
 | 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 
 **리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 리마인드 확인률(목표 `config` `confirm_rate`), 미수 발생률(`config` `unpaid_rate`), 변경률(`config` `reschedule_rate`), 피크 시작 비중 vs 피크 영업시간 비중(`master.PEAK_HOURS`), 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외)
