@@ -129,12 +129,12 @@ for d in 진료일(range_start − warmup_days … TODAY − 1):       # 휴진�
      - completed → (진료·수납·청구는 5단계) 코스 다음 회차가 있으면 그 자리에서 데스크 예약(created_at = 내원 종료 시각, 희망 간격 ② 뒤 첫 가능일)
      - noshow·당일 취소 → 그 수요는 남고, 재예약 지연 뒤 다시 전화 예약
   2. 전화 예약: 그날 기한이 된 수요(리콜·치료 시작·재예약)와 신환
-     - created_at = 그날 영업시간 안 임의 시각, 분이 :00·:30이 아닌 시각(내원 종료 시각과 겹쳐 데스크 예약으로 오인되지 않게), 희망 리드 1~14일 뒤 첫 가능한 진료일·시각(피크 ×2 가중)
+     - created_at = 그날 영업시간 안(평일 점심 제외) 임의 시각, 분이 :00·:30이 아닌 시각(내원 종료 시각과 겹쳐 데스크 예약으로 오인되지 않게), 희망 리드 1~14일 뒤 첫 가능한 진료일·시각(피크 ×2 가중)
      - 가능 = §1 운영 제약 셋 + 같은 환자 같은 날 예약 없음 + 날짜 ≤ range_end. 그때까지 가능일이 없으면 다음 날 다시
      - 신환: 신환 첫 내원이 월 내원의 목표 비율이 되도록 후보 풀에서 꺼냄(registered_at = 그날). 첫 유형은 내원 구성 목표(VISIT_MIX)대로
      - 새 예약마다(전화·데스크 모두) reschedule_rate 확률로 "변경 예정" + 변경일(created_at 다음 날 ~ 예약 전날 중 진료일) 추첨.
        그 사이에 진료일이 없으면(리드 1일, 수→금처럼 휴진일만 낀 경우) 변경 없음 — 이런 예약은 변경률 분모에서도 빠진다(§5.3)
-  3. 변경: 오늘이 변경일인 예약 → 원래 예약 cancelled(cancelled_at = 오늘 영업 시작 ~ 그날 리마인드 시각 전), 새 예약은 원래 날짜 뒤 1~14일의
+  3. 변경: 오늘이 변경일인 예약 → 원래 예약 cancelled(cancelled_at = 오늘 영업 시작 ~ 그날 리마인드 시각 전, 평일 점심 제외), 새 예약은 원래 날짜 뒤 1~14일의
      첫 가능일(같은 유형·시술, created_at = 같은 시각, 다시 변경하지 않음). 가능일이 없으면 변경하지 않음
   4. 리마인드: 그날 리마인드 시각(master.reminder_time — 토요일은 마감 전), 그 시점에 있고 취소되지 않은 다음 진료일 예약에
      발송 → confirm_rate 확률로 confirmed
@@ -192,7 +192,7 @@ for d in 진료일(range_start − warmup_days … TODAY − 1):       # 휴진�
 8. 저장: 전사 → `ax_calls`, 라벨·fact·노이즈 → `truth_call_labels`
 9. 층화 추출 → 판정 풀·블라인드 풀 마킹(평가 설계 §2.1)
 
-**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. 창 안에서 전화로 잡은 예약 → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소, confirmed(직전 진료일) → 확인. **확인 통화 시각** = 직전 진료일의 리마인드 시각 ~ 그날 마감(영업시간 안): 수신은 리마인드를 받고 전화로 응답한 confirmed 예약, 발신은 미확인 예약에 병원이 거는 확인 전화. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담고, 전화·데스크 예약은 `created_at` == 같은 환자 직전 내원 종료 시각인지로 구분한다.
+**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. 창 안에서 전화로 잡은 예약 → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소, confirmed(직전 진료일) → 확인. **확인 통화**: 시각 = 직전 진료일의 리마인드 시각 ~ 그날 마감(영업시간 안, 평일 점심 제외). 수신은 리마인드를 받고 전화로 응답한 confirmed 예약, 발신은 **리마인드를 받았는데 미확인**인 예약에 병원이 거는 확인 전화. `confirmed`는 4단계에서 이미 정해져 있고 통화는 거기서 역산할 뿐이라 통화가 `confirmed`를 바꾸지 않는다. 직전 진료일이 워밍업(창 밖)이면 확인 통화를 만들지 않는다. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담고, 전화·데스크 예약은 `created_at` == 같은 환자 직전 내원 종료 시각인지로 구분한다.
 
 **목적 분포**(%)
 | 목적 | % | | 목적 | % |
@@ -261,10 +261,12 @@ make data [SCALE=small|large] [REGEN_LLM=1]
 11. EOB PDF        슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
 ```
 
-- **규모별 출력**: large는 `data/app.sqlite`·`ground_truth/truth.sqlite`(앱·평가가 보는 기본 경로), small은 `data/small/`·`ground_truth/small/`에 따로 — 서로 덮어쓰지 않는다. `make verify SCALE=small`이 small 경로를 본다
-- **작업 순서**: ① 생성기 작성(디버깅은 small도 가능) → ② large로 `make data`·`make verify`를 돌리며 필수 위반을 고치고 경고를 보고 파라미터 조정 → ③ 같은 코드·파라미터로 small 생성 → 필수 검사 통과 확인(짧은 기간에서 깨지는 코드가 없는지, 테스트 픽스처 재료) → ④ large 재생성(같은 결과) → LLM 7·9단계 → 사람 판정 시작. 데이터 파일은 ④ 전까지 언제든 지우고 다시 만드는 일회용이고, ④ 이후 large는 재생성하지 않는다(판정이 `call_id`에 묶임)
+- **규모별 출력**: 경로는 `generator/paths.py`의 `output_paths(scale)` 하나에서 정한다(생성기·verify·Makefile이 같이 씀). large는 `data/`·`ground_truth/`(앱·평가가 보는 기본 경로 — `app.sqlite`, 벡터 색인 `chroma/`, `llm_calls_gen.jsonl`, `truth.sqlite`), small은 `data/small/`·`ground_truth/small/`에 같은 구성으로 따로 — 서로 덮어쓰지 않는다. 기본 규모는 large, `make verify SCALE=small`이 small을 보고, verify는 DB의 `truth_gen_meta.scale`이 검사하려는 규모와 다르면 실패한다(섞인 DB 방지)
+- **작업 순서**: ① 생성기 작성(디버깅은 small도 가능) → ② large로 `make data`·`make verify`를 돌리며 필수 위반을 고치고 경고를 보고 파라미터 조정 → ③ 같은 코드·파라미터로 small 생성 → 필수 검사 통과 확인(짧은 기간에서 깨지는 코드가 없는지, 테스트 픽스처 재료) → ④ large 재생성(같은 결과) → LLM 7·9단계 → 사람 판정 시작. 데이터 파일은 ④ 전까지 언제든 지우고 다시 만드는 일회용이다
+- **사람 데이터 보호**: 출력 DB에 사람이 만든 데이터(`ax_judgments`·`ax_blind_votes`·`truth_eval_runs`)가 한 행이라도 있으면 생성기는 쓰기를 거부한다. `make data FORCE=1`일 때만 진행하고, 그때도 먼저 `export-human`을 자동 실행해 판정·투표를 파일로 빼 둔다
+- **④ 이후 재생성**: 판정이 `call_id`에 묶이므로, 기존 테이블의 canonical 해시가 그대로인 경우(슬롯 기능의 새 테이블·EOB 정답 추가 — 단계별 독립 시드로 기존 결과는 안 바뀜)만 허용하고 위 보호 장치를 거친다. 기존 테이블이 바뀌는 재생성은 판정을 `import-human`으로 복원(앱 설계 §7)하는 것을 전제로 한다
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 파생한 자기 난수 생성기를 쓴다 — 예: `np.random.default_rng([seed, zlib.crc32(b"patients")])`. 파이썬 내장 `hash()`는 문자열에 실행마다 다른 솔트가 붙어 결정성이 깨지므로 쓰지 않는다. Faker도 전역 `Faker.seed`가 아니라 단계별 인스턴스에 `seed_instance`. 문자열 `set`·`dict` 키 순회에 기대지 말고 정렬해서 쓴다(`make data`는 `PYTHONHASHSEED=0`으로도 막아 둔다). 단계를 추가·삭제해도 다른 단계의 결과는 바뀌지 않는다
-- **정형 먼저, LLM 한 번**: 정형(1~6) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9)을 한 번 돌린다. 정형 로직을 고치면 LLM 캐시가 전량 미스
+- **정형 먼저, LLM 한 번**: 정형(1~6) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9)을 한 번 돌린다. 정형 로직을 고치면 LLM 캐시가 전량 미스. **LLM은 large에서만** — small의 7·9단계는 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서)를 써서 과금 없이 구조만 채운다(테스트 픽스처용)
 - **재현성**: 시드 고정, `make data` 한 번에 전체. LLM 생성물은 파일 캐시로 커밋하고 `make data REGEN_LLM=1`로만 재생성
 - **LLM 캐시 키** = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴
 - 생성기 LLM 호출도 게이트웨이 경유 → `llm_calls_gen.jsonl`, 상한 `DAILY_GEN_USD_LIMIT`(런타임 상한과 분리, 금액은 [[치과 AX - 기능 정의]] §7). 전사는 프론티어 실시간(`Semaphore(20)` + 백오프)
@@ -288,7 +290,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
-| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외) |
+| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외). 두 번은 **서로 다른 `PYTHONHASHSEED`(0과 1)로** 돌린다 — 같은 값이면 set 순회 순서에 기댄 버그가 가려진다 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
 **경고 — 분포 목표**(리포트만. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일·리마인드 시각 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)

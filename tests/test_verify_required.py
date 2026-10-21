@@ -296,6 +296,21 @@ def test_future_new_patient_registered_at_first_booking(tmp_path):
     assert [v["patient_id"] for v in verify.check_future_new_patient_registered(conn, CTX)] == [3]
 
 
+def test_scale_mismatch_exits(tmp_path, capsys):
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE truth.truth_gen_meta SET value = 'small' WHERE key = 'scale'")
+    conn.commit()
+    args = ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
+    assert verify.main(args + ["--scale", "small"]) == 0
+    assert verify.main(args + ["--scale", "large"]) == 1  # small DB를 large로 검사하려 함 — 섞인 DB
+    assert "scale" in capsys.readouterr().out
+
+
+def test_unknown_scale_is_argparse_error():
+    with pytest.raises(SystemExit):
+        verify.main(["--scale", "smal"])
+
+
 def test_load_ctx_reads_range_from_gen_meta(tmp_path):
     conn = make_db(tmp_path)
     ctx = verify.load_ctx(ROOT / "config" / "generator.yaml", conn)

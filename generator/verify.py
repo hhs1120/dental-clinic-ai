@@ -23,6 +23,7 @@ from pathlib import Path
 
 import yaml
 
+from generator.paths import SCALES, output_paths
 from generator.master import (ACTIVE_MONTHS, ACTIVE_SHARE, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, HOURS,
                               MAX_APPOINTMENTS_PER_SLOT, NEW_PATIENT_SHARE, PEAK_HOURS, SATURDAY,
                               SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, SUBMITTED_MONTHS,
@@ -807,21 +808,30 @@ def run(conn, ctx) -> bool:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", type=Path, default=ROOT / "data" / "app.sqlite")
-    parser.add_argument("--truth", type=Path, default=ROOT / "ground_truth" / "truth.sqlite")
+    parser.add_argument("--scale", choices=SCALES, help="검사할 규모(경로는 generator/paths.py). 기본 large")
+    parser.add_argument("--db", type=Path, help="경로를 직접 줄 때(테스트용)")
+    parser.add_argument("--truth", type=Path)
     parser.add_argument("--config", type=Path, default=ROOT / "config" / "generator.yaml")
     args = parser.parse_args(argv)
-    for path in (args.db, args.truth):
+    paths = output_paths(args.scale or "large")
+    db, truth_db = args.db or paths["app"], args.truth or paths["truth"]
+    # 기대 규모: 명시했거나 기본 경로를 쓴 경우 — DB의 truth_gen_meta.scale과 다르면 섞인 DB
+    expected = args.scale or (None if args.db or args.truth else "large")
+    for path in (db, truth_db):
         if not path.exists():
             print(f"DB 없음: {path} — make data 먼저")
             return 1
-    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{args.truth}?mode=ro",))
+    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{truth_db}?mode=ro",))
     try:
         ctx = load_ctx(args.config, conn)
+        scale = conn.execute("SELECT value FROM truth.truth_gen_meta WHERE key = 'scale'").fetchone()
     except (KeyError, sqlite3.OperationalError) as e:
         print(f"truth_gen_meta 읽기 실패({e}) — make data 먼저")
+        return 1
+    if expected and (scale is None or scale[0] != expected):
+        print(f"규모 불일치: {expected}로 검사하려는데 DB의 truth_gen_meta scale = {scale[0] if scale else None}")
         return 1
     ok = run(conn, ctx)
     print("verify 통과" if ok else "verify 실패 — 필수 검사 위반")
