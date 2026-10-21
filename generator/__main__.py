@@ -4,7 +4,7 @@ import argparse
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scale", choices=["small", "medium", "large"], default="small")
+    parser.add_argument("--scale", choices=["small", "large"], default="small")
     parser.add_argument("--regen-llm", action="store_true")
     args = parser.parse_args()
     raise SystemExit(f"TODO: 생성기 미구현 (scale={args.scale})")

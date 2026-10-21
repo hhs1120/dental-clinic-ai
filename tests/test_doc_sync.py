@@ -88,7 +88,7 @@ def test_named_config_keys_exist():
 
 
 # 하위 키 중 다른 뜻의 백틱 토큰(문자 trigger·예약 상태 enum, 규모 이름 등)과 이름이 겹쳐 단독으로는 보지 않는 것
-_AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", "end", "small", "medium", "large"}
+_AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", "end", "small", "large"}
 
 
 def _config_key_names() -> set[str]:

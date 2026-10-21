@@ -18,8 +18,8 @@ tags:
 | 항목 | 결정 |
 |---|---|
 | 규모 | large = `config/generator.yaml` 기본값(기간·환자·하루 상한·통화·문서 수) |
-| 축소 규모 | `SCALE=small\|medium`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 small에서 맞춘 시뮬레이션 파라미터가 large에 그대로 옮겨진다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
-| 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small·medium은 개발·테스트용 |
+| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 small에서 맞춘 시뮬레이션 파라미터가 large에 그대로 옮겨진다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
+| 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small은 개발·테스트용 |
 | 기준일 | `TODAY`(config) 고정. 앱은 설정값을 읽음(환경변수로 변경 = 타임머신) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만(급여 청구액 = fee × 0.7, 소아 급여 특례 없음) |
 | 테이블 접두어 | **현실에서 어느 시스템의 데이터인가**로 붙인다. `emr_*` = 병원 원본 장부(생성기가 만들고 앱은 읽기 전용 — AI는 원본에 쓰지 않음) / `ax_*` = AX 시스템이 쌓는 데이터(앱이 읽고 씀) / `truth_*` = 정답, 별도 DB(앱은 모름). 헷갈리는 점: `ax_calls`·`ax_documents`는 생성기가 채우지만 현실에선 AX 도입 후 쌓이는 데이터라 `ax_`. 슬롯 추가 데이터도 같은 기준(통장·카드 거래 = 병원 원본 → `emr_`). **기존 `emr_*`는 수정하지 않고 새 테이블로** — 기존 테이블이 바뀌면 정형 데이터 → LLM 캐시 → 전사 → 사람 판정까지 연쇄로 무효가 된다 |
@@ -245,7 +245,7 @@ for d in 진료일(range_start − warmup_days … TODAY − 1):       # 휴진�
 ### 5.1 파이프라인
 
 ```
-make data [SCALE=small|medium|large] [REGEN_LLM=1]
+make data [SCALE=small|large] [REGEN_LLM=1]
  0. 시드 로드      holidays, forbidden_topics                    (정적)
  1. 마스터         clinic, staff, procedures                     (코드)
  2. 환자           §2.2, §2.6 ①                                  (코드)

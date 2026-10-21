@@ -30,7 +30,7 @@
 
 ## 명령
 - `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향)
-- `make data [SCALE=small|medium|large]` / `make verify` / `make test`
+- `make data [SCALE=small|large]` / `make verify` / `make test`
 
 ## 현재 단계
 준비: 생성기 + verify. 앱(backend/frontend)은 아직 손대지 않는다.
