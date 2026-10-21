@@ -103,6 +103,7 @@ tags:
 |---|---|---|
 | Hit@5 · MRR · Top-1 | 문서 검색형 **40**(매뉴얼 18 + 공지 10 + 사례 12; dev 20 / test 20) | 정답 청크 top-5 포함 / 순위 역수 / 1위 |
 | 최신성 | 공지형 10 | Top-1이 최신 버전 (옛 버전이 top-5에 같이 있어도 됨) |
+| 인용 정확도 | 문서 검색형 40 | 답변 `cited_ids`에 정답 문서(`answer_doc_ids`)의 청크가 하나 이상 **and** `cited_ids` ⊆ `retrieved_ids`(이번 질문의 검색 결과 합집합 — 검색 안 한 청크 인용은 실패). 공지형은 최신 버전 청크를 인용해야 통과(옛 버전을 같이 인용해도 됨). `refuse`·인용 없음은 실패. 로그만으로 계산(LLM 채점 없음), LLM 답변이 필요해 `--retrieval-only` 대상 아님 |
 | 도구 선택 정확도 | 데이터형 12 | §3.2 규칙 통과 비율 |
 | 환각 억제율 | 거절형 8 | 마지막 호출이 `refuse`인 비율 |
 
@@ -145,7 +146,7 @@ eval.py --split dev|test [--retrieval-only] [--prompt-version v2] [--condition r
 ```
 - 분류: §2.2 표 + 3종 정확도 + 버전 비교(교집합) + 블라인드 쌍별 승률·위치 편향
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
-- 준비표: 회귀 통과 여부 + `suggestion_valid` 비율
+- 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 사람 채점 두 묶음(칩 켜진 / 안 켜진) 집계
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
 

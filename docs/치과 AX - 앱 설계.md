@@ -40,7 +40,7 @@ tags:
 - FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`
 - Chroma 컬렉션 `chunks`(id = `ax_chunks.id`, metadata flat 복사). 단일 조건 필터는 Chroma `where`, id 선필터는 후보 수백 이하일 때만
 
-**`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`is_eval` — 평가 설계 §3 채점의 입력.
+**`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval` — 평가 설계 §3 채점의 입력. 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ⑧ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
 
 **도구 5개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준)
 
