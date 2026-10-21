@@ -2,7 +2,7 @@
 
 동네 치과 AX 포트폴리오 프로젝트. 가상 데이터(미니 EMR + 통화·문서·문자 + 정답)로 통화 분류·사람 판정·RAG 챗·진료 준비표를 구현한다.
 
-## 설계 문서 (규칙·절차의 원본 — 코드와 어긋나면 문서를 먼저 확인. 단 **값**(숫자·enum·컬럼·인덱스)은 `generator/master.py`·`shared/schema.sql`·`config/generator.yaml`이 원본(verify 허용치·상한은 `generator/verify.py`)이고 문서는 이름으로 가리킨다)
+## 설계 문서 (규칙·절차의 원본 — 코드와 어긋나면 문서를 먼저 확인. 단 **값**(숫자·enum·컬럼·인덱스)은 `generator/master.py`·`shared/schema.sql`·`config/generator.yaml`이 원본(verify 허용치·기준값은 `generator/verify.py`)이고 문서는 이름으로 가리킨다)
 - `docs/치과 AX - 기능 정의.md` — 무엇을 만드나, `make gate` 기준
 - `docs/치과 AX - 가상 데이터 생성 설계.md` — `emr_*`·생성기 적재 `ax_*` 스키마, 생성 규칙, `make verify` 검사 목록 (생성기가 읽음)
 - `docs/치과 AX - 앱 설계.md` — 앱 `ax_*` 테이블, 도구 시그니처, 고정 쿼리, 앱 기술 선택 (backend가 읽음)
@@ -39,7 +39,7 @@
 
 ## Coding Guidelines
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+Behavioral guidelines to reduce common LLM coding mistakes.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
