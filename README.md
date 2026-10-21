@@ -37,7 +37,7 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 
 | 명령 | 설명 |
 |---|---|
-| `make data [SCALE=small\|large]` | 가상 데이터 생성 (기본 small) |
+| `make data [SCALE=small\|large]` | 가상 데이터 생성 (기본 large, small은 `data/small/`·`ground_truth/small/`에 따로) |
 | `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 

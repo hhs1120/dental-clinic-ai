@@ -18,7 +18,7 @@ tags:
 | 항목 | 결정 |
 |---|---|
 | 규모 | large = `config/generator.yaml` 기본값(기간·환자·하루 상한·통화·문서 수) |
-| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 small에서 맞춘 시뮬레이션 파라미터가 large에 그대로 옮겨진다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
+| 축소 규모 | `SCALE=small`은 끝(`config` `range.end`) 고정·시작일만 늦춘다(`config` `scale_presets`) → TODAY 기준 구간(확정월·제출월·전월·미래)이 모두 남음. **하루 밀도와 환자 수는 모든 규모에서 같다** — 환자 1인당 수요가 같아야 같은 파라미터로 두 규모가 모두 성립한다. 통화 전사·메타·판정/블라인드 풀만 기간 비율로 축소, 문서 수(`config` `documents`)는 고정 |
 | 평가 규모 | 사람 판정·RAG 질문 작성·`eval.py` 보고·`make gate`는 **large 하나에서만**. small은 개발·테스트용 |
 | 기준일 | `TODAY`(config) 고정. 앱은 설정값을 읽음(환경변수로 변경 = 타임머신) |
 | 보험 | 건강보험 단일. 월 1회 일괄 청구 + 소량 보완 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만(급여 청구액 = fee × 0.7, 소아 급여 특례 없음) |
@@ -160,7 +160,7 @@ for d in 진료일(range_start − warmup_days … TODAY − 1):       # 휴진�
 - **스케일링**: `master.SCALING_MIN_AGE` 미만은 비급여(청구 없음). 성인은 그해 이미 썼으면 hygiene이 구강검진으로 바뀌므로 2회째가 생기지 않음
 - **임플란트 1차(`conditional`)**: 시술일 기준 `master.CONDITIONAL_INSURED_MIN_AGE` 이상 급여(마스터의 본인부담률), 미만 비급여(본인부담 1.0, 청구 없음)
 
-**파라미터** — `lapse_rate`, 연령별 치료 수요 발생률, 재예약 지연, 리콜 응답 지연은 생성기 구현 때 small로 맞춰 `config/generator.yaml`에 기록한다. 환자 수가 규모와 무관하게 같아 small 값을 large에 그대로 쓴다.
+**파라미터** — `lapse_rate`, 연령별 치료 수요 발생률, 재예약 지연, 리콜 응답 지연은 생성기 구현 때 **large로 맞춰** `config/generator.yaml`에 기록한다(활동 비율·확정 월처럼 large에서만 보이는 지표까지 한 번에 보기 위해). small은 같은 값으로 필수 검사 통과만 확인한다.
 
 ## 3. 생성기가 적재하는 `ax_*`
 
@@ -261,6 +261,8 @@ make data [SCALE=small|large] [REGEN_LLM=1]
 11. EOB PDF        슬롯 메모 참고                                 (정답 DB만 — app.sqlite 불변)
 ```
 
+- **규모별 출력**: large는 `data/app.sqlite`·`ground_truth/truth.sqlite`(앱·평가가 보는 기본 경로), small은 `data/small/`·`ground_truth/small/`에 따로 — 서로 덮어쓰지 않는다. `make verify SCALE=small`이 small 경로를 본다
+- **작업 순서**: ① 생성기 작성(디버깅은 small도 가능) → ② large로 `make data`·`make verify`를 돌리며 필수 위반을 고치고 경고를 보고 파라미터 조정 → ③ 같은 코드·파라미터로 small 생성 → 필수 검사 통과 확인(짧은 기간에서 깨지는 코드가 없는지, 테스트 픽스처 재료) → ④ large 재생성(같은 결과) → LLM 7·9단계 → 사람 판정 시작. 데이터 파일은 ④ 전까지 언제든 지우고 다시 만드는 일회용이고, ④ 이후 large는 재생성하지 않는다(판정이 `call_id`에 묶임)
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 파생한 자기 난수 생성기를 쓴다 — 예: `np.random.default_rng([seed, zlib.crc32(b"patients")])`. 파이썬 내장 `hash()`는 문자열에 실행마다 다른 솔트가 붙어 결정성이 깨지므로 쓰지 않는다. Faker도 전역 `Faker.seed`가 아니라 단계별 인스턴스에 `seed_instance`. 문자열 `set`·`dict` 키 순회에 기대지 말고 정렬해서 쓴다(`make data`는 `PYTHONHASHSEED=0`으로도 막아 둔다). 단계를 추가·삭제해도 다른 단계의 결과는 바뀌지 않는다
 - **정형 먼저, LLM 한 번**: 정형(1~6) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9)을 한 번 돌린다. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - **재현성**: 시드 고정, `make data` 한 번에 전체. LLM 생성물은 파일 캐시로 커밋하고 `make data REGEN_LLM=1`로만 재생성
