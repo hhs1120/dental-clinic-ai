@@ -64,6 +64,11 @@ BREAKS = {
     "registered_future": ("UPDATE emr_patients SET registered_at = '2026-12-03' WHERE id = 2", "check_timestamps_not_future"),
     "born_future": ("UPDATE emr_patients SET birth_date = '2027-01-01' WHERE id = 2", "check_timestamps_not_future"),
     "confirmed_before_reminder": ("UPDATE emr_appointments SET confirmed = 1 WHERE id = 6", "check_confirmed_not_future"),
+    # 리마인드 대상 = 직전 진료일 전에 잡혔고 그날까지 취소되지 않은 예약 (12-01 예약의 직전 진료일은 11-30)
+    "confirmed_booked_on_reminder_day": ("UPDATE emr_appointments SET confirmed = 1, created_at = '2026-11-30 10:00:00' WHERE id = 5",
+                                         "check_confirmed_reminded"),
+    "confirmed_cancelled_before_reminder": ("UPDATE emr_appointments SET confirmed = 1 WHERE id = 3",  # 11-14 변경 취소
+                                            "check_confirmed_reminded"),
     "cancel_neither_kind": ("UPDATE emr_appointments SET rescheduled_from_id = NULL WHERE id = 4", "check_cancellation_kind"),
     "sameday_cancel_on_today": (
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"

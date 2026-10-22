@@ -173,6 +173,16 @@ def check_confirmed_not_future(conn, ctx):
             if _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays) > ctx.today]
 
 
+def check_confirmed_reminded(conn, ctx):
+    """confirmed는 리마인드 대상만 — 직전 진료일 전에 잡혔고(그날 잡은 예약은 대상 아님) 그날까지 취소되지 않은 예약"""
+    bad = []
+    for r in _rows(conn, "SELECT id, scheduled_at, created_at, cancelled_at FROM emr_appointments WHERE confirmed = 1"):
+        prev = _prev_open_day(_dt(r["scheduled_at"]).date(), ctx.holidays)
+        if _dt(r["created_at"]).date() >= prev or (r["cancelled_at"] and _dt(r["cancelled_at"]).date() <= prev):
+            bad.append(r)
+    return bad
+
+
 def check_created_before_scheduled(conn, ctx):
     """예약은 잡은 뒤에 열린다 — created_at < scheduled_at"""
     return _rows(conn, "SELECT id, created_at, scheduled_at FROM emr_appointments"
@@ -426,6 +436,7 @@ REQUIRED = [
     check_submitted_months_no_result,
     check_patient_same_day,
     check_confirmed_not_future,
+    check_confirmed_reminded,
     check_created_before_scheduled,
     check_cancel_time,
     check_cancelled_at_status,

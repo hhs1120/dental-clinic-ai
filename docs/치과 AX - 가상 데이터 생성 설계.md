@@ -95,7 +95,7 @@ tags:
 | trigger | 규칙 |
 |---|---|
 | appt_confirm | 예약 생성 시(변경 쌍·당일 취소 행 포함) |
-| reminder | 직전 진료일(시각은 그날 임의 — 그날 잡힌 예약이면 그 `created_at` 이후). 대상은 §2.6 (3) 4 |
+| reminder | 직전 진료일(시각은 그날 임의). 대상은 §2.6 (3) 4 — 리마인드 날 전에 잡힌 예약만이라 문자 시각이 `created_at`보다 항상 뒤 |
 | noshow | 노쇼 시 |
 | balance | 미수 발생 중 `config` `messages.balance` 비율 |
 | doc_ready | 서류 요청 **통화 이후** |
@@ -140,7 +140,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
      - 새 예약마다(전화·데스크 모두) reschedule_rate 확률로 "변경 예정" + 변경일(created_at 다음 날 ~ 예약 전날 중 진료일) 추첨
   3. 변경: 오늘이 변경일인 예약 → 원래 예약 cancelled(cancelled_at = 오늘 임의 시각), 새 예약은 원래 날짜 뒤 1~`master.RESCHEDULE_MAX_DAYS`일의
      첫 가능일(같은 유형·시술, booked_via = phone, created_at = 같은 시각, 다시 변경하지 않음)
-  4. 리마인드: 오늘까지 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약에 발송(날짜 단위) → confirm_rate 확률로 confirmed
+  4. 리마인드: 오늘 전에 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약에 발송(날짜 단위. 오늘 잡은 예약은 제외 — 문자·확인 통화가 `created_at` 뒤 같은 날에 들어갈 자리가 없을 수 있어서) → confirm_rate 확률로 confirmed
 
 5단계(진료·수납·청구): 창 안 completed마다 진료 기록 1행, visit 수납(paid_at = 내원 종료 시각), 미수 정산은 다음 completed
 내원 종료 시각에 settlement 행, 급여 시술은 청구 1줄(§2.4)
@@ -186,7 +186,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 8. 저장: 전사 → `ax_calls`, 라벨·fact·노이즈 → `truth_call_labels`
 9. 층화 추출 → 판정 풀·블라인드 풀 마킹(평가 설계 §2.1)
 
-**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. `booked_via = phone` 예약(변경으로 생긴 새 예약은 변경 통화로 쓰이므로 제외) → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소, confirmed(직전 진료일) → 확인. **확인 통화**: confirmed 예약에서 역산, 시각은 리마인드 날(직전 진료일) 임의 시각 — 그 예약의 리마인드 문자 `sent_at` 이후(문자는 `created_at` 이후). 방향은 아래 방향 분포대로. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담는다.
+**예약류 통화는 예약에서 역산**: 통화가 원인, 예약이 결과. `booked_via = phone` 예약(변경으로 생긴 새 예약은 변경 통화로 쓰이므로 제외) → 예약 잡기, 변경 쌍 → 예약 변경, 당일 취소 → 취소, confirmed(직전 진료일) → 확인. **확인 통화**: confirmed 예약에서 역산, 시각은 리마인드 날(직전 진료일) 임의 시각 — 그 예약의 리마인드 문자 `sent_at` 이후. 방향은 아래 방향 분포대로. 통화 시각 = 그 이벤트 시각. 연결은 `truth_call_labels.used_fact`에 `appointment_id`를 담는다.
 
 **목적 분포**(%)
 | 목적 | % | | 목적 | % |
@@ -272,7 +272,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.source_*`)는 타입별 조인 |
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 충돌 | 같은 환자 같은 날 중복 없음 (§1 운영 제약은 생성 코드가 보장 — 기능이 의존하지 않아 검사하지 않음) |
-| 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전) |
+| 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전) |
 | 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회(이 둘은 `truth_claim_errors`에 기록된 줄 제외 — §2.4 청구 오류); (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 단순 오류는 기록된 변형을 되돌리면 진료 기록과 일치(누락은 청구 줄이 실제로 없음), 기준 오류는 기록된 조건을 실제로 어김; 목록 밖(버그가 정답에서 빠지지 않게): 급여 completed 진료는 청구가 정확히 1줄(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_CODES` 코드마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |

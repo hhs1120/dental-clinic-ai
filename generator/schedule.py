@@ -344,9 +344,10 @@ class Sim:
             self.book(p, a.type, a.code, start, t, "phone", rescheduled_from=a.id)
 
     def reminders(self, d: date) -> None:
-        """4. 리마인드: 오늘까지 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed (날짜 단위)"""
+        """4. 리마인드: 오늘 전에 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed (날짜 단위).
+        오늘 잡은 예약은 대상 아님 — 문자·확인 통화가 created_at 뒤 같은 날에 들어갈 자리가 없을 수 있어서"""
         for a in sorted(self.by_day.get(self.next_open(d), []), key=lambda a: a.id):
-            if a.created.date() <= d and (a.cancelled is None or a.cancelled.date() > d):
+            if a.created.date() < d and (a.cancelled is None or a.cancelled.date() > d):
                 a.confirmed = int(self.rng.random() < self.cfg["confirm_rate"])
 
     def run_days(self) -> None:

@@ -22,7 +22,7 @@ ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
 # 예약만 보는 필수 검사 — 진료·수납·청구(5단계)가 필요한 검사는 묶음 4(기능 정의 §9 준비 2)에서
 APPOINTMENT_CHECKS = [
     verify.check_foreign_keys, verify.check_status_from_today, verify.check_timestamps_not_future,
-    verify.check_patient_same_day, verify.check_confirmed_not_future,
+    verify.check_patient_same_day, verify.check_confirmed_not_future, verify.check_confirmed_reminded,
     verify.check_created_before_scheduled, verify.check_cancel_time, verify.check_cancelled_at_status,
     verify.check_cancellation_kind, verify.check_reschedule_pair,
     verify.check_fake_phone,
@@ -222,17 +222,6 @@ def test_one_open_appointment_per_patient(db):
                 if b is a or b["id"] == a["rescheduled_from_id"]:
                     continue
                 assert not (b["created"] < a["created"] and a["created"].date() < b["resolved"].date()), (a["id"], b["id"])
-
-
-def test_confirmed_only_when_reminded(db):
-    conn, ctx, _ = db
-    rows = _appts(conn)
-    for r in rows:
-        prev = verify._prev_open_day(r["start"].date(), ctx.holidays)
-        # 리마인드 = 직전 진료일에 이미 잡혀 있고 그날 취소되지 않은 예약 (날짜 단위)
-        alive = r["created"].date() <= prev and (r["cancelled"] is None or r["cancelled"].date() > prev)
-        if r["confirmed"]:
-            assert alive and prev < ctx.today
 
 
 def test_new_patients(db):
