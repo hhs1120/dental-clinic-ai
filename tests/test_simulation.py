@@ -1,4 +1,4 @@
-"""4단계 예약 시뮬레이션 — small을 실제로 생성해 예약만 보는 필수 검사와 시뮬레이션 규칙을 본다 (가상 데이터 생성 설계 §2.6 ③)."""
+"""4단계 예약 시뮬레이션 — small을 실제로 생성해 예약만 보는 필수 검사와 시뮬레이션 규칙을 본다 (가상 데이터 생성 설계 §2.6 (3))."""
 import sqlite3
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -19,7 +19,7 @@ CFG = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
 
-# 예약만 보는 필수 검사 — 진료·수납·청구(5단계)가 필요한 검사는 ④에서
+# 예약만 보는 필수 검사 — 진료·수납·청구(5단계)가 필요한 검사는 묶음 4(기능 정의 §9 준비 2)에서
 APPOINTMENT_CHECKS = [
     verify.check_foreign_keys, verify.check_status_from_today, verify.check_timestamps_not_future,
     verify.check_slot_grid, verify.check_daily_cap, verify.check_slot_cap, verify.check_patient_same_day,

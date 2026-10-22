@@ -2,7 +2,7 @@
 -- 정의: docs/치과 AX - 평가 설계.md §6. 생성 규칙: 가상 데이터 생성 설계 §2.4
 -- 테이블은 그 단계를 구현할 때 추가한다
 
--- 9~10월 청구 심사 결과 + 장부에 없는 통보서 줄(extra_in_claim_review). 심사결과 슬롯 착수 때 채움 — 그 전에는 비어 있음
+-- 9~10월 청구 심사 결과 + 장부에 없는 심사결과 줄(extra_in_claim_review). 심사결과 슬롯 착수 때 채움 — 그 전에는 비어 있음
 CREATE TABLE truth_claims (
     id             INTEGER PRIMARY KEY,
     claim_id       INTEGER UNIQUE,  -- app.sqlite emr_claims.id (다른 DB라 FK 없음). extra_in_claim_review는 NULL

@@ -110,3 +110,18 @@ def test_config_keys_always_prefixed():
               for t in re.findall(r"[\w.]+", m.group(1))]
     bare = sorted({t for pos, t in tokens if t in names and not any(a <= pos < b for a, b in covered)})
     assert not bare, f"`config` 접두어 없이 쓴 config 키: {bare}"
+
+
+# §4.2 문서 표에서 방해 문서(정답이 없도록 만드는 문서) 종류 — 나머지는 core
+_DISTRACTOR_KINDS = {"공지 옛 버전", "유사 주제 무답", "타 병원·일반"}
+
+
+def test_rag_document_counts_match_config():
+    """§4.2 문서 표의 종류별 수 합계가 `config` `documents`(core·distractor)와 같아야 한다"""
+    text = _doc()
+    table = text[text.index("### 4.2"):].split("| 종류 | 수 | 생성 |")[1].split("\n\n")[0]
+    rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.strip().splitlines()[1:]]
+    counts = {"core": 0, "distractor": 0}
+    for kind, n, *_ in rows:
+        counts["distractor" if kind in _DISTRACTOR_KINDS else "core"] += int(n)
+    assert counts == CFG["documents"], f"§4.2 표 {counts} ≠ config {CFG['documents']}"

@@ -10,16 +10,15 @@ sameday_cancel_rate: 0.04
 confirm_rate: 0.85          # 직전 진료일 리마인드 응답
 unpaid_rate: 0.15
 settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 첫 large 실행에서 잔액 있음 비율 리포트 보고 확정
-lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 ①) — 초기값, large 튜닝 때 확정
+lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 (1)) — 초기값, large 튜닝 때 확정
 rebook_delay_days: [1, 14]   # 노쇼·당일 취소 뒤 다시 전화하기까지(양 끝 포함, 균등) — 초기값, large 튜닝 때 확정
 treatment_demand_monthly: { child: 0.06, teen: 0.08, adult: 0.08, senior: 0.10 }   # 연령 구간별 환자 1인 월 치료 수요 발생률 — 초기값, large 튜닝 때 확정
 calls_with_transcript: 1000
 eval_pool_size: 300
 blind_pool_size: 150
-documents: { core: 50, distractor: 27 }
+documents: { core: 55, distractor: 27 }
 messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
 claims: { supplementary_ratio: 0.10 }   # 정형 5단계 — 청구 줄 중 보완 청구(supplementary) 비율
-claim_review: { monthly_forms: 9 }     # 심사결과 슬롯 — 월별 통보서 장수 = 창 안 확정·제출 월 수(large 기준)
 holidays: config/holidays_2026.json          # 출처: 한국천문연구원 2026 월력
 forbidden_topics: config/forbidden_topics.json  # TODO: make data 전 2개 선정
 # 규모: range.end 고정, 시작일만 늦춘다(확정월·제출월·전월·미래 구간 유지). visits_per_day는 유지.

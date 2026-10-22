@@ -5,7 +5,7 @@ related:
   - "[[치과 AX - 가상 데이터 생성 설계]]"
   - "[[치과 AX - 평가 설계]]"
 created: 2026-10-20
-updated: 2026-10-21
+updated: 2026-10-22
 tags:
   - 치과AX
   - 앱
@@ -40,7 +40,7 @@ tags:
 - FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`
 - Chroma 컬렉션 `chunks`(id = `ax_chunks.id`, metadata flat 복사). 단일 조건 필터는 Chroma `where`, id 선필터는 후보 수백 이하일 때만
 
-**`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval` — 평가 설계 §3 채점의 입력. 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ⑧ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
+**`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval` — 평가 설계 §3 채점의 입력. 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
 
 **도구 5개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준)
 
@@ -61,9 +61,9 @@ tags:
 **`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행(`id` PK). `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid` + 사람 채점 `human_rating(useful/ok/wrong)`·`rated_by`("다시 만들기"로 제안이 바뀌면 둘 다 초기화). UNIQUE `(sheet_date, patient_id, appointment_id)`
 리포트 테이블(슬롯 ⑥)은 슬롯 착수 시 추가.
 
-## 5. 심사결과통보서 (슬롯 ②, 조건부)
+## 5. 심평원 청구 점검·삭감 대응 (슬롯 ⑤, 조건부)
 
-심사결과 테이블(코드명 `claim_review`)은 슬롯 착수 시 추가.
+테이블(코드명 `claim_review`)은 슬롯 착수 시 추가 — 받은 전자 심사결과 레코드는 `emr_`(병원 청구 프로그램이 받는 데이터), 점검 결과·조정 건별 검색·판단은 `ax_`. ⑤-3 조정 사유 검색은 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
 
 ## 6. 설정·작업·인덱스·고정 쿼리
 
@@ -99,4 +99,4 @@ tags:
 - [ ] 리랭커·임베딩 모델
 - [ ] 프로바이더 조합 A/B — 생성기 7단계(통화 전사) 전에 필요
 - [ ] 홈 화면·네비 (와이어프레임에서)
-- [ ] `prep_facts` fact 키 목록 (⑧ 착수 시 — 후검증·회귀 테스트의 기준)
+- [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)

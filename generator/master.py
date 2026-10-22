@@ -28,14 +28,14 @@ SATURDAY_REMINDER_TIME = "12:30"
 # 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
 MAX_APPOINTMENTS_PER_SLOT = 3
 
-# 예약 시점 (§2.6 ③): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
+# 예약 시점 (§2.6 (3)): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
 MAX_LEAD_DAYS = 14
 RESCHEDULE_MAX_DAYS = 14
 
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
 
-# 임플란트 1차(conditional)는 시술일 기준 이 나이 이상이면 급여, 미만이면 비급여(본인부담 1.0·청구 없음) (§2.6 ④)
+# 임플란트 1차(conditional)는 시술일 기준 이 나이 이상이면 급여, 미만이면 비급여(본인부담 1.0·청구 없음) (§2.6 (4))
 CONDITIONAL_INSURED_MIN_AGE = 65
 
 # 내원 구성 목표 (§1). 목표 — 경고로만 확인
@@ -82,12 +82,12 @@ NOTES = ("치과 공포 있음", "고혈압 약 복용", "당뇨 있음", "오�
          "마취 시 어지러움 호소", "저녁 연락 선호")
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
-# 리콜 (§2.6 ①): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
+# 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
 RECALL_CYCLE_MONTHS = 6
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
-# 치료 수요의 에피소드 유형 비중 (§2.6 ②). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
+# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
 _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
@@ -173,7 +173,7 @@ def open_slots(weekday: int) -> int:
     return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN
 
 
-# 유형별 예정 시술 가중 (§2.6 ④). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
+# 유형별 예정 시술 가중 (§2.6 (4)). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
 # 성인·노인 hygiene은 표가 아니라 규칙: 그해 스케일링을 이미 했으면 구강검진, 아니면 스케일링 (HYGIENE_SCALING_BANDS)
 PLANNED_WEIGHTS = {
     "hygiene": {
