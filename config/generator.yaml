@@ -3,7 +3,7 @@ seed: 20261201
 today: 2026-12-01
 range: { start: 2026-02-01, end: 2026-12-15 }
 returning_patients: 1400    # 구환(창 이전 등록) 수. 모든 규모 고정 — 신환은 시뮬레이션 결과, 총수는 결과값(large ≈ 2,000)
-visits_per_day: 26          # 하루 비취소 예약 상한(평일). 토요일 ×0.5
+visits_per_day: 26          # 하루 비취소 예약 상한(평일). 다른 요일은 슬롯 수 비례 — master.daily_cap
 reschedule_rate: 0.05
 noshow_rate: 0.06
 sameday_cancel_rate: 0.04

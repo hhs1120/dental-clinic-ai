@@ -20,13 +20,8 @@ HOURS = {
 SLOT_MIN = 30
 SATURDAY = 5
 
-# 리마인드 발송 시각 (§2.5) — 직전 진료일의 이 시각에 그때 있던 예약에만 보낸다.
-# 토요일은 마감(13:30)이 이르므로 마감 전 시각 — 확인 통화가 그날 영업시간 안에 들어오게
-REMINDER_TIME = "17:00"
-SATURDAY_REMINDER_TIME = "12:30"
-
-# 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
-MAX_APPOINTMENTS_PER_SLOT = 3
+# 당일 취소 시각 = 예약 1~SAMEDAY_CANCEL_LEAD_MIN분 전 (§2.6 (3))
+SAMEDAY_CANCEL_LEAD_MIN = 120
 
 # 예약 시점 (§2.6 (3)): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
 MAX_LEAD_DAYS = 14
@@ -40,9 +35,6 @@ CONDITIONAL_INSURED_MIN_AGE = 65
 
 # 내원 구성 목표 (§1). 목표 — 경고로만 확인
 VISIT_MIX = {"treatment": 0.70, "hygiene": 0.25, "consult": 0.05}
-
-# 토요일 하루 상한 = 평일 visits_per_day × 이 비율 (§1)
-SATURDAY_VISIT_RATIO = 0.5
 
 # 연령 구간과 비중 (§2.2). (이름, 최소 나이, 최대 나이(포함, 노인은 None), 비중)
 AGE_BANDS = [
@@ -94,11 +86,7 @@ EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISOD
 COURSE_VISITS = (2, 4)  # 양 끝 포함
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
-# 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
-ACTIVE_MONTHS = 6
-ACTIVE_SHARE = 0.60  # 예정 신환을 뺀 환자 중. 초기 설계 가정 — 첫 large 실행 결과로 확정
-
-# 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 목표 — 경고로만 확인
+# 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
 NEW_PATIENT_SHARE = 0.12
 
 # 치아 번호 (§2.1). 치아 단위가 아닌 시술은 FULL_MOUTH 센티널
@@ -158,11 +146,6 @@ def _minutes(hhmm: str) -> int:
     return int(h) * 60 + int(m)
 
 
-def reminder_time(weekday: int) -> str:
-    """그 요일(월=0)에 보내는 리마인드 시각"""
-    return SATURDAY_REMINDER_TIME if weekday == SATURDAY else REMINDER_TIME
-
-
 def open_slots(weekday: int) -> int:
     """그 요일의 진료 슬롯(SLOT_MIN분) 수 (월=0). 휴진 요일은 0. 공휴일은 호출하는 쪽에서 거른다."""
     if weekday in HOURS["closed_weekdays"]:
@@ -171,6 +154,11 @@ def open_slots(weekday: int) -> int:
         return (_minutes(HOURS["saturday_close"]) - _minutes(HOURS["open"])) // SLOT_MIN
     lunch = _minutes(HOURS["lunch"][1]) - _minutes(HOURS["lunch"][0])
     return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN
+
+
+def daily_cap(visits_per_day: int, weekday: int) -> int:
+    """그 요일의 하루 비취소 예약 상한 — config visits_per_day(가장 긴 날 기준)를 슬롯 수에 비례해 내림 (§1)"""
+    return visits_per_day * open_slots(weekday) // max(open_slots(w) for w in range(7))
 
 
 # 유형별 예정 시술 가중 (§2.6 (4)). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.

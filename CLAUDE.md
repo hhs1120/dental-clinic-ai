@@ -25,7 +25,7 @@
 - 정형 데이터(1~6단계) 완성 + `make verify` 통과(small·large 둘 다) → LLM 생성(7·9단계) 1회. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기 입력은 `classify(transcript, direction)`만
-- 병원 상수(시술·영업시간·운영 제약(토 비율·시각대 3건)·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
+- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
 - 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/test_doc_sync.py`에 비교를 추가한다
 
 ## 명령

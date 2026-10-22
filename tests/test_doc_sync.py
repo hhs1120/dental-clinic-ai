@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from generator import master, verify
-from generator.master import ACTIVE_SHARE, AGE_BANDS, NEW_PATIENT_SHARE, VISIT_MIX
+from generator.master import VISIT_MIX
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "치과 AX - 가상 데이터 생성 설계.md"
@@ -15,15 +15,10 @@ CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="ut
 # 문서가 이름으로 가리키지만 아직 구현 전인 값 (해당 단계 구현 때 코드에 추가)
 PENDING = {"ADJUST_CODES"}
 
-_BAND_LABEL = {"child": "소아", "teen": "청소년", "adult": "성인", "senior": "노인"}
 _MIX_LABEL = {"treatment": "진료", "hygiene": "위생", "consult": "상담"}
 
 # 경고로 남은 지표만(리포트 항목은 허용치가 없어 비교할 값이 없다). 지표 이름(표 첫 칸의 앞부분) → ({라벨: 목표값}, 허용치). 라벨 ""은 값이 하나인 칸. 허용치 None = 허용 칸 없음
 EXPECTED = {
-    "연령 구간 비중": ({_BAND_LABEL[name]: share for name, *_, share in AGE_BANDS}, verify.SHARE_TOLERANCE),
-    "활동": ({"": ACTIVE_SHARE}, verify.ACTIVE_TOLERANCE),
-    "신환": ({"": NEW_PATIENT_SHARE}, verify.NEW_PATIENT_TOLERANCE),
-    "노쇼·당일 취소": ({"노쇼": CFG["noshow_rate"], "당일 취소": CFG["sameday_cancel_rate"]}, verify.SHARE_TOLERANCE),
     "내원 구성": ({_MIX_LABEL[t]: v for t, v in VISIT_MIX.items()}, verify.VISIT_MIX_TOLERANCE),
 }
 

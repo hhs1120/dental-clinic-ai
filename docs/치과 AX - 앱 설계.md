@@ -24,7 +24,7 @@ tags:
 |---|---|
 | `ax_call_classifications` | 모델별 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. UNIQUE `(call_id, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델 쌍)의 버전** — 모델만 바꿔도 올림(`v3-final`). 대시보드는 버전마다 `model_actual` 쌍 표기 |
 | `ax_call_disagreements` | A·B 분류 불일치(9항목 중 하나라도 다를 때만 1행). PK `(call_id, prompt_version)`, `is_core`(목적·급함·응급 불일치) |
-| `ax_judgments` | 사람 판정. `judged_at`은 실제 시계, `shown_model`(판정 중 요약을 펼쳤으면 어느 모델) |
+| `ax_judgments` | 사람 판정. `judged_at`은 실제 시계 |
 | `ax_blind_votes` | 블라인드 투표. 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
 ## 2. LLM 로그
@@ -37,8 +37,8 @@ tags:
 
 **`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread)`, 필터용 실컬럼(`chart_no`·`event_date`·`doc_type`).
 `text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`, 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`.
-- FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`
-- Chroma 컬렉션 `chunks`(id = `ax_chunks.id`, metadata flat 복사). 단일 조건 필터는 Chroma `where`, id 선필터는 후보 수백 이하일 때만
+- FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`. 복합어는 적재 시 공백 정규화
+- Chroma 컬렉션 `chunks`(id = `ax_chunks.id`, metadata flat 복사). 단일 조건 필터는 Chroma `where`
 
 **`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval` — 평가 설계 §3 채점의 입력. 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
 
@@ -65,16 +65,11 @@ tags:
 
 테이블(코드명 `claim_review`)은 슬롯 착수 시 추가 — 받은 전자 심사결과 레코드는 `emr_`(병원 청구 프로그램이 받는 데이터), 점검 결과·조정 건별 검색·판단은 `ax_`. ⑤-3 조정 사유 검색은 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
 
-## 6. 설정·작업·인덱스·고정 쿼리
+## 6. 설정·작업·고정 쿼리
 
 **`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(A·B의 model_actual), `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수, test 판정 시 풀 전체. dev 건수 = 판정 풀의 ⌈풀 크기/2⌉ = `eval_sort_order` 앞부분(평가 설계 §2.1의 계약이라 앱은 생성 규칙을 몰라도 됨). 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성)의 상태·진행률. 프론트는 폴링
-
-| 테이블 | 인덱스 |
-|---|---|
-| `ax_llm_calls` | `(task, created_at)`, `(ref_type, ref_id)` |
-| `ax_chunks` | `(source_type, source_id)` |
 
 **판정 큐 "다음 건"**: 대상 = `judge_status` pending/skipped · 판정 풀이면 `eval_sort_order ≤ judge_upto` · 활성 버전 분류 2행 모두 `ok`. 순서 = 건너뛴 건 뒤로 → 핵심 엇갈림(`is_core`) 먼저 → 붙여넣기 통화 먼저 → `eval_sort_order`.
 **블라인드 큐**: [[치과 AX - 평가 설계]] §2.4.
@@ -85,7 +80,7 @@ tags:
 |---|---|
 | 스택 | **Next.js + TypeScript** / **FastAPI** / **SQLite**(FTS5) + **Chroma**(벡터) |
 | DB | SQLite 1파일 + **Chroma PersistentClient**. `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
-| FTS | `unicode61` + 조사 제거 OR prefix. 복합어는 적재 시 공백 정규화 |
+| FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | **비교 후 확정**: `text-embedding-3-small` vs `bge-m3`, 로컬 `bge-reranker-v2-m3` vs Cohere. dev 질문 10개로 비교 |
 | LLM (원본은 여기) | 게이트웨이 모듈 1개(`shared/`, 생성기 7·9단계도 경유), 내부 LiteLLM 라이브러리(서버 아님). 이름(A/B)으로 호출, 폴백, 호출 로그(`ax_llm_calls`), 일일 비용 상한(금액은 [[치과 AX - 기능 정의]] §7). 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
 | 프롬프트 | `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `gen_transcript`·`gen_document`(생성기). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — A·B 쌍이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정, 생성기는 생성기 코드에 고정(LLM 캐시 키의 `prompt_template_hash` = 그 파일 해시) |

@@ -3,20 +3,18 @@
 
 하루 순서: 1. 그날 예약 처리(상태 추첨, 코스 다음 회차 데스크 예약) 2. 전화 예약(기한이 된 수요·재예약·신환)
 3. 변경 4. 리마인드. 휴진일은 아무 일도 없다.
-- 첫 슬롯(개원 시각) 예약은 당일 취소가 없다 — 취소 시각을 그날 영업시간 안, 예약 시각 전에 둘 수 없어서
 - 신환 수 = 그날 잡힌 기존 환자 예약(전화·데스크, 변경 제외) B × s/(1−s), s = NEW_PATIENT_SHARE (확률적 반올림)
 - lapse(첫 리콜 무응답)는 구환 첫 리콜만(3단계). 내원하면 다음 리콜이 다시 생긴다
 """
-import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
 from generator.demand import arrivals, recall_due
 from generator.master import (CHECKUP_CODE, COURSE_INTERVAL_DAYS, COURSE_VISITS, EPISODE_MIX, FAMILY_SIZE,
-                              GUARDIAN_MIN_AGE_GAP, HOURS, HYGIENE_SCALING_BANDS, MAX_APPOINTMENTS_PER_SLOT,
-                              MAX_LEAD_DAYS, NEW_PATIENT_SHARE, PLANNED_WEIGHTS, PROCEDURES, RESCHEDULE_MAX_DAYS,
-                              SATURDAY, SATURDAY_VISIT_RATIO, SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, VISIT_MIX,
-                              RECALL_CYCLE_MONTHS, add_years, age_band, age_on, open_slots, reminder_time)
+                              GUARDIAN_MIN_AGE_GAP, HOURS, HYGIENE_SCALING_BANDS, MAX_LEAD_DAYS, NEW_PATIENT_SHARE,
+                              PLANNED_WEIGHTS, PROCEDURES, RESCHEDULE_MAX_DAYS, SAMEDAY_CANCEL_LEAD_MIN, SATURDAY,
+                              SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, VISIT_MIX, RECALL_CYCLE_MONTHS, add_years,
+                              age_band, age_on, daily_cap, open_slots)
 from generator.patients import new_patient_candidates
 
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
@@ -29,6 +27,7 @@ def _t(hhmm: str) -> time:
 
 
 OPEN = _t(HOURS["open"])
+DAY_MINUTES = (datetime.combine(date.min, _t(HOURS["weekday_close"])) - datetime.combine(date.min, OPEN)).seconds // 60
 
 
 @dataclass
@@ -50,7 +49,6 @@ class Patient:
     appt: "Appt | None" = None  # 지금 잡혀 있는 예약 (끝나면 None)
     days: set = field(default_factory=set)  # 비취소 예약이 있는 날짜 (같은 날 중복 금지)
     scaling_years: set = field(default_factory=set)  # 급여 스케일링(SCALING_MIN_AGE 이상)을 받은 해
-    free_from: datetime | None = None  # 마지막 예약이 끝난 시각 — 같은 날 전화는 그 뒤에
 
 
 @dataclass
@@ -82,7 +80,6 @@ class Sim:
         self.changes_on: dict[date, list[Appt]] = {}
         self.by_day: dict[date, list[Appt]] = {}
         self.day_count: dict[date, int] = {}
-        self.slot_count: dict[datetime, int] = {}
         self.patients: list[Patient] = []
         for p in run.state["patients"]:
             self.patients.append(Patient(p["id"], p["birth_date"], list(run.state["arrivals"][p["id"]]),
@@ -104,9 +101,6 @@ class Sim:
             d += timedelta(days=1)
         return d
 
-    def cap(self, d: date) -> int:
-        return math.floor(self.cfg["visits_per_day"] * (SATURDAY_VISIT_RATIO if d.weekday() == SATURDAY else 1))
-
     @staticmethod
     def starts(d: date, duration: int) -> list[datetime]:
         """그날 duration분 예약이 들어갈 수 있는 시작 시각 (영업시간 안, 평일 점심과 겹치지 않음)"""
@@ -120,35 +114,27 @@ class Sim:
             s += timedelta(minutes=SLOT_MIN)
         return out
 
-    def find_slot(self, patient: Patient, first: date, last: date, duration: int) -> datetime | None:
-        """first~last(range_end까지) 중 운영 제약 셋 + 같은 환자 같은 날 없음을 만족하는 첫 진료일, 시각은 균등 추첨"""
+    def find_day(self, patient: Patient, first: date, last: date) -> date | None:
+        """first~last(range_end까지) 중 진료일 + 하루 상한 미만 + 같은 환자 같은 날 없음인 첫 날"""
         d = first
         while d <= min(last, self.run.range_end):
-            if self.is_open(d) and self.day_count.get(d, 0) < self.cap(d) and d not in patient.days:
-                free = [s for s in self.starts(d, duration) if self.slot_count.get(s, 0) < MAX_APPOINTMENTS_PER_SLOT]
-                if free:
-                    return free[int(self.rng.integers(len(free)))]
+            if self.is_open(d) and self.day_count.get(d, 0) < daily_cap(self.cfg["visits_per_day"], d.weekday()) and d not in patient.days:
+                return d
             d += timedelta(days=1)
         return None
 
-    def business_minute(self, d: date, before: datetime | None = None, after: datetime | None = None) -> datetime | None:
-        """그날 영업시간 안의 분 단위 시각 균등 추첨 (before 전, after 이후). 후보가 없으면 None"""
-        sat = d.weekday() == SATURDAY
-        spans = [(HOURS["open"], HOURS["saturday_close"])] if sat else \
-            [(HOURS["open"], HOURS["lunch"][0]), (HOURS["lunch"][1], HOURS["weekday_close"])]
-        minutes = []
-        for lo, hi in spans:
-            m, end = datetime.combine(d, _t(lo)), datetime.combine(d, _t(hi))
-            while m < end and (before is None or m < before):
-                if after is None or m >= after:
-                    minutes.append(m)
-                m += timedelta(minutes=1)
-        return minutes[int(self.rng.integers(len(minutes)))] if minutes else None
+    def pick_start(self, d: date, duration: int) -> datetime:
+        """그날 duration분 예약의 시작 시각 균등 추첨"""
+        starts = self.starts(d, duration)
+        return starts[int(self.rng.integers(len(starts)))]
+
+    def any_minute(self, d: date) -> datetime:
+        """그날 개원~평일 마감 사이 분 단위 시각 균등 추첨 — 통화·취소 시각. 점심·토요일 마감은 따지지 않는다"""
+        return datetime.combine(d, OPEN) + timedelta(minutes=int(self.rng.integers(DAY_MINUTES)))
 
     def occupy(self, a: Appt, sign: int) -> None:
         d = a.start.date()
         self.day_count[d] = self.day_count.get(d, 0) + sign
-        self.slot_count[a.start] = self.slot_count.get(a.start, 0) + sign
         (a.patient.days.add if sign > 0 else a.patient.days.discard)(d)
 
     # ── 예약 ──────────────────────────────────────────────
@@ -198,25 +184,20 @@ class Sim:
 
     def find_booking(self, patient: Patient, visit_type: str, first: date,
                      missed: "Appt | None" = None) -> tuple[str, datetime] | None:
-        """first부터 첫 가능일. 소요는 시술이, 시술은 날짜(나이·그해 스케일링)가 정한다 — 첫 후보일로 시술을 뽑아 슬롯을 찾고,
-        찾은 날의 code_key가 다르면 그날 기준으로 다시 뽑아 그날부터 다시 찾는다. missed가 있으면 그 시술부터(재예약)"""
-        on = first
-        code, key = (missed.code, self.code_key(patient, missed.start.date())) if missed else (None, None)
-        while True:
-            if code is None:
-                code, key = self.planned_code(patient, visit_type, on), self.code_key(patient, on)
-            start = self.find_slot(patient, on, self.run.range_end, DURATION[code])
-            if start is None:
-                return None
-            if self.code_key(patient, start.date()) == key:
-                return code, start
-            code, on = None, start.date()
+        """first부터 첫 가능일 → 그날 기준(나이·그해 스케일링)으로 시술 → 시술 소요로 시각.
+        재예약(missed)은 그날의 code_key가 놓친 예약과 같으면 같은 시술"""
+        d = self.find_day(patient, first, self.run.range_end)
+        if d is None:
+            return None
+        if missed is not None and self.code_key(patient, d) == self.code_key(patient, missed.start.date()):
+            code = missed.code
+        else:
+            code = self.planned_code(patient, visit_type, d)
+        return code, self.pick_start(d, DURATION[code])
 
     def phone_book(self, patient: Patient, visit_type: str, d: date, missed: "Appt | None" = None) -> Appt | None:
-        """희망 리드 1~MAX_LEAD_DAYS일 뒤 첫 가능일, created_at = 그날 영업시간 안 임의 시각"""
-        created = self.business_minute(d, after=patient.free_from)
-        if created is None:  # 오늘 예약이 마감 직전에 끝남 — 내일 전화
-            return None
+        """희망 리드 1~MAX_LEAD_DAYS일 뒤 첫 가능일, created_at = 그날 임의 시각"""
+        created = self.any_minute(d)
         found = self.find_booking(patient, visit_type, d + timedelta(days=int(self.rng.integers(1, MAX_LEAD_DAYS + 1))),
                                   missed)
         if found is None:
@@ -233,13 +214,13 @@ class Sim:
             p, r = a.patient, self.rng.random()
             p.appt = None
             if r < noshow:
-                a.status, p.free_from = "noshow", a.start
-            elif r < noshow + sameday and a.start.time() != OPEN:
-                a.status, a.cancelled = "cancelled", self.business_minute(d, before=a.start)
-                p.free_from = a.cancelled
+                a.status = "noshow"
+            elif r < noshow + sameday:
+                lead = int(self.rng.integers(1, SAMEDAY_CANCEL_LEAD_MIN + 1))
+                a.status, a.cancelled = "cancelled", a.start - timedelta(minutes=lead)
                 self.occupy(a, -1)
             else:
-                a.status, p.free_from = "completed", a.start + timedelta(minutes=a.duration)
+                a.status = "completed"
             if a.status != "completed":
                 lo, hi = self.cfg["rebook_delay_days"]
                 p.ep.call_on, p.ep.missed = d + timedelta(days=int(self.rng.integers(lo, hi + 1))), a
@@ -348,24 +329,24 @@ class Sim:
                               c["note"]))
 
     def changes(self, d: date) -> None:
-        """3. 변경: 오늘이 변경일인 예약 → 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일의 첫 가능일로"""
+        """3. 변경: 오늘이 변경일인 예약 → 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일의 첫 가능일로. 가능일이 없으면 변경하지 않음"""
         for a in [a for a in self.changes_on.get(d, []) if a.status == "scheduled"]:
             p = a.patient
             self.occupy(a, -1)
             orig = a.start.date()
-            start = self.find_slot(p, orig + timedelta(days=1), orig + timedelta(days=RESCHEDULE_MAX_DAYS), a.duration)
-            if start is None:
+            day = self.find_day(p, orig + timedelta(days=1), orig + timedelta(days=RESCHEDULE_MAX_DAYS))
+            if day is None:
                 self.occupy(a, +1)
                 continue
-            t = self.business_minute(d)
+            start = self.pick_start(day, a.duration)
+            t = self.any_minute(d)
             a.status, a.cancelled = "cancelled", t
             self.book(p, a.type, a.code, start, t, "phone", rescheduled_from=a.id)
 
     def reminders(self, d: date) -> None:
-        """4. 리마인드: 그날 리마인드 시각에 있고 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed"""
-        at = datetime.combine(d, _t(reminder_time(d.weekday())))
+        """4. 리마인드: 오늘까지 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed (날짜 단위)"""
         for a in sorted(self.by_day.get(self.next_open(d), []), key=lambda a: a.id):
-            if a.created <= at and (a.cancelled is None or a.cancelled > at):
+            if a.created.date() <= d and (a.cancelled is None or a.cancelled.date() > d):
                 a.confirmed = int(self.rng.random() < self.cfg["confirm_rate"])
 
     def run_days(self) -> None:
