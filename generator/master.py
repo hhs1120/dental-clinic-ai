@@ -156,9 +156,12 @@ def open_slots(weekday: int) -> int:
     return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN
 
 
+MAX_OPEN_SLOTS = max(open_slots(w) for w in range(7))  # 가장 긴 날의 슬롯 수
+
+
 def daily_cap(visits_per_day: int, weekday: int) -> int:
     """그 요일의 하루 비취소 예약 상한 — config visits_per_day(가장 긴 날 기준)를 슬롯 수에 비례해 내림 (§1)"""
-    return visits_per_day * open_slots(weekday) // max(open_slots(w) for w in range(7))
+    return visits_per_day * open_slots(weekday) // MAX_OPEN_SLOTS
 
 
 # 유형별 예정 시술 가중 (§2.6 (4)). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
