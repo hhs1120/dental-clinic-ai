@@ -38,7 +38,7 @@ tags:
 **`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread)`, 필터용 실컬럼(`chart_no`·`event_date`·`doc_type`).
 `text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`, 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`.
 - FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`. 복합어는 적재 시 공백 정규화
-- Chroma 컬렉션 `chunks`(id = `ax_chunks.id`, metadata flat 복사). 단일 조건 필터는 Chroma `where`
+- 벡터 `ax_chunk_vectors(chunk_id = ax_chunks.id, embedding)` — sqlite-vec. 필터는 `ax_chunks` 실컬럼으로 먼저 거르고 남은 행만 `vec_distance_cosine` 전수 계산(정확 검색 — 근사 인덱스 없음, top-k가 필터에 깎이지 않음). 다중 조건 필터도 SQL 그대로
 
 **`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval` — 평가 설계 §3 채점의 입력. 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
 
@@ -78,13 +78,15 @@ tags:
 
 | 항목 | 선택 |
 |---|---|
-| 스택 | **Next.js + TypeScript** / **FastAPI** / **SQLite**(FTS5) + **Chroma**(벡터) |
-| DB | SQLite 1파일 + **Chroma PersistentClient**. `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
+| 스택 | **Next.js + TypeScript** / **FastAPI** / **SQLite**(FTS5 + **sqlite-vec** 벡터) |
+| DB | SQLite 1파일(`app.sqlite`에 FTS5·벡터까지). 벡터 접근은 `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
+| 벡터 저장소 결정 근거 | **규모**: 청크 수천~1만(문서 ~100 + 통화 `config` `calls_with_transcript` + 월 스레드 + 차트 서술 — 차트는 `source_type` 추가와 함께 [[치과 AX - 기능 정의]] §9 이후) — 질의마다 전수 계산해도 ms 단위라 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 같은 DB라 하이브리드 검색과 메타데이터 필터가 SQL 조인 하나, 두 저장소 동기화(삭제·재색인 불일치)가 없다. **fixture**: `make fixture`·`save-demo`가 파일 하나 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드)이 없고 저장소만 둘로 늘린다 |
+| Chroma로 옮길 때 | 쉽다 — 벡터는 `VectorStore`(`upsert(ids, vectors, metadata)`·`query(vector, filter, k)`) 뒤에만 있고, 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로. 구현 하나 추가 + 필터용 메타데이터를 Chroma에 복사하고 다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사). 옮길 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때 |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | **비교 후 확정**: `text-embedding-3-small` vs `bge-m3`, 로컬 `bge-reranker-v2-m3` vs Cohere. dev 질문 10개로 비교 |
 | LLM (원본은 여기) | 게이트웨이 모듈 1개(`shared/`, 생성기 7·9단계도 경유), 내부 LiteLLM 라이브러리(서버 아님). 이름(A/B)으로 호출, 폴백, 호출 로그(`ax_llm_calls`), 일일 비용 상한(금액은 [[치과 AX - 기능 정의]] §7). 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
 | 프롬프트 | `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `gen_transcript`·`gen_document`(생성기). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — A·B 쌍이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정, 생성기는 생성기 코드에 고정(LLM 캐시 키의 `prompt_template_hash` = 그 파일 해시) |
-| 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 판정 풀 전체 × 2(A/B) 분류 적재 + 해시 기반 결정적 fake 임베딩으로 Chroma까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
+| 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 판정 풀 전체 × 2(A/B) 분류 적재 + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | `export-human/import-human`: 판정은 `hash(transcript)`로만 복원 — 미스 시 버리고 "복원 실패 N건" 리포트(전사가 바뀐 건에 `call_uid`로 붙이면 다른 대화에 라벨이 붙음). 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |
 | 실행 | `make index / fixture / save-demo / reset-demo / set KEY=… VALUE=…`(설정 변경, 허용 키는 [[치과 AX - 기능 정의]] §7) |

@@ -8,14 +8,12 @@ def test_large_uses_default_paths_app_and_eval_read():
     p = output_paths("large")
     assert p["app"] == ROOT / "data" / "app.sqlite"
     assert p["truth"] == ROOT / "ground_truth" / "truth.sqlite"
-    assert p["chroma"] == ROOT / "data" / "chroma"
 
 
 def test_small_is_separate_and_truth_stays_under_ground_truth():
     p = output_paths("small")
     assert p["app"] == ROOT / "data" / "small" / "app.sqlite"
     assert p["truth"] == ROOT / "ground_truth" / "small" / "truth.sqlite"
-    assert p["chroma"] == ROOT / "data" / "small" / "chroma"
     assert p["llm_log"].parent == ROOT / "data" / "small"
     assert set(p.values()).isdisjoint(output_paths("large").values())
 

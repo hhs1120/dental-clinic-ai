@@ -82,7 +82,7 @@ tags:
 - **합성 데이터**: 정답 라벨을 먼저 정하고 LLM이 그에 맞는 통화·문서를 생성 — 실제 환자 정보 없이 정답이 있는 데이터셋
 - **AI 코딩 에이전트로 개발**: Claude Code에 설계 문서·작업 규칙(`CLAUDE.md`)을 주고 테스트 우선으로 구현
 
-스택: Next.js + TypeScript / FastAPI / SQLite(FTS5) + Chroma. 구체적인 모델·임베딩·리랭커는 dev 평가셋으로 비교한 뒤 정한다.
+스택: Next.js + TypeScript / FastAPI / SQLite(FTS5 + sqlite-vec). 구체적인 모델·임베딩·리랭커는 dev 평가셋으로 비교한 뒤 정한다.
 
 ## 4. 팀원이 맡을 수 있는 영역
 

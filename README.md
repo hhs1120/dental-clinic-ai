@@ -50,7 +50,7 @@ generator/     데이터 생성기 + verify
 shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트
 ground_truth/  정답지 (앱은 참조하지 않음)
-data/          생성 결과 (app.sqlite, 벡터 색인)
+data/          생성 결과 (app.sqlite — FTS5·벡터 포함)
 backend/       FastAPI (예정)
 frontend/      Next.js (예정)
 tests/

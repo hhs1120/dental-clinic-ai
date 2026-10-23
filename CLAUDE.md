@@ -12,7 +12,7 @@
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
-- `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite, chroma · `config/` 생성기 설정
+- `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
 
 ## 절대 규칙

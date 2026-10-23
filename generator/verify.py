@@ -470,7 +470,7 @@ REPORTS = [
 # ── 결정성 ──────────────────────────────────────────────────
 
 # 실행할 때마다 바뀌는 컬럼 (§5.3 결정성: indexed_at 제외)
-HASH_EXCLUDED = {("ax_calls", "indexed_at")}
+HASH_EXCLUDED = {("ax_calls", "indexed_at"), ("ax_chunk_vectors", "embedding")}
 
 
 def canonical_hash(conn, schema: str = "main") -> str:

@@ -277,7 +277,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_CODES` 코드마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
-| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at` 제외, 벡터 디렉토리 제외). `make verify` 밖 — `tests/test_generator.py` |
+| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at`·`ax_chunk_vectors.embedding` 제외 — 임베딩 API 출력은 실행마다 비트 단위로 같지 않음). `make verify` 밖 — `tests/test_generator.py` |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
 **경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만 둔다. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)
