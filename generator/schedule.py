@@ -340,8 +340,7 @@ class Sim:
             guardian, surname = fam["guardian"], self.surname[family]
             phone = self.phone[guardian]
         self.new_rows.append((p.id, f"C-{p.id:05d}", surname + c["first_name"], c["birth_date"].isoformat(), c["sex"],
-                              phone, family, guardian, d.isoformat(), RECALL_CYCLE_MONTHS, c["has_private_insurance"],
-                              c["note"]))
+                              phone, family, guardian, d.isoformat(), RECALL_CYCLE_MONTHS, c["has_private_insurance"]))
 
     def changes(self, d: date) -> None:
         """3. 변경: 오늘이 변경일인 예약 → 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일의 첫 가능일로. 가능일이 없으면 변경하지 않음"""
@@ -380,7 +379,7 @@ class Sim:
         conn = self.run.conn
         conn.executemany(
             "INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id, guardian_patient_id,"
-            " registered_at, recall_cycle_months, has_private_insurance, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " registered_at, recall_cycle_months, has_private_insurance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             self.new_rows)
         fmt = "%Y-%m-%d %H:%M:%S"
         conn.executemany(

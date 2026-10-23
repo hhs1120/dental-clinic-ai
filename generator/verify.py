@@ -5,9 +5,10 @@
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 sent_at 이후),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
-         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부(청구 기준 문서의 사유 코드마다 절 1개 포함),
-         truth_claim_errors 목록 검사와 비급여·스케일링 검사의 목록 줄 제외, 목록 밖 급여 진료 ↔ 청구 1줄·급여 조건 충족(5단계)
-  경고 — 목적·노이즈 분포, 문자, 통화, RAG
+         누출(풀 마킹 카테고리 추론·분류기 입력 덤프·emr_chart_notes 허용 컬럼), RAG 전부(청구 기준 문서의 사유 코드마다 절 1개 포함),
+         truth_claim_errors 목록 검사와 비급여·스케일링 검사의 목록 줄 제외, 목록 밖 급여 진료 ↔ 청구 1줄(창 안 — 창 이전은 그해 급여 스케일링만)·급여 조건 충족(5단계),
+         주의사항(4b단계), 차트(5b단계)
+  경고 — 목적·노이즈 분포, 문자, 통화, RAG, 차트 디코이 비율
 결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
@@ -123,10 +124,10 @@ def check_timestamps_not_future(conn, ctx):
 
 
 def check_last_month_claims_pending(conn, ctx):
-    """TODAY 전월(11월) 이후 청구는 pending"""
+    """TODAY 전월(11월) 이후 청구는 pending, 제출일 없음"""
     last_month = (ctx.today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     return _rows(conn, "SELECT id, claim_month, status, submitted_at FROM emr_claims"
-                       " WHERE claim_month >= ? AND status != 'pending'", last_month)
+                       " WHERE claim_month >= ? AND (status != 'pending' OR submitted_at IS NOT NULL)", last_month)
 
 
 def _submitted_months(ctx) -> list[str]:
@@ -145,6 +146,16 @@ def check_submitted_months_no_result(conn, ctx):
     return _rows(conn, "SELECT id, claim_month, status, paid_amount, adjust_code FROM emr_claims"
                        f" WHERE claim_month IN ({marks}) AND (status != 'submitted'"
                        " OR paid_amount IS NOT NULL OR adjust_code IS NOT NULL)", *months)
+
+
+def check_settled_claims(conn, ctx):
+    """확정 월(제출 월 이전) 청구는 paid(금액 그대로·사유 없음) / adjusted(일부 지급·사유) / denied(0원·사유)"""
+    first_submitted = min(_submitted_months(ctx))
+    return _rows(conn, "SELECT id, claim_month, status, claim_amount, paid_amount, adjust_code FROM emr_claims"
+                       " WHERE claim_month < ? AND NOT ("
+                       " (status = 'paid' AND paid_amount = claim_amount AND adjust_code IS NULL)"
+                       " OR (status = 'adjusted' AND paid_amount > 0 AND paid_amount < claim_amount AND adjust_code IS NOT NULL)"
+                       " OR (status = 'denied' AND paid_amount = 0 AND adjust_code IS NOT NULL))", first_submitted)
 
 
 # ── 충돌 ─────────────────────────────────────────────────────
@@ -339,6 +350,16 @@ def check_visit_payment_completed(conn, ctx):
                        " WHERE p.kind = 'visit' AND a.status IS NOT 'completed'")
 
 
+def check_payment_per_visit(conn, ctx):
+    """창 안 completed 예약마다 visit 수납 정확히 1행, 창 이전 내원은 수납 없음, settlement는 amount_due 0"""
+    bad = _rows(conn, "SELECT a.id, a.scheduled_at, count(p.id) AS visits FROM emr_appointments a"
+                      " LEFT JOIN emr_payments p ON p.appointment_id = a.id AND p.kind = 'visit'"
+                      " WHERE a.status = 'completed' GROUP BY a.id"
+                      " HAVING (date(a.scheduled_at) >= ? AND visits != 1) OR (date(a.scheduled_at) < ? AND visits != 0)",
+                ctx.range_start.isoformat(), ctx.range_start.isoformat())
+    return bad + _rows(conn, "SELECT id, amount_due FROM emr_payments WHERE kind = 'settlement' AND amount_due != 0")
+
+
 # ── 누출 ────────────────────────────────────────────────────
 
 # shared/schema.sql의 ax_calls 컬럼(의미는 가상 데이터 생성 설계 §3). 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
@@ -449,6 +470,7 @@ REQUIRED = [
     check_timestamps_not_future,
     check_last_month_claims_pending,
     check_submitted_months_no_result,
+    check_settled_claims,
     check_patient_same_day,
     check_confirmed_not_future,
     check_confirmed_reminded,
@@ -468,6 +490,7 @@ REQUIRED = [
     check_truth_claims_match,
     check_balance_non_negative,
     check_visit_payment_completed,
+    check_payment_per_visit,
     check_ax_calls_columns,
     check_call_uid_format,
     check_fake_phone,

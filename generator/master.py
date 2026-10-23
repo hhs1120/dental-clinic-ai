@@ -69,9 +69,6 @@ FAMILY_SHARE = 0.35            # 가족으로 묶인 환자 비중
 FAMILY_SIZE = (2, 4)           # 가족 인원 (양 끝 포함)
 GUARDIAN_MIN_AGE_GAP = 20      # 보호자는 가족의 소아·청소년보다 이 나이 이상 많다
 PRIVATE_INSURANCE_SHARE = 0.50
-NOTE_SHARE = 0.10
-NOTES = ("치과 공포 있음", "고혈압 약 복용", "당뇨 있음", "오전 진료 선호", "항응고제 복용",
-         "마취 시 어지러움 호소", "저녁 연락 선호")
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일

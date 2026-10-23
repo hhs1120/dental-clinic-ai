@@ -5,7 +5,7 @@
 """
 from datetime import date, timedelta
 
-from generator.master import (AGE_BANDS, FAMILY_SHARE, FAMILY_SIZE, GUARDIAN_MIN_AGE_GAP, MAX_AGE, NOTE_SHARE, NOTES,
+from generator.master import (AGE_BANDS, FAMILY_SHARE, FAMILY_SIZE, GUARDIAN_MIN_AGE_GAP, MAX_AGE,
                               PRIVATE_INSURANCE_SHARE, RECALL_CYCLE, RECALL_CYCLE_MONTHS, REGISTERED_FROM, add_years)
 from generator.seeding import stage_faker, stage_rng
 
@@ -110,8 +110,7 @@ def stage(run, rng, fake) -> None:
     for p in people:
         if p["guardian"] is not None:
             p["phone"] = people[p["guardian"]]["phone"]
-    insured, noted = _pick(rng, n, PRIVATE_INSURANCE_SHARE), _pick(rng, n, NOTE_SHARE)
-    notes = {i: NOTES[int(rng.integers(len(NOTES)))] for i in sorted(noted)}
+    insured = _pick(rng, n, PRIVATE_INSURANCE_SHARE)
 
     # 차트 번호 = 등록순
     ranked = sorted(range(n), key=lambda i: (people[i]["registered_at"], i))
@@ -120,10 +119,10 @@ def stage(run, rng, fake) -> None:
                          [(fid, people[f[0]]["surname"]) for fid, f in enumerate(families, start=1)])
     run.conn.executemany(
         "INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id, guardian_patient_id,"
-        " registered_at, recall_cycle_months, has_private_insurance, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " registered_at, recall_cycle_months, has_private_insurance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(pid[i], f"C-{pid[i]:05d}", p["surname"] + p["first_name"], p["birth_date"].isoformat(), p["sex"],
           p["phone"], p["family"], pid[p["guardian"]] if p["guardian"] is not None else None,
-          p["registered_at"].isoformat(), RECALL_CYCLE_MONTHS, int(i in insured), notes.get(i))
+          p["registered_at"].isoformat(), RECALL_CYCLE_MONTHS, int(i in insured))
          for i in ranked for p in [people[i]]])
     run.state["patients"] = [{"id": pid[i], "birth_date": people[i]["birth_date"], "family_id": people[i]["family"],
                               "last_hygiene": people[i]["last_hygiene"]} for i in ranked]
@@ -143,8 +142,7 @@ def new_patient_candidates(run):
     while True:
         band = names[int(rng.choice(len(names), p=shares))]
         sex = "M" if rng.random() < 0.5 else "F"
-        insured, noted = rng.random() < PRIVATE_INSURANCE_SHARE, rng.random() < NOTE_SHARE
-        note = NOTES[int(rng.integers(len(NOTES)))] if noted else None
+        insured = rng.random() < PRIVATE_INSURANCE_SHARE
         yield {"band": band, "sex": sex, "birth_date": _birth(rng, band, run.today), "surname": fake.last_name(),
                "first_name": _first_name(fake, sex), "phone": next(run.state["phones"]),
-               "has_private_insurance": int(insured), "note": note}
+               "has_private_insurance": int(insured)}

@@ -10,7 +10,7 @@ import yaml
 
 from generator import build, clinic, demand, patients
 from generator.master import (AGE_BANDS, COURSE_VISITS, EPISODE_MIX, FAMILY_SHARE, FAMILY_SIZE,
-                              GUARDIAN_MIN_AGE_GAP, MAX_LEAD_DAYS, NOTE_SHARE, NOTES, PRIVATE_INSURANCE_SHARE,
+                              GUARDIAN_MIN_AGE_GAP, MAX_LEAD_DAYS, PRIVATE_INSURANCE_SHARE,
                               PROCEDURES, RECALL_CYCLE, RECALL_CYCLE_MONTHS, RECALL_JITTER_DAYS, REGISTERED_FROM, STAFF,
                               add_years, age_band, age_on)
 from generator.paths import ROOT
@@ -133,11 +133,10 @@ def test_phones_fake_and_unique_except_children(run):
     assert len(own) == len(set(own))
 
 
-def test_flags_and_notes_exact_shares(run):
+def test_flags_exact_shares(run):
     rows = _patients(run)
     assert sum(r["has_private_insurance"] for r in rows) == round(PRIVATE_INSURANCE_SHARE * N)
-    notes = [r["note"] for r in rows if r["note"] is not None]
-    assert len(notes) == round(NOTE_SHARE * N) and set(notes) <= set(NOTES)
+    assert "note" not in rows[0]  # 주의사항은 emr_patient_alerts(4b단계)로 — 가상 데이터 생성 설계 §2.2
     assert {r["recall_cycle_months"] for r in rows} == {RECALL_CYCLE_MONTHS}
     assert {r["sex"] for r in rows} == {"M", "F"}
 

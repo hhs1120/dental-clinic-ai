@@ -35,7 +35,7 @@ tags:
 **색인**(`make index`): 청킹 300~500자, 겹침 50, 마크다운 헤더 우선. 문자는 건별이 아니라 **환자별 월 스레드 1청크**(`[환자: 김○○(C-00001) | 2026-07] 07-03 예약 확인 … 07-10 답장: …`). 색인 코드는 앱 쪽 — `make data` 10단계가 생성 직후 1회 호출하고, 붙여넣기 통화는 앱이 색인.
 
 **`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread/chart_note)`(id `'chart:<treatment_id>'`, 진료 1건 = 1청크), 필터용 실컬럼(`chart_no`·`event_date`·`doc_type`).
-`text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`, 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`, 차트 `[차트 C-00001 | 2026-07-03 | 치석제거]`(환자 이름 없음 — 케이스 내용으로 찾고 차트 번호로 환자에 닿는다).
+`text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`, 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`, 차트 `[차트 C-00001 | 2026-07-03 | 스케일링]`(환자 이름 없음 — 케이스 내용으로 찾고 차트 번호로 환자에 닿는다).
 - FTS5 `ax_chunks_fts(text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`. 복합어는 적재 시 공백 정규화
 - 벡터 `ax_chunk_vectors(chunk_id = ax_chunks.id, embedding)` — sqlite-vec. 필터는 `ax_chunks` 실컬럼으로 먼저 거르고 남은 행만 `vec_distance_cosine` 전수 계산(정확 검색 — 근사 인덱스 없음, top-k가 필터에 깎이지 않음). 다중 조건 필터도 SQL 그대로
 
@@ -53,7 +53,7 @@ tags:
 
 - 날짜 전부 `YYYY-MM-DD`. 도구 description에 TODAY 값(§6) 예시를 넣음
 - 호출 상한 6회/질문. 경계: 건수·목록 → `query_*`, 절차·규정·과거 대화 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
-- **검색은 버킷 분리**: `document` 상위 25 + `call/message_thread` 상위 25 따로 → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제
+- **검색은 버킷 분리**: `document` 상위 25 + `call/message_thread/chart_note` 상위 25 따로 → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제
 
 ## 4. 준비표·리포트
 
@@ -85,7 +85,7 @@ tags:
 | 리랭커·임베딩 | 임베딩 **OpenAI `text-embedding-3-small`**(확정 — 널리 쓰이고 저렴, Anthropic에는 임베딩 모델이 없음). 리랭커는 **Cohere Rerank(다국어) vs LLM 리랭킹(`claude-haiku-5-5`가 후보 순위 매김)**을 `--retrieval-only` dev로 비교 후 확정(LLM 리랭킹은 순위가 실행마다 흔들릴 수 있어 결정성·지연도 같이 본다) |
 | 모델 (확정) | 프로바이더 **Anthropic**(LLM). ① 분류 경량 `claude-haiku-5-5` → 최종 v3-final `claude-sonnet-5-5`, ③ 챗·④ 제안·⑤-4 초안 `claude-sonnet-5-5`, 생성기(통화 전사·문서·차트 서술) `claude-sonnet-5-5` |
 | LLM (원본은 여기) | 게이트웨이 모듈 1개(`shared/`, 생성기 7·9·9b단계도 경유), 내부 LiteLLM 라이브러리(서버 아님). 별칭으로 호출, 폴백, 호출 로그(`ax_llm_calls`), 일일 비용 상한(금액은 [[치과 AX - 기능 정의]] §7). 프로바이더 조합 확정 + 구조화 출력·도구 호출 테스트 |
-| 프롬프트 | `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `gen_transcript`·`gen_document`(생성기). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정, 생성기는 생성기 코드에 고정(LLM 캐시 키의 `prompt_template_hash` = 그 파일 해시) |
+| 프롬프트 | `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `gen_transcript`·`gen_document`·`gen_chart`(생성기). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정, 생성기는 생성기 코드에 고정(LLM 캐시 키의 `prompt_template_hash` = 그 파일 해시) |
 | 테스트 fixture | **`make fixture`**: small 데이터 + fake 게이트웨이로 판정 풀 전체 분류를 가짜 프롬프트 버전 v1·v2 두 벌로 적재(블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | `export-human/import-human`: 판정은 `hash(transcript)`로만 복원 — 미스 시 버리고 "복원 실패 N건" 리포트(전사가 바뀐 건에 `call_uid`로 붙이면 다른 대화에 라벨이 붙음). 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |

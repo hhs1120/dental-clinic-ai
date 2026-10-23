@@ -50,8 +50,7 @@ CREATE TABLE emr_patients (
     guardian_patient_id    INTEGER REFERENCES emr_patients(id),
     registered_at          TEXT NOT NULL,
     recall_cycle_months    INTEGER NOT NULL DEFAULT 6,
-    has_private_insurance  INTEGER NOT NULL DEFAULT 0,
-    note                   TEXT
+    has_private_insurance  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE emr_appointments (

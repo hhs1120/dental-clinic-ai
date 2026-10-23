@@ -51,6 +51,26 @@ BREAKS = {
         "INSERT INTO emr_claims VALUES (3, 3, 2, 'C-00002', '00', '2026-11', '2026-11-18', 'U0001', 42000, NULL, 'pending', NULL, NULL)",
         "check_scaling_limit",
     ),
+    "pending_with_submitted_at": ("UPDATE emr_claims SET submitted_at = '2026-11-30 09:00:00' WHERE id = 2",
+                                  "check_last_month_claims_pending"),
+    # 확정 월(9월 이전): 상태는 paid/adjusted/denied, 금액·사유 코드가 상태와 맞음
+    "settled_still_submitted": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'submitted', NULL, NULL)",
+        "check_settled_claims"),
+    "paid_amount_mismatch": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'paid', 80000, NULL)",
+        "check_settled_claims"),
+    "adjusted_without_code": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, NULL)",
+        "check_settled_claims"),
+    "denied_with_amount": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 84000, 'A01')",
+        "check_settled_claims"),
+    # 수납: 창 안 completed마다 visit 1행, 창 이전 내원은 수납 없음, settlement는 amount_due 0
+    "completed_without_visit_payment": ("DELETE FROM emr_payments WHERE id = 4", "check_payment_per_visit"),
+    "two_visit_payments": ("INSERT INTO emr_payments VALUES (5, 2, 4, 'visit', 0, 0, '2026-11-18 10:40:00', 'card')",
+                           "check_payment_per_visit"),
+    "settlement_with_due": ("UPDATE emr_payments SET amount_due = 1000 WHERE id = 3", "check_payment_per_visit"),
     "overpaid": ("UPDATE emr_payments SET amount_paid = 40000 WHERE id = 1", "check_balance_non_negative"),
     "settled_before_debt": ("UPDATE emr_payments SET paid_at = '2026-10-01 10:00:00' WHERE id = 3", "check_balance_non_negative"),
     "visit_on_noshow": ("UPDATE emr_payments SET appointment_id = 7 WHERE id = 2", "check_visit_payment_completed"),
@@ -298,3 +318,12 @@ def test_pre_window_visit_valid(tmp_path):
     conn = make_db(tmp_path)
     conn.execute(PRE + _pre(1, "2026-09-15 10:00:00") + ", " + _pre(2, "2026-09-16 10:00:00"))
     assert verify.check_pre_window_visit(conn, CTX) == []
+
+
+def test_pre_window_visit_has_no_payment(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute(PRE + _pre(1, "2026-09-15 10:00:00"))
+    assert verify.check_payment_per_visit(conn, CTX) == []
+    pre_id = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+    conn.execute("INSERT INTO emr_payments VALUES (5, 1, ?, 'visit', 18000, 18000, '2026-09-15 10:40:00', 'card')", (pre_id,))
+    assert verify.check_payment_per_visit(conn, CTX)
