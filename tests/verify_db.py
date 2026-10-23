@@ -10,9 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
-CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), reschedule_rate=0.05,
-          noshow_rate=0.06, sameday_cancel_rate=0.04, confirm_rate=0.85, unpaid_rate=0.15,
-          visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15))
+CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15))
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
 SEED = """
@@ -41,8 +39,8 @@ INSERT INTO emr_payments VALUES
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
 INSERT INTO emr_claims VALUES
-  (1, 1, 1, 'C-00001', '26', '2026-10', 'monthly', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL),
-  (2, 2, 1, 'C-00001', '00', '2026-11', 'monthly', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL);
+  (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL),
+  (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL);
 INSERT INTO emr_messages VALUES
   (1, 1, 'out', '2026-11-02 18:00:00', '내일 예약 안내', 'reminder', 2),
   (2, 1, 'in',  '2026-11-02 18:10:00', '네', 'reply', 2);
@@ -51,28 +49,20 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction,
   (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-27 16:00:00', 140, 0);
 """
 
-# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_eob 줄은 장부에 없는 키
+# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
 TRUTH_SEED = """
 INSERT INTO truth_claims VALUES
   (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),
-  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_eob', 24500, NULL);
+  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL);
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """
 
 
-def make_db(tmp_path, relaxed=False) -> sqlite3.Connection:
-    """relaxed: 스키마 제약(tooth_no·planned_procedure_code NOT NULL, 대조 키 UNIQUE)을 풀어 verify가 따로 잡는지 본다."""
-    schema = SCHEMA
-    if relaxed:
-        assert schema.count("tooth_no       TEXT NOT NULL") == 2
-        schema = schema.replace("tooth_no       TEXT NOT NULL", "tooth_no       TEXT")
-        assert schema.count("planned_procedure_code TEXT NOT NULL") == 1
-        schema = schema.replace("planned_procedure_code TEXT NOT NULL", "planned_procedure_code TEXT")
-        schema = schema.replace("CREATE UNIQUE INDEX", "CREATE INDEX")
+def make_db(tmp_path) -> sqlite3.Connection:
     conn = sqlite3.connect(tmp_path / "app.sqlite")
     conn.row_factory = sqlite3.Row
-    conn.executescript(schema)
+    conn.executescript(SCHEMA)
     cols = list(PROCEDURES[0])
     conn.executemany(f"INSERT INTO emr_procedures ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
                      [tuple(p[c] for c in cols) for p in PROCEDURES])

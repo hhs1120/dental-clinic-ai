@@ -6,24 +6,19 @@ import pytest
 import yaml
 
 from generator import master, verify
-from generator.master import ACTIVE_SHARE, AGE_BANDS, NEW_PATIENT_SHARE, VISIT_MIX
+from generator.master import VISIT_MIX
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "치과 AX - 가상 데이터 생성 설계.md"
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 
 # 문서가 이름으로 가리키지만 아직 구현 전인 값 (해당 단계 구현 때 코드에 추가)
-PENDING = {"ADJUST_CODES"}
+PENDING = {"ADJUST_CODES", "CHART_DECOY_RATIO"}
 
-_BAND_LABEL = {"child": "소아", "teen": "청소년", "adult": "성인", "senior": "노인"}
 _MIX_LABEL = {"treatment": "진료", "hygiene": "위생", "consult": "상담"}
 
 # 경고로 남은 지표만(리포트 항목은 허용치가 없어 비교할 값이 없다). 지표 이름(표 첫 칸의 앞부분) → ({라벨: 목표값}, 허용치). 라벨 ""은 값이 하나인 칸. 허용치 None = 허용 칸 없음
 EXPECTED = {
-    "연령 구간 비중": ({_BAND_LABEL[name]: share for name, *_, share in AGE_BANDS}, verify.SHARE_TOLERANCE),
-    "활동": ({"": ACTIVE_SHARE}, verify.ACTIVE_TOLERANCE),
-    "신환": ({"": NEW_PATIENT_SHARE}, verify.NEW_PATIENT_TOLERANCE),
-    "노쇼·당일 취소": ({"노쇼": CFG["noshow_rate"], "당일 취소": CFG["sameday_cancel_rate"]}, verify.SHARE_TOLERANCE),
     "내원 구성": ({_MIX_LABEL[t]: v for t, v in VISIT_MIX.items()}, verify.VISIT_MIX_TOLERANCE),
 }
 
@@ -89,7 +84,7 @@ _AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", 
 
 
 def _config_key_names() -> set[str]:
-    """config 최상위 키, 하위 키(`messages.balance` 형태), 이름이 겹치지 않는 하위 키 단독(`supplementary_ratio`)"""
+    """config 최상위 키, 하위 키(`messages.balance` 형태), 이름이 겹치지 않는 하위 키 단독(`reply_rate`)"""
     names = set()
     for key, value in CFG.items():
         names.add(key)
@@ -110,3 +105,18 @@ def test_config_keys_always_prefixed():
               for t in re.findall(r"[\w.]+", m.group(1))]
     bare = sorted({t for pos, t in tokens if t in names and not any(a <= pos < b for a, b in covered)})
     assert not bare, f"`config` 접두어 없이 쓴 config 키: {bare}"
+
+
+# §4.2 문서 표에서 방해 문서(정답이 없도록 만드는 문서) 종류 — 나머지는 core
+_DISTRACTOR_KINDS = {"공지 옛 버전", "유사 주제 무답", "타 병원·일반"}
+
+
+def test_rag_document_counts_match_config():
+    """§4.2 문서 표의 종류별 수 합계가 `config` `documents`(core·distractor)와 같아야 한다"""
+    text = _doc()
+    table = text[text.index("### 4.2"):].split("| 종류 | 수 | 생성 |")[1].split("\n\n")[0]
+    rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.strip().splitlines()[1:]]
+    counts = {"core": 0, "distractor": 0}
+    for kind, n, *_ in rows:
+        counts["distractor" if kind in _DISTRACTOR_KINDS else "core"] += int(n)
+    assert counts == CFG["documents"], f"§4.2 표 {counts} ≠ config {CFG['documents']}"

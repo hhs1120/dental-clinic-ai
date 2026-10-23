@@ -20,29 +20,21 @@ HOURS = {
 SLOT_MIN = 30
 SATURDAY = 5
 
-# 리마인드 발송 시각 (§2.5) — 직전 진료일의 이 시각에 그때 있던 예약에만 보낸다.
-# 토요일은 마감(13:30)이 이르므로 마감 전 시각 — 확인 통화가 그날 영업시간 안에 들어오게
-REMINDER_TIME = "17:00"
-SATURDAY_REMINDER_TIME = "12:30"
+# 당일 취소 시각 = 예약 1~SAMEDAY_CANCEL_LEAD_MIN분 전 (§2.6 (3))
+SAMEDAY_CANCEL_LEAD_MIN = 120
 
-# 운영 제약 (§1): 같은 시작 시각의 비취소 예약 상한. 하루 상한은 config의 visits_per_day(평일)
-MAX_APPOINTMENTS_PER_SLOT = 3
-
-# 예약 시점 (§2.6 ③): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
+# 예약 시점 (§2.6 (3)): 전화 예약 희망 리드 1~MAX_LEAD_DAYS일, 변경 새 예약은 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일
 MAX_LEAD_DAYS = 14
 RESCHEDULE_MAX_DAYS = 14
 
 # 스케일링 급여 나이 (§2.1: 19세↑ 연 1회)
 SCALING_MIN_AGE = 19
 
-# 임플란트 1차(conditional)는 시술일 기준 이 나이 이상이면 급여, 미만이면 비급여(본인부담 1.0·청구 없음) (§2.6 ④)
+# 임플란트 1차(conditional)는 시술일 기준 이 나이 이상이면 급여, 미만이면 비급여(본인부담 1.0·청구 없음) (§2.6 (4))
 CONDITIONAL_INSURED_MIN_AGE = 65
 
 # 내원 구성 목표 (§1). 목표 — 경고로만 확인
 VISIT_MIX = {"treatment": 0.70, "hygiene": 0.25, "consult": 0.05}
-
-# 토요일 하루 상한 = 평일 visits_per_day × 이 비율 (§1)
-SATURDAY_VISIT_RATIO = 0.5
 
 # 연령 구간과 비중 (§2.2). (이름, 최소 나이, 최대 나이(포함, 노인은 None), 비중)
 AGE_BANDS = [
@@ -77,28 +69,21 @@ FAMILY_SHARE = 0.35            # 가족으로 묶인 환자 비중
 FAMILY_SIZE = (2, 4)           # 가족 인원 (양 끝 포함)
 GUARDIAN_MIN_AGE_GAP = 20      # 보호자는 가족의 소아·청소년보다 이 나이 이상 많다
 PRIVATE_INSURANCE_SHARE = 0.50
-NOTE_SHARE = 0.10
-NOTES = ("치과 공포 있음", "고혈압 약 복용", "당뇨 있음", "오전 진료 선호", "항응고제 복용",
-         "마취 시 어지러움 호소", "저녁 연락 선호")
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
-# 리콜 (§2.6 ①): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
+# 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
 RECALL_CYCLE_MONTHS = 6
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
-# 치료 수요의 에피소드 유형 비중 (§2.6 ②). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
+# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
 _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
 COURSE_VISITS = (2, 4)  # 양 끝 포함
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
-# 활동·휴면 (§2.2). 내원 = completed 예약. 활동 = TODAY 전 ACTIVE_MONTHS개월 안 내원 ≥ 1회. 목표 비중 — 경고로만 확인
-ACTIVE_MONTHS = 6
-ACTIVE_SHARE = 0.60  # 예정 신환을 뺀 환자 중. 초기 설계 가정 — 첫 large 실행 결과로 확정
-
-# 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 목표 — 경고로만 확인
+# 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
 NEW_PATIENT_SHARE = 0.12
 
 # 치아 번호 (§2.1). 치아 단위가 아닌 시술은 FULL_MOUTH 센티널
@@ -158,11 +143,6 @@ def _minutes(hhmm: str) -> int:
     return int(h) * 60 + int(m)
 
 
-def reminder_time(weekday: int) -> str:
-    """그 요일(월=0)에 보내는 리마인드 시각"""
-    return SATURDAY_REMINDER_TIME if weekday == SATURDAY else REMINDER_TIME
-
-
 def open_slots(weekday: int) -> int:
     """그 요일의 진료 슬롯(SLOT_MIN분) 수 (월=0). 휴진 요일은 0. 공휴일은 호출하는 쪽에서 거른다."""
     if weekday in HOURS["closed_weekdays"]:
@@ -173,7 +153,15 @@ def open_slots(weekday: int) -> int:
     return (_minutes(HOURS["weekday_close"]) - _minutes(HOURS["open"]) - lunch) // SLOT_MIN
 
 
-# 유형별 예정 시술 가중 (§2.6 ④). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
+MAX_OPEN_SLOTS = max(open_slots(w) for w in range(7))  # 가장 긴 날의 슬롯 수
+
+
+def daily_cap(visits_per_day: int, weekday: int) -> int:
+    """그 요일의 하루 비취소 예약 상한 — config visits_per_day(가장 긴 날 기준)를 슬롯 수에 비례해 내림 (§1)"""
+    return visits_per_day * open_slots(weekday) // MAX_OPEN_SLOTS
+
+
+# 유형별 예정 시술 가중 (§2.6 (4)). 시술 이름 → 가중(%). 연령 구간은 예약일 기준.
 # 성인·노인 hygiene은 표가 아니라 규칙: 그해 스케일링을 이미 했으면 구강검진, 아니면 스케일링 (HYGIENE_SCALING_BANDS)
 PLANNED_WEIGHTS = {
     "hygiene": {

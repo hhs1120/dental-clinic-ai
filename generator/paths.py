@@ -13,7 +13,6 @@ def output_paths(scale: str) -> dict[str, Path]:
     truth = ROOT / "ground_truth" if scale == "large" else ROOT / "ground_truth" / scale
     return {
         "app": data / "app.sqlite",
-        "chroma": data / "chroma",
         "llm_log": data / "llm_calls_gen.jsonl",
         "truth": truth / "truth.sqlite",
     }

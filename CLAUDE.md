@@ -12,7 +12,7 @@
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
-- `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite, chroma · `config/` 생성기 설정
+- `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
 
 ## 절대 규칙
@@ -21,11 +21,11 @@
 - 테이블 접두어는 현실의 소속 시스템 기준: `emr_` 병원 원본(backend는 쓰지 않음) · `ax_` AX 시스템 · `truth_` 정답(별도 DB). 상세는 가상 데이터 생성 설계 §0
 - 시드 고정(`config/generator.yaml`). 같은 시드 → 같은 결과
 - 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다). 단계를 추가해도 기존 결과가 바뀌지 않게 하기 위함 (가상 데이터 생성 설계 §5.1)
-- 기존 `emr_*` 테이블은 슬롯 기능을 위해 수정하지 않는다. 추가 데이터는 새 테이블로 (가상 데이터 생성 설계 §0)
-- 정형 데이터(1~6단계) 완성 + `make verify` 통과(small·large 둘 다) → LLM 생성(7·9단계) 1회. 정형 로직을 고치면 LLM 캐시가 전량 미스
+- 데이터를 고정(LLM 7·9·9b단계 실행)한 뒤에는 슬롯 기능을 위해 기존 `emr_*`를 수정하지 않는다. 추가 데이터는 새 테이블로. 슬롯의 기반 데이터는 고정 전에 정형 단계에 처음부터 넣을 수 있다 (가상 데이터 생성 설계 §0)
+- 정형 데이터(1~6·3b·4b·5b단계) 완성 + `make verify` 통과(small·large 둘 다) → LLM 생성(7·9·9b단계) 1회. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기 입력은 `classify(transcript, direction)`만
-- 병원 상수(시술·영업시간·운영 제약(토 비율·시각대 3건)·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
+- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
 - 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/test_doc_sync.py`에 비교를 추가한다
 
 ## 명령

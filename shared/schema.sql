@@ -50,8 +50,7 @@ CREATE TABLE emr_patients (
     guardian_patient_id    INTEGER REFERENCES emr_patients(id),
     registered_at          TEXT NOT NULL,
     recall_cycle_months    INTEGER NOT NULL DEFAULT 6,
-    has_private_insurance  INTEGER NOT NULL DEFAULT 0,
-    note                   TEXT
+    has_private_insurance  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE emr_appointments (
@@ -100,7 +99,6 @@ CREATE TABLE emr_claims (
     chart_no       TEXT NOT NULL,
     tooth_no       TEXT NOT NULL,
     claim_month    TEXT NOT NULL,
-    batch_type     TEXT NOT NULL CHECK (batch_type IN ('monthly', 'supplementary')),
     service_date   TEXT NOT NULL,
     procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
     claim_amount   INTEGER NOT NULL,
@@ -132,7 +130,7 @@ CREATE INDEX ix_claims_month       ON emr_claims(claim_month);
 CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
--- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks는 make index(앱 색인 코드)가 채움.
+-- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.
 -- 나머지는 해당 기능 구현 때 추가
 
 -- 라벨·노이즈·카테고리 컬럼을 두지 않는다 (정답 누출 — truth_call_labels에만)
@@ -154,12 +152,11 @@ CREATE TABLE ax_calls (
     judge_status     TEXT NOT NULL DEFAULT 'none' CHECK (judge_status IN ('none', 'pending', 'skipped', 'done')),
     in_blind_pool    INTEGER NOT NULL DEFAULT 0,
     blind_sort_order INTEGER,
-    blind_status     TEXT NOT NULL DEFAULT 'none' CHECK (blind_status IN ('none', 'pending', 'done')),
     indexed_at       TEXT
 );
 
 CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
-CREATE INDEX ix_calls_blind   ON ax_calls(blind_status, blind_sort_order);
+CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
 
 -- RAG 문서 (9단계). 방해 여부·심은 QA는 truth_doc_meta에만
