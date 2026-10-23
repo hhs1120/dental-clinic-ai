@@ -100,7 +100,6 @@ CREATE TABLE emr_claims (
     chart_no       TEXT NOT NULL,
     tooth_no       TEXT NOT NULL,
     claim_month    TEXT NOT NULL,
-    batch_type     TEXT NOT NULL CHECK (batch_type IN ('monthly', 'supplementary')),
     service_date   TEXT NOT NULL,
     procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
     claim_amount   INTEGER NOT NULL,
@@ -154,12 +153,11 @@ CREATE TABLE ax_calls (
     judge_status     TEXT NOT NULL DEFAULT 'none' CHECK (judge_status IN ('none', 'pending', 'skipped', 'done')),
     in_blind_pool    INTEGER NOT NULL DEFAULT 0,
     blind_sort_order INTEGER,
-    blind_status     TEXT NOT NULL DEFAULT 'none' CHECK (blind_status IN ('none', 'pending', 'done')),
     indexed_at       TEXT
 );
 
 CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
-CREATE INDEX ix_calls_blind   ON ax_calls(blind_status, blind_sort_order);
+CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
 
 -- RAG 문서 (9단계). 방해 여부·심은 QA는 truth_doc_meta에만

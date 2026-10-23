@@ -84,7 +84,7 @@ _AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", 
 
 
 def _config_key_names() -> set[str]:
-    """config 최상위 키, 하위 키(`messages.balance` 형태), 이름이 겹치지 않는 하위 키 단독(`supplementary_ratio`)"""
+    """config 최상위 키, 하위 키(`messages.balance` 형태), 이름이 겹치지 않는 하위 키 단독(`reply_rate`)"""
     names = set()
     for key, value in CFG.items():
         names.add(key)

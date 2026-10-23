@@ -331,7 +331,7 @@ def check_visit_payment_completed(conn, ctx):
 AX_CALLS_COLUMNS = {
     "id", "call_uid", "source", "patient_id", "caller_phone", "caller_name", "direction", "started_at",
     "duration_sec", "has_transcript", "audio_path", "transcript", "in_eval_pool", "eval_sort_order",
-    "judge_status", "in_blind_pool", "blind_sort_order", "blind_status", "indexed_at",
+    "judge_status", "in_blind_pool", "blind_sort_order", "indexed_at",
 }
 CALL_UID = re.compile(r"c-\d{4,}")
 
