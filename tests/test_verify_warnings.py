@@ -71,6 +71,18 @@ def test_visit_mix(tmp_path):
     assert {v["type"] for v in verify.check_visit_mix(conn, CTX)} == {"treatment", "hygiene"}
 
 
+def test_visit_mix_ignores_pre_window_visits(tmp_path):
+    """창 이전 내원(scheduled_at < range_start)은 내원 구성 분모에 넣지 않는다 (가상 데이터 생성 설계 §2.6 (1))"""
+    conn = make_db(tmp_path)
+    _patients(conn, {"1986-01-01": 100})
+    conn.execute("DELETE FROM emr_appointments")
+    for pid in range(1, 101):
+        kind = "treatment" if pid <= 70 else "hygiene" if pid <= 95 else "consult"
+        appt(conn, "2026-11-24 10:00:00", type=kind, patient=pid)
+        appt(conn, "2026-09-15 10:00:00", type="hygiene", patient=pid)  # 창 이전 위생 1행씩
+    assert verify.check_visit_mix(conn, CTX) == []
+
+
 def test_balance_holder_report(tmp_path):
     conn = make_db(tmp_path)
     # 준비표 범위 = TODAY 포함 최근 7일(11-24~12-01)의 비취소 예약: 환자 1의 7번(11-24)·5번(12-01).

@@ -108,7 +108,7 @@ tags:
 > 하루씩 진행하며 예약을 잡고 그날의 예약을 처리한다. 사건이 시간 순서대로만 일어나므로 `created_at`·`registered_at`·코스 다음 회차·변경·노쇼 뒤 재예약이 저절로 정합된다. 강제하는 것은 §1의 운영 제약 둘과 §5.3 필수 검사뿐이고, 분포는 파라미터로 맞춘 뒤 경고로만 확인한다. 치료 코스는 연속 내원으로 있지만 회차 번호·순서는 기록하지 않는다(**회차 추적 없음**).
 
 **(1) 환자와 수요** (2·3단계)
-- **구환**: 창 이전 마지막 위생 내원일을 **시뮬레이션 시작 전 리콜 한 주기에 고르게** 시드(2단계) → 첫 리콜 기한 = 그날 + 리콜 주기(3단계, 첫날에 기한이 몰리지 않게 — 지터로 시작 전이 된 기한은 첫 `master.MAX_LEAD_DAYS`일에 나눠 받음). `config` `lapse_rate`만큼은 첫 리콜에 응하지 않는다(구환 첫 리콜만 — 신환과 이후 리콜은 응답. ④ 가족 리콜 지남 칩의 재료). **창 이전 내원 1행**: 그 마지막 위생 내원을 `emr_appointments`(completed) + `emr_treatments`(위생 시술 — 창 안 위생 내원과 같은 추첨)로 남긴다 — 창 안에 한 번도 오지 않은 구환도 마지막 내원(가족 리콜 칩·`query_patient`·통화 fact)이 비지 않게. 수납·청구·문자는 두지 않되, TODAY와 같은 해의 급여 스케일링이면 보험 잔여 칩(장부 기준)이 맞도록 청구 1줄을 둔다(`paid` 고정 — 청구 오류·심사 추첨 대상 아님). 그해 급여 스케일링이면 그 해를 4단계 연 1회 이력(`scaling_years`)에 미리 넣는다(창 안 리콜이 다시 급여로 잡히지 않게). 내원일·시술은 2단계 난수에서 뽑는다. **창 안 집계·검사 범위**: 내원 구성·급여 진료 ↔ 청구 1줄 등 창 안 규칙은 `scheduled_at ≥ range_start`만 — 이 행은 그 밖. 등록일 < 그 내원일 < 창 시작(verify, 테스트 먼저)
+- **구환**: 창 이전 마지막 위생 내원일을 **시뮬레이션 시작 전 리콜 한 주기에 고르게** 시드(2단계) → 첫 리콜 기한 = 그날 + 리콜 주기(3단계, 첫날에 기한이 몰리지 않게 — 지터로 시작 전이 된 기한은 첫 `master.MAX_LEAD_DAYS`일에 나눠 받음). `config` `lapse_rate`만큼은 첫 리콜에 응하지 않는다(구환 첫 리콜만 — 신환과 이후 리콜은 응답. ④ 가족 리콜 지남 칩의 재료). **창 이전 내원 1행**: 그 마지막 위생 내원을 `emr_appointments`(completed) + `emr_treatments`(위생 시술 — 창 안 위생 내원과 같은 추첨)로 남긴다 — 창 안에 한 번도 오지 않은 구환도 마지막 내원(가족 리콜 칩·`query_patient`·통화 fact)이 비지 않게. 수납·청구·문자는 두지 않되, TODAY와 같은 해의 급여 스케일링이면 보험 잔여 칩(장부 기준)이 맞도록 청구 1줄을 둔다(`paid` 고정 — 청구 오류·심사 추첨 대상 아님). 그해 급여 스케일링이면 그 해를 4단계 연 1회 이력(`scaling_years`)에 미리 넣는다(창 안 리콜이 다시 급여로 잡히지 않게). 3b단계 `pre_window`가 자기 시드로 2단계 날짜를 그 근처 진료일(등록일 뒤)로 맞추고 시술(성인·노인은 스케일링, 그 밖은 위생 가중표)·시각·전화 예약 시각을 뽑는다 — 2·3단계 결과를 바꾸지 않게 따로 둔다(리콜 기한은 2단계 날짜 그대로라 며칠 어긋날 수 있음, 지터 안). 행은 4단계가 먼저 넣는다(id 앞번호, 담당 위생사 순환). **창 안 집계·검사 범위**: 내원 구성·급여 진료 ↔ 청구 1줄 등 창 안 규칙은 `scheduled_at ≥ range_start`만 — 이 행은 그 밖. 등록일 < 그 내원일 < 창 시작(verify, 테스트 먼저)
 - **리콜 주기** = `master.RECALL_CYCLE_MONTHS`개월 ± `master.RECALL_JITTER_DAYS`일
 - **구환 수** = `config` `returning_patients`(규모와 무관하게 고정). 신환은 시뮬레이션이 목표 비율대로 만든 만큼이고, 환자 총수는 결과값이다
 - **신환 후보 풀**: 이름·연령 등만 미리 만들어 두고 필요할 때 꺼내 등록
@@ -258,6 +258,7 @@ make data [SCALE=small|large] [REGEN_LLM=1]
  1. 마스터         clinic, staff, procedures                     (코드)
  2. 환자           §2.2, §2.6 (1)                                  (코드)
  3. 첫 수요        §2.6 (1)                                        (코드)
+ 3b. 창 이전 내원  §2.6 (1) 구환 마지막 위생 내원 1행               (코드)
  4. 예약 시뮬레이션 §2.6 (3)                                        (코드)
  5. 진료·수납·청구 §2.4, §2.6 (4)                                   (코드)
  5b. 차트 사실    §4.3 상병·소견·요건 충족 여부·템플릿 줄              (코드)
@@ -272,7 +273,7 @@ make data [SCALE=small|large] [REGEN_LLM=1]
 ```
 
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 자기 난수 생성기를 만든다 — 단계를 추가·삭제해도 다른 단계의 결과가 바뀌지 않게(구현 방법은 `generator/seeding.py`)
-- **정형 먼저, LLM 한 번**: 정형(1~6, 5b) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9·9b)을 한 번 돌린다. 5b·9b는 기존 번호를 바꾸지 않으려고 붙인 번호(단계 이름이 시드를 정하므로 번호는 실행 순서 표시일 뿐). 정형 로직을 고치면 LLM 캐시가 전량 미스. **LLM은 large에서만** — small의 7·9·9b단계는 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서)를 써서 과금 없이 구조만 채운다(테스트 픽스처용)
+- **정형 먼저, LLM 한 번**: 정형(1~6, 3b, 5b) 완성·verify(small·large 둘 다) 뒤에 LLM(7·9·9b)을 한 번 돌린다. 3b·5b·9b는 기존 번호를 바꾸지 않으려고 붙인 번호(단계 이름이 시드를 정하므로 번호는 실행 순서 표시일 뿐). 정형 로직을 고치면 LLM 캐시가 전량 미스. **LLM은 large에서만** — small의 7·9·9b단계는 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서)를 써서 과금 없이 구조만 채운다(테스트 픽스처용)
 - **LLM 캐시**: 생성물은 파일 캐시로 커밋, `make data REGEN_LLM=1`로만 재생성. 키 = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴
 
 ### 5.2 정답 출력 `ground_truth/`
@@ -289,7 +290,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.source_*`)는 타입별 조인 |
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 충돌 | 같은 환자 같은 날 중복 없음 (§1 운영 제약은 생성 코드가 보장 — 기능이 의존하지 않아 검사하지 않음) |
-| 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전) |
+| 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전); 창 이전 내원(`scheduled_at` < 창 시작)은 환자당 completed 위생 1행·등록일 < 내원일 |
 | 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회(이 둘은 `truth_claim_errors`에 기록된 줄 제외 — §2.4 청구 오류); (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 기준 오류는 기록된 조건을 실제로 어김; 목록 밖(버그가 정답에서 빠지지 않게): 급여 completed 진료는 청구가 정확히 1줄(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_CODES` 코드마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
@@ -302,7 +303,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 
 | 지표 | 목표 | 허용 | 값 위치 | 분모 | 건너뛰는 경우 |
 |---|---|---|---|---|---|
-| 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | completed | — |
+| 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | 창 안 completed | — |
 | 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 | 차트 디코이 비율 | 특이 케이스의 1~2배 | 범위 안 | §4.3 (5b 구현 때 `master.CHART_DECOY_RATIO`) | 특이 케이스 | — |
 

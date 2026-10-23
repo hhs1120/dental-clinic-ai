@@ -9,7 +9,7 @@ import yaml
 
 from generator import build, schedule, verify
 from generator.master import (CHECKUP_CODE, COURSE_INTERVAL_DAYS, FAMILY_SIZE, GUARDIAN_MIN_AGE_GAP,
-                              MAX_LEAD_DAYS, PLANNED_WEIGHTS, PROCEDURES, RESCHEDULE_MAX_DAYS, SAMEDAY_CANCEL_LEAD_MIN,
+                              HYGIENE_SCALING_BANDS, MAX_LEAD_DAYS, PLANNED_WEIGHTS, PROCEDURES, RESCHEDULE_MAX_DAYS, SAMEDAY_CANCEL_LEAD_MIN,
                               SCALING_CODE, SCALING_MIN_AGE, add_years, age_band, age_on)
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
@@ -25,7 +25,7 @@ APPOINTMENT_CHECKS = [
     verify.check_patient_same_day, verify.check_confirmed_not_future, verify.check_confirmed_reminded,
     verify.check_created_before_scheduled, verify.check_cancel_time, verify.check_cancelled_at_status,
     verify.check_cancellation_kind, verify.check_reschedule_pair,
-    verify.check_fake_phone,
+    verify.check_fake_phone, verify.check_pre_window_visit,
 ]
 
 
@@ -60,6 +60,11 @@ def _appts(conn):
     return rows
 
 
+def _window(conn, ctx):
+    """창 안 예약 — 창 이전 내원(scheduled_at < range_start)은 test_pre_window_visit에서"""
+    return [r for r in _appts(conn) if r["start"].date() >= ctx.range_start]
+
+
 def _patients(conn):
     return {r["id"]: dict(r) for r in conn.execute("SELECT * FROM emr_patients")}
 
@@ -72,7 +77,7 @@ def test_required_appointment_checks(db, check):
 
 def test_window_and_today_snapshot(db):
     conn, ctx, _ = db
-    rows = _appts(conn)
+    rows = _window(conn, ctx)
     assert len(rows) > 1000
     assert all(ctx.range_start <= r["start"].date() <= ctx.range_end for r in rows)
     # TODAY 전 예약은 모두 처리됨(scheduled 없음), TODAY 이후는 scheduled/cancelled(필수 검사)
@@ -250,10 +255,10 @@ def test_new_patients(db):
 
 
 def test_lapsed_patients_skip_first_recall(db):
-    conn, _, run = db
+    conn, ctx, run = db
     lapsed = {pid for pid, d in run.state["recall_due"].items() if d is None}
     first = {}
-    for r in _appts(conn):
+    for r in _window(conn, ctx):
         first.setdefault(r["patient_id"], r)
     seen = [pid for pid in lapsed if pid in first]
     assert seen and all(first[pid]["type"] != "hygiene" for pid in seen)
@@ -266,3 +271,38 @@ def test_phone_lead_spreads_early_days(db):
     assert days[ctx.range_start] == 0
     early = [days[ctx.range_start + timedelta(days=k)] for k in range(1, MAX_LEAD_DAYS + 1)]
     assert sum(early) > 0
+
+
+def test_pre_window_visit(db):
+    """구환마다 창 이전 마지막 위생 내원 1행 — 3단계 리콜의 기준일 근처 진료일, 등록 뒤 전화 예약 (가상 데이터 생성 설계 §2.6 (1))"""
+    conn, ctx, run = db
+    pts = _patients(conn)
+    last = {p["id"]: p["last_hygiene"] for p in run.state["patients"]}
+    pre = [r for r in _appts(conn) if r["start"].date() < ctx.range_start]
+    assert Counter(r["patient_id"] for r in pre) == Counter(last.keys())  # 구환마다 정확히 1행
+    names = {p["code"]: p["name"] for p in PROCEDURES}
+    for r in pre:
+        d, p = r["start"].date(), pts[r["patient_id"]]
+        reg = date.fromisoformat(p["registered_at"])
+        assert (r["type"], r["status"], r["booked_via"], r["confirmed"]) == ("hygiene", "completed", "phone", 0)
+        assert reg < d and reg <= r["created"].date() < d
+        assert abs((d - last[r["patient_id"]]).days) <= 7
+        band = age_band(age_on(date.fromisoformat(p["birth_date"]), d))
+        if band in HYGIENE_SCALING_BANDS:
+            assert r["planned_procedure_code"] == SCALING_CODE
+        else:
+            assert names[r["planned_procedure_code"]] in PLANNED_WEIGHTS["hygiene"][band]
+    assert verify.check_pre_window_visit(conn, ctx) == []
+
+
+def test_pre_window_scaling_counts_toward_yearly_limit(db):
+    """창 이전 급여 스케일링이 그해에 있으면 창 안 위생 내원은 구강검진 (small 창은 8월 시작이라 창 이전이 같은 해)"""
+    conn, ctx, _ = db
+    pts = _patients(conn)
+    rows = _appts(conn)
+    scaled = {(r["patient_id"], r["start"].year) for r in rows if r["start"].date() < ctx.range_start
+              and r["planned_procedure_code"] == SCALING_CODE
+              and age_on(date.fromisoformat(pts[r["patient_id"]]["birth_date"]), r["start"].date()) >= SCALING_MIN_AGE}
+    assert scaled
+    later = [r for r in _window(conn, ctx) if r["type"] == "hygiene" and (r["patient_id"], r["start"].year) in scaled]
+    assert later and all(r["planned_procedure_code"] != SCALING_CODE for r in later)

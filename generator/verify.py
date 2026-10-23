@@ -183,6 +183,20 @@ def check_confirmed_reminded(conn, ctx):
     return bad
 
 
+def check_pre_window_visit(conn, ctx):
+    """창 이전 내원(scheduled_at < range_start)은 환자당 completed 위생 1행, 등록일 < 내원일"""
+    rows = _rows(conn, "SELECT a.id, a.patient_id, a.scheduled_at, a.type, a.status, p.registered_at"
+                       " FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"
+                       " WHERE date(a.scheduled_at) < ? ORDER BY a.patient_id, a.id", ctx.range_start.isoformat())
+    bad, seen = [], set()
+    for r in rows:
+        if (r["type"], r["status"]) != ("hygiene", "completed") or r["patient_id"] in seen \
+                or date.fromisoformat(r["registered_at"]) >= _dt(r["scheduled_at"]).date():
+            bad.append(r)
+        seen.add(r["patient_id"])
+    return bad
+
+
 def check_created_before_scheduled(conn, ctx):
     """예약은 잡은 뒤에 열린다 — created_at < scheduled_at"""
     return _rows(conn, "SELECT id, created_at, scheduled_at FROM emr_appointments"
@@ -393,9 +407,10 @@ def report_balance_holder_share(conn, ctx):
 
 
 def check_visit_mix(conn, ctx):
-    """내원(completed) 유형 구성 진료 70 / 위생 25 / 상담 5 ±3%p"""
+    """창 안 내원(completed) 유형 구성 진료 70 / 위생 25 / 상담 5 ±3%p — 창 이전 내원은 빼고"""
     counts = {r["type"]: r["n"] for r in _rows(conn, "SELECT type, count(*) AS n FROM emr_appointments"
-                                                      " WHERE status = 'completed' GROUP BY type")}
+                                                      " WHERE status = 'completed' AND date(scheduled_at) >= ?"
+                                                      " GROUP BY type", ctx.range_start.isoformat())}
     total = sum(counts.values())
     if not total:
         return []
@@ -442,6 +457,7 @@ REQUIRED = [
     check_cancelled_at_status,
     check_cancellation_kind,
     check_reschedule_pair,
+    check_pre_window_visit,
     check_treatment_on_completed,
     check_completed_one_treatment,
     check_performed_at,

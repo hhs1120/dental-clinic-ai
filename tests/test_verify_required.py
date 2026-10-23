@@ -16,6 +16,15 @@ def test_valid_db_passes_every_required_check(tmp_path):
     assert verify.run(conn, CTX) is True
 
 
+PRE = ("INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
+       " planned_procedure_code, status, booked_via, created_at) VALUES ")
+
+
+def _pre(patient, at, type="hygiene", status="completed", created="2026-09-01 10:00:00"):
+    staff = {"hygiene": 2, "treatment": 1}[type]
+    return f"({patient}, {staff}, '{at}', 30, '{type}', 'U0001', '{status}', 'phone', '{created}')"
+
+
 # (깨뜨리는 SQL, 잡아야 하는 검사)
 BREAKS = {
     "fk_dangling": ("UPDATE emr_treatments SET appointment_id = 999 WHERE id = 3", "check_foreign_keys"),
@@ -103,6 +112,12 @@ BREAKS = {
     "truth_points_to_pending": ("UPDATE truth.truth_claims SET claim_id = 2 WHERE claim_id = 1", "check_truth_claims_match"),
     "extra_claim_review_outside_months": (
         "UPDATE truth.truth_claims SET service_date = '2026-08-06' WHERE outcome = 'extra_in_claim_review'", "check_truth_claims_match"),
+    # 창 이전 내원 (scheduled_at < range_start): 환자당 completed 위생 1행, 등록일 < 내원일
+    "pre_window_twice": (PRE + _pre(1, "2026-09-15 10:00:00") + ", " + _pre(1, "2026-09-22 10:00:00"), "check_pre_window_visit"),
+    "pre_window_not_hygiene": (PRE + _pre(1, "2026-09-15 10:00:00", type="treatment"), "check_pre_window_visit"),
+    "pre_window_noshow": (PRE + _pre(1, "2026-09-15 10:00:00", status="noshow"), "check_pre_window_visit"),
+    "pre_window_before_registration": (PRE + _pre(1, "2024-12-20 10:00:00", created="2024-12-10 10:00:00"),
+                                       "check_pre_window_visit"),
     "caller_phone_real": ("UPDATE ax_calls SET caller_phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
     "real_phone": ("UPDATE emr_patients SET phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
 }
@@ -277,3 +292,9 @@ def test_rag_checks_skipped_without_chunks(tmp_path, capsys):
     conn.execute("INSERT INTO ax_chunks VALUES (1)")
     verify.run(conn, CTX)
     assert "[SKIP] RAG" in capsys.readouterr().out
+
+
+def test_pre_window_visit_valid(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute(PRE + _pre(1, "2026-09-15 10:00:00") + ", " + _pre(2, "2026-09-16 10:00:00"))
+    assert verify.check_pre_window_visit(conn, CTX) == []

@@ -89,6 +89,21 @@ class Sim:
         self.phone = dict(run.conn.execute("SELECT id, phone FROM emr_patients"))
         self.new_rows: list[tuple] = []
         self.candidates = new_patient_candidates(run)
+        self.add_pre_window(run.state.get("pre_window", {}))
+
+    def add_pre_window(self, visits: dict) -> None:
+        """3b단계가 뽑은 창 이전 내원 — 완료된 위생 예약으로 먼저 넣는다(id 앞번호, 담당 위생사 순환 시작).
+        그해 급여 스케일링이면 연 1회 이력에 넣어 창 안 리콜이 다시 급여로 잡히지 않게"""
+        for p in self.patients:
+            v = visits.get(p.id)
+            if v is None:
+                continue
+            a = Appt(len(self.appts) + 1, p, self.staff_for("hygiene"), v["start"], DURATION[v["code"]], "hygiene",
+                     v["code"], "phone", v["created"], status="completed")
+            self.appts.append(a)
+            p.days.add(a.start.date())
+            if a.code == SCALING_CODE and age_on(p.birth, a.start.date()) >= SCALING_MIN_AGE:
+                p.scaling_years.add(a.start.year)
 
     # ── 달력·용량 ─────────────────────────────────────────
 
