@@ -3,7 +3,7 @@
 생성기 구현 메모 (코드가 생기면 해당 함수 docstring으로 옮긴다):
 - 생성기 LLM 호출도 shared/ 게이트웨이 경유 → llm_calls_gen.jsonl, 상한 DAILY_GEN_USD_LIMIT(런타임과 분리,
   금액은 기능 정의 §7). 전사는 프론티어 실시간, Semaphore(20) + 백오프
-- 출력 경로는 generator/paths.py. 7·9단계는 large만 실제 LLM, small은 fake 게이트웨이
+- 출력 경로는 generator/paths.py. 7·9·9b단계는 large만 실제 LLM, small은 fake 게이트웨이
 """
 import argparse
 from pathlib import Path
