@@ -11,7 +11,7 @@
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
 

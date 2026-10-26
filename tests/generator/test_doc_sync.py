@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from generator import master, verify
+from shared import llm
 from generator.master import VISIT_MIX
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -214,3 +215,10 @@ def test_eval_pool_strata_numbers_match_code():
     assert f"split당 {master.EVAL_MIN_PER_SPLIT}건" in section
     rare = re.search(r"희귀 카테고리\(([^)]+)\)", section).group(1).split("·")
     assert {_PURPOSE_LABEL.get(r, {"응급": "emergency", "모르겠음": "unknown"}.get(r)) for r in rare} == set(master.EVAL_RARE_PURPOSES)
+
+
+def test_daily_usd_limit_matches_doc():
+    """일일 비용 상한 — 금액의 원본은 기능 정의 §7, config/llm.yaml daily_usd_limit이 같아야 한다"""
+    doc = (ROOT / "docs" / "치과 AX - 기능 정의.md").read_text(encoding="utf-8")
+    runtime, generator = re.search(r"하드리밋 런타임 \$(\d+)/일, 생성기 \$(\d+)/일", doc).groups()
+    assert llm.load_config()["daily_usd_limit"] == {"generator": int(generator), "runtime": int(runtime)}
