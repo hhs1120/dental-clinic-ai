@@ -3,6 +3,9 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
+import json
+
+from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
 from generator.verify import Ctx
 
@@ -11,7 +14,7 @@ SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
 CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15),
-          call_slots=4, eval_pool=2, blind_pool=1)
+          call_slots=4, eval_pool=2, blind_pool=1, documents_core=3, documents_distractor=3)
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
 SEED = """
@@ -103,8 +106,34 @@ INSERT INTO truth_call_labels VALUES
    'test');
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
-  ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1');
+  ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1'), ('documents_core', '3'), ('documents_distractor', '3');
 """
+
+
+def _fact(fid, text, *words, reason=None):
+    return {"id": fid, "text": text, "words": list(words), "reason": reason}
+
+
+# RAG 문서(9단계): 1 매뉴얼 / 2 비슷한 주제(1의 짝, 1의 사실 없음) / 3 최신 공지(4를 대체) / 4 옛 공지(생성 기간 전) /
+# 5 청구 기준(사유마다 절 하나) / 6 타 병원(1의 주제를 다른 값으로)
+_CLAIM_BODY = "# 청구 기준\n\n" + "\n\n".join(f"## {h}\n\n기준을 적는다." for h in CLAIM_HEADINGS.values())
+DOCS = [
+    (1, "manual", "예약 부도 관리", "1", None, "docs/manual/manual-noshow.md",
+     "# 예약 부도 관리\n\n예약 부도가 3회 쌓이면 3개월 동안 전화 예약만 받습니다."),
+    (2, "manual", "예약 접수 기본", "1", None, "docs/manual/sim-booking-basics.md", "# 예약 접수 기본\n\n전화로 예약을 받습니다."),
+    (3, "notice", "미백 비용 변경", "2", "2026-09-01", "docs/notice/notice-whitening.md", "미백 비용은 300,000원입니다."),
+    (4, "notice", "미백 비용 변경", "1", "2025-01-02", "docs/notice/old-whitening.md", "미백 비용은 250,000원입니다."),
+    (5, "claim_standard", "공통 청구 기준", "1", None, "docs/claim_standard/claim-all.md", _CLAIM_BODY),
+    (6, "external", "다른 치과 부도 규정", "1", None, "docs/external/ext-noshow.md", "부도 2회면 6개월간 예약을 받지 않습니다."),
+]
+DOC_META = [  # (doc_key, kind, pair_doc_id, supersedes_doc_id, planted_facts)
+    ("manual-noshow", "core", None, None, [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")]),
+    ("sim-booking-basics", "similar", 1, None, []),
+    ("notice-whitening", "core", None, 4, [_fact("notice.white", "미백 300,000원", "300,000원")]),
+    ("old-whitening", "old_version", 3, None, [_fact("old.white", "미백 250,000원", "250,000원")]),
+    ("claim-all", "core", None, None, [_fact(f"claim.{r}.heading", h, f"## {h}", reason=r) for r, h in CLAIM_HEADINGS.items()]),
+    ("ext-noshow", "external", 1, None, [_fact("ext.noshow", "부도 2회 → 6개월", "2회", "6개월")]),
+]
 
 
 def make_db(tmp_path) -> sqlite3.Connection:
@@ -118,8 +147,13 @@ def make_db(tmp_path) -> sqlite3.Connection:
     conn.executemany("INSERT INTO emr_alert_types VALUES (?, ?, ?)",
                      [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()])
     conn.executescript(SEED)
+    conn.executemany("INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS])
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA + TRUTH_SEED)
+    truth.executemany("INSERT INTO truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      [(d[0], key, kind, int(kind != "core"), pair, sup, json.dumps(facts, ensure_ascii=False))
+                       for d, (key, kind, pair, sup, facts) in zip(DOCS, DOC_META)])
+    truth.commit()
     truth.close()
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))
     return conn

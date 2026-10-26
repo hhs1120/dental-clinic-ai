@@ -155,7 +155,7 @@ tags:
 |---|---|---|
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
-| `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
+| `truth_doc_meta` | 생성기(9단계 문서 계획) | `doc_id → kind(core/old_version/similar/external), is_distractor, pair_doc_id, supersedes_doc_id, planted_facts[]`(심은 사실 — 사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
 | `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |

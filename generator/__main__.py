@@ -1,5 +1,5 @@
 """make data — 데이터 생성기 진입점. 단계는 docs/치과 AX - 가상 데이터 생성 설계.md §5.1, 실행은 generator/build.py.
-출력 경로는 generator/paths.py. LLM 단계(7·9b)는 캐시만 읽고 빈 건은 작업으로 내보낸 뒤 exit 1 — 채우기·들여오기는
+출력 경로는 generator/paths.py. LLM 단계(7·9·9b)는 캐시만 읽고 빈 건은 작업으로 내보낸 뒤 exit 1 — 채우기·들여오기는
 generator/llm_jobs.py. --fake-llm은 가짜 게이트웨이(테스트, 과금 없음)
 """
 import argparse

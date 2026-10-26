@@ -1,11 +1,12 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
-구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·truth_claims(있을 때) 필수 검사 + 분포·치아·통화 분포·전사 경고 + 리포트.
-§5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY,
-         누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
-  경고 — 통화 복수 주제 accepted ≥ 2(라벨 값 검사가 대신함), RAG
+구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·RAG 문서(9단계)·truth_claims(있을 때) 필수 검사
++ 분포·치아·통화 분포·전사 경고 + 리포트.
+§5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG 질문·청크는 구현 전까지 [SKIP]으로 출력:
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix(앱 색인 후), rag_qa.json 검사 전부,
+         누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order)
+  경고 — 통화 복수 주제 accepted ≥ 2(라벨 값 검사가 대신함), RAG(rag_qa.json 있을 때)
 결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
@@ -59,6 +60,8 @@ class Ctx:
     call_slots: int  # 통화 슬롯·판정 풀·블라인드 풀 크기 — truth_gen_meta에서
     eval_pool: int
     blind_pool: int
+    documents_core: int  # RAG 문서 수(핵심·방해) — truth_gen_meta에서
+    documents_distractor: int
 
 
 def load_ctx(config_path: Path, conn) -> Ctx:
@@ -75,6 +78,8 @@ def load_ctx(config_path: Path, conn) -> Ctx:
         call_slots=int(meta["call_slots"]),
         eval_pool=int(meta["eval_pool"]),
         blind_pool=int(meta["blind_pool"]),
+        documents_core=int(meta["documents_core"]),
+        documents_distractor=int(meta["documents_distractor"]),
     )
 
 
@@ -117,7 +122,7 @@ def check_no_records_after_today(conn, ctx):
 
 
 def check_timestamps_not_future(conn, ctx):
-    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date·recorded_at ≤ TODAY"""
+    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date·recorded_at·effective_date ≤ TODAY"""
     today = ctx.today.isoformat()
     return (
         _rows(conn, "SELECT 'emr_appointments.created_at' AS tbl, id, created_at AS at FROM emr_appointments"
@@ -136,6 +141,8 @@ def check_timestamps_not_future(conn, ctx):
                       " WHERE date(started_at) > ?", today)
         + _rows(conn, "SELECT 'emr_patient_alerts' AS tbl, id, recorded_at AS at FROM emr_patient_alerts"
                       " WHERE date(recorded_at) > ?", today)
+        + _rows(conn, "SELECT 'ax_documents' AS tbl, id, effective_date AS at FROM ax_documents"
+                      " WHERE effective_date IS NOT NULL AND date(effective_date) > ?", today)
     )
 
 
@@ -730,6 +737,100 @@ def check_chart_note_columns(conn, ctx):
     """emr_chart_notes에 허용 컬럼만"""
     return [{"column": r["name"]} for r in conn.execute("PRAGMA main.table_info(emr_chart_notes)")
             if r["name"] not in CHART_NOTE_COLUMNS]
+
+
+# ── RAG 문서 (9단계, §4.2) ──────────────────────────────────
+
+def _docs(conn) -> list[dict]:
+    rows = _rows(conn, "SELECT d.*, m.doc_key, m.kind, m.is_distractor, m.pair_doc_id, m.supersedes_doc_id, m.planted_facts"
+                       " FROM ax_documents d JOIN truth.truth_doc_meta m ON m.doc_id = d.id ORDER BY d.id")
+    for r in rows:
+        r["facts"] = json.loads(r["planted_facts"])
+    return rows
+
+
+def check_document_counts(conn, ctx):
+    """문서 수 = 핵심 documents_core + 방해 documents_distractor (truth_gen_meta)"""
+    n = dict(conn.execute("SELECT m.is_distractor, count(*) FROM ax_documents d JOIN truth.truth_doc_meta m"
+                          " ON m.doc_id = d.id GROUP BY m.is_distractor").fetchall())
+    got, want = (n.get(0, 0), n.get(1, 0)), (ctx.documents_core, ctx.documents_distractor)
+    return [] if got == want else [{"core·distractor": got, "expected": want}]
+
+
+def check_doc_meta_match(conn, ctx):
+    """ax_documents ↔ truth_doc_meta 1:1"""
+    return _rows(conn, "SELECT d.id, NULL AS meta FROM ax_documents d LEFT JOIN truth.truth_doc_meta m ON m.doc_id = d.id"
+                       " WHERE m.doc_id IS NULL UNION ALL SELECT NULL, m.doc_id FROM truth.truth_doc_meta m"
+                       " LEFT JOIN ax_documents d ON d.id = m.doc_id WHERE d.id IS NULL")
+
+
+def check_doc_planted_facts(conn, ctx):
+    """심은 사실의 말(청구 기준 소제목 포함)이 본문에 있음 — 앞에 숫자가 붙지 않게(llm_jobs.contains)"""
+    bad = []
+    for r in _docs(conn):
+        missing = [w for f in r["facts"] for w in f["words"] if not llm_jobs.contains(r["body"], w)]
+        if missing:
+            bad.append({"id": r["id"], "key": r["doc_key"], "missing": missing})
+    return bad
+
+
+def check_doc_similar_clean(conn, ctx):
+    """비슷한 주제 문서에 짝 문서의 심은 사실이 없음 (방해 문서에 정답 텍스트 없음)"""
+    docs = {r["id"]: r for r in _docs(conn)}
+    bad = []
+    for r in docs.values():
+        if r["kind"] != "similar":
+            continue
+        pair = docs.get(r["pair_doc_id"])
+        hit = [w for f in (pair["facts"] if pair else []) for w in f["words"] if llm_jobs.contains(r["body"], w)]
+        if pair is None or hit:
+            bad.append({"id": r["id"], "key": r["doc_key"], "pair_words": hit or "짝 없음"})
+    return bad
+
+
+def check_notice_versions(conn, ctx):
+    """옛 공지: 공지끼리, 최신이 대체(supersedes), 옛 시행일 < 최신 시행일 ≤ TODAY, 옛 시행일 < 생성 기간 시작"""
+    docs = {r["id"]: r for r in _docs(conn)}
+    bad = []
+    for r in docs.values():
+        if r["kind"] != "old_version":
+            continue
+        new = docs.get(r["pair_doc_id"])
+        why = ("최신 없음" if new is None
+               else "공지 아님" if (r["type"], new["type"]) != ("notice", "notice")
+               else "대체 표시 없음" if new["supersedes_doc_id"] != r["id"]
+               else "시행일 없음" if not (r["effective_date"] and new["effective_date"])
+               else "옛 ≥ 최신" if r["effective_date"] >= new["effective_date"]
+               else "최신 > TODAY" if new["effective_date"] > ctx.today.isoformat()
+               else "옛 ≥ 생성 기간 시작" if r["effective_date"] >= ctx.range_start.isoformat() else None)
+        if why:
+            bad.append({"id": r["id"], "key": r["doc_key"], "reason": why})
+    return bad
+
+
+def check_claim_sections(conn, ctx):
+    """청구 기준 문서에 master.ADJUST_REASONS 상세 사유마다 절(소제목)이 정확히 1개"""
+    n = Counter(f["reason"] for r in _docs(conn) if r["type"] == "claim_standard" for f in r["facts"]
+                if f.get("reason") and any(w.startswith("## ") for w in f["words"]))
+    return [{"reason": k, "sections": n.get(k, 0)} for k in sorted(ADJUST_REASONS) if n.get(k, 0) != 1] + \
+           [{"reason": k, "sections": v} for k, v in sorted(n.items()) if k not in ADJUST_REASONS]
+
+
+def check_doc_patient_names(conn, ctx):
+    """문서 본문에 환자 이름 없음"""
+    names = sorted({r[0] for r in conn.execute("SELECT name FROM emr_patients")})
+    return [{"id": r["id"], "name": n} for r in _rows(conn, "SELECT id, body FROM ax_documents ORDER BY id")
+            for n in names if n in r["body"]]
+
+
+def check_forbidden_topics(conn, ctx):
+    """금지 토픽(config forbidden_topics) 코퍼스 전체 미포함 — 문서·전사·차트·문자"""
+    corpus = [("document", r[0], r[1]) for r in conn.execute("SELECT id, body FROM ax_documents")]
+    corpus += [("call", r[0], r[1]) for r in conn.execute("SELECT id, transcript FROM ax_calls WHERE transcript IS NOT NULL")]
+    corpus += [("chart", r[0], r[1]) for r in conn.execute("SELECT treatment_id, note FROM emr_chart_notes")]
+    corpus += [("message", r[0], r[1]) for r in conn.execute("SELECT id, body FROM emr_messages")]
+    patterns = llm_jobs.forbidden_patterns()
+    return [{"source": src, "id": i, "pattern": p} for src, i, text in corpus for p in patterns if re.search(p, text)]
 
 
 # ── 누출 ────────────────────────────────────────────────────
@@ -1390,6 +1491,14 @@ REQUIRED = [
     check_confirmed_has_reminder,
     check_reply_after_out,
     check_fake_phone,
+    check_document_counts,
+    check_doc_meta_match,
+    check_doc_planted_facts,
+    check_doc_similar_clean,
+    check_notice_versions,
+    check_claim_sections,
+    check_doc_patient_names,
+    check_forbidden_topics,
 ]
 WARNINGS = [
     check_visit_mix,
@@ -1448,9 +1557,9 @@ def run(conn, ctx) -> bool:
             print(f"[{level}] {name}: {len(violations)}건 — {(check.__doc__ or '').strip()}")
             for v in violations[:EXAMPLES]:
                 print(f"         {v}")
-    # RAG 필수 검사는 9단계·앱 색인 코드와 함께 구현 — 그 전엔 건너뜀으로 표시(§5.1 파이프라인 10단계)
+    # RAG 질문(rag_qa.json)·청크 검사는 질문 작성·앱 색인 코드와 함께 구현 — 그 전엔 건너뜀으로 표시
     # — 청크가 생겨도 검사 없이 통과한 것처럼 보이지 않게 항상 출력
-    print("[SKIP] RAG — 미구현(9단계·앱 색인 코드 후)")
+    print("[SKIP] RAG 질문·청크 — 미구현(rag_qa.json·앱 색인 코드 후)")
     for report in REPORTS:
         print(f"[INFO] {report.__name__}: {report(conn, ctx)}")
     return ok

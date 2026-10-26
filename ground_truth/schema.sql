@@ -69,3 +69,18 @@ CREATE TABLE truth_call_labels (
     used_fact         TEXT NOT NULL,
     split             TEXT NOT NULL CHECK (split IN ('dev', 'test', 'silver'))
 );
+
+-- RAG 문서 정답 (9단계 문서 계획, 평가 설계 §6). kind = core / old_version(공지 옛 버전) / similar(비슷한 주제, 짝의 사실 없음) /
+-- external(타 병원·일반). pair_doc_id = 방해 문서가 흉내 내는 문서(옛 버전은 대체한 최신 공지), supersedes_doc_id = 최신 공지가
+-- 대체한 옛 버전. planted_facts = 심은 사실 JSON [{id, text, words[], reason}] — words는 본문에 그대로 있는 말,
+-- 청구 기준 절은 reason(master.ADJUST_REASONS 키)과 소제목('## …')
+CREATE TABLE truth_doc_meta (
+    doc_id            INTEGER PRIMARY KEY,  -- app.sqlite ax_documents.id
+    doc_key           TEXT NOT NULL UNIQUE,  -- generator/doc_catalog.py
+    kind              TEXT NOT NULL CHECK (kind IN ('core', 'old_version', 'similar', 'external')),
+    is_distractor     INTEGER NOT NULL,
+    pair_doc_id       INTEGER,
+    supersedes_doc_id INTEGER,
+    planted_facts     TEXT NOT NULL,
+    CHECK (is_distractor = (kind != 'core'))
+);

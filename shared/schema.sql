@@ -194,10 +194,11 @@ CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
 CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
 
--- RAG 문서 (9단계). 방해 여부·심은 QA는 truth_doc_meta에만
+-- RAG 문서 (9단계). 방해 여부·심은 사실은 truth_doc_meta에만. 방해 문서의 type은 짝과 같은 값
 CREATE TABLE ax_documents (
     id             INTEGER PRIMARY KEY,
-    type           TEXT NOT NULL CHECK (type IN ('manual', 'faq', 'insurance_guide', 'notice', 'education', 'external')),
+    type           TEXT NOT NULL CHECK (type IN ('manual', 'faq', 'insurance_guide', 'claim_standard', 'notice',
+                                                 'education', 'external')),
     title          TEXT NOT NULL,
     version        TEXT NOT NULL,
     effective_date TEXT,
