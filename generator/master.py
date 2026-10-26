@@ -402,3 +402,24 @@ CALL_PATIENT_RULES = {
 EVAL_RARE_PURPOSES = ("complaint", "emergency", "unknown")
 EVAL_RARE_SHARE = 0.6
 EVAL_MIN_PER_SPLIT = 2
+
+
+# 문자 (§2.5, 8단계). 리마인드는 리마인드 날 개원 시각(HOURS["open"])에 일괄
+MESSAGE_CONFIRM_DELAY_MIN = (1, 5)  # 예약 확정 문자 = 예약을 잡은 뒤 (양 끝 포함, 분)
+MESSAGE_DELAY_MIN = (1, 30)         # 노쇼 문자(진료가 끝났을 시각 뒤)·답장(out 뒤)
+# 트리거별 본문. date = '11월 3일(화)', 리마인드도 '내일'이라 쓰지 않는다(직전 진료일이 전날이 아닐 수 있음)
+MESSAGE_TEMPLATES = {
+    "appt_confirm": "[{clinic}] {name}님, {date} {time} {procedure} 예약이 확정되었습니다.",
+    "reminder": "[{clinic}] {name}님, {date} {time} {procedure} 예약 안내드립니다.",
+    "noshow": "[{clinic}] {name}님, 오늘 {time} 예약에 내원하지 않으셔서 연락드립니다. 다시 예약하시려면 연락 주세요.",
+    "balance": "[{clinic}] {name}님, {date} 진료비 중 {amount}원이 미납되어 안내드립니다.",
+    "doc_ready": "[{clinic}] {name}님, 요청하신 서류가 준비되었습니다. 내원하실 때 받아 가세요.",
+}
+# 트리거별 답장 문구 (균등)
+MESSAGE_REPLIES = {
+    "appt_confirm": ("네", "확인했습니다", "시간 변경 가능할까요?"),
+    "reminder": ("네", "확인했습니다", "시간 변경 가능할까요?"),
+    "noshow": ("죄송합니다. 다시 연락드릴게요", "깜빡했어요"),
+    "balance": ("다음에 갈 때 낼게요", "확인했습니다"),
+    "doc_ready": ("감사합니다", "네, 들를게요"),
+}

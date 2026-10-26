@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from generator import alerts, calls, chart, clinic, demand, patients, pre_window, records, schedule
+from generator import alerts, calls, chart, clinic, demand, messages, patients, pre_window, records, schedule
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -44,6 +44,7 @@ STAGES: list = [
     ("call_slots", calls.stage_slots),
     ("call_labels", calls.stage_labels),
     ("call_pools", calls.stage_pools),
+    ("messages", messages.stage),
 ]
 
 
