@@ -100,6 +100,13 @@ BREAKS = {
     "treatment_on_extracted_tooth": (
         "UPDATE emr_treatments SET procedure_code = CASE id WHEN 1 THEN 'U0011' ELSE 'U0006' END, tooth_no = '26'"
         " WHERE id IN (1, 2)", "check_extracted_tooth"),
+    "treatment_on_implant_tooth": (  # 10/06 임플란트 1차 26(이력 없는 치아) → 11/03 아말감 26
+        "UPDATE emr_treatments SET procedure_code = CASE id WHEN 1 THEN 'U0013' ELSE 'U0006' END, tooth_no = '26'"
+        " WHERE id IN (1, 2)", "check_extracted_tooth"),
+    "implant_twice_same_tooth": (
+        "UPDATE emr_treatments SET procedure_code = 'U0013', tooth_no = '26' WHERE id IN (1, 2)", "check_extracted_tooth"),
+    "implant_on_treated_natural_tooth": (  # 10/06 신경치료 26 → 11/03 임플란트 26 (발치 없이)
+        "UPDATE emr_treatments SET procedure_code = 'U0013', tooth_no = '26' WHERE id = 2", "check_extracted_tooth"),
     "extracted_tooth_extracted_again": (
         "UPDATE emr_treatments SET procedure_code = 'U0011', tooth_no = '26' WHERE id IN (1, 2)", "check_extracted_tooth"),
     # 확정 월 조정 사유: master.ADJUST_REASONS의 상세 사유 하나와 범주 문자·서술이 일치하고 그 시술에 맞음
@@ -502,7 +509,7 @@ def _pregnant(conn, recorded, ends):
 
 
 def test_pregnant_ends_within_lasting_days(tmp_path):
-    """임신 종료일 = 기록일 + master LASTS 범위 안 (남은 기간)"""
+    """임신 종료일 = 기록일 + master.PREGNANCY_LEFT_DAYS 범위 안 (남은 기간)"""
     conn = make_db(tmp_path)
     _pregnant(conn, "2025-01-01", "2025-06-01")
     assert verify.check_alert_ends(conn, CTX) == []

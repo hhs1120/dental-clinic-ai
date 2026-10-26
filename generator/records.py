@@ -32,11 +32,14 @@ def _birth(conn) -> dict[int, date]:
 
 def stage_treatments(run, rng, fake) -> None:
     """completed마다 진료 기록 1행. 치아 단위 시술은 TOOTH_CHOICES에서 뽑되 코스(같은 에피소드) 안에서는 첫 치아를 유지
-    (그 시술의 후보에 있을 때). 발치한 치아는 환자의 이후 후보에서 빠진다 — 임플란트 1차만 그 자리에 한다.
+    (그 시술의 후보에 있을 때). 치아 수명: 발치·임플란트 치아는 이후 자연치 시술 후보에서 빠지고, 임플란트 1차는
+    발치했거나 장부에 이력이 없는 치아에만 한다(임플란트 치아에 다시 임플란트 없음).
     후보가 바닥나면(사랑니 4개를 다 뽑은 뒤 또 사랑니 발치) 생성이 실패한다"""
     episode, birth = run.state["episode"], _birth(run.conn)
     course_tooth: dict[int, str] = {}
     extracted: dict[int, set] = defaultdict(set)
+    implanted: dict[int, set] = defaultdict(set)
+    history: dict[int, set] = defaultdict(set)
     rows = []
     for appt_id, pid, start, code in run.conn.execute(
             "SELECT id, patient_id, scheduled_at, planned_procedure_code FROM emr_appointments"
@@ -45,15 +48,21 @@ def stage_treatments(run, rng, fake) -> None:
         tooth = FULL_MOUTH
         if p["is_tooth_level"]:
             choices = TOOTH_CHOICES[code]
-            if code != IMPLANT_CODE:
-                choices = tuple(t for t in choices if t not in extracted[pid])
+            if code == IMPLANT_CODE:
+                choices = tuple(t for t in choices if t not in implanted[pid]
+                                and (t in extracted[pid] or t not in history[pid]))
+            else:
+                choices = tuple(t for t in choices if t not in extracted[pid] | implanted[pid])
             ep = episode.get(appt_id)
             kept = course_tooth.get(ep)
             tooth = kept if kept in choices else choices[int(rng.integers(len(choices)))]
             if ep is not None:
                 course_tooth.setdefault(ep, tooth)
+            history[pid].add(tooth)
             if code in EXTRACTION_CODES:
                 extracted[pid].add(tooth)
+            if code == IMPLANT_CODE:
+                implanted[pid].add(tooth)
         insured = 0
         if insured_on(p, age_on(birth[pid], datetime.fromisoformat(start).date())):
             insured = round(p["fee_total"] * (1 - p["patient_share_rate"]))

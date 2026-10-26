@@ -3,7 +3,7 @@
 import json
 import math
 import sqlite3
-from collections import Counter
+from collections import Counter, defaultdict
 
 import pytest
 
@@ -13,6 +13,7 @@ from generator.master import (CHART_DECOY_RATIO, DIAGNOSIS_ERROR_RATE, PROCEDURE
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
+RUN = {}  # db 픽스처의 생성 실행(run.state — 4단계 에피소드)
 
 
 def _open(out):
@@ -25,7 +26,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("chart")
-    build.generate("small", out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    RUN["run"] = build.generate("small", out / "app.sqlite", out / "truth.sqlite", CONFIG)
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -118,15 +119,46 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
 
 
 def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
-    """심사 결과 가중을 바꿔도 제출 월·전월 오류(⑤-2 정답)는 그대로 — 확정 월 추첨과 난수를 나눈다 (§5.1)"""
+    """심사 결과 가중을 바꿔도 제출 월·전월의 오류(⑤-2 정답)·요건 사실·상병은 그대로 — 확정 월 추첨과 난수를 나누고,
+    사실은 진료마다 따로 시드한다 (§5.1)"""
     from generator import records
     conn, _, _ = db
     monkeypatch.setattr(records, "ADJUST_TYPE_WEIGHTS", {"clinical": {"requirement": 50, "documentation": 40, "diagnosis": 10},
                                                          "other": {"requirement": 0, "documentation": 50, "diagnosis": 50}})
     build.generate("small", tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
     other = _open(tmp_path)
-    sql = ("SELECT e.* FROM truth.truth_claim_errors e JOIN emr_claims c ON c.treatment_id = e.treatment_id"
-           " WHERE c.status IN ('submitted', 'pending') ORDER BY e.treatment_id")
-    assert [tuple(r) for r in conn.execute(sql)] == [tuple(r) for r in other.execute(sql)]
+    open_months = "SELECT treatment_id FROM emr_claims WHERE status IN ('submitted', 'pending')"
+    for sql in (f"SELECT * FROM truth.truth_claim_errors WHERE treatment_id IN ({open_months}) ORDER BY treatment_id",
+                f"SELECT treatment_id, requirement, evidence_present, facts FROM truth.truth_chart_notes"
+                f" WHERE treatment_id IN ({open_months}) ORDER BY treatment_id",
+                f"SELECT treatment_id, dx_code FROM emr_chart_notes WHERE treatment_id IN ({open_months}) ORDER BY treatment_id"):
+        assert [tuple(r) for r in conn.execute(sql)] == [tuple(r) for r in other.execute(sql)], sql
     settled = "SELECT treatment_id, adjust_note FROM emr_claims WHERE status IN ('adjusted', 'denied') ORDER BY treatment_id"
     assert [tuple(r) for r in conn.execute(settled)] != [tuple(r) for r in other.execute(settled)]  # 심사 결과는 바뀜
+
+
+def test_plan_counts_only_booked_by_that_day(db):
+    """다음 계획의 남은 내원 = 같은 에피소드에서 그날까지 잡혀 있던(created ≤ 그날) 이후 비취소 예약 — 미래 사실 없음 (§4.3)"""
+    conn, _, _ = db
+    episode = RUN["run"].state["episode"]
+    later = defaultdict(list)
+    for a in conn.execute("SELECT id, date(scheduled_at), date(created_at) FROM emr_appointments WHERE status != 'cancelled'"):
+        if a[0] in episode:
+            later[episode[a[0]]].append((a[1], a[2]))
+    checked = 0
+    for tid, appt_id, day, facts in conn.execute(
+            "SELECT t.id, t.appointment_id, date(t.performed_at), n.facts FROM emr_treatments t"
+            " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id"):
+        expected = sum(1 for sched, created in later.get(episode.get(appt_id), ()) if sched > day and created <= day)
+        plan = json.loads(facts)["plan"] or {}
+        assert plan.get("remaining", 0) == expected, (tid, plan, expected)
+        checked += bool(expected)
+    assert checked
+
+
+def test_draft_sentences(db):
+    """초안 문장: 조사 처리('2차 우식으로'), 주의사항이 있으면 '특이사항은 없습니다' 템플릿을 쓰지 않음"""
+    conn, _, _ = db
+    notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
+    assert not any("우식로" in n for n in notes)
+    assert not any("특이사항은 없습니다" in n and ("주의사항" in n or "진료 중" in n) for n in notes)

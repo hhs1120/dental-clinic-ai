@@ -324,11 +324,11 @@ PROCEDURE_DIAGNOSES = {_CODE_BY_NAME[n]: frozenset(dx) for n, dx in _DX_BY_NAME.
 CHART_REQUIREMENT = {_CODE_BY_NAME[n]: key for n, key in
                      (("잇몸치료", "R03"), ("실란트", "R04"), ("사랑니 발치", "R05"), ("임플란트 1차", "R06"))}
 PERIO_LINK_DAYS = 90
-# 아말감/GI·신경치료는 같은 치아를 다시 치료할 때(장부에 이전 진료가 있거나 이 사유로 깎였을 때)만 요건 줄
+# 아말감/GI·신경치료는 같은 치아에 같은 시술을 다시 할 때(장부에 이전 진료가 있거나 이 사유로 깎였을 때)만 요건 줄
 RETREATMENT_REQUIREMENT = "R01"
 # 제출 월·전월 오류 비율 — ⑤-2 평가가 성립하는 평가용 분포(확정 월은 심사 결과에서 정한다). 진료 1건당 오류 최대 1개
 REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
-DIAGNOSIS_ERROR_RATE = 0.03    # 급여 줄 중 상병 착오
+DIAGNOSIS_ERROR_RATE = 0.03    # 요건 오류가 아닌 급여 줄 중 상병 착오
 # 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
 CHART_DECOY_RATIO = 1.5
 

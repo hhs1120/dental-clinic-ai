@@ -120,3 +120,10 @@ def test_rag_document_counts_match_config():
     for kind, n, *_ in rows:
         counts["distractor" if kind in _DISTRACTOR_KINDS else "core"] += int(n)
     assert counts == CFG["documents"], f"§4.2 표 {counts} ≠ config {CFG['documents']}"
+
+
+def test_decoy_row_matches_code():
+    """§5.3 경고 표의 차트 디코이 행 — 목표 배수 = master.CHART_DECOY_RATIO, 허용 범위 = verify.CHART_DECOY_RANGE"""
+    row = next(r for key, r in _target_rows().items() if key.startswith("차트 디코이 비율"))
+    assert [float(x) for x in re.findall(r"(\d+(?:\.\d+)?)배", row[1])] == [master.CHART_DECOY_RATIO], row[1]
+    assert tuple(float(x) for x in re.findall(r"(\d+(?:\.\d+)?)", row[2])) == verify.CHART_DECOY_RANGE, row[2]

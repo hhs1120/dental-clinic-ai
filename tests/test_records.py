@@ -55,17 +55,22 @@ def test_treatment_is_planned_procedure(db):
 
 
 def test_course_keeps_tooth(db):
-    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있고, 발치한 치아가 아닐 때
-    (발치한 치아도 임플란트 1차는 그대로) (§2.1)"""
+    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있고 치아 수명 규칙상
+    쓸 수 있을 때: 발치·임플란트 치아는 자연치 시술 불가, 임플란트 1차는 발치했거나 이력 없는 치아만 (§2.1)"""
     conn, _, run = db
     episode = run.state["episode"]  # 예약 id → 에피소드 번호 (4단계)
     rows = _rows(conn, "SELECT t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no FROM emr_treatments t"
                        " ORDER BY t.performed_at, t.id")
-    courses, extracted = defaultdict(list), defaultdict(set)
+    courses, extracted, implanted, history = defaultdict(list), defaultdict(set), defaultdict(set), defaultdict(set)
     for r in rows:
-        r["extracted_before"] = set(extracted[r["patient_id"]])
+        pid = r["patient_id"]
+        r["before"] = (set(extracted[pid]), set(implanted[pid]), set(history[pid]))
+        if r["tooth_no"] != FULL_MOUTH:
+            history[pid].add(r["tooth_no"])
         if r["procedure_code"] in EXTRACTION_CODES:
-            extracted[r["patient_id"]].add(r["tooth_no"])
+            extracted[pid].add(r["tooth_no"])
+        if r["procedure_code"] == IMPLANT_CODE:
+            implanted[pid].add(r["tooth_no"])
         if r["procedure_code"] in TOOTH_LEVEL and r["appointment_id"] in episode:
             courses[episode[r["appointment_id"]]].append(r)
     multi = [c for c in courses.values() if len(c) > 1]
@@ -73,7 +78,9 @@ def test_course_keeps_tooth(db):
     for course in multi:
         first = course[0]["tooth_no"]
         for r in course[1:]:
-            usable = r["procedure_code"] == IMPLANT_CODE or first not in r["extracted_before"]
+            ext, imp, hist = r["before"]
+            usable = first not in imp and ((first in ext or first not in hist) if r["procedure_code"] == IMPLANT_CODE
+                                           else first not in ext)
             if first in TOOTH_CHOICES[r["procedure_code"]] and usable:
                 assert r["tooth_no"] == first, course
 

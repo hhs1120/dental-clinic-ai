@@ -27,11 +27,11 @@ from pathlib import Path
 import yaml
 
 from generator.paths import SCALES, output_paths
-from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_REQUIREMENT, EXTRACTION_CODES,
-                              IMPLANT_CODE, PERIO_LINK_DAYS, PROCEDURE_DIAGNOSES, RETREATMENT_REQUIREMENT,
-                              MAX_ALERTS_PER_PATIENT, PREGNANCY_LEFT_DAYS, add_years, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
-                              PROCEDURES, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX, age_on, daily_cap,
-                              age_band, insured_on, open_slots)
+from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_REQUIREMENT, CONDITIONAL_INSURED_MIN_AGE,
+                              EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
+                              PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
+                              RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
+                              add_years, age_band, age_on, daily_cap, insured_on, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -364,14 +364,25 @@ def check_adjust_reason(conn, ctx):
 
 
 def check_extracted_tooth(conn, ctx):
-    """발치한 치아에는 이후 진료가 없다 (임플란트 1차 제외) — 있으면 정답 목록에 없는 청구 오류가 장부에 생긴다"""
-    bad, extracted = [], defaultdict(set)
+    """치아 수명 — 발치한 치아에는 이후 임플란트 1차만, 임플란트 치아에는 이후 진료 없음, 임플란트 1차는 발치했거나
+    장부에 이력이 없는 치아에만. 어기면 정답 목록에 없는 청구 오류가 장부에 생긴다"""
+    bad = []
+    extracted, implanted, history = defaultdict(set), defaultdict(set), defaultdict(set)
     for r in _rows(conn, "SELECT id, patient_id, procedure_code, tooth_no, performed_at FROM emr_treatments"
                          " ORDER BY patient_id, datetime(performed_at), id"):
-        if r["tooth_no"] in extracted[r["patient_id"]] and r["procedure_code"] != IMPLANT_CODE:
-            bad.append(r)
-        if r["procedure_code"] in EXTRACTION_CODES:
-            extracted[r["patient_id"]].add(r["tooth_no"])
+        pid, tooth, code = r["patient_id"], r["tooth_no"], r["procedure_code"]
+        if tooth == FULL_MOUTH:
+            continue
+        why = ("임플란트 치아" if tooth in implanted[pid]
+               else "이력 있는 자연치에 임플란트" if code == IMPLANT_CODE and tooth in history[pid] - extracted[pid]
+               else "발치한 치아" if code != IMPLANT_CODE and tooth in extracted[pid] else None)
+        if why:
+            bad.append({**r, "reason": why})
+        history[pid].add(tooth)
+        if code in EXTRACTION_CODES:
+            extracted[pid].add(tooth)
+        if code == IMPLANT_CODE:
+            implanted[pid].add(tooth)
     return bad
 
 
@@ -527,7 +538,7 @@ def _chart_lines(conn, ctx) -> list[dict]:
     """진료마다 차트·차트 정답·청구·오류를 붙인 행. window = 창 안, cut = 확정 월 조정 사유(master 사유 dict)"""
     rows = _rows(conn, "SELECT t.id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
                        " n.dx_code, n.note, pt.name AS patient_name,"
-                       " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy,"
+                       " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy, tc.facts,"
                        " c.id AS claim_id, c.claim_month, c.status, c.adjust_code, c.adjust_note,"
                        " e.kind AS error, e.requirement AS error_requirement"
                        " FROM emr_treatments t JOIN emr_patients pt ON pt.id = t.patient_id"
@@ -546,7 +557,8 @@ def _chart_lines(conn, ctx) -> list[dict]:
 
 def _expected_requirement(rows: list[dict]) -> dict[int, str | None]:
     """진료 id → 요건 사유 키. 창 안 급여 줄만: 확정 월 요건 사유로 깎였으면 그 사유, 아니면 CHART_REQUIREMENT
-    (잇몸치료는 직전 PERIO_LINK_DAYS일 안에 치석제거가 있으면 R02), 아말감/GI·신경치료는 같은 치아 재치료일 때 R01"""
+    (잇몸치료는 직전 PERIO_LINK_DAYS일 안에 치석제거가 있으면 R02), 아말감/GI·신경치료는 같은 치아에 같은 시술을
+    다시 할 때 R01 (같은 치아의 다른 시술 — 신경치료 뒤 충전 — 은 다음 단계 치료라 재시행이 아니다)"""
     expected, treated, scaled = {}, defaultdict(set), defaultdict(list)
     retreat_codes = ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"]
     key_of = {id(r): k for k, r in ADJUST_REASONS.items()}
@@ -559,11 +571,11 @@ def _expected_requirement(rows: list[dict]) -> dict[int, str | None]:
                 key = CHART_REQUIREMENT[r["procedure_code"]]
                 if key == "R03" and any(0 < (r["day"] - d).days <= PERIO_LINK_DAYS for d in scaled[r["patient_id"]]):
                     key = "R02"
-            elif r["procedure_code"] in retreat_codes and r["tooth_no"] in treated[r["patient_id"]]:
+            elif r["procedure_code"] in retreat_codes and (r["tooth_no"], r["procedure_code"]) in treated[r["patient_id"]]:
                 key = RETREATMENT_REQUIREMENT
         expected[r["id"]] = key
         if r["tooth_no"] != FULL_MOUTH:
-            treated[r["patient_id"]].add(r["tooth_no"])
+            treated[r["patient_id"]].add((r["tooth_no"], r["procedure_code"]))
         if r["procedure_code"] == SCALING_CODE:
             scaled[r["patient_id"]].append(r["day"])
     return expected
@@ -619,6 +631,37 @@ def check_chart_requirement(conn, ctx):
             for r in rows if r["kind"] is not None and (r["requirement"] != expected[r["id"]]
                                                         or (r["requirement"] is None) != (r["evidence_present"] is None)
                                                         or r["evidence_present"] not in (None, 0, 1))]
+
+
+def check_requirement_facts(conn, ctx):
+    """요건 사실이 장부와 모순되지 않음 — 장부에 근거 사건이 있으면 그 날짜에서 계산한 값(other_clinic 아님),
+    없으면 '타 기관' 이력(other_clinic). R01 = 같은 치아·같은 시술 이전 진료, R02 = 직전 PERIO_LINK_DAYS일 안
+    치석제거, R06 = 같은 치아 발치(근거 있는 줄만)"""
+    bad = []
+    last, scaled, extracted = defaultdict(dict), defaultdict(list), defaultdict(dict)
+    for r in _chart_lines(conn, ctx):  # 환자·시각순
+        pid, day = r["patient_id"], r["day"]
+        f = json.loads(r["facts"]).get("requirement") if r["facts"] else None
+        if f:
+            ledger, field = {
+                "R01": (last[pid].get((r["tooth_no"], r["procedure_code"])), "prev_days"),
+                "R02": (min([(day - d).days for d in scaled[pid] if 0 < (day - d).days <= PERIO_LINK_DAYS], default=None),
+                        "scaling_days_ago"),
+                "R06": (extracted[pid].get(r["tooth_no"]), "extracted_days_ago"),
+            }.get(f["key"], (None, None))
+            if isinstance(ledger, date):
+                ledger = (day - ledger).days
+            if field and not (f["key"] == "R06" and not f["evidence"]):
+                ok = (not f.get("other_clinic") and f.get(field) == ledger) if ledger is not None else bool(f.get("other_clinic"))
+                if not ok:
+                    bad.append({"id": r["id"], "requirement": f, "ledger_days": ledger})
+        if r["tooth_no"] != FULL_MOUTH:
+            last[pid][(r["tooth_no"], r["procedure_code"])] = day
+        if r["procedure_code"] == SCALING_CODE:
+            scaled[pid].append(day)
+        if r["procedure_code"] in EXTRACTION_CODES:
+            extracted[pid][r["tooth_no"]] = day
+    return bad
 
 
 def check_chart_special(conn, ctx):
@@ -861,6 +904,7 @@ REQUIRED = [
     check_chart_dx,
     check_claim_errors,
     check_chart_requirement,
+    check_requirement_facts,
     check_chart_special,
     check_chart_text,
     check_chart_note_columns,

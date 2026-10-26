@@ -1,5 +1,6 @@
 """verify 차트·청구 오류 검사(5b단계)가 위반을 잡는지 — 정상 DB를 한 곳씩 깨뜨린다 (가상 데이터 생성 설계 §4.3·§5.3).
 시드 진료: 1 신경치료 26(10/06, 제출 월, 템플릿) / 2 스케일링(11/03, 전월, 템플릿) / 3 소아 레진 16(11/18, 비급여, 서술 디코이)"""
+import json
 from dataclasses import replace
 from datetime import date
 
@@ -92,11 +93,17 @@ def test_pending_requirement_error(tmp_path):
     assert [c.__name__ for c in CHART_CHECKS if c(conn, CTX)] == []
 
 
-def test_retreatment_is_requirement_line(tmp_path):
-    """아말감·신경치료는 같은 치아를 다시 치료할 때 요건 줄(R01) — 시드 1번 신경치료 26 뒤 아말감 26"""
+def test_next_step_on_same_tooth_is_not_retreatment(tmp_path):
+    """같은 치아라도 다른 시술(신경치료 26 → 아말감 26)은 다음 단계 치료라 요건 줄이 아니다"""
     conn = make_db(tmp_path)
-    tid = _line(conn, "U0006", "26", "2026-11-10", claim=("pending", None, None, None), dx="D01",
-                fee=(25000, 17500, 7500))
+    _line(conn, "U0006", "26", "2026-11-10", claim=("pending", None, None, None), dx="D01", fee=(25000, 17500, 7500))
+    assert [c.__name__ for c in CHART_CHECKS if c(conn, CTX)] == []
+
+
+def test_retreatment_is_requirement_line(tmp_path):
+    """아말감·신경치료는 같은 치아에 같은 시술을 다시 할 때 요건 줄(R01) — 시드 1번 신경치료 26 뒤 신경치료 26"""
+    conn = make_db(tmp_path)
+    tid = _line(conn, "U0008", "26", "2026-11-10", claim=("pending", None, None, None), dx="D02")
     assert verify.check_chart_requirement(conn, CTX)  # 템플릿·요건 없음 → 위반
     conn.execute("UPDATE truth.truth_chart_notes SET kind = 'narrative', is_special = 1, requirement = 'R01',"
                  " evidence_present = 1 WHERE treatment_id = ?", (tid,))
@@ -230,3 +237,63 @@ def test_claim_error_report(tmp_path):
     conn.execute("UPDATE emr_chart_notes SET dx_code = 'D05' WHERE treatment_id = 2")
     assert verify.report_claim_errors(conn, CTX) == {"settled": 0, "submitted": 0, "pending": 1,
                                                      "pending_lines": 1}
+
+
+# ── 요건 사실 ↔ 장부: 장부에 사건이 있으면 그 날짜로, 없으면 '타 기관' 이력으로 (§4.3) ──
+
+def _facts(conn, tid, requirement: dict):
+    conn.execute("UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = ?",
+                 (json.dumps({"requirement": requirement}, ensure_ascii=False), tid))
+
+
+def _retreat(conn):
+    """시드 1번 신경치료 26(10/06) 뒤 11/10 신경치료 26 — 장부상 35일 전"""
+    return _line(conn, "U0008", "26", "2026-11-10", claim=("pending", None, None, None), dx="D02", kind="narrative",
+                 special=1, requirement="R01", evidence=1)
+
+
+def test_requirement_facts_match_ledger(tmp_path):
+    conn = make_db(tmp_path)
+    tid = _retreat(conn)
+    _facts(conn, tid, {"key": "R01", "evidence": True, "prev_days": 35, "reason": "2차 우식"})
+    assert verify.check_requirement_facts(conn, CTX) == []
+
+
+@pytest.mark.parametrize("facts", [
+    {"key": "R01", "evidence": True, "prev_days": 300, "reason": "2차 우식"},          # 장부(35일 전)와 다름
+    {"key": "R01", "evidence": True, "other_clinic": True, "prev_months": 6, "reason": "2차 우식"},  # 장부에 있는데 타 기관
+])
+def test_requirement_facts_contradict_ledger(tmp_path, facts):
+    conn = make_db(tmp_path)
+    _facts(conn, _retreat(conn), facts)
+    assert verify.check_requirement_facts(conn, CTX)
+
+
+def test_requirement_facts_other_clinic_only_without_ledger(tmp_path):
+    """장부에 이전 사건이 없는 요건 줄(확정 월 사유로 정해진 줄)은 '타 기관' 이력만 — 장부 날짜를 지어내지 않는다"""
+    conn = make_db(tmp_path)
+    tid = _line(conn, "U0006", "36", "2026-08-04", claim=("adjusted", 60000, *R01), dx="D01", kind="narrative",
+                special=1, requirement="R01", evidence=1)
+    _facts(conn, tid, {"key": "R01", "evidence": True, "other_clinic": True, "prev_months": 8, "reason": "2차 우식"})
+    assert verify.check_requirement_facts(conn, CTX_AUG) == []
+    _facts(conn, tid, {"key": "R01", "evidence": True, "prev_days": 40, "reason": "2차 우식"})
+    assert verify.check_requirement_facts(conn, CTX_AUG)
+
+
+def test_r02_and_r06_facts_follow_ledger(tmp_path):
+    """R02 = 직전 치석제거(시드 11/03 스케일링 → 11/10 잇몸치료 7일), R06 = 같은 치아 발치일"""
+    conn = make_db(tmp_path)
+    perio = _line(conn, "U0018", "00", "2026-11-10", claim=("pending", None, None, None), dx="D05", kind="narrative",
+                  special=1, requirement="R02", evidence=1, fee=(35000, 24500, 10500))
+    _facts(conn, perio, {"key": "R02", "evidence": True, "scaling_days_ago": 7, "linked": True})
+    assert verify.check_requirement_facts(conn, CTX) == []
+    _facts(conn, perio, {"key": "R02", "evidence": True, "other_clinic": True, "scaling_days_ago": 30, "linked": True})
+    assert verify.check_requirement_facts(conn, CTX)
+    _facts(conn, perio, {"key": "R02", "evidence": True, "scaling_days_ago": 7, "linked": True})
+    conn.execute("UPDATE emr_treatments SET procedure_code = 'U0011' WHERE id = 1")  # 10/06 단순발치 26
+    implant = _line(conn, "U0013", "26", "2026-11-17", claim=("pending", None, None, None), dx="D08", kind="narrative",
+                    special=1, requirement="R06", evidence=1, fee=(1300000, 910000, 390000))
+    _facts(conn, implant, {"key": "R06", "evidence": True, "extracted_days_ago": 42})
+    assert verify.check_requirement_facts(conn, CTX) == []
+    _facts(conn, implant, {"key": "R06", "evidence": True, "other_clinic": True, "edentulous_months": 6})
+    assert verify.check_requirement_facts(conn, CTX)
