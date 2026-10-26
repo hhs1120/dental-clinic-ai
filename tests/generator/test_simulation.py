@@ -33,7 +33,7 @@ APPOINTMENT_CHECKS = [
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("sim")
     app, truth = out / "app.sqlite", out / "truth.sqlite"
-    run = build.generate(app, truth, CONFIG)
+    run = build.generate(app, truth, CONFIG, fake_llm=True)
     conn = sqlite3.connect(app)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(truth),))

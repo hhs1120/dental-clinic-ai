@@ -6,6 +6,8 @@ __pycache__/
 .pytest_cache/
 # 생성 결과물 (재생성 가능). LLM 캐시와 ground_truth/*.json은 커밋한다
 data/*.sqlite
+generator/llm/jobs/
+generator/llm/results/
 ground_truth/*.sqlite
 
 # 편집기 임시 파일·개인 편집기 설정

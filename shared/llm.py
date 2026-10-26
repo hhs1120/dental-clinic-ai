@@ -6,6 +6,8 @@
 - 그날 쓴 돈이 범위(generator/runtime)의 상한 이상이면 호출하지 않고 BudgetExceeded. 확인과 호출 사이 시차로
   동시 호출 수 × 1건 비용만큼 넘을 수 있다(허용)
 - FakeGateway는 같은 인터페이스로 입력 해시에서 결정적 응답 — 테스트·CI·fixture용(과금 없음)
+- Batch(생성기 API 채우기): 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
+  결과 1건 = 기록 1행. 처리 안 된 건(오류·취소·만료)은 기록하지 않고 None
 의존성: anthropic은 지금 generator 그룹 — 앱 착수 때 backend 그룹에도 추가
 """
 import hashlib
@@ -28,6 +30,7 @@ CACHE_READ_SHARE = 0.1     # 단가에 cache_read가 없으면 input 단가의 �
 CACHE_WRITE_SHARE = 1.25   # 캐시 쓰기 = input 단가의 이 배수
 TRANSIENT_STATUS = (408, 409, 429)  # + 5xx — SDK 재시도 기준과 같음
 ATTEMPT_ITERATIONS = ("message", "fallback_message")  # usage.iterations 중 모델 시도
+BATCH_PRICE_SHARE = 0.5  # Batch 단가 = 일반 단가의 이 배수
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -150,9 +153,7 @@ class Gateway(_Base):
                  schema: dict | None = None, effort: str | None = None, prompt_version: str | None = None,
                  ref: tuple | None = None) -> LLMResult:
         chain = self.config["aliases"][alias]
-        limit = self.config["daily_usd_limit"][self.scope]
-        if self.log.spent(self.clock().date(), self.scope) >= limit:
-            raise BudgetExceeded(f"{self.scope} 일일 상한 ${limit} 도달")
+        self._check_budget()
         output_config = _output_config(schema, effort)
         start = time.monotonic()
         state = {"in": 0, "out": 0, "cost": 0.0, "errors": [], "model": chain[0], "server_fallback": False}
@@ -205,6 +206,58 @@ class Gateway(_Base):
             raise
         self._record(alias, task, prompt_version, ref, result)
         return result
+
+    def _check_budget(self) -> None:
+        limit = self.config["daily_usd_limit"][self.scope]
+        if self.log.spent(self.clock().date(), self.scope) >= limit:
+            raise BudgetExceeded(f"{self.scope} 일일 상한 ${limit} 도달")
+
+    def submit_batch(self, alias: str, requests: list[dict], *, task: str, prompt_version: str | None = None,
+                     max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
+        """requests: [{custom_id, system, messages, schema}] → 배치 id. 상한은 제출 전에만 본다(배치 비용은 결과에서 기록)"""
+        self._check_budget()
+        model = self.config["aliases"][alias][0]
+        batch = []
+        for r in requests:
+            params = {"model": model, "max_tokens": max_tokens, "messages": r["messages"]}
+            if r.get("system") is not None:
+                params["system"] = r["system"]
+            output_config = _output_config(r.get("schema"), None)
+            if output_config is not None:
+                params["output_config"] = output_config
+            batch.append({"custom_id": r["custom_id"], "params": params})
+        return self.client.messages.batches.create(requests=batch).id
+
+    def batch_status(self, batch_id: str) -> str:
+        return self.client.messages.batches.retrieve(batch_id).processing_status
+
+    def batch_results(self, batch_id: str, alias: str, *, task: str, prompt_version: str | None = None,
+                      schema: dict | None = None) -> dict:
+        """{custom_id: LLMResult | None}. 거절·잘림·JSON 파싱 실패는 ok=False, 처리 안 된 건은 None"""
+        model = self.config["aliases"][alias][0]
+        out = {}
+        for entry in self.client.messages.batches.results(batch_id):
+            if entry.result.type != "succeeded":
+                out[entry.custom_id] = None
+                continue
+            msg = entry.result.message
+            tokens_in, tokens_out, cost, _ = self._usage(model, msg.usage)
+            fail = lambda why: LLMResult(False, "", None, msg.model, False, tokens_in, tokens_out,
+                                         cost * BATCH_PRICE_SHARE, 0, f"{msg.model}: {why}")
+            text = "".join(b.text for b in msg.content if b.type == "text")
+            if msg.stop_reason != "end_turn":
+                result = fail("refusal" if msg.stop_reason == "refusal" else f"stop_reason {msg.stop_reason}")
+            elif schema is None:
+                result = LLMResult(True, text, None, msg.model, False, tokens_in, tokens_out, cost * BATCH_PRICE_SHARE, 0)
+            else:
+                try:
+                    result = LLMResult(True, text, json.loads(text), msg.model, False, tokens_in, tokens_out,
+                                       cost * BATCH_PRICE_SHARE, 0)
+                except json.JSONDecodeError:
+                    result = fail("JSON 파싱 실패")
+            self._record(alias, task, prompt_version, ("batch", entry.custom_id), result)
+            out[entry.custom_id] = result
+        return out
 
 
 def _fake_value(schema: dict, seed: str, key: str, root: dict):

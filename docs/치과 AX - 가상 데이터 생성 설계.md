@@ -187,7 +187,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 3. 노이즈 추첨 25%
 4. **라벨 → 상황 → 대화** (단일 JSON 호출 `{scenario, transcript}`). 라벨 어휘("예약 변경", "불만")를 대화에 직접 쓰지 않게 지시
 5. 전사 규칙: `환자:`/`직원:`, 1~3분 분량, fact 날짜는 절대 날짜(`11월 24일`), 시술은 표준명 또는 `aliases`
-6. **건별 검증 루프**: (a) fact 날짜·시술 별칭 substring 존재 (b) 라벨 어휘 직접 등장 없음 (c) 금지 토픽 미매칭 → 실패 시 그 건만 재생성(최대 3회, 그래도 실패면 fact 단순화)
+6. **건별 검증 루프**: (a) fact 날짜·시술 별칭 substring 존재 (b) 라벨 어휘 직접 등장 없음 (c) 금지 토픽 미매칭 → 실패 시 그 건만 재생성(`llm_jobs.SIMPLIFY_AFTER`번 실패 뒤로는 fact 단순화, `llm_jobs.MAX_ATTEMPTS`번 실패하면 멈추고 사람이 프롬프트·캐시를 손본다)
 7. 금지 토픽: 생성 프롬프트에서 다루지 말라고 지시하고, 정규식(`config` `forbidden_topics`)은 검사로만 — 걸리면 그 건 재생성(6(c))
 8. 저장: 전사 → `ax_calls`, 라벨·fact·노이즈 → `truth_call_labels`
 9. 층화 추출 → 판정 풀·블라인드 풀 마킹(평가 설계 §2.1)
@@ -234,6 +234,13 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - **풀**: [[치과 AX - 평가 설계]] §2.1 그대로, 카테고리 = `primary_purpose`. 판정 풀·블라인드 풀 크기는 `config` `eval_pool_size`·`blind_pool_size`(생성기가 `truth_gen_meta`에 남기고 verify가 읽는다). 블라인드 풀은 판정 풀 전체(dev·test)에서 균등 추출하고 순번은 셔플
 - **난수**: 라벨·환자 고르기·풀은 이름이 다른 난수로 나눈다
 
+**7단계 구현 결정**: 절차 4~8. 채우기 흐름은 §5.1
+- **입력**: 방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외)
+- **꼭 넣을 사실**(검증 (a)): 예약 날짜(예약류, 변경은 원래 날짜도)·주제 시술(`topic_procedure` — 이름 또는 별칭). 날짜는 `11월 24일` 꼴
+- **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
+- **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실만 남긴다
+- **적용**: `transcript`·`has_transcript = 1`, `duration_sec` = 발화 글자 수 ÷ `master.TRANSCRIPT_CHARS_PER_SEC`(`master.CALL_DURATION_SEC`로 자름). `scenario`는 저장하지 않는다(라벨을 풀어 쓴 문장)
+
 생성 분포는 현실대로(치우침 유지 — 리포트 쪽 처리는 [[치과 AX - 평가 설계]] §1 원칙 6).
 
 ### 4.2 RAG 문서
@@ -274,12 +281,18 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - **서술 규칙**: 임상 사실만. 정답 어휘("청구 오류"·"삭감"·"조정") 금지(§4.1 라벨 어휘 금지와 같은 규칙). 환자 이름 없음(비식별), 차트 번호는 메타데이터만
 - **건별 검증**: 근거 사실(치아 번호·수치·시술 별칭)이 본문에 그대로 있음, 금지 어휘 없음, 환자 이름 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식)
 
+**9b단계 구현 결정**: 채우기 흐름은 §5.1
+- **입력**: 5b 사실(`truth_chart_notes.facts`)과 초안 본문
+- **꼭 넣을 사실**: 치아 `NN번`·시술 이름(또는 별칭)·치주낭 `Nmm`·주의사항과 그 내원에서 발견한 주의사항·요건 근거(기간 `N일`·`N개월`, 매복 정도, 실란트는 `소와열구`/`충전물`)·다음 계획(`N회`·`N개월`)
+- **검증**: 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·환자 이름·금지 토픽 없음. 단순화 없음
+- **적용**: `emr_chart_notes.note`를 덮어쓴다
+
 ## 5. 생성·정답·검증
 
 ### 5.1 파이프라인
 
 ```
-make data [REGEN_LLM=1]
+make data [FAKE_LLM=1]
  0. 시드 로드      holidays, forbidden_topics                    (정적)
  1. 마스터         clinic, staff, procedures                     (코드)
  2. 환자           §2.2, §2.6 (1)                                  (코드)
@@ -300,9 +313,9 @@ make data [REGEN_LLM=1]
 ```
 
 - **단계별 독립 시드**: 각 단계는 `config` `seed`와 단계 이름으로 자기 난수 생성기를 만든다 — 단계를 추가·삭제해도 다른 단계의 결과가 바뀌지 않게(구현 방법은 `generator/seeding.py`). 5단계 안에서도 치아·수납·청구 오류·심사 추첨은 이름이 다른 난수로 나눈다 — 미수 파라미터를 튜닝해도 오류·심사 정답이 흔들리지 않게
-- **정형 먼저, LLM 한 번**: 정형(1~6, 3b, 4b, 5b, 8) 완성·verify 통과 뒤에 LLM(7·9·9b)을 한 번 돌린다(8단계 문자는 LLM 입력이 아니지만 정형이라 함께 끝낸다). 3b·4b·5b·9b는 기존 번호를 바꾸지 않으려고 붙인 번호(단계 이름이 시드를 정하므로 번호는 실행 순서 표시일 뿐). 정형 로직을 고치면 LLM 캐시가 전량 미스. **진짜 LLM은 `make data`에서만** — 테스트·CI·앱 fixture는 같은 생성을 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서, LLM 단계 구현 때 생성기 옵션 `--fake-llm`)로 돌려 과금 없이 구조만 채운다
-- **LLM 캐시**: 생성물은 파일 캐시로 커밋, 재생성은 아래 채우기 흐름으로만. 키 = `(call_uid, seed, prompt_template_hash, used_fact_hash, attempt)` — attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴
-- **LLM 단계 채우기**: 7·9·9b단계는 생성기가 LLM 작업(건별 프롬프트·입력 사실·캐시 키)을 내보내고, 채운 결과를 들여오면서 건별 검증(§4.1 절차 6)을 통과한 것만 캐시에 넣는다 — 실패한 건은 시도 번호를 올려 다음 작업에 다시 나온다. 채우는 쪽은 API(게이트웨이)와 Claude Code 중 건별로 고르고, 캐시에 출처(모델 또는 Claude Code)·프롬프트 버전을 기록한다. `make data`는 캐시만 읽고, 캐시에 없는 건이 있으면 멈춘다(테스트는 fake 게이트웨이로 채움)
+- **정형 먼저, LLM 한 번**: 정형(1~6, 3b, 4b, 5b, 8) 완성·verify 통과 뒤에 LLM(7·9·9b)을 한 번 돌린다(8단계 문자는 LLM 입력이 아니지만 정형이라 함께 끝낸다). 3b·4b·5b·9b는 기존 번호를 바꾸지 않으려고 붙인 번호(단계 이름이 시드를 정하므로 번호는 실행 순서 표시일 뿐). 정형 로직을 고치면 LLM 캐시가 전량 미스. **진짜 LLM은 `make data`에서만** — 테스트·CI·앱 fixture는 같은 생성을 fake 게이트웨이(입력 해시 기반 결정적 가짜 전사·문서, `make data FAKE_LLM=1`)로 돌려 과금 없이 구조만 채운다
+- **LLM 캐시**: 생성물은 파일 캐시(`generator/llm/cache/<작업>.jsonl`, 한 줄 = 한 시도)로 커밋 — LLM 폴더(cache·jobs·results)는 입력·출력에 라벨이 있어 앱이 읽는 `data/` 밖에 둔다. 출력은 앱에 넣는 필드만 남긴다(전사의 `scenario`는 버림), 재생성은 아래 채우기 흐름으로만. 키 = `(작업, 건 id, 프롬프트 파일 해시, 입력 해시, attempt)` — 입력 해시는 프롬프트에 들어가는 입력(라벨·사실) 전부와 검증 기준을 덮어 라벨만 바뀐 건도 미스가 난다. attempt가 없으면 검증 실패 후 재시도에 같은 실패작이 돌아옴. 다시 쓰려면 프롬프트를 새 버전 파일로 올리거나 그 건의 캐시 줄을 지운다
+- **LLM 단계 채우기**: 7·9·9b단계는 생성기가 LLM 작업(건별 프롬프트·입력 사실·검증 기준·캐시 키 — 꼭 넣을 말·피할 말·길이는 입력에도 넣어 채우는 쪽이 같은 기준을 본다)을 내보내고, 채운 결과를 들여오면서 건별 검증(§4.1 절차 6)을 통과한 것만 캐시에 넣는다 — 실패한 건은 캐시에 실패로 남고 시도 번호를 올려 다음 작업에 다시 나온다(`llm_jobs.MAX_ATTEMPTS`번 실패하면 더 내보내지 않고 `make data`가 멈춘다). 이미 캐시에 있는 작업은 다시 채우지 않는다. 채우는 쪽은 API(게이트웨이 Batch — `make llm-fill-api`)와 Claude Code(`/fill-llm-jobs`) 중 건별로 고르고, 캐시에 출처(모델 또는 `claude-code`)·프롬프트 버전을 기록한다. `make data`는 캐시만 읽는다 — 캐시에 없는 건이 있으면 끝까지 돌아 빈 건 전부를 `generator/llm/jobs/<작업>.jsonl`에 쓰고 DB를 바꾸지 않은 채 멈춘다 → 채우기(결과는 `generator/llm/results/`) → `make llm-import` → `make data`. `FAKE_LLM=1`(테스트)은 fake 게이트웨이로 채우고 검증하지 않는다(차트는 초안이 남음)
 
 ### 5.2 정답 출력 `ground_truth/`
 
@@ -326,7 +339,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at`·`ax_chunk_vectors.embedding` 제외 — 임베딩 API 출력은 실행마다 비트 단위로 같지 않음). `make verify` 밖 — `tests/generator/test_generator.py` |
 | 차트 | 진료 기록 1건당 `emr_chart_notes`·`truth_chart_notes` 정확히 1행; 요건 줄이 §4.3 규칙대로(요건 줄만 근거 여부 보유); 요건 사실이 장부와 일치(장부에 근거 사건이 있으면 그 날짜, 없으면 '타 기관'); `truth_chart_notes.is_special` ⇔ (청구 오류 줄 ∪ 요건 줄), 서술 ⇔ 특이 ∪ 디코이, 창 이전 내원은 템플릿만; 차트 상병이 허용 밖 ⇔ 상병 착오; `truth_claim_errors`는 창 안 급여 청구 줄에만·요건 오류 ⇔ 근거 없음·확정 월은 심사 결과와 일치(상병 사유 ⇔ 상병 착오, 요건 오류는 요건 사유로 깎인 줄만); 본문에 환자 이름·정답 어휘 없음, 치아 번호·시술 이름(별칭)·그 내원에서 발견한 주의사항 존재 |
 | 주의사항 | 문진은 대상 조건(기록일 나이·성별 — `master.ALERT_TYPES`) 충족; 출처가 정의와 같음; 기록일 ≥ 등록일, 문진 기록일 = 신환 첫 completed 내원일(내원 없으면 문진 없음) / 구환 창 이전 마지막 내원일; 끝나는 날은 임신(기록일 + `master.PREGNANCY_LEFT_DAYS` 안)·협조 어려운 소아(소아 구간을 벗어나는 생일)만; `visit` 출처는 같은 환자의 창 안 관련 시술 completed 내원과 연결되고 기록일 = 그 내원일; 환자당 ≤ `master.MAX_ALERTS_PER_PATIENT`개; (환자, 코드) 유일은 스키마 |
-| 통화 슬롯 | (6단계) 생성 통화 ↔ `truth_call_labels` 1:1; 건수 = `config` `calls_with_transcript`; 통화는 창 안 TODAY 전 진료일 영업시간, 길이는 `master.CALL_DURATION_SEC` 안; 행 순서 = 통화 시각순; 라벨 enum·함의 플래그·`accepted_purposes` = 주 목적 + 부 주제 1개(`master.CALL_SUBTOPICS` 안)·응급 → urgent·outbound 목적·inbound 복합 ⇔ 노이즈 '주제 2개 섞임'·노이즈 대상; 상대 ↔ 환자·발신자(통화일 소아·보호자 기록 ⇔ 보호자, 처음 연락 예약은 그날 등록한 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측); `used_fact`의 최근 진료·잔액·다음 예약·주의사항이 통화 시각까지 읽은 장부와 같음; 판정 풀 크기·순번 1..P·앞 절반 dev·`judge_status`·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
+| 통화 슬롯 | (7단계) 생성 통화는 전사 있음(`has_transcript` = 1); (6단계) 생성 통화 ↔ `truth_call_labels` 1:1; 건수 = `config` `calls_with_transcript`; 통화는 창 안 TODAY 전 진료일 영업시간, 길이는 `master.CALL_DURATION_SEC` 안; 행 순서 = 통화 시각순; 라벨 enum·함의 플래그·`accepted_purposes` = 주 목적 + 부 주제 1개(`master.CALL_SUBTOPICS` 안)·응급 → urgent·outbound 목적·inbound 복합 ⇔ 노이즈 '주제 2개 섞임'·노이즈 대상; 상대 ↔ 환자·발신자(통화일 소아·보호자 기록 ⇔ 보호자, 처음 연락 예약은 그날 등록한 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측); `used_fact`의 최근 진료·잔액·다음 예약·주의사항이 통화 시각까지 읽은 장부와 같음; 판정 풀 크기·순번 1..P·앞 절반 dev·`judge_status`·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
 | 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
@@ -342,7 +355,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 영역 | 검사 |
 |---|---|
 | 치아 | 치아 단위 시술은 `'00'` 금지, 치아 단위가 아닌 시술은 `'00'`만; 소아 시술(`age_group='child'`)은 소아만 |
-| 통화 | 라벨 enum 유효; 화자 형식; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 < 20%; 복수 주제는 `accepted_purposes` ≥ 2 |
+| 통화 | 라벨 enum 유효; 화자 형식; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 비율 < `verify.TRANSCRIPT_LABEL_WORD_MAX`; 복수 주제는 `accepted_purposes` ≥ 2 |
 | RAG | (`rag_qa.json` 있을 때) 거절형 답이 어느 문서에도 없음(키워드); 질문 어휘가 정답 문단에 그대로 있는 비율 < 30% |
 
 **리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외), 잔액 있음 비율(준비표 범위 = 최근 `verify.PREP_SHEET_DAYS`일 + 오늘의 예약, 잔액 있음 정의는 [[치과 AX - 앱 설계]] §3 `has_unpaid_balance`), 주의사항 1개 이상 보유 비율(전체·연령 구간별), 확정 월 조정 판정 분포(목표 `master.ADJUST_JUDGMENT_TARGET`), 청구 오류 수(월 구간별 + 전월 급여 줄 수)

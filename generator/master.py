@@ -331,6 +331,7 @@ REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
 DIAGNOSIS_ERROR_RATE = 0.03    # 요건 오류가 아닌 급여 줄 중 상병 착오
 # 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
 CHART_DECOY_RATIO = 1.5
+CHART_FORBIDDEN_WORDS = ("청구 오류", "삭감", "조정")  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
 
 
 def adjust_group(procedure_code: str) -> str:
@@ -389,6 +390,11 @@ APPT_CONFIRMED_SHARE = 0.7                    # book·reschedule 중 appt_confir
 HAS_TODO_SHARE = {"confirm": 0.3, "recall": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
 HAS_TODO_DEFAULT = 0.8
 CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 1~3분 분량(§4.1 절차 5)
+# 통화 전사 (§4.1 '7단계 구현 결정'). 발화 글자 수(화자 표시·공백 제외) ÷ 이 값 = 통화 길이(초)
+TRANSCRIPT_CHARS_PER_SEC = 4
+# 라벨 어휘 — 전사에 그대로 나오면 검증 실패(§4.1 절차 6(b)). 목적 이름(§4.1 목적 분포 표)과 그 조각
+CALL_LABEL_WORDS = ("예약 잡기", "예약 변경", "예약 확인", "예약 취소", "리콜", "치료 문의", "보험 문의", "가격 문의",
+                    "비용 문의", "수납 문의", "청구 문의", "서류 요청", "기록 요청", "응급", "불만")
 # 환자 측(예약류 아님) 환자 조건 — (목적, 방향) → (규칙, 값). 없으면 'visited'(통화일 전 completed 내원이 있음)
 # recall_due: 마지막 위생 내원 + RECALL_CYCLE < 통화일이고 그 시점 잡힌 예약 없음 / balance: 그 시점 잔액 > 0 /
 # recent_treatment: 통화일 값[0]~값[1]일 전에 진료(treatment) 내원 / recent_visit: 통화일 값일 안에 내원

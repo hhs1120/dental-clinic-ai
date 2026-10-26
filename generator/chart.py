@@ -5,6 +5,7 @@
 - chart_facts: 요건 줄(master.CHART_REQUIREMENT·재치료 R01), 청구 오류(확정 월은 심사 결과에서, 제출 월·전월은 비율로),
   상병(허용 상병, 상병 착오면 다른 시술의 상병), 사실(C.C·소견·요건 근거·주의사항 처리·다음 계획)
 - chart_notes: 디코이(특이 × CHART_DECOY_RATIO, 시술별 비례 층화), 본문(템플릿 / 서술 초안)
+9b단계 chart_narratives: 서술 줄의 초안을 LLM 서술로 덮어쓴다(§4.3 '9b단계 구현 결정' — 채우기는 llm_jobs).
 창 이전 내원은 템플릿만(특이·디코이 대상 아님).
 """
 import json
@@ -13,7 +14,9 @@ from datetime import date, datetime
 
 import numpy as np
 
-from generator.master import (ADJUST_REASONS, ALERT_TYPES, CHART_DECOY_RATIO, CHART_REQUIREMENT, CHECKUP_CODE, DIAGNOSES,
+from generator import llm_jobs
+from generator.llm_jobs import Task
+from generator.master import (ADJUST_REASONS, ALERT_TYPES, CHART_DECOY_RATIO, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT, CHECKUP_CODE, DIAGNOSES,
                               DIAGNOSIS_ERROR_RATE, EXTRACTION_CODES, FULL_MOUTH, PERIO_LINK_DAYS, PROCEDURE_DIAGNOSES, PROCEDURES,
                               RECALL_CYCLE_MONTHS, REQUIREMENT_CUT_ERROR_SHARE, REQUIREMENT_ERROR_RATE,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SUBMITTED_MONTHS)
@@ -318,3 +321,74 @@ def stage_notes(run, rng, fake) -> None:
                       int(x["id"] in decoys), json.dumps(x["facts"], ensure_ascii=False, sort_keys=True)))
     run.conn.executemany("INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES (?, ?, ?)", notes)
     run.conn.executemany("INSERT INTO truth.truth_chart_notes VALUES (?, ?, ?, ?, ?, ?, ?)", truth)
+
+
+# ── 9b단계 차트 서술 (§4.3 '9b단계 구현 결정') ──────────────────
+
+NARRATIVE_SCHEMA = {
+    "type": "object",
+    "properties": {"note": {"type": "string", "description": "문장형 차트 본문"}},
+    "required": ["note"],
+    "additionalProperties": False,
+}
+# 가짜 모드(테스트)는 채우지 않는다 — 초안이 그대로 남는다
+NARRATIVE_TASK = Task(name="chart", prompt="gen_chart/v1", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
+
+
+def _period(days: int) -> str:
+    """기간 숫자 — _ago와 같은 단위(60일 미만은 일, 이상은 개월)"""
+    return f"{days}일" if days < 60 else f"{round(days / 30)}개월"
+
+
+def _requirement_words(req: dict) -> list[str]:
+    key = req["key"]
+    if key == "R01":
+        return [f"{req['prev_months']}개월" if req.get("other_clinic") else _period(req["prev_days"])]
+    if key == "R02":
+        return [f"{req['scaling_days_ago']}일"]
+    if key == "R04":
+        return ["소와열구" if req["evidence"] else "충전물"]
+    if key == "R05" and req["impaction"]:
+        return [req["impaction"]]
+    if key == "R06" and req.get("extracted_days_ago"):
+        return [_period(req["extracted_days_ago"])]
+    if key == "R06" and req.get("other_clinic"):
+        return [f"{req['edentulous_months']}개월"]
+    return []
+
+
+def narrative_must_include(f: dict, names: dict) -> list[list[str]]:
+    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(별칭)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
+    out = [[f"{f['tooth']}번"]] if f["tooth"] else []
+    out.append(names.get(f["procedure"], [f["procedure"]]))
+    if f["findings"]:
+        out.append([f"{f['findings']['pocket_mm']}mm"])
+    out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
+    if f["requirement"]:
+        out += [[w] for w in _requirement_words(f["requirement"])]
+    plan = f["plan"]
+    if plan and "remaining" in plan:
+        out.append([f"{plan['remaining']}회"])
+    elif plan:
+        out.append([f"{plan['recall_months']}개월"])
+    return out
+
+
+def narrative_checks(f: dict, names: dict, patient_name: str) -> dict:
+    return {"field": "note", "must_include": narrative_must_include(f, names),
+            "forbidden_words": [*CHART_FORBIDDEN_WORDS, patient_name], "forbidden_patterns": llm_jobs.forbidden_patterns()}
+
+
+def stage_narratives(run, rng, fake) -> None:
+    ctx = run.state["llm"]
+    names = llm_jobs.procedure_names(run.conn)
+    rows = run.conn.execute(
+        "SELECT n.treatment_id, n.note, c.facts, p.name FROM emr_chart_notes n"
+        " JOIN truth.truth_chart_notes c USING (treatment_id) JOIN emr_treatments t ON t.id = n.treatment_id"
+        " JOIN emr_patients p ON p.id = t.patient_id WHERE c.kind = 'narrative' ORDER BY n.treatment_id").fetchall()
+    for treatment_id, draft, facts, patient_name in rows:
+        f = json.loads(facts)
+        out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), {"facts": f, "draft": draft},
+                          narrative_checks(f, names, patient_name))
+        if out is not None:
+            run.conn.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (out["note"], treatment_id))
