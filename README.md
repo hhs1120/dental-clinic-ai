@@ -53,5 +53,5 @@ ground_truth/  정답지 (앱은 참조하지 않음)
 data/          생성 결과 (app.sqlite — FTS5·벡터 포함)
 backend/       FastAPI (예정)
 frontend/      Next.js (예정)
-tests/
+tests/         generator/ 생성기·verify 테스트, 앱 테스트는 backend/ (예정). 정답 격리 검사는 tests/ 바로 아래
 ```

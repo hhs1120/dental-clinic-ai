@@ -6,7 +6,7 @@ from pathlib import Path
 from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
 from generator.verify import Ctx
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 

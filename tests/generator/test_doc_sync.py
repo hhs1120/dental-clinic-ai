@@ -8,7 +8,7 @@ import yaml
 from generator import master, verify
 from generator.master import VISIT_MIX
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs" / "치과 AX - 가상 데이터 생성 설계.md"
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 

@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from generator import verify
-from tests.verify_db import CTX, ROOT, appt, make_db
+from tests.generator.verify_db import CTX, ROOT, appt, make_db
 
 
 def test_valid_db_passes_every_required_check(tmp_path):
