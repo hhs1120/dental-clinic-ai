@@ -79,14 +79,14 @@ tags:
 - **대조 키** `(chart_no, service_date, procedure_code, tooth_no)` UNIQUE — 심사결과 대조용. 제출 월 결과 정답(`outcome`)은 `truth_claims`에만(앱 DB 쪽 전자 레코드는 슬롯 메모 ⑤-1)
 
 **심사 결과 추첨**(확정 월 `emr_claims`, 정형 5단계. 제출 월 `truth_claims`는 슬롯 착수 때 같은 규칙으로. `missing`·`extra`는 심사결과 대조 결과라 장부에 없음)
-1. **타 기관 이력**: 급여 스케일링 줄 중 `master.EXTERNAL_SCALING_DENY_RATE`는 denied + 외부 이력 사유(연 1회 초과) — 환자가 다른 치과에서 그해 이미 받은 경우. 우리 장부로는 오류가 아니라 `truth_claim_errors`에 넣지 않고, 데스크가 미리 알 수 없어 ⑤-2 대상도 아니다(현장 빈도 확인 필요). 보험 잔여 칩은 장부 기준이라 그 환자는 잘못 켜진 채로 둔다
-2. **그 밖의 줄**: 시술군(`master.adjust_group` — 요건 사유가 있는 임상 시술 / 그 밖)별 `master.REVIEW_OUTCOME_WEIGHTS`로 paid / adjusted / denied. 임상 시술이 주로 깎인다(스케일링·검진·단순발치는 요건 사유가 없어, 같은 비율이면 요건 사유가 깎인 줄의 약 20%에 그쳐 판정 목표를 못 맞춤 — 결정 2026-10-26). 깎인 줄은 사유 유형을 시술군별 `master.ADJUST_TYPE_WEIGHTS`(요건 / 장부 밖 / 상병)로 뽑고 그 유형 안에서 그 시술에 맞는 코드를 균등 추첨 — 맞는 코드가 없는 유형은 빼고 다시 정규화
+1. **타 기관 이력**: 급여 스케일링 줄 중 `master.EXTERNAL_SCALING_DENY_RATE`는 denied + 외부 이력 사유(연 1회 초과) — 환자가 다른 치과에서 그해 이미 받은 경우. 우리 장부로는 오류가 아니라 `truth_claim_errors`에 넣지 않고, 데스크가 미리 알 수 없어 ⑤-2 대상도 아니다(현장 빈도 확인 필요)
+2. **그 밖의 줄**: 시술군(`master.adjust_group` — 요건 사유가 있는 임상 시술 / 그 밖)별 `master.REVIEW_OUTCOME_WEIGHTS`로 paid / adjusted / denied. 임상 시술이 주로 깎인다(스케일링·검진·단순발치에는 요건 사유가 없다). 깎인 줄은 사유 유형을 시술군별 `master.ADJUST_TYPE_WEIGHTS`(요건 / 장부 밖 / 상병)로 뽑고 그 유형 안에서 그 시술에 맞는 상세 사유를 균등 추첨
 
 - 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount × U(0.5, 0.9)`, 10원 단위 내림 + 사유 / denied → `paid_amount = 0` + 사유(전액 조정. 반송해 보완하게 하는 심사불능은 두지 않는다 — 기재 누락도 조정으로)
-- **사유 형식**은 실제 심사결과 통보서처럼 범주 코드 + 서술: `adjust_code` = 심평원 조정 사유 범주 문자(B 요양급여기준 적용착오·C 범위 초과·AK 코드 산정착오·M 증빙자료상 미확인 등 — 출처: 심평원 「요양급여비용 청구방법, 심사청구서·명세서서식 및 작성요령」 2020년 7월판 별첨 3), `adjust_note` = 일반사유 서술. 범주 문자는 여러 사유가 공유하므로 서술을 읽어야 구체 사유가 정해진다(결정 2026-10-26)
-- 상세 사유는 `master.ADJUST_REASONS` — 사유마다 범주 문자·서술 템플릿·유형(요건 / 장부 밖 / 상병 / 외부 이력)·맞는 시술을 둔다. 나이 사유는 두지 않는다(전산으로 걸러져 심평원이 나이로 잘못 깎는 일도 비현실적). 상병 사유와 상병 착오 오류(5b)를 위해 시술별 허용 상병도 `master`에 둔다(5b 구현 때)
+- **사유 형식**은 실제 심사결과 통보서처럼 범주 코드 + 서술: `adjust_code` = 심평원 조정 사유 범주 문자(출처: 심평원 「요양급여비용 청구방법, 심사청구서·명세서서식 및 작성요령」 2020년 7월판 별첨 3), `adjust_note` = 일반사유 서술. 범주 문자는 여러 사유가 공유하므로 서술을 읽어야 구체 사유가 정해진다
+- 상세 사유는 `master.ADJUST_REASONS` — 사유마다 범주 문자·서술 템플릿·유형(요건 / 장부 밖 / 상병 / 외부 이력)·맞는 시술을 둔다. 나이 사유는 두지 않는다(위 청구 오류와 같은 이유). 상병 사유와 상병 착오 오류(5b)를 위해 시술별 허용 상병도 `master`에 둔다(5b 구현 때)
 - **5b 연결**: 5b가 확정 월 깎인 줄을 읽어 오류를 정한다 — 상병 사유로 깎인 줄은 전부 상병 착오로, 요건 사유로 깎인 줄 중 `master.REQUIREMENT_CUT_ERROR_SHARE`는 임상 요건형 오류로(나머지는 차트에 요건 근거). 제출 월·전월 오류는 5b가 따로 정한다(§4.3)
-- 조정의 판단 정답(⑤-3)은 따로 저장하지 않고 사유 유형과 오류 목록에서 파생한다. 확정 월 목표는 `master.ADJUST_JUDGMENT_TARGET` — 위 가중과 비율은 이 목표에서 역산했고, 5b 구현 후 verify 경고로 확인:
+- 조정의 판단 정답(⑤-3)은 따로 저장하지 않고 사유 유형과 오류 목록에서 파생한다. 확정 월 목표는 `master.ADJUST_JUDGMENT_TARGET` — 위 가중과 비율은 이 목표에서 역산했다(시술 구성이 바뀌면 다시 역산 — 5b 구현 후 verify 리포트로 판정 분포 출력):
   - **정당**: `truth_claim_errors`에 있는 줄이 그 오류에 맞는 사유로 깎임(**상병 착오**로 깎인 줄 포함 — 상병을 잘못 넣은 청구는 재청구가 안 된다, 현장 확인 2026-10-23) + 외부 이력 사유로 깎인 줄(차트가 정상이어도 정당)
   - **다툴 만함**: 오류가 없는 줄이 요건 사유로 깎임(진료 기록이 청구 기준 §4.2의 요건을 충족 — 임상 요건형은 차트 기록 §4.3에 근거가 있음)
   - **보완 후 재청구**: 오류가 없는 줄이 장부 밖 사유(내역설명 누락·증빙 미제출 등)로 깎임 — 빠뜨린 것을 채워 다시 낸다(재심 아님)
@@ -296,7 +296,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 충돌 | 같은 환자 같은 날 중복 없음 (§1 운영 제약은 생성 코드가 보장 — 기능이 의존하지 않아 검사하지 않음) |
 | 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전); 창 이전 내원(`scheduled_at` < 창 시작)은 환자당 completed 위생 1행·등록일 < 내원일 |
-| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회(5단계는 오류를 심지 않아 제외 줄 없음 — §2.4 청구 오류); (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖; 전월 `pending`은 제출일 없음; 확정 월은 paid(금액 그대로·사유 없음) / adjusted(일부·사유) / denied(0원·사유), 사유는 `master.ADJUST_REASONS`의 상세 사유 하나와 일치(범주 문자·서술 템플릿, 그 시술에 맞음 — 외부 이력은 급여 스케일링 denied만); 창 안 급여 completed 진료는 청구가 정확히 1줄(창 이전은 그해 급여 스케일링만 1줄 `paid`)(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
+| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖; 전월 `pending`은 제출일 없음; 확정 월은 paid(금액 그대로·사유 없음) / adjusted(일부·사유) / denied(0원·사유), 사유는 `master.ADJUST_REASONS`의 상세 사유 하나와 일치(범주 문자·서술 템플릿, 그 시술에 맞음 — 외부 이력은 급여 스케일링 denied만); 창 안 급여 completed 진료는 청구가 정확히 1줄(창 이전은 그해 급여 스케일링만 1줄 `paid`)(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만; 창 안 completed마다 `visit` 정확히 1행, 창 이전 내원은 수납 없음; `settlement`는 `amount_due` 0 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_REASONS` 상세 사유마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; `emr_chart_notes` 컬럼은 허용 목록만(특이·디코이·요건 충족 컬럼 없음); **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
@@ -334,6 +334,6 @@ Python · Faker(ko_KR) · numpy 시드(lock 파일 커밋 — Faker 버전이 �
 전제: 심사결과는 전자문서(줄마다 수가코드·조정 사유 범주 코드·일반사유 서술·조정 금액)로 받아 청구 프로그램이 반영한다. 종이 판독·PDF 렌더링은 하지 않는다. 기반 데이터는 처음부터 들어간다(심사 결과 §2.4는 5단계, 청구 오류 §4.3은 5b단계, 청구 기준 문서 §4.2는 9단계 — §0). 이미 정한 것:
 - ⑤-1 입력 = 전자 심사결과 레코드: 제출 월 outcome 추첨 → `truth_claims` → 앱 DB 새 `emr_` 테이블로 적재 — 줄마다 금액·조정 사유(범주 코드·서술)만, `outcome` 분류와 결과에 없는 줄은 없음(정답 분리). **대조 키 어긋남**도 일부 심는다(같은 줄인데 레코드의 치아 번호·수가코드가 장부와 다름 — 정답은 `truth_claims`, 비율은 착수 시). ⑤-1 완료 기준이 대조 정확도라서. 어긋남은 1건으로 센다 — `truth_claims`에 이를 담을 enum·컬럼은 ⑤ 착수 시 추가. 전월은 `pending`이라 결과 없음. 확정 월은 장부에 이미 반영된 결과
 - ⑤-2 입력 = 전월분 `emr_claims`(`pending`)와 진료 기록(`treatment_id`로 연결). 정답 `truth_claim_errors`(§2.4, 앱 DB에는 표시 없음)
-- ⑤-3 문서 = 청구 기준(§4.2 표 — ③ 말뭉치에 처음부터 포함, ③ 질문에는 넣지 않음). 상세 사유마다 한 절이라 사유 → 정답 절이 생성 규칙에서 바로 나온다(범주 코드만으로는 절이 정해지지 않아 서술을 읽어야 함). 조정의 판단 정답은 §2.4 사유 규칙에서 파생(따로 저장하지 않음)
+- ⑤-3 문서 = 청구 기준(§4.2 표 — ③ 말뭉치에 처음부터 포함, ③ 질문에는 넣지 않음). 상세 사유마다 한 절이라 사유 → 정답 절이 생성 규칙에서 바로 나온다. 조정의 판단 정답은 §2.4 사유 규칙에서 파생(따로 저장하지 않음)
 
 분포·`extra_in_claim_review` 생성 방법은 ⑤ 착수 시 정한다.

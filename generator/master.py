@@ -109,7 +109,7 @@ ADJUST_TYPE_WEIGHTS = {
 }
 # 5b: 요건 사유로 깎인 줄 중 임상 요건형 오류로 만드는 비율 (상병 사유로 깎인 줄은 전부 상병 착오)
 REQUIREMENT_CUT_ERROR_SHARE = 0.6
-# 확정 월 깎인 줄의 판정 목표(%): 정당 / 다툴 만함 / 보완 후 재청구 — 5b 구현 후 verify 경고로 확인
+# 확정 월 깎인 줄의 판정 목표(%): 정당 / 다툴 만함 / 보완 후 재청구 — 위 가중의 역산 기준. 5b 구현 후 verify 리포트로 출력
 ADJUST_JUDGMENT_TARGET = {"justified": 50, "contestable": 20, "resubmit": 30}
 
 # 시술 19개 (§2.1 표). 코드는 표 순번 기반 가상 코드
