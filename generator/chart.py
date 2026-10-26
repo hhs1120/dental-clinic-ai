@@ -142,6 +142,9 @@ def _plan(r, episode: dict, later: dict) -> dict | None:
 
 
 def stage_facts(run, rng, fake) -> None:
+    """난수를 셋으로 나눈다 — 확정 월 오류(심사 결과 따라감) / 제출 월·전월 오류(⑤-2 정답) / 상병·사실.
+    심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 흔들리지 않게"""
+    settled_rng, open_rng, rng = rng.spawn(3)
     episode = run.state["episode"]
     later = defaultdict(list)  # 에피소드 → 예약일 (취소 제외)
     for appt_id, day in run.conn.execute("SELECT id, date(scheduled_at) FROM emr_appointments WHERE status != 'cancelled'"):
@@ -159,12 +162,12 @@ def stage_facts(run, rng, fake) -> None:
                 cut_type = ADJUST_REASONS[r["cut"]]["type"] if r["cut"] else None
                 if cut_type == "diagnosis":
                     error = "diagnosis"
-                elif cut_type == "requirement" and rng.random() < REQUIREMENT_CUT_ERROR_SHARE:
+                elif cut_type == "requirement" and settled_rng.random() < REQUIREMENT_CUT_ERROR_SHARE:
                     error = "requirement"
             else:
-                if key and rng.random() < REQUIREMENT_ERROR_RATE:
+                if key and open_rng.random() < REQUIREMENT_ERROR_RATE:
                     error = "requirement"
-                elif rng.random() < DIAGNOSIS_ERROR_RATE:
+                elif open_rng.random() < DIAGNOSIS_ERROR_RATE:
                     error = "diagnosis"
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
         dx = _pick(rng, sorted(set(DIAGNOSES) - set(allowed))) if error == "diagnosis" else _pick(rng, allowed)

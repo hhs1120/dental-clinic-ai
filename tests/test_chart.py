@@ -115,3 +115,18 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
         assert [tuple(r) for r in conn.execute(sql)] == [tuple(r) for r in other.execute(sql)], sql
     assert other.execute("SELECT sum(is_decoy) FROM truth.truth_chart_notes").fetchone()[0] < \
            conn.execute("SELECT sum(is_decoy) FROM truth.truth_chart_notes").fetchone()[0]
+
+
+def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
+    """심사 결과 가중을 바꿔도 제출 월·전월 오류(⑤-2 정답)는 그대로 — 확정 월 추첨과 난수를 나눈다 (§5.1)"""
+    from generator import records
+    conn, _, _ = db
+    monkeypatch.setattr(records, "ADJUST_TYPE_WEIGHTS", {"clinical": {"requirement": 50, "documentation": 40, "diagnosis": 10},
+                                                         "other": {"requirement": 0, "documentation": 50, "diagnosis": 50}})
+    build.generate("small", tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    other = _open(tmp_path)
+    sql = ("SELECT e.* FROM truth.truth_claim_errors e JOIN emr_claims c ON c.treatment_id = e.treatment_id"
+           " WHERE c.status IN ('submitted', 'pending') ORDER BY e.treatment_id")
+    assert [tuple(r) for r in conn.execute(sql)] == [tuple(r) for r in other.execute(sql)]
+    settled = "SELECT treatment_id, adjust_note FROM emr_claims WHERE status IN ('adjusted', 'denied') ORDER BY treatment_id"
+    assert [tuple(r) for r in conn.execute(settled)] != [tuple(r) for r in other.execute(settled)]  # 심사 결과는 바뀜

@@ -105,11 +105,11 @@ REVIEW_OUTCOME_WEIGHTS = {
     "clinical": {"paid": 80, "adjusted": 15, "denied": 5},
     "other": {"paid": 94, "adjusted": 4, "denied": 2},
 }
-# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산
-# (깎인 줄 전체로 요건 53 / 장부 밖 33 / 상병 14)
+# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산 —
+# 5b 구현 후 large 판정 분포 리포트로 다시 맞춤(2026-10-26: 정당 57.5 / 다툴 만함 20.3 / 보완 22.2 → 상병↓·장부 밖↑)
 ADJUST_TYPE_WEIGHTS = {
-    "clinical": {"requirement": 80, "documentation": 10, "diagnosis": 10},
-    "other": {"requirement": 0, "documentation": 78, "diagnosis": 22},
+    "clinical": {"requirement": 78, "documentation": 15, "diagnosis": 7},
+    "other": {"requirement": 0, "documentation": 88, "diagnosis": 12},
 }
 # adjusted 지급액 = claim_amount × U(범위), 10원 단위 내림
 ADJUSTED_PAID_RANGE = (0.5, 0.9)
