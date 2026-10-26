@@ -72,7 +72,7 @@ PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
-RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 성인 2회째가 검진만 하는 위생 내원이 돼 위생 비중이 부풀었다(결정 2026-10-26)
+RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
@@ -100,13 +100,13 @@ SUBMITTED_MONTHS = 2
 # 심사 결과 추첨 (§2.4). 급여 스케일링 줄은 먼저 이 비율로 타 기관 이력(연 1회 초과) 불능 — 우리 장부로는 오류가 아님
 EXTERNAL_SCALING_DENY_RATE = 0.02
 # 시술군(adjust_group)별 그 밖의 줄 결과 가중(%). 임상 시술(요건 사유가 있는 시술)이 주로 깎인다.
-# large 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
+# 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
 REVIEW_OUTCOME_WEIGHTS = {
     "clinical": {"paid": 80, "adjusted": 15, "denied": 5},
     "other": {"paid": 94, "adjusted": 4, "denied": 2},
 }
-# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산 —
-# 5b 구현 후 large 판정 분포 리포트로 다시 맞춤(2026-10-26: 정당 57.5 / 다툴 만함 20.3 / 보완 22.2 → 상병↓·장부 밖↑)
+# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산,
+# 판정 분포 리포트(report_adjust_judgment)로 맞춘 값
 ADJUST_TYPE_WEIGHTS = {
     "clinical": {"requirement": 78, "documentation": 15, "diagnosis": 7},
     "other": {"requirement": 0, "documentation": 88, "diagnosis": 12},
@@ -337,3 +337,68 @@ def adjust_group(procedure_code: str) -> str:
     """심사 결과 추첨의 시술군 — 요건 사유가 있는 시술이 clinical (REVIEW_OUTCOME_WEIGHTS·ADJUST_TYPE_WEIGHTS의 키)"""
     return "clinical" if any(r["type"] == "requirement" and procedure_code in r["procedures"]
                              for r in ADJUST_REASONS.values()) else "other"
+
+
+# 통화 슬롯 (§4.1, 6단계). 목적·노이즈·방향 비중은 §4.1 표가 설계 목표 — 어긋나면 tests/generator/test_doc_sync.py가 실패.
+# 목적·목적 안 방향·노이즈는 할당량(최대 잔여 반올림)으로 맞추고, 급함·플래그는 건마다 추첨한다
+CALL_PURPOSE_SHARE = {
+    "book": 0.18, "reschedule": 0.15, "confirm": 0.08, "cancel": 0.06, "recall": 0.08, "treatment_q": 0.10,
+    "insurance_q": 0.06, "price_q": 0.08, "billing_q": 0.04, "document_req": 0.04, "emergency": 0.05,
+    "complaint": 0.03, "other": 0.03, "unknown": 0.02,
+}
+# 예약 이벤트에서 역산하는 목적 — 이벤트 하나에 통화 최대 1건
+BOOKING_PURPOSES = ("book", "reschedule", "cancel", "confirm")
+# outbound 비중(전체 통화 대비 %p). 목적 안 방향 할당량 = 이 값 / 목적 비중. 나머지 목적은 전부 inbound
+CALL_OUTBOUND_SHARE = {"recall": 0.08, "confirm": 0.04, "billing_q": 0.03, "document_req": 0.02, "treatment_q": 0.03}
+OUTBOUND_MULTI_SHARE = 0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
+CALL_NOISE_SHARE = {"two_topics": 0.10, "interrupted": 0.08, "ambiguous_pain": 0.04, "guardian_confused": 0.03}
+# 상대 분포(§4.1) — 목표가 아니라 근사(상대는 목적·환자에서 정해짐). 리포트로만 본다
+CALL_COUNTERPART_SHARE = {"patient": 0.60, "guardian": 0.15, "new_caller": 0.15, "insurer": 0.03, "vendor": 0.04,
+                          "other": 0.03}
+URGENCIES = ("urgent", "normal", "low")
+# 목적별 상대 가중(%) — 예약류 아닌 목적. side = 환자 측(통화일에 소아면 guardian, 아니면 patient). outbound는 항상 side
+CALL_COUNTERPART_WEIGHTS = {
+    "recall": {"side": 100},
+    "treatment_q": {"side": 85, "new_caller": 15},
+    "insurance_q": {"side": 50, "new_caller": 30, "insurer": 20},
+    "price_q": {"side": 40, "new_caller": 60},
+    "billing_q": {"side": 85, "insurer": 15},
+    "document_req": {"side": 70, "insurer": 30},
+    "emergency": {"side": 70, "new_caller": 30},
+    "complaint": {"side": 100},
+    "other": {"side": 20, "vendor": 50, "other": 30},
+    "unknown": {"side": 30, "new_caller": 30, "other": 40},
+}
+# 플래그 6개. 주 목적이 함의하는 플래그는 항상 true
+CALL_FLAGS = ("emergency", "complaint", "price_inquiry", "wants_appt", "appt_confirmed", "has_todo")
+IMPLIED_FLAG = {"emergency": "emergency", "complaint": "complaint", "price_q": "price_inquiry", "book": "wants_appt"}
+# 부 주제 플래그 → accepted_purposes에 들어가는 목적
+SUBTOPIC_PURPOSE = {"price_inquiry": "price_q", "complaint": "complaint", "emergency": "emergency", "wants_appt": "book"}
+# 목적별로 가능한 부 주제 플래그(주 목적이 함의하는 것 제외). 빈 목적은 복합 주제를 만들지 않는다
+CALL_SUBTOPICS = {
+    "book": ("price_inquiry",), "reschedule": ("price_inquiry", "complaint"), "cancel": ("complaint",),
+    "confirm": ("price_inquiry",), "recall": ("wants_appt", "price_inquiry"),
+    "treatment_q": ("price_inquiry", "wants_appt", "emergency"), "insurance_q": ("price_inquiry", "wants_appt"),
+    "price_q": ("wants_appt",), "billing_q": ("complaint",), "document_req": ("wants_appt",),
+    "emergency": ("wants_appt",), "complaint": ("wants_appt",), "other": (), "unknown": (),
+}
+CALL_PAIN_PURPOSES = ("book", "treatment_q")  # 노이즈 '급함 애매한 통증' 대상
+PAIN_URGENT_SHARE = 0.5                       # 그중 urgent (나머지 normal)
+CALL_URGENCY_WEIGHTS = {"normal": 85, "low": 15}  # emergency 플래그·애매한 통증이 아닌 통화
+APPT_CONFIRMED_SHARE = 0.7                    # book·reschedule 중 appt_confirmed
+HAS_TODO_SHARE = {"confirm": 0.3, "recall": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
+HAS_TODO_DEFAULT = 0.8
+CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 1~3분 분량(§4.1 절차 5)
+# 환자 측(예약류 아님) 환자 조건 — (목적, 방향) → (규칙, 값). 없으면 'visited'(통화일 전 completed 내원이 있음)
+# recall_due: 마지막 위생 내원 + RECALL_CYCLE < 통화일이고 그 시점 잡힌 예약 없음 / balance: 그 시점 잔액 > 0 /
+# recent_treatment: 통화일 값[0]~값[1]일 전에 진료(treatment) 내원 / recent_visit: 통화일 값일 안에 내원
+CALL_PATIENT_RULES = {
+    ("recall", "outbound"): ("recall_due", None),
+    ("billing_q", "outbound"): ("balance", None),
+    ("treatment_q", "outbound"): ("recent_treatment", (1, 7)),
+    ("complaint", "inbound"): ("recent_visit", 30),
+}
+# 판정 풀 층화 (평가 설계 §2.1): 희귀 카테고리는 각 전사의 이 비율, 나머지는 비례 + split당 최소 건수
+EVAL_RARE_PURPOSES = ("complaint", "emergency", "unknown")
+EVAL_RARE_SHARE = 0.6
+EVAL_MIN_PER_SPLIT = 2

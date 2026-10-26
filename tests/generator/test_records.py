@@ -1,4 +1,4 @@
-"""5단계 진료·수납·청구·심사 결과 — small을 실제로 생성해 필수 검사 전부와 생성 규칙을 본다 (가상 데이터 생성 설계 §2.4·§2.6 (4))."""
+"""5단계 진료·수납·청구·심사 결과 — 실제로 생성해 필수 검사 전부와 생성 규칙을 본다 (가상 데이터 생성 설계 §2.4·§2.6 (4))."""
 import sqlite3
 from collections import Counter, defaultdict
 from datetime import date, datetime
@@ -26,7 +26,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("records")
-    run = build.generate("small", out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    run = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
     conn = _open(out)
     return conn, verify.load_ctx(CONFIG, conn), run
 
@@ -164,7 +164,7 @@ def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
     cfg = {**CFG, "unpaid_rate": 0.5}
     path = tmp_path / "generator.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-    build.generate("small", tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path)
     other = _open(tmp_path)
     for table in ("emr_treatments", "emr_claims"):
         assert [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")] == \

@@ -1,5 +1,5 @@
-"""5b단계 차트 사실 — small을 실제로 생성해 오류 비율·디코이 층화·사실 구성을 본다 (가상 데이터 생성 설계 §4.3).
-필수 검사 전부는 tests/test_records.py가 같은 small로 본다."""
+"""5b단계 차트 사실 — 실제로 생성해 오류 비율·디코이 층화·사실 구성을 본다 (가상 데이터 생성 설계 §4.3).
+필수 검사 전부는 tests/generator/test_records.py가 본다."""
 import json
 import math
 import sqlite3
@@ -26,7 +26,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("chart")
-    RUN["run"] = build.generate("small", out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    RUN["run"] = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -95,7 +95,7 @@ def test_facts(db):
 
 
 def test_judgment_report_near_target(db):
-    """판정 분포가 ADJUST_JUDGMENT_TARGET 근처 — small 확정 월은 8월 하나라 표본 크기에 맞춰 이항 4σ"""
+    """판정 분포가 ADJUST_JUDGMENT_TARGET 근처 — 표본 크기에 맞춰 이항 4σ"""
     from generator.master import ADJUST_JUDGMENT_TARGET
     conn, ctx, _ = db
     report = verify.report_adjust_judgment(conn, ctx)
@@ -108,7 +108,7 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
     """디코이 배수를 바꿔도 오류·상병·요건은 그대로 — 사실(chart_facts)과 본문(chart_notes) 난수를 나눈다 (§5.1)"""
     conn, _, _ = db
     monkeypatch.setattr(chart, "CHART_DECOY_RATIO", 1.0)
-    build.generate("small", tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
     other = _open(tmp_path)
     for sql in ("SELECT * FROM truth.truth_claim_errors ORDER BY treatment_id",
                 "SELECT treatment_id, dx_code FROM emr_chart_notes ORDER BY treatment_id",
@@ -125,7 +125,7 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
     conn, _, _ = db
     monkeypatch.setattr(records, "ADJUST_TYPE_WEIGHTS", {"clinical": {"requirement": 50, "documentation": 40, "diagnosis": 10},
                                                          "other": {"requirement": 0, "documentation": 50, "diagnosis": 50}})
-    build.generate("small", tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
     other = _open(tmp_path)
     open_months = "SELECT treatment_id FROM emr_claims WHERE status IN ('submitted', 'pending')"
     for sql in (f"SELECT * FROM truth.truth_claim_errors WHERE treatment_id IN ({open_months}) ORDER BY treatment_id",

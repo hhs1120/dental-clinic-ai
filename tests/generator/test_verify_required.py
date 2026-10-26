@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from generator import verify
-from tests.verify_db import CTX, ROOT, appt, make_db
+from tests.generator.verify_db import CTX, ROOT, appt, make_db
 
 
 def test_valid_db_passes_every_required_check(tmp_path):
@@ -291,21 +291,6 @@ def test_missing_gen_meta_table_exits(tmp_path, capsys):
     truth.commit()
     assert verify.main(["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]) == 1
     assert "truth_gen_meta" in capsys.readouterr().out
-
-
-def test_scale_mismatch_exits(tmp_path, capsys):
-    conn = make_db(tmp_path)
-    conn.execute("UPDATE truth.truth_gen_meta SET value = 'small' WHERE key = 'scale'")
-    conn.commit()
-    args = ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
-    assert verify.main(args + ["--scale", "small"]) == 0
-    assert verify.main(args + ["--scale", "large"]) == 1  # small DB를 large로 검사하려 함 — 섞인 DB
-    assert "scale" in capsys.readouterr().out
-
-
-def test_unknown_scale_is_argparse_error():
-    with pytest.raises(SystemExit):
-        verify.main(["--scale", "smal"])
 
 
 def test_load_ctx_reads_range_from_gen_meta(tmp_path):

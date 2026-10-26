@@ -5,7 +5,7 @@ import pytest
 from datetime import date
 
 from generator import verify
-from tests.verify_db import CTX, appt, make_db
+from tests.generator.verify_db import CTX, appt, make_db
 
 
 def test_valid_db_tooth_checks_pass(tmp_path):

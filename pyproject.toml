@@ -2,14 +2,19 @@
 name = "dental-clinic-ai"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = [
-    "faker",
+dependencies = []
+
+# 의존성은 소속별 그룹으로 나눈다 — 생성기(generator/)와 앱(backend/, 착수 때 추가)이 한 환경에 섞이지 않게
+[dependency-groups]
+generator = [
+    "faker",  # 버전이 이름 결정성에 영향 — uv.lock 커밋 필수
     "numpy",
     "pyyaml",
 ]
-
-[dependency-groups]
 dev = ["pytest"]
+
+[tool.uv]
+default-groups = ["generator", "dev"]  # uv sync·uv run 기본 — 앱 착수 때 backend 그룹 추가
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

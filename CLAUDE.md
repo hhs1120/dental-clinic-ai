@@ -11,7 +11,7 @@
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이 · `evaluation/` eval.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
 
@@ -22,15 +22,15 @@
 - 시드 고정(`config/generator.yaml`). 같은 시드 → 같은 결과
 - 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다). 단계를 추가해도 기존 결과가 바뀌지 않게 하기 위함 (가상 데이터 생성 설계 §5.1)
 - 데이터를 고정(LLM 단계 — 통화 전사·RAG 문서·차트 서술 — 실행)한 뒤에는 슬롯 기능을 위해 기존 `emr_*`를 수정하지 않는다. 추가 데이터는 새 테이블로. 슬롯의 기반 데이터는 고정 전에 정형 단계에 처음부터 넣을 수 있다 (가상 데이터 생성 설계 §0)
-- 정형(코드) 단계 전부 완성 + `make verify` 통과(small·large 둘 다) → LLM 단계 1회. 단계 목록·순서는 가상 데이터 생성 설계 §5.1. 정형 로직을 고치면 LLM 캐시가 전량 미스
+- 정형(코드) 단계 전부 완성 + `make verify` 통과 → LLM 단계 1회. 단계 목록·순서는 가상 데이터 생성 설계 §5.1. 정형 로직을 고치면 LLM 캐시가 전량 미스
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기 입력은 `classify(transcript, direction)`만
 - 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
-- 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/test_doc_sync.py`에 비교를 추가한다
+- 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/generator/test_doc_sync.py`에 비교를 추가한다
 
 ## 명령
-- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향)
-- `make data [SCALE=small|large]` / `make verify [SCALE=small]` / `make test` — 기본은 large, small은 `data/small/`·`ground_truth/small/`에 따로 출력
+- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 착수 때 `backend` 그룹 추가
+- `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 
 ## 현재 단계
 준비: 생성기 + verify. 앱(backend/frontend)은 아직 손대지 않는다.

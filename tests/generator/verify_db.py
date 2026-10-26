@@ -6,11 +6,12 @@ from pathlib import Path
 from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
 from generator.verify import Ctx
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
-CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15))
+CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15),
+          call_slots=4, eval_pool=2, blind_pool=1)
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
 SEED = """
@@ -55,9 +56,14 @@ INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES
 INSERT INTO emr_messages VALUES
   (1, 1, 'out', '2026-11-02 18:00:00', '내일 예약 안내', 'reminder', 2),
   (2, 1, 'in',  '2026-11-02 18:10:00', '네', 'reply', 2);
-INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction, started_at, duration_sec, has_transcript) VALUES
-  (1, 'c-0002', 'generated', 1, '010-0000-0001', 'inbound',  '2026-11-20 10:55:00', 95, 0),
-  (2, 'c-0001', 'generated', NULL, '010-0000-9999', 'outbound', '2026-11-27 16:00:00', 140, 0);
+-- 통화 슬롯(6단계): 1 예약 잡기(1번 예약 created_at) / 2 수납 안내 outbound(잔액 16,000원일 때) /
+-- 3 변경(4번 예약 created_at, 소아라 보호자 김철수가 건다) / 4 처음 연락 가격 문의. 행 순서 = 통화 시각순, call_uid는 셔플
+INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_name, direction, started_at, duration_sec,
+                      has_transcript, in_eval_pool, eval_sort_order, judge_status, in_blind_pool, blind_sort_order) VALUES
+  (1, 'c-0003', 'generated', 1, '010-0000-0001', '김철수', 'inbound',  '2026-10-02 11:00:00', 150, 0, 1, 1, 'pending', 1, 1),
+  (2, 'c-0001', 'generated', 1, '010-0000-0001', '김철수', 'outbound', '2026-10-20 15:00:00', 130, 0, 0, NULL, 'none', 0, NULL),
+  (3, 'c-0004', 'generated', 2, '010-0000-0002', '김철수', 'inbound',  '2026-11-14 10:00:00', 170, 0, 0, NULL, 'none', 0, NULL),
+  (4, 'c-0002', 'generated', NULL, '010-0000-9999', '박민수', 'inbound', '2026-11-27 16:00:00', 140, 0, 1, 2, 'pending', 0, NULL);
 """
 
 # 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
@@ -69,8 +75,22 @@ INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evid
   (1, 'template', 0, NULL, NULL, 0, '{}'),
   (2, 'template', 0, NULL, NULL, 0, '{}'),
   (3, 'narrative', 0, NULL, NULL, 1, '{}');
+INSERT INTO truth_call_labels VALUES
+  ('c-0003', 'book', '["book"]', 'patient', 'normal', 0, 0, 0, 1, 1, 0, NULL,
+   '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"]}',
+   'dev'),
+  ('c-0001', 'billing_q', '["billing_q", "complaint"]', 'patient', 'normal', 0, 1, 0, 0, 0, 1, NULL,
+   '{"call_date": "2026-10-20", "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [{"date": "2026-10-06", "procedure": "신경치료", "tooth": "26"}], "balance": 16000, "next_appointment": {"appointment_id": 2, "date": "2026-11-03", "time": "10:00", "procedure": "스케일링"}, "family": ["김하늘"], "alerts": ["고혈압", "마취가 잘 안 됨"]}',
+   'silver'),
+  ('c-0004', 'reschedule', '["reschedule"]', 'guardian', 'low', 0, 0, 0, 0, 1, 1, 'guardian_confused',
+   '{"call_date": "2026-11-14", "appointment_id": 4, "appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진", "from_date": "2026-11-17", "from_time": "10:00"}, "patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 4, "date": "2026-11-18", "time": "10:00", "procedure": "레진"}, "family": ["김철수"], "alerts": ["협조 어려운 소아"]}',
+   'silver'),
+  ('c-0002', 'price_q', '["price_q", "book"]', 'new_caller', 'normal', 0, 0, 1, 1, 0, 1, 'two_topics',
+   '{"call_date": "2026-11-27", "topic_procedure": "미백"}',
+   'test');
 INSERT INTO truth_gen_meta VALUES
-  ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
+  ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
+  ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1');
 """
 
 

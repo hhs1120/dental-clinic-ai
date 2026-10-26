@@ -7,9 +7,9 @@ from datetime import date
 import pytest
 
 from generator import verify
-from tests.verify_db import CTX, make_db
+from tests.generator.verify_db import CTX, make_db
 
-# 확정 월(8월) 줄이 창 안에 있도록 — 실제 데이터는 창이 확정 월을 포함한다(small 8월~, large 2월~)
+# 확정 월(8월) 줄이 창 안에 있도록 — 실제 데이터는 창(2월~)이 확정 월을 포함한다
 CTX_AUG = replace(CTX, range_start=date(2026, 8, 1))
 
 CHART_CHECKS = [verify.check_chart_note_per_treatment, verify.check_chart_dx, verify.check_claim_errors,

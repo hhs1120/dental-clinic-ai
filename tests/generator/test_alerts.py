@@ -1,5 +1,5 @@
-"""4b단계 주의사항 — small을 실제로 생성해 정의 적재·비율·출처 규칙을 본다 (가상 데이터 생성 설계 §2.2).
-필수 검사 전부는 tests/test_records.py가 같은 small로 본다."""
+"""4b단계 주의사항 — 실제로 생성해 정의 적재·비율·출처 규칙을 본다 (가상 데이터 생성 설계 §2.2).
+필수 검사 전부는 tests/generator/test_records.py가 본다."""
 import math
 import sqlite3
 from collections import Counter, defaultdict
@@ -17,7 +17,7 @@ CONFIG = ROOT / "config" / "generator.yaml"
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("alerts")
-    build.generate("small", out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
     conn = sqlite3.connect(out / "app.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

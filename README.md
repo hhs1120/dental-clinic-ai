@@ -31,21 +31,21 @@ make test
 cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 ```
 
-> conda와 함께 써도 충돌하지 않는다. 이 프로젝트는 uv의 `.venv`만 사용하므로 `pip install`·`conda install` 대신 `uv add <패키지>`로 추가한다.
+> conda와 함께 써도 충돌하지 않는다. 이 프로젝트는 uv의 `.venv`만 사용하므로 `pip install`·`conda install` 대신 `uv add --group <그룹> <패키지>`로 추가한다(그룹: 생성기 `generator`, 테스트 `dev`, 앱은 착수 때 `backend`).
 
 ## 명령
 
 | 명령 | 설명 |
 |---|---|
-| `make data [SCALE=small\|large]` | 가상 데이터 생성 (기본 large, small은 `data/small/`·`ground_truth/small/`에 따로) |
-| `make verify [SCALE=small]` | 생성 데이터 검사 (기본 large) |
+| `make data` | 가상 데이터 생성 (`data/app.sqlite`, 정답은 `ground_truth/truth.sqlite`) |
+| `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 
 ## 구조
 
 ```
 docs/          설계 문서 (기능 정의 · 가상 데이터 생성 설계 · 앱 설계 · 평가 설계 · 전환의 의미 · 프로젝트 소개)
-config/        생성기 설정 (시드, 규모, 공휴일, 금지 토픽)
+config/        생성기 설정 (시드, 기간·건수, 공휴일, 금지 토픽)
 generator/     데이터 생성기 + verify
 shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트
@@ -53,5 +53,5 @@ ground_truth/  정답지 (앱은 참조하지 않음)
 data/          생성 결과 (app.sqlite — FTS5·벡터 포함)
 backend/       FastAPI (예정)
 frontend/      Next.js (예정)
-tests/
+tests/         generator/ 생성기·verify 테스트, 앱 테스트는 backend/ (예정). 정답 격리 검사는 tests/ 바로 아래
 ```
