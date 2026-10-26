@@ -22,7 +22,7 @@ HOLIDAYS = frozenset(date.fromisoformat(d) for d in json.loads((ROOT / CFG["holi
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("messages")
-    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = sqlite3.connect(out / "app.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

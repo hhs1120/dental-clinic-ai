@@ -221,3 +221,27 @@ def test_call_mix_warnings(tmp_path):
     assert report["counterpart"] == {"patient": 0.5, "guardian": 0.25, "new_caller": 0.25}
     assert report["outbound"] == 0.25
     assert report["dev_n"] == {"book": 1}  # 평가 설계 §2.1 — 카테고리별 dev n
+
+
+# ── 통화 전사 (7단계, §4.1 '7단계 구현 결정') ──────────────────
+
+def test_transcripts_filled_required(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_call_transcripts(conn, CTX) == []
+    assert verify.check_call_transcripts in verify.REQUIRED
+    conn.execute("UPDATE ax_calls SET has_transcript = 0, transcript = NULL WHERE id = 2")
+    assert [v["id"] for v in verify.check_call_transcripts(conn, CTX)] == [2]
+
+
+def test_transcript_warnings(tmp_path):
+    """화자 형식·꼭 넣을 사실·라벨 어휘 비율 — 경고"""
+    conn = make_db(tmp_path)
+    checks = (verify.check_transcript_speakers, verify.check_transcript_facts, verify.check_transcript_label_words)
+    assert {c.__name__: c(conn, CTX) for c in checks if c(conn, CTX)} == {}
+    assert all(c in verify.WARNINGS for c in checks)
+    conn.execute("UPDATE ax_calls SET transcript = '손님: 안녕하세요' WHERE id = 1")
+    assert [v["id"] for v in verify.check_transcript_speakers(conn, CTX)] == [1]
+    conn.execute("UPDATE ax_calls SET transcript = '환자: 하루 미룰 수 있을까요?\n직원: 네, 11월 18일로요.' WHERE id = 3")
+    assert [v["id"] for v in verify.check_transcript_facts(conn, CTX)] == [1, 3]  # 1은 위에서 덮어씀, 3은 원래 날짜 11월 17일 없음
+    conn.execute("UPDATE ax_calls SET transcript = '환자: 불만이 있어요\n직원: 네' WHERE id = 2")
+    assert verify.check_transcript_label_words(conn, CTX)  # 4건 중 1건 = 25% ≥ 20%

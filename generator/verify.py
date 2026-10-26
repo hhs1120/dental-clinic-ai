@@ -1,12 +1,11 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
-구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·문자(8단계)·truth_claims(있을 때) 필수 검사 + 분포·치아·통화 분포 경고 + 리포트.
+구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·truth_claims(있을 때) 필수 검사 + 분포·치아·통화 분포·전사 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY,
          누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
-         차트 본문의 근거 사실(소견 수치 등 — 9b 건별 검증과 함께)
-  경고 — 통화(전사 — 7단계), RAG
+  경고 — 통화 복수 주제 accepted ≥ 2(라벨 값 검사가 대신함), RAG
 결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
@@ -25,16 +24,17 @@ from pathlib import Path
 
 import yaml
 
+from generator import chart, llm_jobs, transcripts
 from generator.paths import output_paths
-from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_REQUIREMENT, CONDITIONAL_INSURED_MIN_AGE,
-                              EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
+from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT,
+                              CONDITIONAL_INSURED_MIN_AGE, EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
                               add_years, age_band, age_on, daily_cap, insured_on, open_slots,
                               BOOKING_PURPOSES, CALL_COUNTERPART_SHARE, CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE,
                               CALL_OUTBOUND_SHARE, CALL_PAIN_PURPOSES, CALL_PURPOSE_SHARE, CALL_SUBTOPICS,
                               EVAL_RARE_PURPOSES, EVAL_RARE_SHARE, EVAL_MIN_PER_SPLIT, HOURS, IMPLIED_FLAG,
-                              SUBTOPIC_PURPOSE, URGENCIES)
+                              SUBTOPIC_PURPOSE, URGENCIES, CALL_LABEL_WORDS)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -47,7 +47,6 @@ REASON_BY_TEXT = {(r["category"], r["note"]): r for r in ADJUST_REASONS.values()
 VISIT_MIX_TOLERANCE = 0.04
 PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = 최근 7일 + 오늘 (기능 정의 ④)
 CHART_DECOY_RANGE = (1.0, 2.0)  # 디코이 / 특이 케이스 (§4.3 — 목표는 master.CHART_DECOY_RATIO)
-CHART_FORBIDDEN_WORDS = ("청구 오류", "삭감", "조정")  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
 
 
 @dataclass(frozen=True)
@@ -709,6 +708,20 @@ def check_chart_text(conn, ctx):
     return bad
 
 
+def check_chart_narrative_facts(conn, ctx):
+    """서술 줄 본문에 꼭 넣을 사실(9b 건별 검증과 같은 기준 — chart.narrative_must_include)이 있음"""
+    names = llm_jobs.procedure_names(conn)
+    bad = []
+    for r in _rows(conn, "SELECT n.treatment_id, n.note, c.facts FROM emr_chart_notes n"
+                         " JOIN truth.truth_chart_notes c USING (treatment_id) WHERE c.kind = 'narrative'"
+                         " ORDER BY n.treatment_id"):
+        missing = [alts[0] for alts in chart.narrative_must_include(json.loads(r["facts"]), names)
+                   if not any(llm_jobs.contains(r["note"], a) for a in alts)]
+        if missing:
+            bad.append({"treatment_id": r["treatment_id"], "missing": missing})
+    return bad
+
+
 # emr_chart_notes 허용 컬럼 — 특이·디코이·요건 충족 컬럼은 정답 누출 (§5.3 누출)
 CHART_NOTE_COLUMNS = {"id", "treatment_id", "dx_code", "note"}
 
@@ -826,6 +839,51 @@ def check_call_duration(conn, ctx):
     lo, hi = CALL_DURATION_SEC
     return _rows(conn, "SELECT id, duration_sec FROM ax_calls WHERE source = 'generated'"
                        " AND duration_sec NOT BETWEEN ? AND ?", lo, hi)
+
+
+def check_call_transcripts(conn, ctx):
+    """생성 통화는 전사 있음 (7단계)"""
+    return _rows(conn, "SELECT id, call_uid FROM ax_calls WHERE source = 'generated'"
+                       " AND (has_transcript != 1 OR transcript IS NULL OR trim(transcript) = '')")
+
+
+def _transcripts(conn) -> list[dict]:
+    return _rows(conn, "SELECT c.id, c.transcript, l.used_fact FROM ax_calls c JOIN truth.truth_call_labels l"
+                       " USING (call_uid) WHERE c.source = 'generated' AND c.transcript IS NOT NULL ORDER BY c.id")
+
+
+def check_transcript_speakers(conn, ctx):
+    """전사 화자 형식 — 줄마다 '환자:'/'직원:', 둘 다 나옴 (경고)"""
+    bad = []
+    for r in _transcripts(conn):
+        lines = [ln for ln in r["transcript"].splitlines() if ln.strip()]
+        if not all(ln.startswith(tuple(transcripts.SPEAKERS)) for ln in lines) or \
+                not all(any(ln.startswith(s) for ln in lines) for s in transcripts.SPEAKERS):
+            bad.append({"id": r["id"], "transcript": r["transcript"][:40]})
+    return bad
+
+
+def check_transcript_facts(conn, ctx):
+    """꼭 넣을 사실(예약 날짜·주제 시술 별칭)이 전사에 있음 (경고)"""
+    names = llm_jobs.procedure_names(conn)
+    bad = []
+    for r in _transcripts(conn):
+        missing = [alts[0] for alts in transcripts.must_include(json.loads(r["used_fact"]), names)
+                   if not any(llm_jobs.contains(r["transcript"], a) for a in alts)]
+        if missing:
+            bad.append({"id": r["id"], "missing": missing})
+    return bad
+
+
+TRANSCRIPT_LABEL_WORD_MAX = 0.2  # 라벨 어휘가 그대로 나오는 전사 비율 상한 (§5.3 경고)
+
+
+def check_transcript_label_words(conn, ctx):
+    """라벨 어휘(master.CALL_LABEL_WORDS)가 그대로 나오는 전사 < 20% (경고)"""
+    rows = _transcripts(conn)
+    hit = [r["id"] for r in rows if any(w in r["transcript"] for w in CALL_LABEL_WORDS)]
+    share = len(hit) / len(rows) if rows else 0.0
+    return [{"share": round(share, 3), "ids": hit[:EXAMPLES]}] if share >= TRANSCRIPT_LABEL_WORD_MAX else []
 
 
 def check_call_row_order(conn, ctx):
@@ -1310,6 +1368,7 @@ REQUIRED = [
     check_requirement_facts,
     check_chart_special,
     check_chart_text,
+    check_chart_narrative_facts,
     check_chart_note_columns,
     check_ax_calls_columns,
     check_call_uid_format,
@@ -1318,6 +1377,7 @@ REQUIRED = [
     check_call_slot_count,
     check_call_day,
     check_call_duration,
+    check_call_transcripts,
     check_call_row_order,
     check_booking_call_event,
     check_call_counterpart,
@@ -1338,6 +1398,9 @@ WARNINGS = [
     check_chart_decoy_ratio,
     check_call_purpose_mix,
     check_call_noise_mix,
+    check_transcript_speakers,
+    check_transcript_facts,
+    check_transcript_label_words,
 ]
 REPORTS = [
     report_daily_fill,

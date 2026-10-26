@@ -258,3 +258,84 @@ def test_fake_gateway_is_deterministic_and_follows_schema(tmp_path):
 def test_default_config_models_have_prices():
     cfg = llm.load_config()
     assert all(m in cfg["models"] for chain in cfg["aliases"].values() for m in chain)
+
+
+# ── Batch (생성기 API 채우기 — 앱 설계 §7) ─────────────────────
+
+from anthropic.types.messages import MessageBatch, MessageBatchIndividualResponse  # noqa: E402
+
+TEXT_SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
+
+
+def _batch(status="ended"):
+    return MessageBatch.model_validate({
+        "id": "batch_1", "type": "message_batch", "processing_status": status, "created_at": "2026-10-27T10:00:00Z",
+        "expires_at": "2026-10-28T10:00:00Z", "archived_at": None, "cancel_initiated_at": None, "ended_at": None,
+        "results_url": None,
+        "request_counts": {"processing": 0, "succeeded": 2, "errored": 0, "canceled": 0, "expired": 0}})
+
+
+def _entry(custom_id, result):
+    return MessageBatchIndividualResponse.model_validate({"custom_id": custom_id, "result": result})
+
+
+class _Batches:
+    def __init__(self, results):
+        self.results_, self.created = results, None
+
+    def create(self, requests):
+        self.created = requests
+        return _batch("in_progress")
+
+    def retrieve(self, batch_id):
+        return _batch()
+
+    def results(self, batch_id):
+        return iter(self.results_)
+
+
+class BatchClient:
+    def __init__(self, results=()):
+        self.messages = type("M", (), {"batches": _Batches(list(results))})()
+
+
+def test_batch_submit_uses_first_model_without_server_fallback(tmp_path):
+    client = BatchClient()
+    gw = _gateway(tmp_path, client)
+    batch_id = gw.submit_batch("gen", [{"custom_id": "k1", "system": "지시", "messages": MSGS, "schema": TEXT_SCHEMA}],
+                               task="toy", prompt_version="toy/v1")
+    assert batch_id == "batch_1" and gw.batch_status(batch_id) == "ended"
+    (req,) = client.messages.batches.created
+    assert req["custom_id"] == "k1"
+    params = req["params"]
+    assert params["model"] == "model-a" and params["system"] == "지시" and params["messages"] == MSGS
+    assert "fallbacks" not in params and params["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_batch_results_priced_at_batch_share_and_logged(tmp_path):
+    ok = _message(text='{"text": "사과"}', model="model-a", input_tokens=1000, output_tokens=200).model_dump()
+    refused = _message(text="", model="model-a", stop="refusal", input_tokens=1000, output_tokens=0).model_dump()
+    bad_json = _message(text="사과", model="model-a").model_dump()
+    client = BatchClient([
+        _entry("k1", {"type": "succeeded", "message": ok}),
+        _entry("k2", {"type": "succeeded", "message": refused}),
+        _entry("k3", {"type": "succeeded", "message": bad_json}),
+        _entry("k4", {"type": "expired"}),
+        _entry("k5", {"type": "errored", "error": {"type": "error", "error": {"type": "api_error", "message": "x"}}}),
+    ])
+    gw = _gateway(tmp_path, client)
+    out = gw.batch_results("batch_1", "gen", task="toy", prompt_version="toy/v1", schema=TEXT_SCHEMA)
+    assert out["k1"].ok and out["k1"].data == {"text": "사과"}
+    assert out["k1"].cost_usd == pytest.approx((1000 * 2.0 + 200 * 10.0) / 1e6 * llm.BATCH_PRICE_SHARE)
+    assert not out["k2"].ok and "refusal" in out["k2"].error
+    assert not out["k3"].ok and "JSON" in out["k3"].error
+    assert out["k4"] is None and out["k5"] is None  # 처리 안 됨 — 시도로 세지 않는다
+    log = _log(tmp_path)
+    assert [r["ref_id"] for r in log] == ["k1", "k2", "k3"] and all(r["task"] == "toy" for r in log)
+
+
+def test_batch_submit_checks_budget(tmp_path):
+    gw = _gateway(tmp_path, BatchClient())
+    gw.log.write({"at": NOW.isoformat(), "scope": "generator", "cost_usd": 1.0})
+    with pytest.raises(llm.BudgetExceeded):
+        gw.submit_batch("gen", [], task="toy")

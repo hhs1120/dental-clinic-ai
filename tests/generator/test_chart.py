@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 import pytest
 
 from generator import build, chart, verify
-from generator.master import (CHART_DECOY_RATIO, DIAGNOSIS_ERROR_RATE, PROCEDURE_DIAGNOSES, REQUIREMENT_CUT_ERROR_SHARE,
+from generator.master import (CHART_DECOY_RATIO, CHART_FORBIDDEN_WORDS, DIAGNOSIS_ERROR_RATE, PROCEDURE_DIAGNOSES, REQUIREMENT_CUT_ERROR_SHARE,
                               REQUIREMENT_ERROR_RATE)
 from generator.paths import ROOT
 
@@ -26,7 +26,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("chart")
-    RUN["run"] = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    RUN["run"] = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -108,7 +108,7 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
     """디코이 배수를 바꿔도 오류·상병·요건은 그대로 — 사실(chart_facts)과 본문(chart_notes) 난수를 나눈다 (§5.1)"""
     conn, _, _ = db
     monkeypatch.setattr(chart, "CHART_DECOY_RATIO", 1.0)
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     for sql in ("SELECT * FROM truth.truth_claim_errors ORDER BY treatment_id",
                 "SELECT treatment_id, dx_code FROM emr_chart_notes ORDER BY treatment_id",
@@ -125,7 +125,7 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
     conn, _, _ = db
     monkeypatch.setattr(records, "ADJUST_TYPE_WEIGHTS", {"clinical": {"requirement": 50, "documentation": 40, "diagnosis": 10},
                                                          "other": {"requirement": 0, "documentation": 50, "diagnosis": 50}})
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     open_months = "SELECT treatment_id FROM emr_claims WHERE status IN ('submitted', 'pending')"
     for sql in (f"SELECT * FROM truth.truth_claim_errors WHERE treatment_id IN ({open_months}) ORDER BY treatment_id",
@@ -162,3 +162,74 @@ def test_draft_sentences(db):
     notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
     assert not any("우식로" in n for n in notes)
     assert not any("특이사항은 없습니다" in n and ("주의사항" in n or "진료 중" in n) for n in notes)
+
+
+# ── 9b단계 차트 서술 작업 (§4.3 '9b단계 구현 결정') ────────────
+
+FACTS = {"alerts": [{"label": "고혈압", "action": "혈압 측정 후 진행"}], "cc": "잇몸이 내려간 것 같아요",
+         "discovered": ["마취가 잘 안 됨"], "findings": {"bleeding": True, "calculus": "많음", "mobility": 0, "pocket_mm": 6},
+         "plan": {"remaining": 2}, "procedure": "잇몸치료", "tooth": None,
+         "requirement": {"key": "R02", "evidence": True, "scaling_days_ago": 14, "linked": True}}
+
+
+def test_narrative_must_include_facts():
+    names = {"잇몸치료": ["잇몸치료", "치주치료"], "신경치료": ["신경치료"]}
+    got = chart.narrative_must_include(FACTS, names)
+    assert got == [["잇몸치료", "치주치료"], ["6mm"], ["고혈압"], ["마취가 잘 안 됨"], ["14일"], ["2회"]]
+    tooth = {**FACTS, "tooth": "26", "procedure": "신경치료", "findings": None, "alerts": [], "discovered": [],
+             "requirement": {"key": "R01", "evidence": True, "prev_days": 200, "reason": "2차 우식"}, "plan": None}
+    assert chart.narrative_must_include(tooth, names) == [["26번"], ["신경치료"], ["7개월"]]
+    other = {**tooth, "requirement": {"key": "R06", "evidence": True, "other_clinic": True, "edentulous_months": 5}}
+    assert chart.narrative_must_include(other, names)[-1] == ["5개월"]
+    sealant = {**tooth, "requirement": {"key": "R04", "evidence": True, "surface": "깊은 소와열구가 있고 우식이 없는 교합면"}}
+    assert chart.narrative_must_include(sealant, names)[-1] == ["소와열구"]
+    impacted = {**tooth, "requirement": {"key": "R05", "evidence": True, "impaction": "부분 매복", "bone_removal": True}}
+    assert chart.narrative_must_include(impacted, names)[-1] == ["부분 매복"]
+
+
+def test_narrative_checks_forbid_answer_words_and_patient_name():
+    c = chart.narrative_checks(FACTS, {"잇몸치료": ["잇몸치료"]}, "김철수")
+    assert c["field"] == "note" and "김철수" in c["forbidden_words"]
+    assert set(CHART_FORBIDDEN_WORDS) <= set(c["forbidden_words"]) and c["forbidden_patterns"]
+
+
+def test_narrative_stage_fake_keeps_draft(db, tmp_path):
+    """가짜 게이트웨이면 초안이 그대로 남는다 — db 픽스처(가짜 모드 생성)의 서술 줄 본문 = 초안"""
+    conn, _, _ = db
+    row = conn.execute("SELECT n.note, t.facts FROM emr_chart_notes n JOIN truth.truth_chart_notes t USING (treatment_id)"
+                       " WHERE t.kind = 'narrative' LIMIT 1").fetchone()
+    assert row["note"] == chart.draft_note(json.loads(row["facts"]))
+
+
+
+def test_narrative_payload_hides_requirement_key_and_evidence():
+    """LLM 입력에 요건 사유 키·충족 여부(정답)가 없다 — 사실 필드만 history로"""
+    p = chart.narrative_payload(FACTS, "초안")
+    text = json.dumps(p, ensure_ascii=False)
+    assert "R02" not in text and "evidence" not in text and "requirement" not in text
+    assert p["facts"]["history"] == {"scaling_days_ago": 14, "linked": True} and p["draft"] == "초안"
+    r03 = chart.narrative_payload({**FACTS, "requirement": {"key": "R03", "evidence": False}}, "초안")
+    assert "history" not in r03["facts"]
+
+
+def test_narrative_stage_exports_then_applies_cache(tmp_path):
+    """실제 모드: 서술 줄 → 작업 → 들여오기 → 본문 덮어쓰기 (verify 테스트 DB의 3번 레진 서술 줄)"""
+    from types import SimpleNamespace
+    from generator import llm_jobs
+    from tests.generator.verify_db import make_db
+    conn = make_db(tmp_path)
+    paths = {k: tmp_path / k for k in ("llm_cache", "llm_jobs", "llm_results")}
+    ctx = llm_jobs.LLMContext(paths, fake=False)
+    chart.stage_narratives(SimpleNamespace(conn=conn, state={"llm": ctx}), None, None)
+    assert ctx.finish() == {"chart": 1}
+    (job,) = [json.loads(line) for line in (paths["llm_jobs"] / "chart.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert job["item"] == "3" and job["checks"]["must_include"] == [["16번"], ["레진"]]
+    assert "김하늘" in job["checks"]["forbidden_words"]  # 3번 진료 환자 이름
+    note = "16번 치아에 까만 점이 보여 레진 충전을 시행했습니다."
+    paths["llm_results"].mkdir()
+    (paths["llm_results"] / "chart.jsonl").write_text(
+        json.dumps({"key": job["key"], "output": {"note": note}, "source": "claude-code"}, ensure_ascii=False) + "\n",
+        encoding="utf-8")
+    assert llm_jobs.import_results(paths)["chart"]["ok"] == 1
+    chart.stage_narratives(SimpleNamespace(conn=conn, state={"llm": llm_jobs.LLMContext(paths, fake=False)}), None, None)
+    assert conn.execute("SELECT note FROM emr_chart_notes WHERE treatment_id = 3").fetchone()[0] == note

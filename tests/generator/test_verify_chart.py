@@ -297,3 +297,13 @@ def test_r02_and_r06_facts_follow_ledger(tmp_path):
     assert verify.check_requirement_facts(conn, CTX) == []
     _facts(conn, implant, {"key": "R06", "evidence": True, "other_clinic": True, "edentulous_months": 6})
     assert verify.check_requirement_facts(conn, CTX)
+
+
+
+def test_narrative_facts_required(tmp_path):
+    """서술 줄 본문에 꼭 넣을 사실(9b 건별 검증과 같은 기준)이 없으면 실패"""
+    conn = make_db(tmp_path)
+    assert verify.check_chart_narrative_facts in verify.REQUIRED
+    assert verify.check_chart_narrative_facts(conn, CTX) == []
+    conn.execute("UPDATE emr_chart_notes SET note = '레진 충전을 했습니다.' WHERE treatment_id = 3")
+    assert verify.check_chart_narrative_facts(conn, CTX) == [{"treatment_id": 3, "missing": ["16번"]}]

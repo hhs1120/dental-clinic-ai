@@ -64,11 +64,19 @@ INSERT INTO emr_messages VALUES
 -- 통화 슬롯(6단계): 1 예약 잡기(1번 예약 created_at) / 2 수납 안내 outbound(잔액 16,000원일 때) /
 -- 3 변경(4번 예약 created_at, 소아라 보호자 김철수가 건다) / 4 처음 연락 가격 문의. 행 순서 = 통화 시각순, call_uid는 셔플
 INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_name, direction, started_at, duration_sec,
-                      has_transcript, in_eval_pool, eval_sort_order, judge_status, in_blind_pool, blind_sort_order) VALUES
-  (1, 'c-0003', 'generated', 1, '010-0000-0001', '김철수', 'inbound',  '2026-10-02 11:00:00', 150, 0, 1, 1, 'pending', 1, 1),
-  (2, 'c-0001', 'generated', 1, '010-0000-0001', '김철수', 'outbound', '2026-10-20 15:00:00', 130, 0, 0, NULL, 'none', 0, NULL),
-  (3, 'c-0004', 'generated', 2, '010-0000-0002', '김철수', 'inbound',  '2026-11-14 10:00:00', 170, 0, 0, NULL, 'none', 0, NULL),
-  (4, 'c-0002', 'generated', NULL, '010-0000-9999', '박민수', 'inbound', '2026-11-27 16:00:00', 140, 0, 1, 2, 'pending', 0, NULL);
+                      has_transcript, transcript, in_eval_pool, eval_sort_order, judge_status, in_blind_pool, blind_sort_order) VALUES
+  (1, 'c-0003', 'generated', 1, '010-0000-0001', '김철수', 'inbound',  '2026-10-02 11:00:00', 150, 1,
+   '환자: 이가 너무 시려서요, 진료 받을 수 있을까요?
+직원: 네, 10월 6일 오전 10시에 신경치료로 잡아 드릴게요.', 1, 1, 'pending', 1, 1),
+  (2, 'c-0001', 'generated', 1, '010-0000-0001', '김철수', 'outbound', '2026-10-20 15:00:00', 130, 1,
+   '직원: 지난번 진료비가 일부 남아 있어 연락드렸어요.
+환자: 아, 그게 왜 남았는지 모르겠네요. 좀 기분이 안 좋네요.', 0, NULL, 'none', 0, NULL),
+  (3, 'c-0004', 'generated', 2, '010-0000-0002', '김철수', 'inbound',  '2026-11-14 10:00:00', 170, 1,
+   '환자: 아이가 11월 17일에 가기로 했는데 하루 미룰 수 있을까요?
+직원: 네, 11월 18일 오전 10시로 옮겨 드릴게요.', 0, NULL, 'none', 0, NULL),
+  (4, 'c-0002', 'generated', NULL, '010-0000-9999', '박민수', 'inbound', '2026-11-27 16:00:00', 140, 1,
+   '환자: 미백 하면 얼마 정도 나와요? 괜찮으면 날 잡고 싶어서요.
+직원: 상담 후 안내드리는데, 이번 주에 한번 오실 수 있으세요?', 1, 2, 'pending', 0, NULL);
 """
 
 # 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
@@ -79,7 +87,7 @@ INSERT INTO truth_claims VALUES
 INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evidence_present, is_decoy, facts) VALUES
   (1, 'template', 0, NULL, NULL, 0, '{}'),
   (2, 'template', 0, NULL, NULL, 0, '{}'),
-  (3, 'narrative', 0, NULL, NULL, 1, '{}');
+  (3, 'narrative', 0, NULL, NULL, 1, '{"alerts": [], "cc": "이에 까만 점이 생겼어요", "discovered": [], "findings": null, "plan": null, "procedure": "레진", "requirement": null, "tooth": "16"}');
 INSERT INTO truth_call_labels VALUES
   ('c-0003', 'book', '["book"]', 'patient', 'normal', 0, 0, 0, 1, 1, 0, NULL,
    '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"]}',

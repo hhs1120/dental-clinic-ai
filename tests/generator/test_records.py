@@ -26,7 +26,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("records")
-    run = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG)
+    run = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     return conn, verify.load_ctx(CONFIG, conn), run
 
@@ -164,7 +164,7 @@ def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
     cfg = {**CFG, "unpaid_rate": 0.5}
     path = tmp_path / "generator.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path)
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
     other = _open(tmp_path)
     for table in ("emr_treatments", "emr_claims"):
         assert [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")] == \
