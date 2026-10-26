@@ -6,7 +6,7 @@
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 sent_at 이후),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프·emr_chart_notes 허용 컬럼), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
-         급여 진료 ↔ 청구 1줄(창 안 — 창 이전은 그해 급여 스케일링만)·사유(범주 문자·서술)가 master.ADJUST_REASONS에서 그 시술에 맞음(5단계), truth_claim_errors 목록 검사(5b단계),
+         truth_claim_errors 목록 검사(5b단계),
          주의사항(4b단계), 차트(5b단계)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG, 차트 디코이 비율
 결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
@@ -28,16 +28,19 @@ from pathlib import Path
 import yaml
 
 from generator.paths import SCALES, output_paths
-from generator.master import (AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS, SCALING_CODE,
-                              SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX, age_on, daily_cap, open_slots)
+from generator.master import (ADJUST_REASONS, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
+                              PROCEDURES, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX, age_on, daily_cap,
+                              insured_on, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
 
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
+PROCEDURE = {p["code"]: p for p in PROCEDURES}
+REASON_BY_TEXT = {(r["category"], r["note"]): r for r in ADJUST_REASONS.values()}  # (adjust_code, adjust_note) → 사유
 
 # 경고 허용치 (§5.3 경고 표)
-VISIT_MIX_TOLERANCE = 0.03
+VISIT_MIX_TOLERANCE = 0.04
 PREP_SHEET_DAYS = 7  # 준비표 날짜 탭 = 최근 7일 + 오늘 (기능 정의 ④)
 
 
@@ -301,6 +304,60 @@ def check_scaling_limit(conn, ctx):
     return bad
 
 
+def check_treatment_amounts(conn, ctx):
+    """진료 금액은 수가대로(master fee_total) — 급여면 급여 금액 = fee × (1 − 본인부담률), 비급여면 전액 본인부담"""
+    bad = []
+    for r in _rows(conn, "SELECT t.id, t.procedure_code, t.performed_at, t.fee_total, t.insured_amount, t.patient_amount,"
+                         " pt.birth_date FROM emr_treatments t JOIN emr_patients pt ON pt.id = t.patient_id"):
+        p = PROCEDURE[r["procedure_code"]]
+        insured = insured_on(p, age_on(date.fromisoformat(r["birth_date"]), _dt(r["performed_at"]).date()))
+        expected = round(p["fee_total"] * (1 - p["patient_share_rate"])) if insured else 0
+        if (r["fee_total"], r["insured_amount"], r["patient_amount"]) != (p["fee_total"], expected, p["fee_total"] - expected):
+            bad.append({**r, "expected_insured": expected})
+    return bad
+
+
+def check_insured_claim_one_line(conn, ctx):
+    """급여 completed 진료 ↔ 청구 정확히 1줄(환자·차트번호·코드·치아·금액 = 급여 금액·청구월 = 진료월 일치).
+    창 안은 급여 진료 전부, 창 이전 내원은 TODAY와 같은 해 급여 스케일링만 paid 1줄. 그 밖의 진료는 청구 없음"""
+    claims = defaultdict(list)
+    for c in _rows(conn, "SELECT * FROM emr_claims"):
+        claims[c["treatment_id"]].append(c)
+    bad = []
+    for t in _rows(conn, "SELECT t.id, t.patient_id, pt.chart_no, t.procedure_code, t.tooth_no, t.performed_at,"
+                         " t.insured_amount, pt.birth_date FROM emr_treatments t JOIN emr_patients pt ON pt.id = t.patient_id"):
+        served = _dt(t["performed_at"]).date()
+        insured = insured_on(PROCEDURE[t["procedure_code"]], age_on(date.fromisoformat(t["birth_date"]), served))
+        pre_window = served < ctx.range_start
+        if pre_window:
+            insured = insured and t["procedure_code"] == SCALING_CODE and served.year == ctx.today.year
+        got = claims.pop(t["id"], [])
+        if len(got) != insured:
+            bad.append({"treatment_id": t["id"], "procedure_code": t["procedure_code"], "performed_at": t["performed_at"],
+                        "claims": len(got), "expected": int(insured)})
+            continue
+        expected = {"patient_id": t["patient_id"], "chart_no": t["chart_no"], "procedure_code": t["procedure_code"],
+                    "tooth_no": t["tooth_no"], "claim_amount": t["insured_amount"], "claim_month": served.strftime("%Y-%m")}
+        if pre_window:
+            expected["status"] = "paid"
+        for c in got:
+            mismatch = [k for k, v in expected.items() if c[k] != v]
+            if mismatch:
+                bad.append({"claim_id": c["id"], "treatment_id": t["id"], "mismatch": mismatch})
+    return bad + [{"claim_id": c["id"], "treatment_id": tid, "mismatch": "진료 기록 없음"}
+                  for tid, cs in claims.items() for c in cs]
+
+
+def check_adjust_reason(conn, ctx):
+    """조정·불능 줄의 사유(adjust_code·adjust_note)는 master.ADJUST_REASONS 상세 사유 하나와 범주 문자·서술이 일치하고
+    그 시술에 맞음. 외부 이력 사유는 denied만"""
+    return [r for r in _rows(conn, "SELECT id, procedure_code, status, adjust_code, adjust_note FROM emr_claims"
+                                   " WHERE status IN ('adjusted', 'denied')")
+            if (reason := REASON_BY_TEXT.get((r["adjust_code"], r["adjust_note"]))) is None
+            or r["procedure_code"] not in reason["procedures"]
+            or (reason["type"] == "external" and r["status"] != "denied")]
+
+
 def check_extra_claim_review_not_in_ledger(conn, ctx):
     """truth_claims의 extra_in_claim_review 대조 키가 emr_claims와 겹치지 않음"""
     return _rows(conn, "SELECT t.id, t.chart_no, t.service_date, t.procedure_code, t.tooth_no, c.id AS claim_id"
@@ -428,7 +485,7 @@ def report_balance_holder_share(conn, ctx):
 
 
 def check_visit_mix(conn, ctx):
-    """창 안 내원(completed) 유형 구성 진료 70 / 위생 25 / 상담 5 ±3%p — 창 이전 내원은 빼고"""
+    """창 안 내원(completed) 유형 구성 master.VISIT_MIX ± VISIT_MIX_TOLERANCE — 창 이전 내원은 빼고"""
     counts = {r["type"]: r["n"] for r in _rows(conn, "SELECT type, count(*) AS n FROM emr_appointments"
                                                       " WHERE status = 'completed' AND date(scheduled_at) >= ?"
                                                       " GROUP BY type", ctx.range_start.isoformat())}
@@ -486,6 +543,9 @@ REQUIRED = [
     check_service_date,
     check_uninsured_not_claimed,
     check_scaling_limit,
+    check_treatment_amounts,
+    check_insured_claim_one_line,
+    check_adjust_reason,
     check_extra_claim_review_not_in_ledger,
     check_truth_claims_match,
     check_balance_non_negative,

@@ -11,7 +11,7 @@ tags:
   - 데이터
 ---
 
-> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§2.4 조정 금액·수납 분포, §4.1 분포 등)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/test_doc_sync.py`가 검사).
+> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§4.1 분포 등)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/test_doc_sync.py`가 검사).
 
 ## 0. 전제
 
@@ -70,7 +70,7 @@ tags:
 
 ### 2.4 수납·청구
 
-- **잔액** = Σ(`amount_due − amount_paid`). 창 안 completed 내원마다 `visit` 수납 행 1개(0원이어도). 미수는 `amount_due > 0`인 내원 중 `config` `unpaid_rate`에서 일부만 수납 → 그중 `config` `settle_next_visit`은 다음 내원 때 `settlement` 행(`amount_due = 0`)으로 정산, 나머지는 잔류. 발생률만 두면 잔액이 누적돼 준비표 미수 칩이 절반 넘게 켜진다. 결제 수단은 카드 80 / 현금 10 / 이체 10, 미수 내원의 부분 수납은 청구액의 U(0, 0.7), `settlement` 행은 정산한 다음 내원 예약에 붙인다(값은 5단계 구현 때 `master`로)
+- **잔액** = Σ(`amount_due − amount_paid`). 창 안 completed 내원마다 `visit` 수납 행 1개(0원이어도). 미수는 `amount_due > 0`인 내원 중 `config` `unpaid_rate`에서 일부만 수납 → 그중 `config` `settle_next_visit`은 다음 내원 때 `settlement` 행(`amount_due = 0`)으로 정산, 나머지는 잔류. 발생률만 두면 잔액이 누적돼 준비표 미수 칩이 절반 넘게 켜진다. 결제 수단 가중은 `master.PAYMENT_METHOD_WEIGHTS`, 미수 내원의 부분 수납은 청구액 × `master.UNPAID_PAID_RANGE`(10원 단위 내림), `settlement` 행은 정산한 다음 내원 예약에 붙인다(그 내원의 미수를 합쳐 1행, 내원 종료 시각)
 - **보험 잔여**(준비표 칩): 별도 테이블 없이 `emr_claims`의 그해 스케일링 급여 청구 유무로 계산 — 같은 사실을 두 곳에 두지 않는다. 청구 오류가 섞인 장부를 그대로 쓴다(데스크가 보는 화면과 같고, 청구 누락으로 칩이 잘못 켜지는 것은 ⑤-2가 잡을 현실 오류)
 - **청구**: 급여 시술 completed마다 1줄(아래 청구 오류 줄은 예외). `claim_month` = 진료월, 월 일괄 청구만
   - `submitted_at`: 익월 1일(시각·휴진일은 따지지 않음), 전월분(`pending`)은 NULL
@@ -82,7 +82,7 @@ tags:
 1. **타 기관 이력**: 급여 스케일링 줄 중 `master.EXTERNAL_SCALING_DENY_RATE`는 denied + 외부 이력 사유(연 1회 초과) — 환자가 다른 치과에서 그해 이미 받은 경우. 우리 장부로는 오류가 아니라 `truth_claim_errors`에 넣지 않고, 데스크가 미리 알 수 없어 ⑤-2 대상도 아니다(현장 빈도 확인 필요)
 2. **그 밖의 줄**: 시술군(`master.adjust_group` — 요건 사유가 있는 임상 시술 / 그 밖)별 `master.REVIEW_OUTCOME_WEIGHTS`로 paid / adjusted / denied. 임상 시술이 주로 깎인다(스케일링·검진·단순발치에는 요건 사유가 없다). 깎인 줄은 사유 유형을 시술군별 `master.ADJUST_TYPE_WEIGHTS`(요건 / 장부 밖 / 상병)로 뽑고 그 유형 안에서 그 시술에 맞는 상세 사유를 균등 추첨
 
-- 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount × U(0.5, 0.9)`, 10원 단위 내림 + 사유 / denied → `paid_amount = 0` + 사유(전액 조정. 반송해 보완하게 하는 심사불능은 두지 않는다 — 기재 누락도 조정으로)
+- 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount` × `master.ADJUSTED_PAID_RANGE`, 10원 단위 내림 + 사유 / denied → `paid_amount = 0` + 사유(전액 조정. 반송해 보완하게 하는 심사불능은 두지 않는다 — 기재 누락도 조정으로)
 - **사유 형식**은 실제 심사결과 통보서처럼 범주 코드 + 서술: `adjust_code` = 심평원 조정 사유 범주 문자(출처: 심평원 「요양급여비용 청구방법, 심사청구서·명세서서식 및 작성요령」 2020년 7월판 별첨 3), `adjust_note` = 일반사유 서술. 범주 문자는 여러 사유가 공유하므로 서술을 읽어야 구체 사유가 정해진다
 - 상세 사유는 `master.ADJUST_REASONS` — 사유마다 범주 문자·서술 템플릿·유형(요건 / 장부 밖 / 상병 / 외부 이력)·맞는 시술을 둔다. 나이 사유는 두지 않는다(위 청구 오류와 같은 이유). 상병 사유와 상병 착오 오류(5b)를 위해 시술별 허용 상병도 `master`에 둔다(5b 구현 때)
 - **5b 연결**: 5b가 확정 월 깎인 줄을 읽어 오류를 정한다 — 상병 사유로 깎인 줄은 전부 상병 착오로, 요건 사유로 깎인 줄 중 `master.REQUIREMENT_CUT_ERROR_SHARE`는 임상 요건형 오류로(나머지는 차트에 요건 근거). 제출 월·전월 오류는 5b가 따로 정한다(§4.3)
@@ -296,7 +296,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 충돌 | 같은 환자 같은 날 중복 없음 (§1 운영 제약은 생성 코드가 보장 — 기능이 의존하지 않아 검사하지 않음) |
 | 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전); 창 이전 내원(`scheduled_at` < 창 시작)은 환자당 completed 위생 1행·등록일 < 내원일 |
-| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖; 전월 `pending`은 제출일 없음; 확정 월은 paid(금액 그대로·사유 없음) / adjusted(일부·사유) / denied(0원·사유), 사유는 `master.ADJUST_REASONS`의 상세 사유 하나와 일치(범주 문자·서술 템플릿, 그 시술에 맞음 — 외부 이력은 급여 스케일링 denied만); 창 안 급여 completed 진료는 청구가 정확히 1줄(창 이전은 그해 급여 스케일링만 1줄 `paid`)(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
+| 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; 진료 금액은 수가대로(급여 여부는 `master.insured_on` — 급여면 본인부담률로 나눔, 비급여면 전액 본인부담); `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖; 전월 `pending`은 제출일 없음; 확정 월은 paid(금액 그대로·사유 없음) / adjusted(일부·사유) / denied(0원·사유), 사유는 `master.ADJUST_REASONS`의 상세 사유 하나와 일치(범주 문자·서술 템플릿, 그 시술에 맞음 — 외부 이력은 급여 스케일링 denied만); 창 안 급여 completed 진료는 청구가 정확히 1줄(창 이전은 그해 급여 스케일링만 1줄 `paid`)(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만; 창 안 completed마다 `visit` 정확히 1행, 창 이전 내원은 수납 없음; `settlement`는 `amount_due` 0 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_REASONS` 상세 사유마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; `emr_chart_notes` 컬럼은 허용 목록만(특이·디코이·요건 충족 컬럼 없음); **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
@@ -309,7 +309,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 
 | 지표 | 목표 | 허용 | 값 위치 | 분모 | 건너뛰는 경우 |
 |---|---|---|---|---|---|
-| 내원 구성 | 진료 70% · 위생 25% · 상담 5% | ±3%p | `master.VISIT_MIX` | 창 안 completed | — |
+| 내원 구성 | 진료 66% · 위생 31% · 상담 3% | ±4%p | `master.VISIT_MIX` | 창 안 completed | — |
 | 통화 목적·노이즈 | §4.1 | ±2%p | §4.1 | 전사 | — |
 | 차트 디코이 비율 | 특이 케이스의 1~2배 | 범위 안 | §4.3 (5b 구현 때 `master.CHART_DECOY_RATIO`) | 특이 케이스 | — |
 

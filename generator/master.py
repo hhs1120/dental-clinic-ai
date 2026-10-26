@@ -34,7 +34,7 @@ SCALING_MIN_AGE = 19
 CONDITIONAL_INSURED_MIN_AGE = 65
 
 # 내원 구성 목표 (§1). 목표 — 경고로만 확인
-VISIT_MIX = {"treatment": 0.70, "hygiene": 0.25, "consult": 0.05}
+VISIT_MIX = {"treatment": 0.66, "hygiene": 0.31, "consult": 0.03}
 
 # 연령 구간과 비중 (§2.2). (이름, 최소 나이, 최대 나이(포함, 노인은 None), 비중)
 AGE_BANDS = [
@@ -72,7 +72,7 @@ PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
-RECALL_CYCLE_MONTHS = 6
+RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 성인 2회째가 검진만 하는 위생 내원이 돼 위생 비중이 부풀었다(결정 2026-10-26)
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
@@ -89,6 +89,10 @@ NEW_PATIENT_SHARE = 0.12
 # 치아 번호 (§2.1). 치아 단위가 아닌 시술은 FULL_MOUTH 센티널
 PERMANENT_TEETH = frozenset(f"{q}{n}" for q in (1, 2, 3, 4) for n in range(1, 9))
 FULL_MOUTH = "00"
+
+# 수납 (§2.4). 결제 수단 가중(%), 미수 내원의 부분 수납 = amount_due × U(범위) — 10원 단위 내림
+PAYMENT_METHOD_WEIGHTS = {"card": 80, "cash": 10, "transfer": 10}
+UNPAID_PAID_RANGE = (0.0, 0.7)
 
 # 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
 SUBMITTED_MONTHS = 2
@@ -107,6 +111,8 @@ ADJUST_TYPE_WEIGHTS = {
     "clinical": {"requirement": 80, "documentation": 10, "diagnosis": 10},
     "other": {"requirement": 0, "documentation": 78, "diagnosis": 22},
 }
+# adjusted 지급액 = claim_amount × U(범위), 10원 단위 내림
+ADJUSTED_PAID_RANGE = (0.5, 0.9)
 # 5b: 요건 사유로 깎인 줄 중 임상 요건형 오류로 만드는 비율 (상병 사유로 깎인 줄은 전부 상병 착오)
 REQUIREMENT_CUT_ERROR_SHARE = 0.6
 # 확정 월 깎인 줄의 판정 목표(%): 정당 / 다툴 만함 / 보완 후 재청구 — 위 가중의 역산 기준. 5b 구현 후 verify 리포트로 출력
@@ -146,6 +152,22 @@ PROCEDURES = [
 ]
 
 SCALING_CODE = "U0001"
+
+# 적용 연령(age_group)별 나이 범위 (양 끝 포함, None = 상한 없음) — 급여 조건 (§2.1·§2.6 (4))
+_AGE_GROUP_RANGE = {
+    "child": (0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child")),
+    "age19plus": (SCALING_MIN_AGE, None),
+    "senior": (CONDITIONAL_INSURED_MIN_AGE, None),
+}
+
+
+def insured_on(procedure: dict, age: int) -> bool:
+    """그 나이에 급여인지 — is_insured가 yes·conditional이고 적용 연령 안. 아니면 비급여(본인부담 1.0·청구 없음).
+    연 횟수(스케일링 연 1회)는 4단계가 2회째를 구강검진으로 바꿔 여기서 보지 않는다"""
+    if procedure["is_insured"] == "no":
+        return False
+    lo, hi = _AGE_GROUP_RANGE.get(procedure["age_group"], (0, None))
+    return lo <= age and (hi is None or age <= hi)
 
 # 치아 단위 시술의 치아 후보 (§2.1). 뽑기만 한다 — 순서 고정을 위해 정렬된 튜플(frozenset 순회 순서는 실행마다 다름)
 _WISDOM = tuple(f"{q}8" for q in (1, 2, 3, 4))

@@ -73,6 +73,42 @@ BREAKS = {
     "denied_with_amount": (
         "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 84000, 'A01', NULL)",
         "check_settled_claims"),
+    # 진료 금액: 수가대로, 급여면 본인부담률로 나눔, 비급여면 전액 본인부담
+    "fee_not_master": ("UPDATE emr_treatments SET fee_total = 100000 WHERE id = 1", "check_treatment_amounts"),
+    "insured_split_wrong": ("UPDATE emr_treatments SET insured_amount = 80000, patient_amount = 40000 WHERE id = 1",
+                            "check_treatment_amounts"),
+    "uninsured_with_insured_amount": ("UPDATE emr_treatments SET insured_amount = 56000, patient_amount = 24000 WHERE id = 3",
+                                      "check_treatment_amounts"),
+    "implant_under65_insured_amount": (  # 1번 환자는 1980년생 — 임플란트 1차는 65세 미만이면 본인부담 1.0
+        "UPDATE emr_treatments SET procedure_code = 'U0013', fee_total = 1300000, insured_amount = 910000,"
+        " patient_amount = 390000 WHERE id = 1", "check_treatment_amounts"),
+    # 창 안 급여 completed 진료 ↔ 청구 정확히 1줄 (환자·차트번호·코드·치아·금액·청구월 일치)
+    "insured_without_claim": ("DELETE FROM emr_claims WHERE id = 2", "check_insured_claim_one_line"),
+    "two_claims_one_treatment": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '27', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-01 09:00:00', 'submitted', NULL, NULL, NULL)",
+        "check_insured_claim_one_line"),
+    "claim_on_uninsured_treatment": (
+        "INSERT INTO emr_claims VALUES (3, 3, 2, 'C-00002', '16', '2026-11', '2026-11-18', 'U0005', 0, NULL, 'pending', NULL, NULL, NULL)",
+        "check_insured_claim_one_line"),
+    "claim_tooth_mismatch": ("UPDATE emr_claims SET tooth_no = '27' WHERE id = 1", "check_insured_claim_one_line"),
+    "claim_code_mismatch": ("UPDATE emr_claims SET procedure_code = 'U0006' WHERE id = 1", "check_insured_claim_one_line"),
+    "claim_amount_mismatch": ("UPDATE emr_claims SET claim_amount = 80000 WHERE id = 1", "check_insured_claim_one_line"),
+    "claim_month_mismatch": ("UPDATE emr_claims SET claim_month = '2026-11' WHERE id = 1", "check_insured_claim_one_line"),
+    "claim_chart_no_mismatch": ("UPDATE emr_claims SET chart_no = 'C-00002' WHERE id = 1", "check_insured_claim_one_line"),
+    "claim_patient_mismatch": ("UPDATE emr_claims SET patient_id = 2 WHERE id = 1", "check_insured_claim_one_line"),
+    # 확정 월 조정 사유: master.ADJUST_REASONS의 상세 사유 하나와 범주 문자·서술이 일치하고 그 시술에 맞음
+    "adjust_note_unknown": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', '알 수 없는 사유')",
+        "check_adjust_reason"),
+    "adjust_code_note_mismatch": (
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'B', '동일 부위 재시행 간격 기준 미충족')",
+        "check_adjust_reason"),
+    "adjust_reason_wrong_procedure": (  # R02는 잇몸치료 사유
+        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 0, 'C', '치석제거 후 후속 치주치료 확인 불가')",
+        "check_adjust_reason"),
+    "external_reason_adjusted": (  # 외부 이력은 급여 스케일링 denied만
+        "INSERT INTO emr_claims VALUES (3, 2, 1, 'C-00001', '00', '2026-08', '2026-08-04', 'U0001', 42000, '2026-09-01 09:00:00', 'adjusted', 30000, 'C', '연 1회 산정 횟수 초과(타 기관 이력)')",
+        "check_adjust_reason"),
     # 수납: 창 안 completed마다 visit 1행, 창 이전 내원은 수납 없음, settlement는 amount_due 0
     "completed_without_visit_payment": ("DELETE FROM emr_payments WHERE id = 4", "check_payment_per_visit"),
     "two_visit_payments": ("INSERT INTO emr_payments VALUES (5, 2, 4, 'visit', 0, 0, '2026-11-18 10:40:00', 'card')",
@@ -334,3 +370,63 @@ def test_pre_window_visit_has_no_payment(tmp_path):
     pre_id = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
     conn.execute("INSERT INTO emr_payments VALUES (5, 1, ?, 'visit', 18000, 18000, '2026-09-15 10:40:00', 'card')", (pre_id,))
     assert verify.check_payment_per_visit(conn, CTX)
+
+
+def _settled_claim(conn, code, tooth, status, paid, adjust_code, note, service_date="2026-08-06"):
+    conn.execute("INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
+                 " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note)"
+                 " VALUES (1, 1, 'C-00001', ?, '2026-08', ?, ?, 84000, '2026-09-01 09:00:00', ?, ?, ?, ?)",
+                 (tooth, service_date, code, status, paid, adjust_code, note))
+
+
+def test_adjust_reason_valid(tmp_path):
+    """사유 표대로 쓴 조정·불능 줄과 외부 이력 스케일링 불능은 통과, paid 줄은 사유를 보지 않는다"""
+    conn = make_db(tmp_path)
+    _settled_claim(conn, "U0008", "26", "adjusted", 60000, "C", "동일 부위 재시행 간격 기준 미충족")
+    _settled_claim(conn, "U0008", "26", "denied", 0, "K", "부위·산정 내역 기재 누락", service_date="2026-08-07")
+    _settled_claim(conn, "U0001", "00", "denied", 0, "C", "연 1회 산정 횟수 초과(타 기관 이력)")
+    _settled_claim(conn, "U0006", "16", "paid", 84000, None, None)
+    assert verify.check_adjust_reason(conn, CTX) == []
+
+
+def _pre_window_scaling(conn, at, claim_status=None):
+    """창 이전 위생 내원 1행 + 진료 기록(성인 스케일링). claim_status를 주면 청구 1줄도"""
+    conn.execute(PRE + _pre(1, at))
+    appt_id = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+    conn.execute("INSERT INTO emr_treatments (appointment_id, patient_id, procedure_code, tooth_no, performed_at,"
+                 " fee_total, insured_amount, patient_amount) VALUES (?, 1, 'U0001', '00', ?, 60000, 42000, 18000)",
+                 (appt_id, at))
+    treatment_id = conn.execute("SELECT max(id) FROM emr_treatments").fetchone()[0]
+    if claim_status:
+        paid = 42000 if claim_status == "paid" else None
+        conn.execute("INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
+                     " procedure_code, claim_amount, submitted_at, status, paid_amount)"
+                     " VALUES (?, 1, 'C-00001', '00', ?, ?, 'U0001', 42000, '2026-09-01 09:00:00', ?, ?)",
+                     (treatment_id, at[:7], at[:10], claim_status, paid))
+
+
+def test_pre_window_scaling_this_year_claimed_paid(tmp_path):
+    """창 이전 내원은 TODAY와 같은 해 급여 스케일링만 청구 1줄 paid (§2.6 (1))"""
+    conn = make_db(tmp_path)
+    _pre_window_scaling(conn, "2026-08-04 10:00:00", claim_status="paid")
+    assert verify.check_insured_claim_one_line(conn, CTX) == []
+
+
+def test_pre_window_scaling_this_year_without_claim(tmp_path):
+    conn = make_db(tmp_path)
+    _pre_window_scaling(conn, "2026-08-04 10:00:00")
+    assert verify.check_insured_claim_one_line(conn, CTX)
+
+
+def test_pre_window_scaling_claim_not_paid(tmp_path):
+    conn = make_db(tmp_path)
+    _pre_window_scaling(conn, "2026-08-04 10:00:00", claim_status="submitted")
+    assert verify.check_insured_claim_one_line(conn, CTX)
+
+
+def test_pre_window_scaling_last_year_not_claimed(tmp_path):
+    conn = make_db(tmp_path)
+    _pre_window_scaling(conn, "2025-12-02 10:00:00")
+    assert verify.check_insured_claim_one_line(conn, CTX) == []
+    _pre_window_scaling(conn, "2025-11-04 10:00:00", claim_status="paid")
+    assert verify.check_insured_claim_one_line(conn, CTX)

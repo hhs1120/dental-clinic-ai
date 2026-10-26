@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from generator import clinic, demand, patients, pre_window, schedule
+from generator import clinic, demand, patients, pre_window, records, schedule
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -36,6 +36,9 @@ STAGES: list = [
     ("demand", demand.stage),
     ("pre_window", pre_window.stage),
     ("appointments", schedule.stage),
+    ("treatments", records.stage_treatments),
+    ("payments", records.stage_payments),
+    ("claims", records.stage_claims),
 ]
 
 

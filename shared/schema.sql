@@ -49,7 +49,7 @@ CREATE TABLE emr_patients (
     family_id              INTEGER REFERENCES emr_families(id),
     guardian_patient_id    INTEGER REFERENCES emr_patients(id),
     registered_at          TEXT NOT NULL,
-    recall_cycle_months    INTEGER NOT NULL DEFAULT 6,
+    recall_cycle_months    INTEGER NOT NULL DEFAULT 12,
     has_private_insurance  INTEGER NOT NULL DEFAULT 0
 );
 

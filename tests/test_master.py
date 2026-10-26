@@ -56,3 +56,13 @@ def test_adjust_reasons():
     for weights in (*REVIEW_OUTCOME_WEIGHTS.values(), *ADJUST_TYPE_WEIGHTS.values()):
         assert sum(weights.values()) == 100
     assert set(REVIEW_OUTCOME_WEIGHTS) == set(ADJUST_TYPE_WEIGHTS) == {"clinical", "other"}
+
+
+def test_insured_on():
+    # §2.6 (4)·§2.1: 급여 = is_insured yes(적용 연령 안) 또는 conditional(65세↑). 스케일링은 19세↑, 실란트는 소아만
+    from generator.master import insured_on
+    by_name = {p["name"]: p for p in PROCEDURES}
+    assert insured_on(by_name["스케일링"], 19) and not insured_on(by_name["스케일링"], 18)
+    assert insured_on(by_name["실란트"], 12) and not insured_on(by_name["실란트"], 13)
+    assert insured_on(by_name["임플란트 1차"], 65) and not insured_on(by_name["임플란트 1차"], 64)
+    assert insured_on(by_name["신경치료"], 5) and not insured_on(by_name["레진"], 40)

@@ -64,7 +64,7 @@ def test_visit_mix(tmp_path):
     _patients(conn, {"1986-01-01": 100})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, 101):
-        kind = "treatment" if pid <= 70 else "hygiene" if pid <= 95 else "consult"
+        kind = "treatment" if pid <= 67 else "hygiene" if pid <= 97 else "consult"
         appt(conn, "2026-11-24 10:00:00", type=kind, patient=pid)
     assert verify.check_visit_mix(conn, CTX) == []
     conn.execute("UPDATE emr_appointments SET type = 'hygiene', staff_id = 2 WHERE patient_id BETWEEN 51 AND 70")
@@ -77,7 +77,7 @@ def test_visit_mix_ignores_pre_window_visits(tmp_path):
     _patients(conn, {"1986-01-01": 100})
     conn.execute("DELETE FROM emr_appointments")
     for pid in range(1, 101):
-        kind = "treatment" if pid <= 70 else "hygiene" if pid <= 95 else "consult"
+        kind = "treatment" if pid <= 67 else "hygiene" if pid <= 97 else "consult"
         appt(conn, "2026-11-24 10:00:00", type=kind, patient=pid)
         appt(conn, "2026-09-15 10:00:00", type="hygiene", patient=pid)  # 창 이전 위생 1행씩
     assert verify.check_visit_mix(conn, CTX) == []
