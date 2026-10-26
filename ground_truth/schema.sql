@@ -15,6 +15,7 @@ CREATE TABLE truth_claims (
                        'missing_in_claim_review', 'extra_in_claim_review')),
     paid_amount    INTEGER,
     adjust_code    TEXT,
+    adjust_note    TEXT,
     CHECK ((outcome = 'extra_in_claim_review') = (claim_id IS NULL))
 );
 

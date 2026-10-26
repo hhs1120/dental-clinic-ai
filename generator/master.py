@@ -93,6 +93,25 @@ FULL_MOUTH = "00"
 # 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
 SUBMITTED_MONTHS = 2
 
+# 심사 결과 추첨 (§2.4). 급여 스케일링 줄은 먼저 이 비율로 타 기관 이력(연 1회 초과) 불능 — 우리 장부로는 오류가 아님
+EXTERNAL_SCALING_DENY_RATE = 0.02
+# 시술군(adjust_group)별 그 밖의 줄 결과 가중(%). 임상 시술(요건 사유가 있는 시술)이 주로 깎인다.
+# large 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
+REVIEW_OUTCOME_WEIGHTS = {
+    "clinical": {"paid": 80, "adjusted": 15, "denied": 5},
+    "other": {"paid": 94, "adjusted": 4, "denied": 2},
+}
+# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산
+# (깎인 줄 전체로 요건 53 / 장부 밖 33 / 상병 14)
+ADJUST_TYPE_WEIGHTS = {
+    "clinical": {"requirement": 80, "documentation": 10, "diagnosis": 10},
+    "other": {"requirement": 0, "documentation": 78, "diagnosis": 22},
+}
+# 5b: 요건 사유로 깎인 줄 중 임상 요건형 오류로 만드는 비율 (상병 사유로 깎인 줄은 전부 상병 착오)
+REQUIREMENT_CUT_ERROR_SHARE = 0.6
+# 확정 월 깎인 줄의 판정 목표(%): 정당 / 다툴 만함 / 보완 후 재청구 — 5b 구현 후 verify 경고로 확인
+ADJUST_JUDGMENT_TARGET = {"justified": 50, "contestable": 20, "resubmit": 30}
+
 # 시술 19개 (§2.1 표). 코드는 표 순번 기반 가상 코드
 # (code, name, category, is_insured, fee_total, duration_min, insured_limit, limit_scope, age_group, is_tooth_level)
 # age_group: child = 0–12세, age19plus = 19세 이상(노인 포함), senior = 65세 이상 — AGE_BANDS의 구간 이름과 별개
@@ -185,3 +204,33 @@ PLANNED_WEIGHTS = {
 }
 HYGIENE_SCALING_BANDS = ("adult", "senior")
 CHECKUP_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "구강검진")
+
+# 심사 조정 상세 사유 (§2.4). category = 심평원 조정 사유 범주 문자(청구방법 매뉴얼 2020.7 별첨 3 — 대응은 추정),
+# note = 일반사유 서술(adjust_note). 범주 문자는 여러 사유가 공유하므로 서술이 사유를 구별한다. 나이 사유는 두지 않는다
+_INSURED_NAMES = ("스케일링", "구강검진", "실란트", "아말감/GI", "신경치료", "단순발치", "사랑니 발치", "임플란트 1차", "잇몸치료")
+_REASON_ROWS = [
+    # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
+    ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),
+    ("R02", "C", "requirement", "치석제거 후 후속 치주치료 확인 불가", ("잇몸치료",)),
+    ("R03", "C", "requirement", "치주치료 산정 기준 소견 미확인", ("잇몸치료",)),
+    ("R04", "B", "requirement", "실란트 대상 치아 기준 적용착오", ("실란트",)),
+    ("R05", "AK", "requirement", "발치 난이도 산정 근거 부족으로 하향 인정", ("사랑니 발치",)),
+    ("R06", "B", "requirement", "임플란트 급여 대상 부위 기준 적용착오", ("임플란트 1차",)),
+    ("D01", "C", "documentation", "내역설명 미기재로 인정 근거 없음", ("잇몸치료", "신경치료", "사랑니 발치", "임플란트 1차", "실란트")),
+    ("D02", "M", "documentation", "방사선 등 증빙자료 미확인", ("신경치료", "단순발치", "사랑니 발치", "임플란트 1차")),
+    ("D03", "K", "documentation", "부위·산정 내역 기재 누락", None),
+    ("C01", "B", "diagnosis", "상병과 시행 행위 불일치", None),
+    ("E01", "C", "external", "연 1회 산정 횟수 초과(타 기관 이력)", ("스케일링",)),
+]
+_CODE_BY_NAME = {p["name"]: p["code"] for p in PROCEDURES}
+ADJUST_REASONS = {
+    key: {"category": category, "type": adjust_type, "note": note,
+          "procedures": frozenset(_CODE_BY_NAME[n] for n in (names or _INSURED_NAMES))}
+    for key, category, adjust_type, note, names in _REASON_ROWS
+}
+
+
+def adjust_group(procedure_code: str) -> str:
+    """심사 결과 추첨의 시술군 — 요건 사유가 있는 시술이 clinical (REVIEW_OUTCOME_WEIGHTS·ADJUST_TYPE_WEIGHTS의 키)"""
+    return "clinical" if any(r["type"] == "requirement" and procedure_code in r["procedures"]
+                             for r in ADJUST_REASONS.values()) else "other"

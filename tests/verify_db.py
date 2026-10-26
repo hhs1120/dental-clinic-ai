@@ -39,8 +39,8 @@ INSERT INTO emr_payments VALUES
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
 INSERT INTO emr_claims VALUES
-  (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL),
-  (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL);
+  (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL, NULL),
+  (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL);
 INSERT INTO emr_messages VALUES
   (1, 1, 'out', '2026-11-02 18:00:00', '내일 예약 안내', 'reminder', 2),
   (2, 1, 'in',  '2026-11-02 18:10:00', '네', 'reply', 2);
@@ -52,8 +52,8 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction,
 # 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
 TRUTH_SEED = """
 INSERT INTO truth_claims VALUES
-  (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),
-  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL);
+  (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL, NULL),
+  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL, NULL);
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """

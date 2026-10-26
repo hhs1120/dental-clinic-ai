@@ -34,3 +34,25 @@ def test_planned_weights_names_and_bands():
         assert set(by_band) == expected, visit_type  # 성인·노인 hygiene은 가중표가 아니라 규칙
         for weights in by_band.values():
             assert set(weights) <= names and sum(weights.values()) == 100
+
+
+def test_adjust_reasons():
+    # §2.4: 상세 사유마다 범주 문자·서술·유형·맞는 시술. 서술은 사유를 구별하므로 유일, 시술은 급여 청구가 생기는 것만
+    from generator.master import ADJUST_REASONS, ADJUST_TYPE_WEIGHTS, REVIEW_OUTCOME_WEIGHTS, adjust_group
+    insured = {p["code"] for p in PROCEDURES if p["is_insured"] in ("yes", "conditional")}
+    assert len({r["note"] for r in ADJUST_REASONS.values()}) == len(ADJUST_REASONS)
+    for key, r in ADJUST_REASONS.items():
+        assert r["type"] in {"requirement", "documentation", "diagnosis", "external"}, key
+        assert r["category"] and r["category"].isalnum() and r["category"].isupper(), key
+        assert r["procedures"] and r["procedures"] <= insured, key
+    external = [r for r in ADJUST_REASONS.values() if r["type"] == "external"]
+    assert [r["procedures"] for r in external] == [{SCALING_CODE}]
+    # 시술군이 뽑는 유형마다 그 시술에 맞는 사유가 하나 이상 (빈 유형 재정규화가 목표 비율을 흔들지 않게)
+    for code in insured:
+        group = adjust_group(code)
+        for adjust_type, weight in ADJUST_TYPE_WEIGHTS[group].items():
+            assert weight == 0 or any(r["type"] == adjust_type and code in r["procedures"]
+                                      for r in ADJUST_REASONS.values()), (code, adjust_type)
+    for weights in (*REVIEW_OUTCOME_WEIGHTS.values(), *ADJUST_TYPE_WEIGHTS.values()):
+        assert sum(weights.values()) == 100
+    assert set(REVIEW_OUTCOME_WEIGHTS) == set(ADJUST_TYPE_WEIGHTS) == {"clinical", "other"}

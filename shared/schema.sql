@@ -105,7 +105,8 @@ CREATE TABLE emr_claims (
     submitted_at   TEXT,
     status         TEXT NOT NULL CHECK (status IN ('pending', 'submitted', 'paid', 'adjusted', 'denied')),
     paid_amount    INTEGER,
-    adjust_code    TEXT
+    adjust_code    TEXT,  -- 심평원 조정 사유 범주 문자(B·C·AK·M 등 — master.ADJUST_REASONS)
+    adjust_note    TEXT   -- 일반사유 서술(상세 사유 템플릿)
 );
 
 CREATE TABLE emr_messages (

@@ -5,8 +5,8 @@
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 sent_at 이후),
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
-         누출(풀 마킹 카테고리 추론·분류기 입력 덤프·emr_chart_notes 허용 컬럼), RAG 전부(청구 기준 문서의 사유 코드마다 절 1개 포함),
-         truth_claim_errors 목록 검사와 비급여·스케일링 검사의 목록 줄 제외, 목록 밖 급여 진료 ↔ 청구 1줄(창 안 — 창 이전은 그해 급여 스케일링만)·급여 조건 충족(5단계),
+         누출(풀 마킹 카테고리 추론·분류기 입력 덤프·emr_chart_notes 허용 컬럼), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
+         급여 진료 ↔ 청구 1줄(창 안 — 창 이전은 그해 급여 스케일링만)·사유(범주 문자·서술)가 master.ADJUST_REASONS에서 그 시술에 맞음(5단계), truth_claim_errors 목록 검사(5b단계),
          주의사항(4b단계), 차트(5b단계)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG, 차트 디코이 비율
 결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
@@ -140,22 +140,22 @@ def _submitted_months(ctx) -> list[str]:
 
 
 def check_submitted_months_no_result(conn, ctx):
-    """전월 이전 SUBMITTED_MONTHS개월(9~10월) 청구는 submitted, 결과(paid_amount·adjust_code) 없음 — 정답 누출 방지"""
+    """전월 이전 SUBMITTED_MONTHS개월(9~10월) 청구는 submitted, 결과(paid_amount·adjust_code·adjust_note) 없음 — 정답 누출 방지"""
     months = _submitted_months(ctx)
     marks = ",".join("?" * len(months))
-    return _rows(conn, "SELECT id, claim_month, status, paid_amount, adjust_code FROM emr_claims"
+    return _rows(conn, "SELECT id, claim_month, status, paid_amount, adjust_code, adjust_note FROM emr_claims"
                        f" WHERE claim_month IN ({marks}) AND (status != 'submitted'"
-                       " OR paid_amount IS NOT NULL OR adjust_code IS NOT NULL)", *months)
+                       " OR paid_amount IS NOT NULL OR adjust_code IS NOT NULL OR adjust_note IS NOT NULL)", *months)
 
 
 def check_settled_claims(conn, ctx):
     """확정 월(제출 월 이전) 청구는 paid(금액 그대로·사유 없음) / adjusted(일부 지급·사유) / denied(0원·사유)"""
     first_submitted = min(_submitted_months(ctx))
-    return _rows(conn, "SELECT id, claim_month, status, claim_amount, paid_amount, adjust_code FROM emr_claims"
+    return _rows(conn, "SELECT id, claim_month, status, claim_amount, paid_amount, adjust_code, adjust_note FROM emr_claims"
                        " WHERE claim_month < ? AND NOT ("
-                       " (status = 'paid' AND paid_amount = claim_amount AND adjust_code IS NULL)"
-                       " OR (status = 'adjusted' AND paid_amount > 0 AND paid_amount < claim_amount AND adjust_code IS NOT NULL)"
-                       " OR (status = 'denied' AND paid_amount = 0 AND adjust_code IS NOT NULL))", first_submitted)
+                       " (status = 'paid' AND paid_amount = claim_amount AND adjust_code IS NULL AND adjust_note IS NULL)"
+                       " OR (status = 'adjusted' AND paid_amount > 0 AND paid_amount < claim_amount AND adjust_code IS NOT NULL AND adjust_note IS NOT NULL)"
+                       " OR (status = 'denied' AND paid_amount = 0 AND adjust_code IS NOT NULL AND adjust_note IS NOT NULL))", first_submitted)
 
 
 # ── 충돌 ─────────────────────────────────────────────────────
