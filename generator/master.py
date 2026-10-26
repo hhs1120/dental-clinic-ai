@@ -72,7 +72,7 @@ PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
-RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 성인 2회째가 검진만 하는 위생 내원이 돼 위생 비중이 부풀었다(결정 2026-10-26)
+RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
