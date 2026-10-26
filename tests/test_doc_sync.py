@@ -13,7 +13,7 @@ DOC = ROOT / "docs" / "치과 AX - 가상 데이터 생성 설계.md"
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 
 # 문서가 이름으로 가리키지만 아직 구현 전인 값 (해당 단계 구현 때 코드에 추가)
-PENDING = {"CHART_DECOY_RATIO"}
+PENDING: set[str] = set()
 
 _MIX_LABEL = {"treatment": "진료", "hygiene": "위생", "consult": "상담"}
 

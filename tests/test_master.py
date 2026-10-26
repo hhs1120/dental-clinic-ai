@@ -85,3 +85,20 @@ def test_alert_types():
         else:
             assert not a["rules"] and 0 < a["rate"] < 1, code
     assert sorted(c for c, a in ALERT_TYPES.items() if a["source"] == "visit") == ["ANES_FAIL", "GAG", "SYNCOPE"]
+
+
+def test_diagnoses_and_requirements():
+    # 생성 설계 §4.3: 상병은 가상 코드 + 한글 이름, 시술마다 허용 상병 1개 이상. 임상 요건은 요건 사유(R01~R06)와 1:1
+    from generator.master import (ADJUST_REASONS, CHART_REQUIREMENT, DIAGNOSES, PROCEDURE_DIAGNOSES,
+                                  RETREATMENT_REQUIREMENT, adjust_group)
+    assert len(set(DIAGNOSES.values())) == len(DIAGNOSES)
+    assert set(PROCEDURE_DIAGNOSES) == {p["code"] for p in PROCEDURES}
+    for code, allowed in PROCEDURE_DIAGNOSES.items():
+        assert allowed and allowed <= set(DIAGNOSES), code
+        assert allowed != set(DIAGNOSES), code  # 상병 착오로 고를 다른 상병이 있어야 한다
+    requirement_keys = {k for k, r in ADJUST_REASONS.items() if r["type"] == "requirement"}
+    assert set(CHART_REQUIREMENT.values()) | {RETREATMENT_REQUIREMENT} | {"R02"} == requirement_keys
+    for code, key in CHART_REQUIREMENT.items():
+        assert code in ADJUST_REASONS[key]["procedures"], code
+    clinical = {p["code"] for p in PROCEDURES if adjust_group(p["code"]) == "clinical"}
+    assert set(CHART_REQUIREMENT) | ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"] == clinical

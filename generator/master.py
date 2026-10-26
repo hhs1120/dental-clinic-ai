@@ -304,6 +304,35 @@ ADJUST_REASONS = {
 }
 
 
+# 차트 상병 (§4.3, 5b단계). 시술처럼 가상 코드 — 뜻은 이름이 갖는다. emr_diagnoses에 적재
+DIAGNOSES = {
+    "D01": "상아질 우식", "D02": "치수염", "D03": "만성 근단 치주염", "D04": "만성 치은염", "D05": "만성 치주염",
+    "D06": "치아 침착물(치석)", "D07": "매복치", "D08": "치아 상실", "D09": "치아 위치 이상", "D10": "치아 변색",
+    "D11": "치과 검사", "D12": "우식 예방 처치",
+}
+# 시술별 허용 상병 — 차트 상병이 이 밖이면 상병 착오(⑤-2 상병 확인 경고). 예방 시술(불소도포·실란트 → D12)은 확신이 낮다
+_DX_BY_NAME = {
+    "스케일링": ("D06", "D04"), "구강검진": ("D11",), "불소도포": ("D12",), "실란트": ("D12",), "레진": ("D01",),
+    "아말감/GI": ("D01",), "인레이": ("D01",), "신경치료": ("D02", "D03"), "크라운": ("D01", "D03"), "브릿지": ("D08",),
+    "단순발치": ("D03", "D05"), "사랑니 발치": ("D07",), "임플란트 1차": ("D08",), "임플란트 2차": ("D08",),
+    "교정 상담": ("D09",), "교정 월 체크": ("D09",), "미백": ("D10",), "잇몸치료": ("D05",), "상담": ("D11",),
+}
+PROCEDURE_DIAGNOSES = {_CODE_BY_NAME[n]: frozenset(dx) for n, dx in _DX_BY_NAME.items()}
+
+# 임상 요건 (§4.3, 5b단계) — 요건 사유(ADJUST_REASONS의 requirement 유형)와 1:1. 차트에 그 요건의 근거가 있는지가 ⑤-2·⑤-3의 기준.
+# 요건 줄: 이 시술의 창 안 급여 줄은 항상 요건 줄(잇몸치료는 직전 PERIO_LINK_DAYS일 안에 치석제거가 있으면 R02, 아니면 R03)
+CHART_REQUIREMENT = {_CODE_BY_NAME[n]: key for n, key in
+                     (("잇몸치료", "R03"), ("실란트", "R04"), ("사랑니 발치", "R05"), ("임플란트 1차", "R06"))}
+PERIO_LINK_DAYS = 90
+# 아말감/GI·신경치료는 같은 치아를 다시 치료할 때(장부에 이전 진료가 있거나 이 사유로 깎였을 때)만 요건 줄
+RETREATMENT_REQUIREMENT = "R01"
+# 제출 월·전월 오류 비율 — ⑤-2 평가가 성립하는 평가용 분포(확정 월은 심사 결과에서 정한다). 진료 1건당 오류 최대 1개
+REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
+DIAGNOSIS_ERROR_RATE = 0.03    # 급여 줄 중 상병 착오
+# 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
+CHART_DECOY_RATIO = 1.5
+
+
 def adjust_group(procedure_code: str) -> str:
     """심사 결과 추첨의 시술군 — 요건 사유가 있는 시술이 clinical (REVIEW_OUTCOME_WEIGHTS·ADJUST_TYPE_WEIGHTS의 키)"""
     return "clinical" if any(r["type"] == "requirement" and procedure_code in r["procedures"]

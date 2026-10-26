@@ -128,6 +128,21 @@ CREATE TABLE emr_claims (
     adjust_note    TEXT   -- 일반사유 서술(상세 사유 템플릿)
 );
 
+-- 차트 상병 정의 (§4.3). 가상 코드 — 시술별 허용 상병은 master.PROCEDURE_DIAGNOSES에만
+CREATE TABLE emr_diagnoses (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+-- 차트 기록 (§4.3, 5b단계 — 서술 줄 본문은 9b단계가 LLM 서술로 덮어씀). 진료 1건당 1행.
+-- 특이·디코이·요건 충족 여부는 두지 않는다(정답 누출 — truth_chart_notes에만)
+CREATE TABLE emr_chart_notes (
+    id           INTEGER PRIMARY KEY,
+    treatment_id INTEGER NOT NULL UNIQUE REFERENCES emr_treatments(id),
+    dx_code      TEXT NOT NULL REFERENCES emr_diagnoses(code),
+    note         TEXT NOT NULL
+);
+
 CREATE TABLE emr_messages (
     id                     INTEGER PRIMARY KEY,
     patient_id             INTEGER NOT NULL REFERENCES emr_patients(id),
