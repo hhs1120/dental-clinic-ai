@@ -40,35 +40,33 @@ def no_stages(monkeypatch):
     monkeypatch.setattr(build, "STAGES", [])
 
 
-def _generate(tmp_path, scale):
+def _generate(tmp_path):
     app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
-    generate(scale, app, truth, CONFIG)
+    generate(app, truth, CONFIG)
     return app, truth
 
 
-def test_gen_meta_records_seed_scale_and_range(tmp_path, no_stages):
-    for scale in ("small", "large"):
-        _, truth = _generate(tmp_path / scale, scale)
-        meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
-        assert meta == {
-            "seed": str(CFG["seed"]),
-            "scale": scale,
-            "range_start": CFG["scale_presets"][scale]["start"].isoformat(),
-            "range_end": CFG["range"]["end"].isoformat(),
-        }
+def test_gen_meta_records_seed_and_range(tmp_path, no_stages):
+    _, truth = _generate(tmp_path)
+    meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
+    assert meta == {
+        "seed": str(CFG["seed"]),
+        "range_start": CFG["range"]["start"].isoformat(),
+        "range_end": CFG["range"]["end"].isoformat(),
+    }
 
 
 def test_verify_load_ctx_reads_generated_meta(tmp_path, no_stages):
-    app, truth = _generate(tmp_path, "small")
+    app, truth = _generate(tmp_path)
     conn = sqlite3.connect(app)
     conn.execute("ATTACH DATABASE ? AS truth", (str(truth),))
     ctx = verify.load_ctx(CONFIG, conn)
-    assert ctx.range_start == CFG["scale_presets"]["small"]["start"]
+    assert ctx.range_start == CFG["range"]["start"]
     assert ctx.range_end == CFG["range"]["end"]
 
 
 def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
-    app, truth = _generate(tmp_path, "small")
+    app, truth = _generate(tmp_path)
     app_tables = {r[0] for r in sqlite3.connect(app).execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     truth_tables = {r[0] for r in sqlite3.connect(truth).execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"emr_patients", "emr_appointments", "ax_calls"} <= app_tables
@@ -83,7 +81,7 @@ def test_regenerate_replaces_existing_db(tmp_path, no_stages):
         conn.execute("CREATE TABLE leftover (x)")
         conn.commit()
         conn.close()
-    generate("small", app, truth, CONFIG)
+    generate(app, truth, CONFIG)
     for path in (app, truth):
         assert "leftover" not in {r[0] for r in sqlite3.connect(path).execute("SELECT name FROM sqlite_master")}
     assert not list(tmp_path.glob("*.tmp"))
@@ -92,7 +90,7 @@ def test_regenerate_replaces_existing_db(tmp_path, no_stages):
 def _run_cli(out, hashseed):
     out.mkdir()
     env = {**os.environ, "PYTHONHASHSEED": str(hashseed)}
-    subprocess.run([sys.executable, "-m", "generator", "--scale", "small",
+    subprocess.run([sys.executable, "-m", "generator",
                     "--db", str(out / "app.sqlite"), "--truth", str(out / "truth.sqlite")],
                    cwd=ROOT, env=env, check=True)
     conn = sqlite3.connect(out / "app.sqlite")
@@ -106,9 +104,9 @@ def test_same_seed_twice_same_hash_across_hashseeds(tmp_path):
 
 
 def test_db_and_truth_must_be_given_together(tmp_path):
-    # 하나만 주면 나머지가 기본 경로(large)로 떨어져 실제 DB를 덮어쓴다
+    # 하나만 주면 나머지가 기본 경로로 떨어져 실제 DB를 덮어쓴다
     for flag in ("--db", "--truth"):
-        r = subprocess.run([sys.executable, "-m", "generator", "--scale", "small", flag, str(tmp_path / "x.sqlite")],
+        r = subprocess.run([sys.executable, "-m", "generator", flag, str(tmp_path / "x.sqlite")],
                            cwd=ROOT, capture_output=True)
         assert r.returncode != 0
     assert not list(tmp_path.iterdir())

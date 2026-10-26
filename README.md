@@ -37,15 +37,15 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 
 | 명령 | 설명 |
 |---|---|
-| `make data [SCALE=small\|large]` | 가상 데이터 생성 (기본 large, small은 `data/small/`·`ground_truth/small/`에 따로) |
-| `make verify [SCALE=small]` | 생성 데이터 검사 (기본 large) |
+| `make data` | 가상 데이터 생성 (`data/app.sqlite`, 정답은 `ground_truth/truth.sqlite`) |
+| `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 
 ## 구조
 
 ```
 docs/          설계 문서 (기능 정의 · 가상 데이터 생성 설계 · 앱 설계 · 평가 설계 · 전환의 의미 · 프로젝트 소개)
-config/        생성기 설정 (시드, 규모, 공휴일, 금지 토픽)
+config/        생성기 설정 (시드, 기간·건수, 공휴일, 금지 토픽)
 generator/     데이터 생성기 + verify
 shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트

@@ -39,7 +39,7 @@ tags:
 
 ### 2.1 평가 풀
 
-크기는 `config` `calls_with_transcript`·`eval_pool_size`·`blind_pool_size`(small은 기간 비율로 축소). 아래 배분·분할은 전부 풀 크기에서 계산한다 — 고정 숫자를 두지 않는다.
+크기는 `config` `calls_with_transcript`·`eval_pool_size`·`blind_pool_size`. 아래 배분·분할은 전부 풀 크기에서 계산한다 — 고정 숫자를 두지 않는다.
 
 - 전사 전체에 골드 라벨(`truth_call_labels`, 생성기 산출)
 - **사람 판정 풀**: 생성기가 고정 시드로 층화 추출. 희귀 카테고리(불만·응급·모르겠음)는 각 카테고리 전사의 **60%를 뽑는다**(비례 배분보다 많이 뽑는 과표집. 전수를 뽑으면 비풀이 0건이라 60%에서 멈춤), 풀의 나머지는 남은 카테고리에 비례 배분. dev/test는 카테고리별 절반, 홀수 잔여는 카테고리를 돌며 dev/test에 번갈아 배정 → 합계 절반씩(풀이 홀수면 dev가 1건 더). 순번은 각 split 안에서 고정 셔플(층화 순서대로 두면 카테고리가 드러남)하고 **dev 전부 → test** 순으로 매긴다. 앱 DB에는 `in_eval_pool`·`eval_sort_order`만 — 카테고리 정보 없음. **카테고리별 최소**: 비례 배분이 split당 2건 미만인 카테고리는 split당 2건(dev 2·test 2)까지 올리고 그만큼 큰 카테고리에서 뺀다(풀이 작아 작은 카테고리가 dev 1건이 되는 것 방지). 리포트에 카테고리별 dev n 표시. 풀 150·현재 분포에서는 실제로 작은 카테고리 한두 개('기타' 등)에만 작동한다
@@ -156,7 +156,7 @@ tags:
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
-| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `scale`, `range_start`, `range_end`. verify가 규모별 기간을 읽음. 생성 시각은 넣지 않음(해시 비교) |
+| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`. verify가 검사하는 DB의 기간을 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |

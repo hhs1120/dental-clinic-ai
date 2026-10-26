@@ -19,14 +19,14 @@ from generator.seeding import stage_faker, stage_rng
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 N = CFG["returning_patients"]
 TODAY = CFG["today"]
-START = CFG["scale_presets"]["large"]["start"]
+START = CFG["range"]["start"]
 
 
 def _new_run():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
-    return build.new_run(conn, CFG, "large")
+    return build.new_run(conn, CFG)
 
 
 def _stage(run, name, fn):

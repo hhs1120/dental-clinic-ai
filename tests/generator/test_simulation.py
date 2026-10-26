@@ -1,4 +1,4 @@
-"""4단계 예약 시뮬레이션 — small을 실제로 생성해 예약만 보는 필수 검사와 시뮬레이션 규칙을 본다 (가상 데이터 생성 설계 §2.6 (3))."""
+"""4단계 예약 시뮬레이션 — 실제로 생성해 예약만 보는 필수 검사와 시뮬레이션 규칙을 본다 (가상 데이터 생성 설계 §2.6 (3))."""
 import sqlite3
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -33,21 +33,11 @@ APPOINTMENT_CHECKS = [
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("sim")
     app, truth = out / "app.sqlite", out / "truth.sqlite"
-    run = build.generate("small", app, truth, CONFIG)
+    run = build.generate(app, truth, CONFIG)
     conn = sqlite3.connect(app)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(truth),))
     return conn, verify.load_ctx(CONFIG, conn), run
-
-
-@pytest.fixture(scope="module")
-def large(tmp_path_factory):
-    """small(8~12월)보다 긴 창이 필요한 규칙용 — 성인 한 해 2회 위생 내원 (리콜 12개월이라 large에도 드묾, 생성 1~2초)"""
-    out = tmp_path_factory.mktemp("sim_large")
-    build.generate("large", out / "app.sqlite", out / "truth.sqlite", CONFIG)
-    conn = sqlite3.connect(out / "app.sqlite")
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def _appts(conn):
@@ -112,7 +102,7 @@ def test_planned_procedure_fits_age(db):
 
 
 def test_planned_code_hygiene_scaling_rule():
-    run = build.new_run(sqlite3.connect(":memory:"), CFG, "small")
+    run = build.new_run(sqlite3.connect(":memory:"), CFG)
     run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:3]:
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
@@ -128,7 +118,8 @@ def test_planned_code_hygiene_scaling_rule():
     assert {names[sim.planned_code(child, "hygiene", on)] for _ in range(50)} == set(PLANNED_WEIGHTS["hygiene"]["child"])
 
 
-def test_adult_checkup_only_after_scaling_that_year(large):
+def test_adult_checkup_only_after_scaling_that_year(db):
+    large = db[0]
     """리콜 12개월이라 성인 2회째 위생 내원은 드물다 — 있으면 검진이어야 한다는 불변식만 본다.
     규칙 자체는 test_planned_code_hygiene_scaling_rule"""
     pts = _patients(large)
@@ -298,7 +289,7 @@ def test_pre_window_visit(db):
 def test_pre_window_scaling_counts_toward_yearly_limit():
     """창 이전 급여 스케일링은 그해를 연 1회 이력에 넣는다 — 같은 해 창 안 위생 내원은 구강검진 (§2.6 (1)).
     리콜 12개월이라 생성 데이터에는 같은 해 재방문이 거의 없어 Sim 상태로 본다"""
-    run = build.new_run(sqlite3.connect(":memory:"), CFG, "small")
+    run = build.new_run(sqlite3.connect(":memory:"), CFG)
     run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))

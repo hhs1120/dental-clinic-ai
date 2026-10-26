@@ -26,7 +26,7 @@ from pathlib import Path
 
 import yaml
 
-from generator.paths import SCALES, output_paths
+from generator.paths import output_paths
 from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_REQUIREMENT, CONDITIONAL_INSURED_MIN_AGE,
                               EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
@@ -52,12 +52,12 @@ class Ctx:
     today: date
     holidays: frozenset
     visits_per_day: int
-    range_start: date  # 생성 기간 — truth_gen_meta에서 (규모별 시작일)
+    range_start: date  # 생성 기간 — truth_gen_meta에서 (검사하는 DB 자신의 값 — verify 테스트 DB는 config와 다름)
     range_end: date
 
 
 def load_ctx(config_path: Path, conn) -> Ctx:
-    """설정 + truth_gen_meta(생성기가 남긴 규모별 기간). 메타 키가 없으면 KeyError."""
+    """설정 + truth_gen_meta(생성기가 남긴 기간). 메타 키가 없으면 KeyError."""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
     meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta").fetchall())
@@ -972,15 +972,12 @@ def run(conn, ctx) -> bool:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scale", choices=SCALES, help="검사할 규모(경로는 generator/paths.py). 기본 large")
-    parser.add_argument("--db", type=Path, help="경로를 직접 줄 때(테스트용)")
+    parser.add_argument("--db", type=Path, help="경로를 직접 줄 때(테스트용). 기본은 generator/paths.py")
     parser.add_argument("--truth", type=Path)
     parser.add_argument("--config", type=Path, default=ROOT / "config" / "generator.yaml")
     args = parser.parse_args(argv)
-    paths = output_paths(args.scale or "large")
+    paths = output_paths()
     db, truth_db = args.db or paths["app"], args.truth or paths["truth"]
-    # 기대 규모: 명시했거나 기본 경로를 쓴 경우 — DB의 truth_gen_meta.scale과 다르면 섞인 DB
-    expected = args.scale or (None if args.db or args.truth else "large")
     for path in (db, truth_db):
         if not path.exists():
             print(f"DB 없음: {path} — make data 먼저")
@@ -990,12 +987,8 @@ def main(argv=None) -> int:
     conn.execute("ATTACH DATABASE ? AS truth", (f"file:{truth_db}?mode=ro",))
     try:
         ctx = load_ctx(args.config, conn)
-        scale = conn.execute("SELECT value FROM truth.truth_gen_meta WHERE key = 'scale'").fetchone()
     except (KeyError, sqlite3.OperationalError) as e:
         print(f"truth_gen_meta 읽기 실패({e}) — make data 먼저")
-        return 1
-    if expected and (scale is None or scale[0] != expected):
-        print(f"규모 불일치: {expected}로 검사하려는데 DB의 truth_gen_meta scale = {scale[0] if scale else None}")
         return 1
     ok = run(conn, ctx)
     print("verify 통과" if ok else "verify 실패 — 필수 검사 위반")

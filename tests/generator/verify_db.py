@@ -70,7 +70,7 @@ INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evid
   (2, 'template', 0, NULL, NULL, 0, '{}'),
   (3, 'narrative', 0, NULL, NULL, 1, '{}');
 INSERT INTO truth_gen_meta VALUES
-  ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
+  ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """
 
 

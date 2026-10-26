@@ -78,8 +78,8 @@ def test_named_config_keys_exist():
     assert keys and not [k for k in keys if not exists(k)], sorted(k for k in keys if not exists(k))
 
 
-# 하위 키 중 다른 뜻의 백틱 토큰(문자 trigger·예약 상태 enum, 규모 이름, 연령 구간·시술 age_group 등)과 이름이 겹쳐 단독으로는 보지 않는 것
-_AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", "end", "small", "large",
+# 하위 키 중 다른 뜻의 백틱 토큰(문자 trigger·예약 상태 enum, 연령 구간·시술 age_group 등)과 이름이 겹쳐 단독으로는 보지 않는 것
+_AMBIGUOUS_SUBKEYS = {"appt_confirm", "reminder", "noshow", "balance", "start", "end",
                       "child", "teen", "adult", "senior"}
 
 
