@@ -44,7 +44,7 @@ def db(tmp_path_factory):
 
 
 def _labels(conn):
-    return [dict(r) for r in conn.execute("SELECT c.direction, c.in_eval_pool, l.* FROM ax_calls c"
+    return [dict(r) for r in conn.execute("SELECT c.direction, c.in_eval_pool, c.eval_sort_order, l.* FROM ax_calls c"
                                           " JOIN truth.truth_call_labels l USING (call_uid)")]
 
 
@@ -64,6 +64,35 @@ def test_purpose_direction_noise_follow_quota(db):
         multi = [r for r in out if len(json.loads(r["accepted_purposes"])) > 1]
         assert len(multi) == calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))["m"]
         assert all(r["noise_type"] != "two_topics" for r in out)
+
+
+def _adjacent_same(purposes: list) -> tuple[int, float]:
+    """이웃한 쌍 중 같은 카테고리 수와 셔플(무작위 순열)일 때의 기대값 Σ n_c(n_c − 1) / n"""
+    same = sum(a == b for a, b in zip(purposes, purposes[1:]))
+    return same, sum(k * (k - 1) for k in Counter(purposes).values()) / len(purposes)
+
+
+def test_pool_order_and_call_uid_are_shuffled(db):
+    """평가 설계 §2.1 — 순번이 층화 순서대로면 카테고리가 드러난다. 판정 풀 split 안 순번·call_uid 순서 모두
+    같은 카테고리가 이웃하는 쌍이 셔플 기대값 근처(카테고리별로 몰리면 거의 n − 카테고리 수)"""
+    rows = sorted((r for r in _labels(db) if r["in_eval_pool"]), key=lambda r: r["eval_sort_order"])
+    for split in ("dev", "test"):
+        same, expected = _adjacent_same([r["primary_purpose"] for r in rows if r["split"] == split])
+        assert same <= 2 * expected + 5, (split, same, expected)
+    same, expected = _adjacent_same([r["primary_purpose"] for r in sorted(_labels(db), key=lambda r: r["call_uid"])])
+    assert same <= 1.5 * expected + 10, (same, expected)
+
+
+def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
+    """노이즈 비중만 바꿔도 통화 행(call_uid·환자·시각·길이)과 풀 소속은 그대로 — call_uid는 7단계 LLM 캐시 키"""
+    def rows(conn):
+        return sorted(tuple(r) for r in conn.execute(
+            "SELECT call_uid, patient_id, started_at, duration_sec, in_eval_pool FROM ax_calls"))
+    before = rows(db)
+    monkeypatch.setattr(calls, "CALL_NOISE_SHARE", {"two_topics": 0.08, "interrupted": 0.10, "ambiguous_pain": 0.03,
+                                                    "guardian_confused": 0.02})
+    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG)
+    assert rows(sqlite3.connect(tmp_path / "app.sqlite")) == before
 
 
 def test_pool_split_halves(db):

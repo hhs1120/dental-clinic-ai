@@ -11,7 +11,7 @@ tags:
   - 데이터
 ---
 
-> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§4.1 분포 등)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/test_doc_sync.py`가 검사).
+> **어떤 데이터를 어떻게 만드나.** 규칙·절차의 원본. 값은 코드가 원본이고 이름으로 가리킨다(CLAUDE.md). 아직 코드가 없는 값(§4.1 분포 등)은 구현 때 코드로 옮긴다. config 키는 `config` `unpaid_rate`처럼 접두어를 붙인다(`tests/generator/test_doc_sync.py`가 검사).
 
 ## 0. 전제
 
@@ -315,13 +315,13 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만; 창 안 completed마다 `visit` 정확히 1행, 창 이전 내원은 수납 없음; `settlement`는 `amount_due` 0 |
 | RAG | 금지 토픽 코퍼스 전체 미포함; 통화·스레드 청크에 prefix; 옛 공지의 `effective_date` < 최신; 청구 기준 문서에 `master.ADJUST_REASONS` 상세 사유마다 절이 정확히 1개. **`rag_qa.json`이 있으면 추가로**: 정답 청크가 `ax_chunks`에 존재, 방해 문서에 정답 텍스트 미포함, 데이터형 답이 쿼리로 재계산되고 ≥ 2건, QA 환자 이름 중복 0, dev/test 유형 비율 동일 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; `emr_chart_notes` 컬럼은 허용 목록만(특이·디코이·요건 충족 컬럼 없음); **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
-| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at`·`ax_chunk_vectors.embedding` 제외 — 임베딩 API 출력은 실행마다 비트 단위로 같지 않음). `make verify` 밖 — `tests/test_generator.py` |
+| 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at`·`ax_chunk_vectors.embedding` 제외 — 임베딩 API 출력은 실행마다 비트 단위로 같지 않음). `make verify` 밖 — `tests/generator/test_generator.py` |
 | 차트 | 진료 기록 1건당 `emr_chart_notes`·`truth_chart_notes` 정확히 1행; 요건 줄이 §4.3 규칙대로(요건 줄만 근거 여부 보유); 요건 사실이 장부와 일치(장부에 근거 사건이 있으면 그 날짜, 없으면 '타 기관'); `truth_chart_notes.is_special` ⇔ (청구 오류 줄 ∪ 요건 줄), 서술 ⇔ 특이 ∪ 디코이, 창 이전 내원은 템플릿만; 차트 상병이 허용 밖 ⇔ 상병 착오; `truth_claim_errors`는 창 안 급여 청구 줄에만·요건 오류 ⇔ 근거 없음·확정 월은 심사 결과와 일치(상병 사유 ⇔ 상병 착오, 요건 오류는 요건 사유로 깎인 줄만); 본문에 환자 이름·정답 어휘 없음, 치아 번호·시술 이름(별칭)·그 내원에서 발견한 주의사항 존재 |
 | 주의사항 | 문진은 대상 조건(기록일 나이·성별 — `master.ALERT_TYPES`) 충족; 출처가 정의와 같음; 기록일 ≥ 등록일, 문진 기록일 = 신환 첫 completed 내원일(내원 없으면 문진 없음) / 구환 창 이전 마지막 내원일; 끝나는 날은 임신(기록일 + `master.PREGNANCY_LEFT_DAYS` 안)·협조 어려운 소아(소아 구간을 벗어나는 생일)만; `visit` 출처는 같은 환자의 창 안 관련 시술 completed 내원과 연결되고 기록일 = 그 내원일; 환자당 ≤ `master.MAX_ALERTS_PER_PATIENT`개; (환자, 코드) 유일은 스키마 |
 | 통화 슬롯 | (6단계) 생성 통화 ↔ `truth_call_labels` 1:1; 건수 = `config` `calls_with_transcript`; 통화는 창 안 TODAY 전 진료일 영업시간, 길이는 `master.CALL_DURATION_SEC` 안; 행 순서 = 통화 시각순; 라벨 enum·함의 플래그·`accepted_purposes` = 주 목적 + 부 주제 1개(`master.CALL_SUBTOPICS` 안)·응급 → urgent·outbound 목적·inbound 복합 ⇔ 노이즈 '주제 2개 섞임'·노이즈 대상; 상대 ↔ 환자·발신자(통화일 소아·보호자 기록 ⇔ 보호자, 처음 연락 예약은 그날 등록한 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측); `used_fact`의 최근 진료·잔액·다음 예약·주의사항이 통화 시각까지 읽은 장부와 같음; 판정 풀 크기·순번 1..P·앞 절반 dev·`judge_status`·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
-**경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만 둔다. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)
+**경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만 둔다. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/generator/test_doc_sync.py`가 실패한다)
 
 | 지표 | 목표 | 허용 | 값 위치 | 분모 | 건너뛰는 경우 |
 |---|---|---|---|---|---|

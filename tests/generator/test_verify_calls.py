@@ -122,6 +122,9 @@ FACT_BREAKS = {
     "alert_not_yet": ("c-0003", {"alerts": ["고혈압", "마취가 잘 안 됨"]}),
     "patient_mismatch": ("c-0001", {"patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}}),
     "call_date_mismatch": ("c-0001", {"call_date": "2026-10-21"}),
+    "appointment_detail_wrong": ("c-0003", {"appointment": {"date": "2026-10-07", "time": "10:00", "procedure": "신경치료"}}),
+    "reschedule_from_wrong": ("c-0004", {"appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진",
+                                                         "from_date": "2026-11-16", "from_time": "10:00"}}),
 }
 
 
@@ -131,6 +134,13 @@ def test_fact_break_is_caught(tmp_path, case):
     conn = make_db(tmp_path)
     _fact(conn, uid, **change)
     assert verify.check_call_facts_as_of(conn, CTX), f"{case}를 못 잡음"
+
+
+def test_patient_facts_required_when_patient_linked(tmp_path):
+    """환자가 연결된 통화(환자 측·예약류)에 환자 사실이 없으면 실패"""
+    conn = make_db(tmp_path)
+    conn.execute(L + "used_fact = '{\"call_date\": \"2026-10-20\"}' WHERE call_uid = 'c-0001'")
+    assert verify.check_call_facts_as_of(conn, CTX)
 
 
 def test_confirm_call_on_reminder_day_after_message(tmp_path):
@@ -194,6 +204,11 @@ def test_eval_pool_strata(tmp_path):
     # dev 3·test 0이면 실패
     conn.execute(L + "split = 'dev' WHERE call_uid = 'c-0002'")
     assert verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=3))
+    # 일반 카테고리(예약 잡기) 4건 이상인데 split당 1건이면 최소(EVAL_MIN_PER_SPLIT) 미달
+    conn.execute(L + "primary_purpose = 'book', accepted_purposes = '[\"book\"]', complaint = 0, wants_appt = 1")
+    conn.execute(L + "split = 'silver' WHERE call_uid = 'c-0003'")
+    conn.execute("UPDATE ax_calls SET in_eval_pool = 0, eval_sort_order = NULL, judge_status = 'none' WHERE id = 3")
+    assert any(v["problem"] == "split당 최소 건수 미달" for v in verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=2)))
 
 
 def test_call_mix_warnings(tmp_path):
@@ -205,3 +220,4 @@ def test_call_mix_warnings(tmp_path):
     report = verify.report_call_mix(conn, CTX)
     assert report["counterpart"] == {"patient": 0.5, "guardian": 0.25, "new_caller": 0.25}
     assert report["outbound"] == 0.25
+    assert report["dev_n"] == {"book": 1}  # 평가 설계 §2.1 — 카테고리별 dev n

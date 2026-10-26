@@ -100,13 +100,13 @@ SUBMITTED_MONTHS = 2
 # 심사 결과 추첨 (§2.4). 급여 스케일링 줄은 먼저 이 비율로 타 기관 이력(연 1회 초과) 불능 — 우리 장부로는 오류가 아님
 EXTERNAL_SCALING_DENY_RATE = 0.02
 # 시술군(adjust_group)별 그 밖의 줄 결과 가중(%). 임상 시술(요건 사유가 있는 시술)이 주로 깎인다.
-# large 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
+# 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
 REVIEW_OUTCOME_WEIGHTS = {
     "clinical": {"paid": 80, "adjusted": 15, "denied": 5},
     "other": {"paid": 94, "adjusted": 4, "denied": 2},
 }
-# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산 —
-# 5b 구현 후 large 판정 분포 리포트로 다시 맞춤(2026-10-26: 정당 57.5 / 다툴 만함 20.3 / 보완 22.2 → 상병↓·장부 밖↑)
+# 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산,
+# 판정 분포 리포트(report_adjust_judgment)로 맞춘 값
 ADJUST_TYPE_WEIGHTS = {
     "clinical": {"requirement": 78, "documentation": 15, "diagnosis": 7},
     "other": {"requirement": 0, "documentation": 88, "diagnosis": 12},
@@ -339,7 +339,7 @@ def adjust_group(procedure_code: str) -> str:
                              for r in ADJUST_REASONS.values()) else "other"
 
 
-# 통화 슬롯 (§4.1, 6단계). 목적·노이즈·방향 비중은 §4.1 표가 설계 목표 — 어긋나면 tests/test_doc_sync.py가 실패.
+# 통화 슬롯 (§4.1, 6단계). 목적·노이즈·방향 비중은 §4.1 표가 설계 목표 — 어긋나면 tests/generator/test_doc_sync.py가 실패.
 # 목적·목적 안 방향·노이즈는 할당량(최대 잔여 반올림)으로 맞추고, 급함·플래그는 건마다 추첨한다
 CALL_PURPOSE_SHARE = {
     "book": 0.18, "reschedule": 0.15, "confirm": 0.08, "cancel": 0.06, "recall": 0.08, "treatment_q": 0.10,

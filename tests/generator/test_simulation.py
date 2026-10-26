@@ -19,7 +19,7 @@ CFG = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
 
-# 예약만 보는 필수 검사 — 필수 검사 전부는 tests/test_records.py
+# 예약만 보는 필수 검사 — 필수 검사 전부는 tests/generator/test_records.py
 APPOINTMENT_CHECKS = [
     verify.check_foreign_keys, verify.check_status_from_today, verify.check_timestamps_not_future,
     verify.check_patient_same_day, verify.check_confirmed_not_future, verify.check_confirmed_reminded,
@@ -119,12 +119,12 @@ def test_planned_code_hygiene_scaling_rule():
 
 
 def test_adult_checkup_only_after_scaling_that_year(db):
-    large = db[0]
+    conn = db[0]
     """리콜 12개월이라 성인 2회째 위생 내원은 드물다 — 있으면 검진이어야 한다는 불변식만 본다.
     규칙 자체는 test_planned_code_hygiene_scaling_rule"""
-    pts = _patients(large)
+    pts = _patients(conn)
     scaled = set()
-    for r in sorted(_appts(large), key=lambda r: r["start"]):
+    for r in sorted(_appts(conn), key=lambda r: r["start"]):
         age = age_on(date.fromisoformat(pts[r["patient_id"]]["birth_date"]), r["start"].date())
         if r["type"] != "hygiene" or age < SCALING_MIN_AGE:
             continue

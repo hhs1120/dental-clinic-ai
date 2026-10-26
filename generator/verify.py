@@ -4,10 +4,10 @@
 구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·truth_claims(있을 때) 필수 검사 + 분포·치아·통화 분포 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY,
-         누출(풀 마킹 카테고리 추론 — 순번 셔플·행 순서는 검사함, 분류기 입력 덤프), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
+         누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
          차트 본문의 근거 사실(소견 수치 등 — 9b 건별 검증과 함께)
   경고 — 문자, 통화(전사 — 7단계), RAG
-결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
+결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
 conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
@@ -18,7 +18,7 @@ import json
 import re
 import sqlite3
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -931,17 +931,34 @@ def _facts_at(conn, pid: int, t: str, birth: str) -> dict:
             "balance": balance, "next": nxt[0] if nxt else None, "alerts": alerts}
 
 
+def _appt_detail(a: dict, appts: dict) -> dict:
+    """예약류 통화의 예약 상세(날짜·시각·시술, 변경이면 원래 날짜·시각)"""
+    out = {"date": a["scheduled_at"][:10], "time": a["scheduled_at"][11:16],
+           "procedure": PROCEDURE[a["planned_procedure_code"]]["name"]}
+    if a["rescheduled_from_id"] is not None:
+        orig = appts[a["rescheduled_from_id"]]["scheduled_at"]
+        out |= {"from_date": orig[:10], "from_time": orig[11:16]}
+    return out
+
+
 def check_call_facts_as_of(conn, ctx):
-    """used_fact는 통화 시점 사실: 통화 날짜, 환자(통화 환자와 같음), 최근 진료 3건·잔액·다음 예약·보이는 주의사항이
-    장부를 통화 시각까지만 읽은 값과 같음"""
+    """used_fact는 통화 시점 사실: 통화 날짜, 예약류의 예약 상세, 환자(통화 환자와 같음 — 환자가 연결됐거나 보험사면
+    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항이 장부를 통화 시각까지만 읽은 값과 같음"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
+    appts = {a["id"]: a for a in _rows(conn, "SELECT id, scheduled_at, planned_procedure_code, rescheduled_from_id"
+                                             " FROM emr_appointments")}
     bad = []
     for r in _calls(conn):
         f, t = r["fact"], r["started_at"]
         if f.get("call_date") != t[:10]:
             bad.append({"call_uid": r["call_uid"], "problem": "call_date ≠ 통화 날짜"})
             continue
+        if (a := appts.get(f.get("appointment_id"))) is not None and f.get("appointment") != _appt_detail(a, appts):
+            bad.append({"call_uid": r["call_uid"], "problem": "예약 상세 ≠ 장부"})
+            continue
         if "patient" not in f:
+            if r["patient_id"] is not None or r["counterpart"] == "insurer":
+                bad.append({"call_uid": r["call_uid"], "problem": "환자가 연결된 통화인데 환자 사실 없음"})
             continue
         pid = f["patient"]["id"]
         if r["patient_id"] is not None and pid != r["patient_id"] or pid not in patients:
@@ -1035,13 +1052,14 @@ def check_call_noise_mix(conn, ctx):
 
 
 def report_call_mix(conn, ctx):
-    """상대 분포(§4.1 근사 — 목표 아님)·outbound 비중·복합 주제 비중"""
+    """상대 분포(§4.1 근사 — 목표 아님)·outbound 비중·복합 주제 비중·카테고리별 dev n(평가 설계 §2.1)"""
     rows = _calls(conn)
     if not rows:
         return {}
     return {"counterpart": {k: round(v, 3) for k, v in sorted(_share(rows, "counterpart").items(), key=lambda kv: -kv[1])},
             "outbound": round(sum(r["direction"] == "outbound" for r in rows) / len(rows), 3),
-            "multi_topic": round(sum(len(r["accepted"]) > 1 for r in rows) / len(rows), 3)}
+            "multi_topic": round(sum(len(r["accepted"]) > 1 for r in rows) / len(rows), 3),
+            "dev_n": dict(sorted(Counter(r["primary_purpose"] for r in rows if r["split"] == "dev").items()))}
 
 
 # ── 가상 PII ────────────────────────────────────────────────

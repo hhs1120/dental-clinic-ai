@@ -1,6 +1,8 @@
 """6단계 통화 슬롯 — ax_calls 빈 행(has_transcript=0)·truth_call_labels (가상 데이터 생성 설계 §4.1 '6단계 구현 결정').
 세 단계, 각자 시드:
-- call_slots: 목적·목적 안 방향 할당량 → 예약류는 이벤트 비복원 추출(통화 시각 = 이벤트 시각), 나머지는 날짜·상대·환자·발신자
+- call_slots: 목적·목적 안 방향 할당량 → 예약류는 이벤트 비복원 추출(통화 시각 = 이벤트 시각), 나머지는 날짜·상대·환자·발신자.
+  환자 측이 아닌 상대의 번호는 run.state["phones"](4단계 신환 후보가 쓰고 남은 번호)를 이어 쓴다 — 뒤 단계가 같은
+  이터레이터를 쓰면 실행 순서에 묶인다
 - call_labels: 복합 주제·노이즈 할당량·급함·플래그·used_fact → 행 쓰기(id = 통화 시각순, call_uid = 셔플 순번)
 - call_pools: 판정 풀 층화·dev/test·순번, 블라인드 풀 (평가 설계 §2.1)
 """
@@ -277,6 +279,10 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
 
 def stage_labels(run, rng, fake) -> None:
     slots, led = run.state["call_slots"], run.state["call_ledger"]
+    # call_uid(7단계 LLM 캐시 키)·길이는 라벨 추첨보다 먼저 — 라벨 파라미터를 바꿔도 그대로
+    lo, hi = CALL_DURATION_SEC
+    uids = (rng.permutation(len(slots)) + 1).tolist()
+    durations = rng.integers(lo, hi + 1, size=len(slots)).tolist()
     _assign_noise(rng, slots)
     for s in slots:
         purpose = s["purpose"]
@@ -299,15 +305,13 @@ def stage_labels(run, rng, fake) -> None:
             urgency = _weighted(rng, CALL_URGENCY_WEIGHTS)
         s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []),
                  fact=_used_fact(rng, led, s))
-    lo, hi = CALL_DURATION_SEC
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
     width = max(4, len(str(len(slots))))
-    uids = (rng.permutation(len(slots)) + 1).tolist()
     calls, labels = [], []
     for row_id, i in enumerate(order, start=1):
         s = slots[i]
         uid = f"c-{uids[row_id - 1]:0{width}d}"
-        calls.append((row_id, uid, s["patient"], *s["caller"], s["direction"], s["t"], int(rng.integers(lo, hi + 1))))
+        calls.append((row_id, uid, s["patient"], *s["caller"], s["direction"], s["t"], durations[row_id - 1]))
         labels.append((uid, s["purpose"], json.dumps(s["accepted"]), s["counterpart"], s["urgency"],
                        *(s["flags"][f] for f in CALL_FLAGS), s["noise"], json.dumps(s["fact"], ensure_ascii=False)))
     run.conn.executemany("INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_name, direction,"
