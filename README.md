@@ -31,7 +31,7 @@ make test
 cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 ```
 
-> conda와 함께 써도 충돌하지 않는다. 이 프로젝트는 uv의 `.venv`만 사용하므로 `pip install`·`conda install` 대신 `uv add <패키지>`로 추가한다.
+> conda와 함께 써도 충돌하지 않는다. 이 프로젝트는 uv의 `.venv`만 사용하므로 `pip install`·`conda install` 대신 `uv add --group <그룹> <패키지>`로 추가한다(그룹: 생성기 `generator`, 테스트 `dev`, 앱은 착수 때 `backend`).
 
 ## 명령
 

@@ -29,7 +29,7 @@
 - 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/test_doc_sync.py`에 비교를 추가한다
 
 ## 명령
-- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향)
+- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 착수 때 `backend` 그룹 추가
 - `make data [SCALE=small|large]` / `make verify [SCALE=small]` / `make test` — 기본은 large, small은 `data/small/`·`ground_truth/small/`에 따로 출력
 
 ## 현재 단계

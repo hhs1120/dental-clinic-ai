@@ -19,27 +19,28 @@ wheels = [
 name = "dental-clinic-ai"
 version = "0.1.0"
 source = { virtual = "." }
-dependencies = [
+default-groups = ["dev", "generator"]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+generator = [
     { name = "faker" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pyyaml" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
 [package.metadata]
-requires-dist = [
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]
+generator = [
     { name = "faker" },
     { name = "numpy" },
     { name = "pyyaml" },
 ]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest" }]
 
 [[package]]
 name = "faker"
