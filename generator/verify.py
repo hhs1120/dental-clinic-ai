@@ -1,13 +1,12 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
-구현: 정형(emr_*)·ax_calls·truth_claims(있을 때) 필수 검사 + 분포·치아 경고 + 리포트.
+구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·truth_claims(있을 때) 필수 검사 + 분포·치아·통화 분포 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY, 예약류 통화 시각 == 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 sent_at 이후),
-         예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
-         누출(풀 마킹 카테고리 추론·분류기 입력 덤프), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY,
+         누출(풀 마킹 카테고리 추론 — 순번 셔플·행 순서는 검사함, 분류기 입력 덤프), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
          차트 본문의 근거 사실(소견 수치 등 — 9b 건별 검증과 함께)
-  경고 — 목적·노이즈 분포, 문자, 통화, RAG
+  경고 — 문자, 통화(전사 — 7단계), RAG
 결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
@@ -31,7 +30,11 @@ from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_REQU
                               EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
-                              add_years, age_band, age_on, daily_cap, insured_on, open_slots)
+                              add_years, age_band, age_on, daily_cap, insured_on, open_slots,
+                              BOOKING_PURPOSES, CALL_COUNTERPART_SHARE, CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE,
+                              CALL_OUTBOUND_SHARE, CALL_PAIN_PURPOSES, CALL_PURPOSE_SHARE, CALL_SUBTOPICS,
+                              EVAL_RARE_PURPOSES, EVAL_RARE_SHARE, EVAL_MIN_PER_SPLIT, HOURS, IMPLIED_FLAG,
+                              SUBTOPIC_PURPOSE, URGENCIES)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -54,10 +57,13 @@ class Ctx:
     visits_per_day: int
     range_start: date  # 생성 기간 — truth_gen_meta에서 (검사하는 DB 자신의 값 — verify 테스트 DB는 config와 다름)
     range_end: date
+    call_slots: int  # 통화 슬롯·판정 풀·블라인드 풀 크기 — truth_gen_meta에서
+    eval_pool: int
+    blind_pool: int
 
 
 def load_ctx(config_path: Path, conn) -> Ctx:
-    """설정 + truth_gen_meta(생성기가 남긴 기간). 메타 키가 없으면 KeyError."""
+    """설정 + truth_gen_meta(생성기가 남긴 기간·통화 건수). 메타 키가 없으면 KeyError."""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
     meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta").fetchall())
@@ -67,6 +73,9 @@ def load_ctx(config_path: Path, conn) -> Ctx:
         visits_per_day=cfg["visits_per_day"],
         range_start=date.fromisoformat(meta["range_start"]),
         range_end=date.fromisoformat(meta["range_end"]),
+        call_slots=int(meta["call_slots"]),
+        eval_pool=int(meta["eval_pool"]),
+        blind_pool=int(meta["blind_pool"]),
     )
 
 
@@ -733,6 +742,308 @@ def check_call_uid_format(conn, ctx):
             if not CALL_UID.fullmatch(r["call_uid"])]
 
 
+# ── 통화 슬롯 (6단계, §4.1) ─────────────────────────────────
+
+CALL_MIX_TOLERANCE = 0.02  # 목적·노이즈 분포 경고 허용치 (§5.3 경고 표)
+OPEN_TIME = datetime.strptime(HOURS["open"], "%H:%M").time()
+CLOSE_TIME = datetime.strptime(HOURS["weekday_close"], "%H:%M").time()
+_SIDE = ("patient", "guardian")
+
+
+def _calls(conn) -> list[dict]:
+    """생성 통화 + 골드 라벨 (accepted·fact는 JSON 풀어서)"""
+    rows = _rows(conn, "SELECT c.*, l.primary_purpose, l.accepted_purposes, l.counterpart, l.urgency,"
+                       f" {', '.join('l.' + f for f in CALL_FLAGS)}, l.noise_type, l.used_fact, l.split"
+                       " FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid) WHERE c.source = 'generated'"
+                       " ORDER BY c.id")
+    for r in rows:
+        r["accepted"], r["fact"] = json.loads(r["accepted_purposes"]), json.loads(r["used_fact"])
+    return rows
+
+
+def check_call_labels_match(conn, ctx):
+    """생성 통화 ↔ truth_call_labels 1:1 (call_uid)"""
+    calls = {r[0] for r in conn.execute("SELECT call_uid FROM ax_calls WHERE source = 'generated'")}
+    labels = {r[0] for r in conn.execute("SELECT call_uid FROM truth.truth_call_labels")}
+    return ([{"call_uid": u, "problem": "라벨 없음"} for u in sorted(calls - labels)]
+            + [{"call_uid": u, "problem": "통화 없음"} for u in sorted(labels - calls)])
+
+
+def _label_problem(r) -> str | None:
+    purpose = r["primary_purpose"]
+    if purpose not in CALL_PURPOSE_SHARE or r["counterpart"] not in CALL_COUNTERPART_SHARE \
+            or r["urgency"] not in URGENCIES or (r["noise_type"] is not None and r["noise_type"] not in CALL_NOISE_SHARE):
+        return "enum 밖"
+    implied = IMPLIED_FLAG.get(purpose)
+    if implied and not r[implied]:
+        return "주 목적이 함의하는 플래그 꺼짐"
+    subs = [f for f in SUBTOPIC_PURPOSE if r[f] and f != implied]
+    if r["accepted"][:1] != [purpose] or sorted(r["accepted"][1:]) != sorted(SUBTOPIC_PURPOSE[f] for f in subs):
+        return "accepted_purposes ≠ [주 목적] + 부 주제 플래그"
+    if len(subs) > 1 or not set(subs) <= set(CALL_SUBTOPICS[purpose]):
+        return "부 주제가 CALL_SUBTOPICS 밖"
+    if r["emergency"] and r["urgency"] != "urgent":
+        return "응급인데 urgent 아님"
+    if r["appt_confirmed"] and purpose not in ("book", "reschedule"):
+        return "appt_confirmed는 book·reschedule만"
+    if r["direction"] == "outbound" and purpose not in CALL_OUTBOUND_SHARE:
+        return "outbound가 아닌 목적"
+    noise = r["noise_type"]
+    if (noise == "two_topics") != (r["direction"] == "inbound" and bool(subs)):
+        return "inbound 복합 주제 ⇔ 노이즈 주제 2개"
+    if noise == "guardian_confused" and r["counterpart"] != "guardian":
+        return "보호자 노이즈인데 보호자 아님"
+    if noise == "ambiguous_pain" and purpose not in CALL_PAIN_PURPOSES:
+        return "애매한 통증 노이즈 대상 목적 아님"
+    return None
+
+
+def check_call_label_values(conn, ctx):
+    """골드 라벨: enum, 함의 플래그, accepted = 주 목적 + 부 주제(CALL_SUBTOPICS 안 1개), 응급 → urgent,
+    outbound 목적, inbound 복합 ⇔ 노이즈 '주제 2개', 노이즈 대상(보호자·통증 목적)"""
+    return [{"call_uid": r["call_uid"], "problem": p} for r in _calls(conn) if (p := _label_problem(r))]
+
+
+def check_call_slot_count(conn, ctx):
+    """생성 통화 수 = calls_with_transcript"""
+    n = conn.execute("SELECT count(*) FROM ax_calls WHERE source = 'generated'").fetchone()[0]
+    return [] if n == ctx.call_slots else [{"calls": n, "expected": ctx.call_slots}]
+
+
+def check_call_day(conn, ctx):
+    """통화는 range_start ~ TODAY 전날의 진료일, 개원 ~ 평일 마감 (§2.6 사건 시각)"""
+    bad = []
+    for r in _rows(conn, "SELECT id, started_at FROM ax_calls WHERE source = 'generated'"):
+        t = _dt(r["started_at"])
+        if not (ctx.range_start <= t.date() < ctx.today and open_slots(t.weekday()) and t.date() not in ctx.holidays
+                and OPEN_TIME <= t.time() < CLOSE_TIME):
+            bad.append(r)
+    return bad
+
+
+def check_call_duration(conn, ctx):
+    """duration_sec은 CALL_DURATION_SEC 안"""
+    lo, hi = CALL_DURATION_SEC
+    return _rows(conn, "SELECT id, duration_sec FROM ax_calls WHERE source = 'generated'"
+                       " AND duration_sec NOT BETWEEN ? AND ?", lo, hi)
+
+
+def check_call_row_order(conn, ctx):
+    """행 순서(id) = 통화 시각순 — 생성 순서(목적별)가 id에 드러나지 않게"""
+    rows = _rows(conn, "SELECT id, started_at FROM ax_calls WHERE source = 'generated' ORDER BY id")
+    return [b for a, b in zip(rows, rows[1:]) if b["started_at"] < a["started_at"]]
+
+
+def _booking_problem(r, a, origins, reminders, ctx) -> str | None:
+    if a is None:
+        return "appointment_id 없음"
+    if a["patient_id"] != r["patient_id"]:
+        return "예약 환자와 통화 환자 다름"
+    if a["created_at"] < ctx.range_start.isoformat():
+        return "창 이전 예약"
+    t, purpose = r["started_at"], r["primary_purpose"]
+    if purpose == "book" and not (a["booked_via"] == "phone" and a["rescheduled_from_id"] is None and t == a["created_at"]):
+        return "예약 잡기 = 전화 예약(변경 새 예약 아님)의 created_at"
+    if purpose == "reschedule" and not (a["rescheduled_from_id"] is not None and t == a["created_at"]):
+        return "변경 = 변경 쌍 새 예약의 created_at"
+    if purpose == "cancel" and not (a["status"] == "cancelled" and a["id"] not in origins and t == a["cancelled_at"]):
+        return "취소 = 당일 취소의 cancelled_at"
+    if purpose == "confirm":
+        call = _dt(t)
+        if not a["confirmed"] or call.date() != _prev_open_day(_dt(a["scheduled_at"]).date(), ctx.holidays) \
+                or call.time() <= OPEN_TIME or any(s >= t for s in reminders.get(a["id"], [])):
+            return "확인 = confirmed 예약의 리마인드 날 개원 뒤, 리마인드 문자 뒤"
+    return None
+
+
+def check_booking_call_event(conn, ctx):
+    """예약류 통화 ↔ 예약 이벤트: 통화 시각 == 이벤트 시각(확인은 리마인드 날·문자 뒤), 같은 환자, 창 안 예약,
+    이벤트 하나에 통화 최대 1건(= 목적별 이벤트 수 ≥ 통화 수)"""
+    appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
+    origins = {a["rescheduled_from_id"] for a in appts.values() if a["rescheduled_from_id"]}
+    reminders = defaultdict(list)
+    for m in _rows(conn, "SELECT related_appointment_id AS a, sent_at FROM emr_messages WHERE \"trigger\" = 'reminder'"):
+        reminders[m["a"]].append(m["sent_at"])
+    bad, used = [], defaultdict(list)
+    for r in _calls(conn):
+        if r["primary_purpose"] not in BOOKING_PURPOSES:
+            continue
+        aid = r["fact"].get("appointment_id")
+        used[(r["primary_purpose"], aid)].append(r["call_uid"])
+        if p := _booking_problem(r, appts.get(aid), origins, reminders, ctx):
+            bad.append({"call_uid": r["call_uid"], "appointment_id": aid, "problem": p})
+    return bad + [{"event": k, "calls": v, "problem": "이벤트 하나에 통화 여러 건"} for k, v in used.items() if len(v) > 1]
+
+
+def _is_child(p: dict, day: date) -> bool:
+    """보호자가 거는 환자 — 통화일에 소아이고 보호자 기록이 있음"""
+    return p["guardian_patient_id"] is not None and age_on(date.fromisoformat(p["birth_date"]), day) <= CHILD_MAX_AGE
+
+
+def check_call_counterpart(conn, ctx):
+    """상대 ↔ 환자·발신자: 환자 측은 환자 연결·통화일 소아 ⇔ 보호자·번호/이름 = 말하는 사람(소아면 보호자), 처음 연락 예약은
+    그날 등록한 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측"""
+    patients = {p["id"]: p for p in _rows(conn, "SELECT * FROM emr_patients")}
+    phones = {p["phone"] for p in patients.values()}
+    bad = []
+    for r in _calls(conn):
+        who, p = r["counterpart"], patients.get(r["patient_id"])
+        day = _dt(r["started_at"]).date()
+        if who in _SIDE or (who == "new_caller" and r["primary_purpose"] in BOOKING_PURPOSES):
+            if p is None:
+                problem = "환자 측인데 환자 없음"
+            elif who == "new_caller" and (r["primary_purpose"] != "book" or p["registered_at"] != day.isoformat()):
+                problem = "처음 연락 예약은 그날 등록한 환자의 예약 잡기만"
+            elif r["primary_purpose"] == "book" and who != "new_caller" and p["registered_at"] == day.isoformat():
+                problem = "그날 등록한 환자의 예약 잡기는 처음 연락"
+            elif who != "new_caller" and (who == "guardian") != _is_child(p, day):
+                problem = "통화일 소아 ⇔ 보호자"
+            else:
+                speaker = patients.get(p["guardian_patient_id"]) if _is_child(p, day) else p
+                problem = None if speaker and (r["caller_phone"], r["caller_name"]) == (p["phone"], speaker["name"]) \
+                    else "발신 번호·이름 ≠ 말하는 사람"
+        elif r["patient_id"] is not None or r["caller_phone"] in phones:
+            problem = "환자 측이 아닌데 환자 연결·환자 번호"
+        else:
+            problem = None
+        if problem is None and r["direction"] == "outbound" and who not in _SIDE:
+            problem = "outbound는 환자 측만"
+        if problem:
+            bad.append({"call_uid": r["call_uid"], "counterpart": who, "problem": problem})
+    return bad
+
+
+def _facts_at(conn, pid: int, t: str, birth: str) -> dict:
+    """통화 시각 t 시점의 사실 — 생성기와 따로 계산 (§4.1 절차 2: created_at·performed_at·paid_at ≤ t)"""
+    day = t[:10]
+    visits = [{"date": v["performed_at"][:10], "procedure": PROCEDURE[v["procedure_code"]]["name"], "tooth": v["tooth_no"]}
+              for v in _rows(conn, "SELECT performed_at, procedure_code, tooth_no FROM emr_treatments"
+                                   " WHERE patient_id = ? AND performed_at <= ? ORDER BY performed_at DESC LIMIT 3", pid, t)]
+    balance = conn.execute("SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments"
+                           " WHERE patient_id = ? AND paid_at <= ?", (pid, t)).fetchone()[0]
+    nxt = conn.execute("SELECT id FROM emr_appointments WHERE patient_id = ? AND created_at <= ? AND scheduled_at > ?"
+                       " AND (cancelled_at IS NULL OR cancelled_at > ?) ORDER BY scheduled_at LIMIT 1",
+                       (pid, t, t, t)).fetchone()
+    alerts = {r[0] for r in conn.execute(
+        "SELECT t.label FROM emr_patient_alerts a JOIN emr_alert_types t USING (code) WHERE a.patient_id = ?"
+        " AND a.recorded_at <= ? AND (a.ends_at IS NULL OR ? < a.ends_at)", (pid, day, day))}
+    return {"age": age_on(date.fromisoformat(birth), date.fromisoformat(day)), "recent_visits": visits,
+            "balance": balance, "next": nxt[0] if nxt else None, "alerts": alerts}
+
+
+def check_call_facts_as_of(conn, ctx):
+    """used_fact는 통화 시점 사실: 통화 날짜, 환자(통화 환자와 같음), 최근 진료 3건·잔액·다음 예약·보이는 주의사항이
+    장부를 통화 시각까지만 읽은 값과 같음"""
+    patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
+    bad = []
+    for r in _calls(conn):
+        f, t = r["fact"], r["started_at"]
+        if f.get("call_date") != t[:10]:
+            bad.append({"call_uid": r["call_uid"], "problem": "call_date ≠ 통화 날짜"})
+            continue
+        if "patient" not in f:
+            continue
+        pid = f["patient"]["id"]
+        if r["patient_id"] is not None and pid != r["patient_id"] or pid not in patients:
+            bad.append({"call_uid": r["call_uid"], "problem": "사실의 환자 ≠ 통화 환자"})
+            continue
+        want = _facts_at(conn, pid, t, patients[pid]["birth_date"])
+        nxt = f.get("next_appointment")
+        got = {"age": f["patient"]["age"], "recent_visits": f["recent_visits"], "balance": f["balance"],
+               "next": nxt["appointment_id"] if nxt else None, "alerts": set(f["alerts"])}
+        if f["patient"]["name"] != patients[pid]["name"]:
+            got["name"] = f["patient"]["name"]
+        diff = sorted(k for k in got if got[k] != want.get(k))
+        if diff:
+            bad.append({"call_uid": r["call_uid"], "problem": f"통화 시점 장부와 다름: {diff}"})
+    return bad
+
+
+def check_eval_pool(conn, ctx):
+    """판정 풀: 크기 = eval_pool_size, 순번 1..P, 앞 ⌈P/2⌉ = dev·나머지 test(라벨 split과 일치),
+    풀만 judge_status pending, 비풀은 순번 없음·silver"""
+    rows = _calls(conn)
+    pool = [r for r in rows if r["in_eval_pool"]]
+    bad = [] if len(pool) == ctx.eval_pool else [{"pool": len(pool), "expected": ctx.eval_pool}]
+    if sorted(r["eval_sort_order"] or 0 for r in pool) != list(range(1, len(pool) + 1)):
+        bad.append({"problem": "eval_sort_order가 1..P가 아님"})
+    dev_n = (len(pool) + 1) // 2
+    for r in rows:
+        if r["in_eval_pool"]:
+            want = ("dev" if (r["eval_sort_order"] or 0) <= dev_n else "test", "pending")
+        else:
+            want = ("silver", "none")
+        if (r["split"], r["judge_status"]) != want or (not r["in_eval_pool"] and r["eval_sort_order"] is not None):
+            bad.append({"call_uid": r["call_uid"], "split": r["split"], "judge_status": r["judge_status"],
+                        "expected": want})
+    return bad
+
+
+def check_blind_pool(conn, ctx):
+    """블라인드 풀: 판정 풀의 부분집합, 크기 = blind_pool_size, 순번 1..B, 비블라인드는 순번 없음"""
+    rows = _rows(conn, "SELECT id, in_eval_pool, in_blind_pool, blind_sort_order FROM ax_calls WHERE source = 'generated'")
+    blind = [r for r in rows if r["in_blind_pool"]]
+    bad = [r for r in blind if not r["in_eval_pool"]] + [r for r in rows if not r["in_blind_pool"] and r["blind_sort_order"]]
+    if len(blind) != ctx.blind_pool:
+        bad.append({"blind": len(blind), "expected": ctx.blind_pool})
+    if sorted(r["blind_sort_order"] or 0 for r in blind) != list(range(1, len(blind) + 1)):
+        bad.append({"problem": "blind_sort_order가 1..B가 아님"})
+    return bad
+
+
+def check_eval_pool_strata(conn, ctx):
+    """판정 풀 층화(평가 설계 §2.1, 카테고리 = 주 목적): 희귀 카테고리는 전사의 EVAL_RARE_SHARE(반올림),
+    카테고리마다 dev·test 차이 ≤ 1, 전사가 충분한(≥ split당 최소 × 2) 일반 카테고리는 split마다 최소 건수 이상"""
+    by = defaultdict(lambda: {"n": 0, "dev": 0, "test": 0})
+    for r in _calls(conn):
+        c = by[r["primary_purpose"]]
+        c["n"] += 1
+        if r["split"] in ("dev", "test"):
+            c[r["split"]] += 1
+    floor = 2 * EVAL_MIN_PER_SPLIT
+    bad = []
+    for purpose, c in sorted(by.items()):
+        if abs(c["dev"] - c["test"]) > 1:
+            bad.append({"purpose": purpose, **c, "problem": "dev·test 차이 > 1"})
+        if purpose in EVAL_RARE_PURPOSES and c["dev"] + c["test"] != round(EVAL_RARE_SHARE * c["n"]):
+            bad.append({"purpose": purpose, **c, "problem": "희귀 카테고리 과표집 비율"})
+        if purpose not in EVAL_RARE_PURPOSES and c["n"] >= floor \
+                and min(c["dev"], c["test"]) < EVAL_MIN_PER_SPLIT:
+            bad.append({"purpose": purpose, **c, "problem": "split당 최소 건수 미달"})
+    return bad
+
+
+def _share(rows, key) -> dict:
+    counts = defaultdict(int)
+    for r in rows:
+        counts[r[key]] += 1
+    return {k: v / len(rows) for k, v in counts.items()} if rows else {}
+
+
+def check_call_purpose_mix(conn, ctx):
+    """통화 목적 분포가 §4.1 목표(CALL_PURPOSE_SHARE) ±CALL_MIX_TOLERANCE"""
+    got = _share(_calls(conn), "primary_purpose")
+    return [{"purpose": k, "share": round(got.get(k, 0), 3), "target": v} for k, v in CALL_PURPOSE_SHARE.items()
+            if abs(got.get(k, 0) - v) > CALL_MIX_TOLERANCE]
+
+
+def check_call_noise_mix(conn, ctx):
+    """노이즈 분포가 §4.1 목표(CALL_NOISE_SHARE) ±CALL_MIX_TOLERANCE"""
+    got = _share(_calls(conn), "noise_type")
+    return [{"noise": k, "share": round(got.get(k, 0), 3), "target": v} for k, v in CALL_NOISE_SHARE.items()
+            if abs(got.get(k, 0) - v) > CALL_MIX_TOLERANCE]
+
+
+def report_call_mix(conn, ctx):
+    """상대 분포(§4.1 근사 — 목표 아님)·outbound 비중·복합 주제 비중"""
+    rows = _calls(conn)
+    if not rows:
+        return {}
+    return {"counterpart": {k: round(v, 3) for k, v in sorted(_share(rows, "counterpart").items(), key=lambda kv: -kv[1])},
+            "outbound": round(sum(r["direction"] == "outbound" for r in rows) / len(rows), 3),
+            "multi_topic": round(sum(len(r["accepted"]) > 1 for r in rows) / len(rows), 3)}
+
+
 # ── 가상 PII ────────────────────────────────────────────────
 
 def check_fake_phone(conn, ctx):
@@ -910,6 +1221,18 @@ REQUIRED = [
     check_chart_note_columns,
     check_ax_calls_columns,
     check_call_uid_format,
+    check_call_labels_match,
+    check_call_label_values,
+    check_call_slot_count,
+    check_call_day,
+    check_call_duration,
+    check_call_row_order,
+    check_booking_call_event,
+    check_call_counterpart,
+    check_call_facts_as_of,
+    check_eval_pool,
+    check_blind_pool,
+    check_eval_pool_strata,
     check_fake_phone,
 ]
 WARNINGS = [
@@ -917,6 +1240,8 @@ WARNINGS = [
     check_tooth_level,
     check_child_procedures,
     check_chart_decoy_ratio,
+    check_call_purpose_mix,
+    check_call_noise_mix,
 ]
 REPORTS = [
     report_daily_fill,
@@ -924,6 +1249,7 @@ REPORTS = [
     report_alert_holder_share,
     report_adjust_judgment,
     report_claim_errors,
+    report_call_mix,
 ]
 
 

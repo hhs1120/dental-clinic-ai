@@ -156,7 +156,7 @@ tags:
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
 | `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
-| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`. verify가 검사하는 DB의 기간을 읽음. 생성 시각은 넣지 않음(해시 비교) |
+| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |

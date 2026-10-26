@@ -46,13 +46,16 @@ def _generate(tmp_path):
     return app, truth
 
 
-def test_gen_meta_records_seed_and_range(tmp_path, no_stages):
+def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
     _, truth = _generate(tmp_path)
     meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
     assert meta == {
         "seed": str(CFG["seed"]),
         "range_start": CFG["range"]["start"].isoformat(),
         "range_end": CFG["range"]["end"].isoformat(),
+        "call_slots": str(CFG["calls_with_transcript"]),
+        "eval_pool": str(CFG["eval_pool_size"]),
+        "blind_pool": str(CFG["blind_pool_size"]),
     }
 
 

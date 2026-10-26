@@ -21,7 +21,7 @@ CREATE TABLE truth_claims (
 
 CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_date, procedure_code, tooth_no);
 
--- 생성 설정 기록 (seed·range_start·range_end). verify가 검사하는 DB의 기간을 여기서 읽는다
+-- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
 -- (verify 테스트 DB는 config와 값이 다름).
 -- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
 CREATE TABLE truth_gen_meta (
@@ -48,4 +48,24 @@ CREATE TABLE truth_claim_errors (
     kind         TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement')),
     requirement  TEXT,
     CHECK ((kind = 'requirement') = (requirement IS NOT NULL))
+);
+
+-- 통화 골드 라벨 (6단계, 평가 설계 §6). 목적·상대·급함·노이즈 enum은 master.CALL_*.
+-- accepted_purposes = [주 목적, 부 주제 목적](JSON), noise_type NULL = 노이즈 없음,
+-- used_fact = 통화 시점 사실(JSON — 예약류는 appointment_id), split = 판정 풀 dev/test, 나머지 silver
+CREATE TABLE truth_call_labels (
+    call_uid          TEXT PRIMARY KEY,  -- app.sqlite ax_calls.call_uid
+    primary_purpose   TEXT NOT NULL,
+    accepted_purposes TEXT NOT NULL,
+    counterpart       TEXT NOT NULL,
+    urgency           TEXT NOT NULL,
+    emergency         INTEGER NOT NULL,
+    complaint         INTEGER NOT NULL,
+    price_inquiry     INTEGER NOT NULL,
+    wants_appt        INTEGER NOT NULL,
+    appt_confirmed    INTEGER NOT NULL,
+    has_todo          INTEGER NOT NULL,
+    noise_type        TEXT,
+    used_fact         TEXT NOT NULL,
+    split             TEXT NOT NULL CHECK (split IN ('dev', 'test', 'silver'))
 );

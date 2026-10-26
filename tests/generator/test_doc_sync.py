@@ -127,3 +127,90 @@ def test_decoy_row_matches_code():
     row = next(r for key, r in _target_rows().items() if key.startswith("차트 디코이 비율"))
     assert [float(x) for x in re.findall(r"(\d+(?:\.\d+)?)배", row[1])] == [master.CHART_DECOY_RATIO], row[1]
     assert tuple(float(x) for x in re.findall(r"(\d+(?:\.\d+)?)", row[2])) == verify.CHART_DECOY_RANGE, row[2]
+
+
+# ── §4.1 통화 분포 (6단계) ──────────────────────────────────
+
+_PURPOSE_LABEL = {
+    "예약 잡기": "book", "예약 변경": "reschedule", "예약 확인": "confirm", "예약 취소": "cancel",
+    "리콜·안내 전화": "recall", "치료 문의": "treatment_q", "보험 문의": "insurance_q", "가격·비용 문의": "price_q",
+    "수납·청구 문의": "billing_q", "서류·기록 요청": "document_req", "응급·통증": "emergency", "불만": "complaint",
+    "기타": "other", "모르겠음·애매": "unknown",
+}
+_COUNTERPART_LABEL = {"환자": "patient", "보호자": "guardian", "처음 연락": "new_caller", "보험사": "insurer",
+                      "업체": "vendor", "기타": "other"}
+_NOISE_LABEL = {"주제 2개 섞임": "two_topics", "말 끊김·되묻기": "interrupted", "급함 애매한 통증": "ambiguous_pain",
+                "보호자가 정보 헷갈림": "guardian_confused"}
+_OUTBOUND_LABEL = {"리콜·안내": "recall", "예약 확인": "confirm", "수납 문의": "billing_q", "서류 요청": "document_req",
+                   "치료 문의(경과 확인)": "treatment_q"}
+
+
+def _call_section() -> str:
+    text = _doc()
+    return text[text.index("### 4.1"):text.index("### 4.2")]
+
+
+def _line(prefix: str) -> str:
+    return next(line for line in _call_section().splitlines() if line.startswith(prefix))
+
+
+def _pairs(text: str) -> dict[str, float]:
+    """'환자 60 / 보호자 15' → {'환자': 60, '보호자': 15}"""
+    return {m.group(1): float(m.group(2)) for part in text.split("/")
+            if (m := re.fullmatch(r"\s*(.+?)\s+(\d+(?:\.\d+)?)\s*", part))}
+
+
+def test_call_purpose_table_matches_code():
+    table = _call_section().split("| 목적 | % | | 목적 | % |")[1].split("\n\n")[0]
+    got = {}
+    for line in table.strip().splitlines()[1:]:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        got |= {_PURPOSE_LABEL[cells[0]]: float(cells[1]) / 100, _PURPOSE_LABEL[cells[3]]: float(cells[4]) / 100}
+    assert got == pytest.approx(master.CALL_PURPOSE_SHARE)
+
+
+def test_call_counterpart_and_noise_lines_match_code():
+    counterpart = _pairs(_line("**상대**").split(":", 1)[1])
+    assert {_COUNTERPART_LABEL[k]: v / 100 for k, v in counterpart.items()} == pytest.approx(master.CALL_COUNTERPART_SHARE)
+    noise = _pairs(_line("**노이즈**").split(":", 1)[1])
+    assert {_NOISE_LABEL[k]: v / 100 for k, v in noise.items()} == pytest.approx(master.CALL_NOISE_SHARE)
+    assert re.search(r"노이즈\*\*\((\d+)%\)", _line("**노이즈**")).group(1) == str(round(sum(master.CALL_NOISE_SHARE.values()) * 100))
+
+
+def test_call_direction_line_matches_code():
+    line = _line("**방향**")
+    got = {_OUTBOUND_LABEL[label.strip()]: float(n) / 100
+           for label, n in re.findall(r"(?:—|\+)\s*([^+—]+?)\s+(\d+)%p", line)}
+    assert got == pytest.approx(master.CALL_OUTBOUND_SHARE)
+    assert re.search(r"outbound ~(\d+)%", line).group(1) == str(round(sum(got.values()) * 100))
+    assert "절반은 복합 주제" in line and master.OUTBOUND_MULTI_SHARE == 0.5
+
+
+def test_call_urgency_and_flag_lines_match_code():
+    urgency = _line("**급함**")
+    assert re.search(r"(\d+)% `urgent`", urgency).group(1) == str(round(master.PAIN_URGENT_SHARE * 100))
+    assert re.findall(r"`normal` (\d+) · `low` (\d+)", urgency) == [
+        tuple(str(master.CALL_URGENCY_WEIGHTS[k]) for k in ("normal", "low"))]
+    flags = _line("**플래그**")
+    assert f"{round(master.APPT_CONFIRMED_SHARE * 100)}%" in flags.split("`appt_confirmed`")[1].split(".")[0]
+    todo = flags.split("`has_todo`")[1]
+    assert re.findall(r"(\d+)%", todo) == [str(round(master.HAS_TODO_SHARE["confirm"] * 100)),
+                                          str(round(master.HAS_TODO_DEFAULT * 100))]
+    assert master.HAS_TODO_SHARE == {"confirm": master.HAS_TODO_SHARE["confirm"], "recall": master.HAS_TODO_SHARE["confirm"]}
+    implied = dict(re.findall(r"`(\w+)`→(\w+)", flags))
+    assert implied == master.IMPLIED_FLAG
+
+
+def test_call_mix_warning_row_matches_code():
+    row = next(r for key, r in _target_rows().items() if key.startswith("통화 목적·노이즈"))
+    assert list(_labeled_percents(row[2].replace("%p", "%")).values()) == pytest.approx([verify.CALL_MIX_TOLERANCE])
+
+
+def test_eval_pool_strata_numbers_match_code():
+    """평가 설계 §2.1의 희귀 카테고리·과표집 비율·split당 최소"""
+    text = (ROOT / "docs" / "치과 AX - 평가 설계.md").read_text(encoding="utf-8")
+    section = text[text.index("### 2.1"):text.index("### 2.2")]
+    assert f"**{round(master.EVAL_RARE_SHARE * 100)}%를 뽑는다**" in section
+    assert f"split당 {master.EVAL_MIN_PER_SPLIT}건" in section
+    rare = re.search(r"희귀 카테고리\(([^)]+)\)", section).group(1).split("·")
+    assert {_PURPOSE_LABEL.get(r, {"응급": "emergency", "모르겠음": "unknown"}.get(r)) for r in rare} == set(master.EVAL_RARE_PURPOSES)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from generator import alerts, chart, clinic, demand, patients, pre_window, records, schedule
+from generator import alerts, calls, chart, clinic, demand, patients, pre_window, records, schedule
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -41,6 +41,9 @@ STAGES: list = [
     ("claims", records.stage_claims),
     ("chart_facts", chart.stage_facts),
     ("chart_notes", chart.stage_notes),
+    ("call_slots", calls.stage_slots),
+    ("call_labels", calls.stage_labels),
+    ("call_pools", calls.stage_pools),
 ]
 
 
@@ -71,6 +74,8 @@ def generate(app_path: Path, truth_path: Path, config_path: Path) -> Run:
         conn.executemany("INSERT INTO truth.truth_gen_meta VALUES (?, ?)", [
             ("seed", str(run.seed)),
             ("range_start", run.range_start.isoformat()), ("range_end", run.range_end.isoformat()),
+            ("call_slots", str(cfg["calls_with_transcript"])), ("eval_pool", str(cfg["eval_pool_size"])),
+            ("blind_pool", str(cfg["blind_pool_size"])),
         ])
         for name, stage in STAGES:
             stage(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
