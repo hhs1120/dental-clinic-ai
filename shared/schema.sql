@@ -49,8 +49,27 @@ CREATE TABLE emr_patients (
     family_id              INTEGER REFERENCES emr_families(id),
     guardian_patient_id    INTEGER REFERENCES emr_patients(id),
     registered_at          TEXT NOT NULL,
-    recall_cycle_months    INTEGER NOT NULL DEFAULT 6,
+    recall_cycle_months    INTEGER NOT NULL DEFAULT 12,
     has_private_insurance  INTEGER NOT NULL DEFAULT 0
+);
+
+-- 주의사항 정의 (§2.2). 관련 시술·행동·대상·비율은 master.ALERT_TYPES에만
+CREATE TABLE emr_alert_types (
+    code     TEXT PRIMARY KEY,
+    label    TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('systemic', 'allergy', 'procedure'))
+);
+
+-- 환자 주의사항 (§2.2, 4b단계). intake = 문진(appointment_id 없음), visit = 진료 중 발견(발견한 내원)
+CREATE TABLE emr_patient_alerts (
+    id             INTEGER PRIMARY KEY,
+    patient_id     INTEGER NOT NULL REFERENCES emr_patients(id),
+    code           TEXT NOT NULL REFERENCES emr_alert_types(code),
+    source         TEXT NOT NULL CHECK (source IN ('intake', 'visit')),
+    recorded_at    TEXT NOT NULL,  -- 기록일 'YYYY-MM-DD'. 이 날부터 보인다
+    appointment_id INTEGER REFERENCES emr_appointments(id),
+    ends_at        TEXT,           -- 끝나는 날(이 날부터 안 보인다). 기간이 있는 항목(임신·소아)만, 나머지는 NULL
+    UNIQUE (patient_id, code)
 );
 
 CREATE TABLE emr_appointments (
@@ -105,7 +124,23 @@ CREATE TABLE emr_claims (
     submitted_at   TEXT,
     status         TEXT NOT NULL CHECK (status IN ('pending', 'submitted', 'paid', 'adjusted', 'denied')),
     paid_amount    INTEGER,
-    adjust_code    TEXT
+    adjust_code    TEXT,  -- 심평원 조정 사유 범주 문자(B·C·AK·M 등 — master.ADJUST_REASONS)
+    adjust_note    TEXT   -- 일반사유 서술(상세 사유 템플릿)
+);
+
+-- 차트 상병 정의 (§4.3). 가상 코드 — 시술별 허용 상병은 master.PROCEDURE_DIAGNOSES에만
+CREATE TABLE emr_diagnoses (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+-- 차트 기록 (§4.3, 5b단계 — 서술 줄 본문은 9b단계가 LLM 서술로 덮어씀). 진료 1건당 1행.
+-- 특이·디코이·요건 충족 여부는 두지 않는다(정답 누출 — truth_chart_notes에만)
+CREATE TABLE emr_chart_notes (
+    id           INTEGER PRIMARY KEY,
+    treatment_id INTEGER NOT NULL UNIQUE REFERENCES emr_treatments(id),
+    dx_code      TEXT NOT NULL REFERENCES emr_diagnoses(code),
+    note         TEXT NOT NULL
 );
 
 CREATE TABLE emr_messages (

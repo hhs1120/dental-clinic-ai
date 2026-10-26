@@ -19,7 +19,7 @@ CFG = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
 
-# 예약만 보는 필수 검사 — 진료·수납·청구(5단계)가 필요한 검사는 묶음 4(기능 정의 §9 준비 2)에서
+# 예약만 보는 필수 검사 — 필수 검사 전부는 tests/test_records.py
 APPOINTMENT_CHECKS = [
     verify.check_foreign_keys, verify.check_status_from_today, verify.check_timestamps_not_future,
     verify.check_patient_same_day, verify.check_confirmed_not_future, verify.check_confirmed_reminded,
@@ -42,7 +42,7 @@ def db(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def large(tmp_path_factory):
-    """small(8~12월)에는 성인이 한 해에 위생 내원을 두 번 하는 경우가 없어 large로 보는 규칙용 (생성 1~2초)"""
+    """small(8~12월)보다 긴 창이 필요한 규칙용 — 성인 한 해 2회 위생 내원 (리콜 12개월이라 large에도 드묾, 생성 1~2초)"""
     out = tmp_path_factory.mktemp("sim_large")
     build.generate("large", out / "app.sqlite", out / "truth.sqlite", CONFIG)
     conn = sqlite3.connect(out / "app.sqlite")
@@ -129,8 +129,10 @@ def test_planned_code_hygiene_scaling_rule():
 
 
 def test_adult_checkup_only_after_scaling_that_year(large):
+    """리콜 12개월이라 성인 2회째 위생 내원은 드물다 — 있으면 검진이어야 한다는 불변식만 본다.
+    규칙 자체는 test_planned_code_hygiene_scaling_rule"""
     pts = _patients(large)
-    scaled, checkups = set(), 0
+    scaled = set()
     for r in sorted(_appts(large), key=lambda r: r["start"]):
         age = age_on(date.fromisoformat(pts[r["patient_id"]]["birth_date"]), r["start"].date())
         if r["type"] != "hygiene" or age < SCALING_MIN_AGE:
@@ -138,10 +140,8 @@ def test_adult_checkup_only_after_scaling_that_year(large):
         key = (r["patient_id"], r["start"].year)
         if r["planned_procedure_code"] == CHECKUP_CODE:
             assert key in scaled
-            checkups += 1
         if r["planned_procedure_code"] == SCALING_CODE and r["status"] == "completed":
             scaled.add(key)
-    assert checkups > 0
 
 
 def test_rebook_keeps_missed_procedure(db):
@@ -295,14 +295,19 @@ def test_pre_window_visit(db):
     assert verify.check_pre_window_visit(conn, ctx) == []
 
 
-def test_pre_window_scaling_counts_toward_yearly_limit(db):
-    """창 이전 급여 스케일링이 그해에 있으면 창 안 위생 내원은 구강검진 (small 창은 8월 시작이라 창 이전이 같은 해)"""
-    conn, ctx, _ = db
-    pts = _patients(conn)
-    rows = _appts(conn)
-    scaled = {(r["patient_id"], r["start"].year) for r in rows if r["start"].date() < ctx.range_start
-              and r["planned_procedure_code"] == SCALING_CODE
-              and age_on(date.fromisoformat(pts[r["patient_id"]]["birth_date"]), r["start"].date()) >= SCALING_MIN_AGE}
+def test_pre_window_scaling_counts_toward_yearly_limit():
+    """창 이전 급여 스케일링은 그해를 연 1회 이력에 넣는다 — 같은 해 창 안 위생 내원은 구강검진 (§2.6 (1)).
+    리콜 12개월이라 생성 데이터에는 같은 해 재방문이 거의 없어 Sim 상태로 본다"""
+    run = build.new_run(sqlite3.connect(":memory:"), CFG, "small")
+    run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
+        fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
+    sim = schedule.Sim(run, np.random.default_rng(0))
+    visits = run.state["pre_window"]
+    scaled = [p for p in sim.patients if p.id in visits and visits[p.id]["code"] == SCALING_CODE
+              and age_on(p.birth, visits[p.id]["start"].date()) >= SCALING_MIN_AGE]
     assert scaled
-    later = [r for r in _window(conn, ctx) if r["type"] == "hygiene" and (r["patient_id"], r["start"].year) in scaled]
-    assert later and all(r["planned_procedure_code"] != SCALING_CODE for r in later)
+    for p in scaled:
+        year = visits[p.id]["start"].year
+        assert year in p.scaling_years
+        assert sim.planned_code(p, "hygiene", date(year, 12, 31)) == CHECKUP_CODE

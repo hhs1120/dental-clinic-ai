@@ -15,6 +15,7 @@ CREATE TABLE truth_claims (
                        'missing_in_claim_review', 'extra_in_claim_review')),
     paid_amount    INTEGER,
     adjust_code    TEXT,
+    adjust_note    TEXT,
     CHECK ((outcome = 'extra_in_claim_review') = (claim_id IS NULL))
 );
 
@@ -25,4 +26,25 @@ CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_
 CREATE TABLE truth_gen_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+-- 차트 정답 (5b단계, 평가 설계 §6). kind = template/narrative, 특이 = 청구 오류 줄 ∪ 임상 요건형 시술 줄,
+-- requirement = 요건 사유 키(master.ADJUST_REASONS, 요건 줄만), evidence_present = 차트에 요건 근거가 있음(요건 줄만),
+-- facts = 5b가 정한 사실(JSON) — 9b 서술의 입력이자 건별 검증 기준
+CREATE TABLE truth_chart_notes (
+    treatment_id     INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
+    kind             TEXT NOT NULL CHECK (kind IN ('template', 'narrative')),
+    is_special       INTEGER NOT NULL,
+    requirement      TEXT,
+    evidence_present INTEGER,
+    is_decoy         INTEGER NOT NULL,
+    facts            TEXT NOT NULL
+);
+
+-- 청구 오류 정답 (5b단계, 생성 설계 §2.4·§4.3). 진료 1건당 최대 1개. requirement는 임상 요건형 오류의 요건 사유 키
+CREATE TABLE truth_claim_errors (
+    treatment_id INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
+    kind         TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement')),
+    requirement  TEXT,
+    CHECK ((kind = 'requirement') = (requirement IS NOT NULL))
 );

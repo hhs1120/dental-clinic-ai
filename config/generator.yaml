@@ -2,17 +2,17 @@
 seed: 20261201
 today: 2026-12-01
 range: { start: 2026-02-01, end: 2026-12-15 }
-returning_patients: 1400    # 구환(창 이전 등록) 수. 모든 규모 고정 — 신환은 시뮬레이션 결과, 총수는 결과값(large ≈ 2,000)
+returning_patients: 1400    # 구환(창 이전 등록) 수. 모든 규모 고정 — 신환은 시뮬레이션 결과, 총수는 결과값(large ≈ 1,900)
 visits_per_day: 26          # 하루 비취소 예약 상한(평일). 다른 요일은 슬롯 수 비례 — master.daily_cap
 reschedule_rate: 0.05
 noshow_rate: 0.06
 sameday_cancel_rate: 0.04
 confirm_rate: 0.85          # 직전 진료일 리마인드 응답
 unpaid_rate: 0.15
-settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 첫 large 실행에서 잔액 있음 비율 리포트 보고 확정
-lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 (1)) — 초기값, large 튜닝 때 확정
-rebook_delay_days: [1, 14]   # 노쇼·당일 취소 뒤 다시 전화하기까지(양 끝 포함, 균등) — 초기값, large 튜닝 때 확정
-treatment_demand_monthly: { child: 0.06, teen: 0.08, adult: 0.08, senior: 0.10 }   # 연령 구간별 환자 1인 월 치료 수요 발생률 — 초기값, large 튜닝 때 확정
+settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지는 잔류 — 확정 2026-10-26 (large 잔액 있음 약 11%)
+lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 (1)) — 확정 2026-10-26 (아래 둘과 함께: 내원 구성·하루 채움이 목표 안)
+rebook_delay_days: [1, 14]   # 노쇼·당일 취소 뒤 다시 전화하기까지(양 끝 포함, 균등) — 확정 2026-10-26
+treatment_demand_monthly: { child: 0.06, teen: 0.08, adult: 0.08, senior: 0.10 }   # 연령 구간별 환자 1인 월 치료 수요 발생률 — 확정 2026-10-26
 calls_with_transcript: 1000
 eval_pool_size: 150       # 사람 판정 풀 — 1인 판정 부담 기준(건당 ~1분)
 blind_pool_size: 75       # 판정 풀의 부분집합

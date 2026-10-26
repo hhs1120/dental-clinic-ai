@@ -3,7 +3,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-from generator.master import PROCEDURES
+from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
 from generator.verify import Ctx
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +20,12 @@ INSERT INTO emr_families VALUES (1, '김');
 INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id, guardian_patient_id, registered_at) VALUES
   (1, 'C-00001', '김철수', '1980-05-10', 'M', '010-0000-0001', 1, NULL, '2025-01-01'),
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
+-- 주의사항: 1번 구환(창 이전 내원 없음 → 문진 기록일 = 등록일) 고혈압, 2번 소아 협조 어려움(13세 생일에 끝남),
+-- 1번 10/06 신경치료 중 마취 잘 안 됨 발견
+INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, appointment_id, ends_at) VALUES
+  (1, 1, 'HTN', 'intake', '2025-01-01', NULL, NULL),
+  (2, 2, 'CHILD_COOP', 'intake', '2025-01-01', NULL, '2031-03-01'),
+  (3, 1, 'ANES_FAIL', 'visit', '2026-10-06', 1, NULL);
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
                               planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
   (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL),
@@ -39,8 +45,13 @@ INSERT INTO emr_payments VALUES
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
 INSERT INTO emr_claims VALUES
-  (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL),
-  (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL);
+  (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL, NULL),
+  (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL);
+-- 차트: 1·2는 템플릿, 3(소아 레진)은 서술 디코이
+INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES
+  (1, 'D02', '26번 치아 치수염으로 신경치료를 진행했습니다. 진료 중 마취가 잘 안 됨을 확인했습니다.'),
+  (2, 'D06', '치석이 많아 스케일링을 시행했습니다.'),
+  (3, 'D01', '16번 치아 상아질 우식으로 레진 충전을 했습니다. 보호자와 함께 내원했습니다.');
 INSERT INTO emr_messages VALUES
   (1, 1, 'out', '2026-11-02 18:00:00', '내일 예약 안내', 'reminder', 2),
   (2, 1, 'in',  '2026-11-02 18:10:00', '네', 'reply', 2);
@@ -52,8 +63,12 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, direction,
 # 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
 TRUTH_SEED = """
 INSERT INTO truth_claims VALUES
-  (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL),
-  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL);
+  (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL, NULL),
+  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL, NULL);
+INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evidence_present, is_decoy, facts) VALUES
+  (1, 'template', 0, NULL, NULL, 0, '{}'),
+  (2, 'template', 0, NULL, NULL, 0, '{}'),
+  (3, 'narrative', 0, NULL, NULL, 1, '{}');
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('scale', 'fixture'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15');
 """
@@ -66,6 +81,9 @@ def make_db(tmp_path) -> sqlite3.Connection:
     cols = list(PROCEDURES[0])
     conn.executemany(f"INSERT INTO emr_procedures ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
                      [tuple(p[c] for c in cols) for p in PROCEDURES])
+    conn.executemany("INSERT INTO emr_diagnoses VALUES (?, ?)", sorted(DIAGNOSES.items()))
+    conn.executemany("INSERT INTO emr_alert_types VALUES (?, ?, ?)",
+                     [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()])
     conn.executescript(SEED)
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA + TRUTH_SEED)

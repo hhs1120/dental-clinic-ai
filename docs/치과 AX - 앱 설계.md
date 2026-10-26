@@ -46,7 +46,7 @@ tags:
 | 도구 | 인자 | 반환 |
 |---|---|---|
 | `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?=5` | 청크 목록 |
-| `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`) |
+| `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`) |
 | `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?`(`has_unpaid_balance` = 그 예약일 개원 전 잔액 > 0 — 정의 원본. `is_new_patient` = 창 안에서 처음 등록한 환자 — 생성 설계 §2.2) | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
@@ -96,3 +96,4 @@ tags:
 - [ ] 리랭커 — Cohere vs LLM 리랭킹(Haiku) 비교 결과로 확정
 - [ ] 홈 화면·네비 (와이어프레임에서)
 - [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)
+- [ ] 주의 칩의 관련 시술·행동(④)과 시술별 허용 상병(⑤-2 상병 확인 경고)을 backend가 읽는 방법 (④·⑤ 착수 시) — 원본은 `generator/master.py` `ALERT_TYPES`·`PROCEDURE_DIAGNOSES`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱 DB에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다

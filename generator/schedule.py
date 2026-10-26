@@ -67,6 +67,7 @@ class Appt:
     cancelled: datetime | None = None
     confirmed: int = 0
     change_day: date | None = None
+    episode: Episode | None = None  # 이 예약이 속한 수요 — 5단계가 코스 안에서 같은 치아를 유지하려고 (창 이전 내원은 None)
 
 
 class Sim:
@@ -175,7 +176,7 @@ class Sim:
     def book(self, patient: Patient, visit_type: str, code: str, start: datetime, created: datetime, via: str,
              rescheduled_from: int | None = None) -> Appt:
         a = Appt(len(self.appts) + 1, patient, self.staff_for(visit_type), start, DURATION[code], visit_type, code,
-                 via, created, rescheduled_from)
+                 via, created, rescheduled_from, episode=patient.ep)
         if rescheduled_from is None and self.rng.random() < self.cfg["reschedule_rate"]:
             # 변경일 = created 다음 날 ~ 예약 전날 중 진료일. 없으면 변경 없음
             days, d = [], created.date() + timedelta(days=1)
@@ -389,6 +390,10 @@ class Sim:
             [(a.id, a.patient.id, a.staff_id, a.start.strftime(fmt), a.duration, a.type, a.code, a.status,
               a.rescheduled_from, a.booked_via, a.confirmed, a.created.strftime(fmt),
               a.cancelled.strftime(fmt) if a.cancelled else None) for a in self.appts])
+        # 예약 id → 에피소드 번호(처음 나온 순). DB에는 두지 않는다(회차 추적 없음) — 5단계 치아 유지에만
+        numbers: dict[int, int] = {}
+        self.run.state["episode"] = {a.id: numbers.setdefault(id(a.episode), len(numbers))
+                                     for a in self.appts if a.episode is not None}
 
 
 def stage(run, rng, fake) -> None:
