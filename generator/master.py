@@ -152,6 +152,9 @@ PROCEDURES = [
 ]
 
 SCALING_CODE = "U0001"
+# 발치한 치아에는 이후 진료가 없다 — 임플란트 1차만 그 자리에 한다 (§2.1)
+EXTRACTION_CODES = frozenset(p["code"] for p in PROCEDURES if p["name"] in ("단순발치", "사랑니 발치"))
+IMPLANT_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "임플란트 1차")
 
 # 적용 연령(age_group)별 나이 범위 (양 끝 포함, None = 상한 없음) — 급여 조건 (§2.1·§2.6 (4))
 _AGE_GROUP_RANGE = {
@@ -191,7 +194,7 @@ _ALERT_ROWS = [
     ("OSTEO", "골다공증 약 복용", "systemic", "약 종류·복용 기간 확인 후 원장 판단", _SURGERY,
      [(*_SENIOR, "F", 0.15), (*_SENIOR, "M", 0.02)]),
     ("PROSTHESIS", "인공관절·인공판막", "systemic", "예방 항생제 필요 여부 확인", _BLEEDING, [(*_SENIOR, None, 0.06)]),
-    ("PREGNANT", "임신 중", "systemic", "방사선·약 처방 최소화, 원장 확인", _ANESTHESIA, [(19, 44, "F", 0.03)]),
+    ("PREGNANT", "임신 중", "systemic", "방사선·약 처방 최소화, 원장 확인", _ANESTHESIA, [(19, 44, "F", 0.03)]),  # 끝: PREGNANCY_LEFT_DAYS
     ("LATEX", "라텍스 알레르기", "allergy", "비라텍스 장갑 사용", _ALL, [(0, None, None, 0.01)]),
     ("PENICILLIN", "페니실린 알레르기", "allergy", "항생제 처방 시 대체 약", _SURGERY | {_P["신경치료"]},
      [(0, None, None, 0.05)]),
@@ -199,7 +202,7 @@ _ALERT_ROWS = [
     ("CLAUSTRO", "폐소공포증", "procedure", "러버댐·장시간 진료 시 중간 휴식", _LONG_OPEN, [(13, None, None, 0.05)]),
     ("TRISMUS", "개구 제한", "procedure", "짧게 나눠 진행", _LONG_OPEN, [(19, None, None, 0.02)]),
     ("FEAR", "치과 공포", "procedure", "시술 전 충분히 설명하고 천천히 진행", _ALL, [(0, None, None, 0.06)]),
-    ("CHILD_COOP", "협조 어려운 소아", "procedure", "보호자 동반, 짧게 진행", _ALL,
+    ("CHILD_COOP", "협조 어려운 소아", "procedure", "보호자 동반, 짧게 진행", _ALL,  # 끝: 소아 구간을 벗어나는 생일
      [(0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child"), None, 0.15)]),
     ("UPRIGHT", "체어 눕히지 말고 진료", "procedure", "체어를 세운 자세로 진료", _ALL,
      [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.06)]),
@@ -214,6 +217,9 @@ ALERT_TYPES = {
     for code, label, category, action, procs, target in _ALERT_ROWS
 }
 MAX_ALERTS_PER_PATIENT = 3
+# 기간이 있는 주의사항의 끝(ends_at — 이 날부터 안 보인다). 임신은 기록일 + 남은 기간 U(양 끝 포함, 일),
+# 협조 어려운 소아는 소아 구간 최대 나이 + 1세 생일. 나머지는 끝이 없다
+PREGNANCY_LEFT_DAYS = (1, 280)
 
 # 치아 단위 시술의 치아 후보 (§2.1). 뽑기만 한다 — 순서 고정을 위해 정렬된 튜플(frozenset 순회 순서는 실행마다 다름)
 _WISDOM = tuple(f"{q}8" for q in (1, 2, 3, 4))

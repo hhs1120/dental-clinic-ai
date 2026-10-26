@@ -69,7 +69,7 @@ def test_insured_on():
 
 
 def test_alert_types():
-    # §2.2·기능 정의 §9: 주의사항 17개 — 문진(intake)은 대상 규칙(나이 범위·성별·비율), 진료 중 발견(visit)은 관련 시술 내원 비율
+    # 생성 설계 §2.2: 주의사항 17개(master.ALERT_TYPES) — 문진(intake)은 대상 규칙(나이 범위·성별·비율), 진료 중 발견(visit)은 관련 시술 내원 비율
     from generator.master import ALERT_TYPES
     procedure_codes = {p["code"] for p in PROCEDURES}
     assert len(ALERT_TYPES) == 17

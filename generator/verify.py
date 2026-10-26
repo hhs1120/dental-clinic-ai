@@ -28,7 +28,8 @@ from pathlib import Path
 import yaml
 
 from generator.paths import SCALES, output_paths
-from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, MAX_ALERTS_PER_PATIENT, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
+from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, EXTRACTION_CODES, IMPLANT_CODE,
+                              MAX_ALERTS_PER_PATIENT, PREGNANCY_LEFT_DAYS, add_years, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
                               PROCEDURES, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX, age_on, daily_cap,
                               age_band, insured_on, open_slots)
 
@@ -360,6 +361,18 @@ def check_adjust_reason(conn, ctx):
             or (reason["type"] == "external" and r["status"] != "denied")]
 
 
+def check_extracted_tooth(conn, ctx):
+    """발치한 치아에는 이후 진료가 없다 (임플란트 1차 제외) — 있으면 정답 목록에 없는 청구 오류가 장부에 생긴다"""
+    bad, extracted = [], defaultdict(set)
+    for r in _rows(conn, "SELECT id, patient_id, procedure_code, tooth_no, performed_at FROM emr_treatments"
+                         " ORDER BY patient_id, datetime(performed_at), id"):
+        if r["tooth_no"] in extracted[r["patient_id"]] and r["procedure_code"] != IMPLANT_CODE:
+            bad.append(r)
+        if r["procedure_code"] in EXTRACTION_CODES:
+            extracted[r["patient_id"]].add(r["tooth_no"])
+    return bad
+
+
 def check_extra_claim_review_not_in_ledger(conn, ctx):
     """truth_claims의 extra_in_claim_review 대조 키가 emr_claims와 겹치지 않음"""
     return _rows(conn, "SELECT t.id, t.chart_no, t.service_date, t.procedure_code, t.tooth_no, c.id AS claim_id"
@@ -460,16 +473,37 @@ def check_alert_source(conn, ctx):
 
 
 def check_alert_recorded_at(conn, ctx):
-    """기록일 ≥ 등록일. 문진 기록일 = 신환은 등록일, 구환은 창 이전 마지막 completed 내원일(없으면 등록일)"""
+    """기록일 ≥ 등록일. 문진 기록일 = 신환은 첫 completed 내원일(내원한 적 없으면 문진 없음),
+    구환은 창 이전 마지막 completed 내원일(없으면 등록일)"""
+    start = ctx.range_start.isoformat()
     pre = dict(conn.execute("SELECT patient_id, max(date(scheduled_at)) FROM emr_appointments"
-                            " WHERE status = 'completed' AND date(scheduled_at) < ? GROUP BY patient_id",
-                            (ctx.range_start.isoformat(),)).fetchall())
+                            " WHERE status = 'completed' AND date(scheduled_at) < ? GROUP BY patient_id", (start,)).fetchall())
+    first = dict(conn.execute("SELECT patient_id, min(date(scheduled_at)) FROM emr_appointments"
+                              " WHERE status = 'completed' GROUP BY patient_id").fetchall())
     bad = []
     for r in _alerts(conn):
-        expected = r["registered_at"] if r["registered_at"] >= ctx.range_start.isoformat() \
+        expected = first.get(r["patient_id"]) if r["registered_at"] >= start \
             else pre.get(r["patient_id"], r["registered_at"])
         if r["recorded_at"] < r["registered_at"] or (r["source"] == "intake" and r["recorded_at"] != expected):
             bad.append({**r, "expected": expected})
+    return bad
+
+
+def check_alert_ends(conn, ctx):
+    """끝나는 날(ends_at): 임신은 기록일 + PREGNANCY_LEFT_DAYS 안, 협조 어려운 소아는 소아 구간을 벗어나는 생일,
+    나머지는 없음"""
+    lo, hi = PREGNANCY_LEFT_DAYS
+    bad = []
+    for r in _alerts(conn):
+        if r["code"] == "PREGNANT":
+            left = r["ends_at"] and (date.fromisoformat(r["ends_at"]) - date.fromisoformat(r["recorded_at"])).days
+            ok = bool(left) and lo <= left <= hi
+        elif r["code"] == "CHILD_COOP":
+            ok = r["ends_at"] == add_years(date.fromisoformat(r["birth_date"]), CHILD_MAX_AGE + 1).isoformat()
+        else:
+            ok = r["ends_at"] is None
+        if not ok:
+            bad.append(r)
     return bad
 
 
@@ -618,6 +652,7 @@ REQUIRED = [
     check_service_date,
     check_uninsured_not_claimed,
     check_scaling_limit,
+    check_extracted_tooth,
     check_treatment_amounts,
     check_insured_claim_one_line,
     check_adjust_reason,
@@ -629,6 +664,7 @@ REQUIRED = [
     check_alert_target,
     check_alert_source,
     check_alert_recorded_at,
+    check_alert_ends,
     check_alerts_per_patient,
     check_ax_calls_columns,
     check_call_uid_format,

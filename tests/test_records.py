@@ -7,8 +7,8 @@ import pytest
 import yaml
 
 from generator import build, verify
-from generator.master import (ADJUSTED_PAID_RANGE, FULL_MOUTH, PAYMENT_METHOD_WEIGHTS, PROCEDURES, SCALING_CODE,
-                              TOOTH_CHOICES, UNPAID_PAID_RANGE)
+from generator.master import (ADJUSTED_PAID_RANGE, EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, PAYMENT_METHOD_WEIGHTS,
+                              PROCEDURES, SCALING_CODE, TOOTH_CHOICES, UNPAID_PAID_RANGE)
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
@@ -55,13 +55,17 @@ def test_treatment_is_planned_procedure(db):
 
 
 def test_course_keeps_tooth(db):
-    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있을 때 (§2.1)"""
+    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있고, 발치한 치아가 아닐 때
+    (발치한 치아도 임플란트 1차는 그대로) (§2.1)"""
     conn, _, run = db
     episode = run.state["episode"]  # 예약 id → 에피소드 번호 (4단계)
-    rows = _rows(conn, "SELECT t.appointment_id, t.procedure_code, t.tooth_no FROM emr_treatments t"
+    rows = _rows(conn, "SELECT t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no FROM emr_treatments t"
                        " ORDER BY t.performed_at, t.id")
-    courses = defaultdict(list)
+    courses, extracted = defaultdict(list), defaultdict(set)
     for r in rows:
+        r["extracted_before"] = set(extracted[r["patient_id"]])
+        if r["procedure_code"] in EXTRACTION_CODES:
+            extracted[r["patient_id"]].add(r["tooth_no"])
         if r["procedure_code"] in TOOTH_LEVEL and r["appointment_id"] in episode:
             courses[episode[r["appointment_id"]]].append(r)
     multi = [c for c in courses.values() if len(c) > 1]
@@ -69,7 +73,8 @@ def test_course_keeps_tooth(db):
     for course in multi:
         first = course[0]["tooth_no"]
         for r in course[1:]:
-            if first in TOOTH_CHOICES[r["procedure_code"]]:
+            usable = r["procedure_code"] == IMPLANT_CODE or first not in r["extracted_before"]
+            if first in TOOTH_CHOICES[r["procedure_code"]] and usable:
                 assert r["tooth_no"] == first, course
 
 

@@ -20,11 +20,12 @@ INSERT INTO emr_families VALUES (1, '김');
 INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id, guardian_patient_id, registered_at) VALUES
   (1, 'C-00001', '김철수', '1980-05-10', 'M', '010-0000-0001', 1, NULL, '2025-01-01'),
   (2, 'C-00002', '김하늘', '2018-03-01', 'F', '010-0000-0002', 1, 1, '2025-01-01');
--- 주의사항: 1번 구환(창 이전 내원 없음 → 문진 기록일 = 등록일) 고혈압, 2번 소아 협조 어려움, 1번 10/06 신경치료 중 마취 잘 안 됨 발견
-INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, appointment_id) VALUES
-  (1, 1, 'HTN', 'intake', '2025-01-01', NULL),
-  (2, 2, 'CHILD_COOP', 'intake', '2025-01-01', NULL),
-  (3, 1, 'ANES_FAIL', 'visit', '2026-10-06', 1);
+-- 주의사항: 1번 구환(창 이전 내원 없음 → 문진 기록일 = 등록일) 고혈압, 2번 소아 협조 어려움(13세 생일에 끝남),
+-- 1번 10/06 신경치료 중 마취 잘 안 됨 발견
+INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, appointment_id, ends_at) VALUES
+  (1, 1, 'HTN', 'intake', '2025-01-01', NULL, NULL),
+  (2, 2, 'CHILD_COOP', 'intake', '2025-01-01', NULL, '2031-03-01'),
+  (3, 1, 'ANES_FAIL', 'visit', '2026-10-06', 1, NULL);
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
                               planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
   (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL),

@@ -35,7 +35,7 @@ def test_alert_types_loaded(db):
 
 
 @pytest.mark.parametrize("check", [verify.check_alert_target, verify.check_alert_source, verify.check_alert_recorded_at,
-                                   verify.check_alerts_per_patient], ids=lambda c: c.__name__)
+                                   verify.check_alert_ends, verify.check_alerts_per_patient], ids=lambda c: c.__name__)
 def test_alert_checks(db, check):
     conn, ctx = db
     assert check(conn, ctx) == []
@@ -46,11 +46,17 @@ def test_intake_rates(db):
     conn, _ = db
     actual = Counter(r["code"] for r in _rows(conn, "SELECT code FROM emr_patient_alerts WHERE source = 'intake'"))
     expected = defaultdict(float)
-    pre = dict(conn.execute("SELECT patient_id, max(date(scheduled_at)) FROM emr_appointments a"
-                            " JOIN truth.truth_gen_meta m ON m.key = 'range_start'"
-                            " WHERE status = 'completed' AND date(scheduled_at) < m.value GROUP BY patient_id").fetchall())
+    start = verify.load_ctx(CONFIG, conn).range_start.isoformat()
+    pre = dict(conn.execute("SELECT patient_id, max(date(scheduled_at)) FROM emr_appointments"
+                            " WHERE status = 'completed' AND date(scheduled_at) < ? GROUP BY patient_id", (start,)).fetchall())
+    first = dict(conn.execute("SELECT patient_id, min(date(scheduled_at)) FROM emr_appointments"
+                              " WHERE status = 'completed' GROUP BY patient_id").fetchall())
     for p in _rows(conn, "SELECT id, birth_date, sex, registered_at FROM emr_patients"):
-        day = date.fromisoformat(pre.get(p["id"], p["registered_at"]))  # 문진 기록일 — 구환은 창 이전 내원일
+        # 문진 기록일 — 신환은 첫 내원일(내원한 적 없으면 문진 없음), 구환은 창 이전 내원일
+        recorded = first.get(p["id"]) if p["registered_at"] >= start else pre.get(p["id"], p["registered_at"])
+        if recorded is None:
+            continue
+        day = date.fromisoformat(recorded)
         age = age_on(date.fromisoformat(p["birth_date"]), day)
         for code, a in ALERT_TYPES.items():
             for lo, hi, sex, rate in a["rules"]:
@@ -81,3 +87,18 @@ def test_some_patients_have_several_alerts(db):
     conn, _ = db
     per = Counter(r["patient_id"] for r in _rows(conn, "SELECT patient_id FROM emr_patient_alerts"))
     assert max(per.values()) >= 2
+
+
+def test_lasting_alerts_end(db):
+    """임신·협조 어려운 소아는 끝나는 날이 있고, 준비표 범위(TODAY)에는 끝난 것도 있다"""
+    conn, ctx = db
+    rows = _rows(conn, "SELECT code, ends_at FROM emr_patient_alerts WHERE code IN ('PREGNANT', 'CHILD_COOP')")
+    assert rows and all(r["ends_at"] for r in rows)
+    assert any(r["ends_at"] <= ctx.today.isoformat() for r in rows)
+
+
+def test_never_visited_new_patients_have_no_intake(db):
+    conn, ctx = db
+    assert _rows(conn, "SELECT a.id FROM emr_patient_alerts a JOIN emr_patients p ON p.id = a.patient_id"
+                       " WHERE p.registered_at >= ? AND NOT EXISTS (SELECT 1 FROM emr_appointments x"
+                       " WHERE x.patient_id = p.id AND x.status = 'completed')", ctx.range_start.isoformat()) == []

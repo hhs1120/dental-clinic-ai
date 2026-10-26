@@ -68,6 +68,7 @@ CREATE TABLE emr_patient_alerts (
     source         TEXT NOT NULL CHECK (source IN ('intake', 'visit')),
     recorded_at    TEXT NOT NULL,  -- 기록일 'YYYY-MM-DD'. 이 날부터 보인다
     appointment_id INTEGER REFERENCES emr_appointments(id),
+    ends_at        TEXT,           -- 끝나는 날(이 날부터 안 보인다). 기간이 있는 항목(임신·소아)만, 나머지는 NULL
     UNIQUE (patient_id, code)
 );
 

@@ -96,6 +96,12 @@ BREAKS = {
     "claim_month_mismatch": ("UPDATE emr_claims SET claim_month = '2026-11' WHERE id = 1", "check_insured_claim_one_line"),
     "claim_chart_no_mismatch": ("UPDATE emr_claims SET chart_no = 'C-00002' WHERE id = 1", "check_insured_claim_one_line"),
     "claim_patient_mismatch": ("UPDATE emr_claims SET patient_id = 2 WHERE id = 1", "check_insured_claim_one_line"),
+    # 발치한 치아에 이후 진료 없음 (임플란트 1차 제외): 1번 10/06 단순발치 26 → 11/03 아말감 26
+    "treatment_on_extracted_tooth": (
+        "UPDATE emr_treatments SET procedure_code = CASE id WHEN 1 THEN 'U0011' ELSE 'U0006' END, tooth_no = '26'"
+        " WHERE id IN (1, 2)", "check_extracted_tooth"),
+    "extracted_tooth_extracted_again": (
+        "UPDATE emr_treatments SET procedure_code = 'U0011', tooth_no = '26' WHERE id IN (1, 2)", "check_extracted_tooth"),
     # 확정 월 조정 사유: master.ADJUST_REASONS의 상세 사유 하나와 범주 문자·서술이 일치하고 그 시술에 맞음
     "adjust_note_unknown": (
         "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', '알 수 없는 사유')",
@@ -201,6 +207,10 @@ BREAKS = {
                               "check_alert_source"),
     "visit_alert_without_appointment": ("UPDATE emr_patient_alerts SET appointment_id = NULL WHERE id = 3", "check_alert_source"),
     "visit_alert_other_patient": ("UPDATE emr_patient_alerts SET patient_id = 2 WHERE id = 3", "check_alert_source"),
+    "child_coop_without_end": ("UPDATE emr_patient_alerts SET ends_at = NULL WHERE id = 2", "check_alert_ends"),
+    "child_coop_wrong_end": ("UPDATE emr_patient_alerts SET ends_at = '2031-02-28' WHERE id = 2", "check_alert_ends"),
+    "lasting_alert_with_end": ("UPDATE emr_patient_alerts SET ends_at = '2026-06-01' WHERE id = 1", "check_alert_ends"),
+    "visit_alert_with_end": ("UPDATE emr_patient_alerts SET ends_at = '2027-01-01' WHERE id = 3", "check_alert_ends"),
     "four_alerts": ("INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at) VALUES"
                     " (1, 'PENICILLIN', 'intake', '2025-01-01'), (1, 'FEAR', 'intake', '2025-01-01')",
                     "check_alerts_per_patient"),
@@ -464,14 +474,53 @@ def test_intake_alert_of_returning_patient_on_pre_window_visit(tmp_path):
     assert verify.check_alert_recorded_at(conn, CTX) == []
 
 
-def test_intake_alert_of_new_patient_on_registration(tmp_path):
-    """신환(등록일 ≥ 창 시작) 문진 기록일 = 등록일"""
+def test_intake_alert_of_new_patient_on_first_visit(tmp_path):
+    """신환(등록일 ≥ 창 시작) 문진 기록일 = 첫 completed 내원일 — 등록(전화 예약)일이 아니다"""
     conn = make_db(tmp_path)
     conn.execute("UPDATE emr_patients SET registered_at = '2026-10-02' WHERE id = 1")
-    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-02' WHERE id = 1")
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-06' WHERE id = 1")  # 첫 내원 = 10/06 신경치료
     assert verify.check_alert_recorded_at(conn, CTX) == []
-    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-03' WHERE id = 1")
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-02' WHERE id = 1")
     assert verify.check_alert_recorded_at(conn, CTX)
+
+
+def test_no_intake_alert_for_new_patient_never_visited(tmp_path):
+    """내원한 적 없는 신환은 문진 주의사항이 없다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-10-30' WHERE id = 2")
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-11-18' WHERE id = 2")  # 첫 내원 11/18 레진
+    assert verify.check_alert_recorded_at(conn, CTX) == []
+    conn.execute("UPDATE emr_appointments SET status = 'noshow' WHERE id = 4")
+    assert verify.check_alert_recorded_at(conn, CTX)
+
+
+def _pregnant(conn, recorded, ends):
+    conn.execute("INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, registered_at)"
+                 " VALUES (3, 'C-00003', '이수진', '1993-04-01', 'F', '010-0000-0003', '2025-01-01')")
+    conn.execute("INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at, ends_at)"
+                 " VALUES (3, 'PREGNANT', 'intake', ?, ?)", (recorded, ends))
+
+
+def test_pregnant_ends_within_lasting_days(tmp_path):
+    """임신 종료일 = 기록일 + master LASTS 범위 안 (남은 기간)"""
+    conn = make_db(tmp_path)
+    _pregnant(conn, "2025-01-01", "2025-06-01")
+    assert verify.check_alert_ends(conn, CTX) == []
+
+
+@pytest.mark.parametrize("ends", [None, "2025-12-01", "2025-01-01"])
+def test_pregnant_end_out_of_range(tmp_path, ends):
+    conn = make_db(tmp_path)
+    _pregnant(conn, "2025-01-01", ends)
+    assert verify.check_alert_ends(conn, CTX)
+
+
+def test_implant_on_extracted_tooth_allowed(tmp_path):
+    """발치한 치아에도 임플란트 1차는 된다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_treatments SET procedure_code = CASE id WHEN 1 THEN 'U0011' ELSE 'U0013' END,"
+                 " tooth_no = '26' WHERE id IN (1, 2)")
+    assert verify.check_extracted_tooth(conn, CTX) == []
 
 
 def test_visit_alert_not_on_pre_window_visit(tmp_path):
