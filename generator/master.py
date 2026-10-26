@@ -145,7 +145,7 @@ _ROWS = [
 _KEYS = ("code", "name", "category", "is_insured", "fee_total", "duration_min",
          "insured_limit", "limit_scope", "age_group", "is_tooth_level")
 
-# aliases는 생성기 전사 단계에서 채운다 (스키마 기본값 '[]')
+# aliases는 비어 있다(스키마 기본값 '[]') — 채울지는 기능 정의 §9
 PROCEDURES = [
     {**dict(zip(_KEYS, row)), "patient_share_rate": 1.0 if row[3] == "no" else 0.3}
     for row in _ROWS
@@ -331,7 +331,7 @@ REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
 DIAGNOSIS_ERROR_RATE = 0.03    # 요건 오류가 아닌 급여 줄 중 상병 착오
 # 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
 CHART_DECOY_RATIO = 1.5
-CHART_FORBIDDEN_WORDS = ("청구 오류", "삭감", "조정")  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
+CHART_FORBIDDEN_WORDS = ("청구 오류", "삭감", "조정", "요건", "급여 기준")  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
 
 
 def adjust_group(procedure_code: str) -> str:

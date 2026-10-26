@@ -39,6 +39,14 @@ def test_payload_has_labels_and_facts_without_internal_ids(conn):
     assert p["facts"]["patient"]["name"] == "김하늘"
 
 
+def test_full_mouth_tooth_is_blank(conn):
+    """치아 '00'(전체 구강 내부 표시)은 입력에서 None — '00번 치아'라고 쓰지 않게"""
+    conn.execute("UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recent_visits',"
+                 " json('[{\"date\": \"2026-10-06\", \"procedure\": \"스케일링\", \"tooth\": \"00\"}]'))"
+                 " WHERE call_uid = 'c-0001'")
+    assert transcripts.payload(_row(conn, "c-0001"))["facts"]["recent_visits"][0]["tooth"] is None
+
+
 def test_must_include_dates_and_topic(conn):
     names = llm_jobs.procedure_names(conn)
     assert transcripts.must_include(json.loads(_row(conn, "c-0004")["used_fact"]), names) == [["11월 18일"], ["11월 17일"]]

@@ -87,7 +87,7 @@ INSERT INTO truth_claims VALUES
 INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evidence_present, is_decoy, facts) VALUES
   (1, 'template', 0, NULL, NULL, 0, '{}'),
   (2, 'template', 0, NULL, NULL, 0, '{}'),
-  (3, 'narrative', 0, NULL, NULL, 1, '{}');
+  (3, 'narrative', 0, NULL, NULL, 1, '{"alerts": [], "cc": "이에 까만 점이 생겼어요", "discovered": [], "findings": null, "plan": null, "procedure": "레진", "requirement": null, "tooth": "16"}');
 INSERT INTO truth_call_labels VALUES
   ('c-0003', 'book', '["book"]', 'patient', 'normal', 0, 0, 0, 1, 1, 0, NULL,
    '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"]}',

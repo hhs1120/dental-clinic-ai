@@ -3,9 +3,9 @@
 - 단계는 건마다 LLMContext.resolve(작업, 건 id, 입력, 검증 기준)를 부른다: 캐시에 통과한 출력이 있으면 그것,
   없으면 작업을 모아 두고 None. 생성이 끝나면 finish()가 빈 건을 jobs/<작업>.jsonl에 쓴다(build.py가 멈춤)
 - 작업 한 줄은 완결: 시스템 프롬프트(prompts/<task>/<version>.md)·사용자 입력(JSON — 검증 기준에서 뽑은
-  must_mention·avoid_words·length_chars 포함)·출력 스키마·검증 기준·캐시 키
+  must_mention·avoid_words·avoid_patterns·length_chars 포함)·출력 스키마·검증 기준·캐시 키
 - 채우기: API(fill-api — 게이트웨이 Batch) 또는 Claude Code(/fill-llm-jobs — split·check). 결과는 results/*.jsonl,
-  파일 이름은 작업 이름으로 시작, 한 줄 = {key, output | error, source}. 이미 캐시에 있는 작업은 다시 채우지 않는다
+  파일 이름은 작업 이름으로 시작, 한 줄 = {key, output | error, source}. 캐시·결과 파일·진행 중 배치에 있는 작업은 다시 채우지 않는다
 - 들여오기(import): 건별 검증 → 캐시(cache/<작업>.jsonl, 한 줄 = 한 시도)에 ok/failed. 출력은 Task.store 필드만 남긴다
   (전사의 scenario는 라벨을 풀어 쓴 문장이라 버림). 실패는 다음 시도 번호로 다시, MAX_ATTEMPTS번 넘게 실패하면 멈춤
 - 가짜 모드(테스트)는 FakeGateway로 채우고 캐시·검증을 건너뛴다. fake=False 작업(차트 서술)은 채우지 않는다(초안 유지)
@@ -30,7 +30,7 @@ from shared import llm
 PROMPTS = ROOT / "prompts"
 ALIAS = "gen"  # config/llm.yaml 별칭 — 생성기 7·9·9b
 SIMPLIFY_AFTER = 2  # 이 횟수만큼 실패하면 다음 시도부터 단순화한 입력 (§4.1 절차 6)
-MAX_ATTEMPTS = 3  # 이 횟수만큼 실패하면 더 내보내지 않고 make data가 멈춘다 — 프롬프트를 고치거나 캐시 줄을 지운다
+MAX_ATTEMPTS = 3  # 이 횟수만큼 실패하면 더 내보내지 않고 make data가 멈춘다 — 프롬프트를 고치거나 그 건의 캐시 줄을 모두 지운다
 CHUNK_SIZE = 25  # Claude Code 보조 에이전트 하나가 맡는 작업 수
 POLL_SEC = 60
 REPORT_KEYS = ("ok", "failed", "unknown", "duplicate", "bad")
@@ -70,7 +70,7 @@ def procedure_names(conn) -> dict[str, list[str]]:
 def instructions(checks: dict) -> dict:
     """검증 기준 중 쓰는 쪽이 알아야 하는 것 — 입력에 넣어 API·Claude Code가 같은 기준을 본다"""
     out = {"must_mention": [alts[0] for alts in checks.get("must_include", [])],
-           "avoid_words": checks.get("forbidden_words", [])}
+           "avoid_words": checks.get("forbidden_words", []), "avoid_patterns": checks.get("forbidden_patterns", [])}
     if checks.get("length"):
         out["length_chars"] = checks["length"]
     return out
@@ -254,29 +254,34 @@ def _file_task(path: Path) -> str:
 
 def import_results(paths: dict) -> dict[str, dict]:
     """결과 파일 전부를 검증해 캐시에 넣고 지운다. {작업: {ok, failed, unknown, duplicate, bad}}.
-    unknown = 지금 작업 파일에 없는 키(작업을 다시 내보내 키가 바뀐 옛 결과), bad = 형식이 깨진 줄"""
+    unknown = 지금 작업 파일에 없는 키(작업을 다시 내보내 키가 바뀐 옛 결과), bad = 형식이 깨진 줄.
+    같은 키의 결과가 여럿이면 통과한 것(없으면 첫 실패)을 남기고 나머지는 duplicate"""
     jobs = _jobs(paths)
     files = sorted(paths["llm_results"].glob("*.jsonl")) if paths["llm_results"].exists() else []
     report = defaultdict(lambda: dict.fromkeys(REPORT_KEYS, 0))
-    caches: dict[str, Cache] = {}
+    by_key: dict[str, list[dict]] = defaultdict(list)
     for f in files:
         for _, r, bad in _results(f):
-            job = jobs.get(r["key"]) if r else None
-            if job is None:
+            if r is not None and r["key"] in jobs:
+                by_key[r["key"]].append(r)
+            else:
                 report[_file_task(f)]["bad" if bad else "unknown"] += 1
-                continue
-            cache = caches.setdefault(job["task"], Cache(paths["llm_cache"] / f"{job['task']}.jsonl"))
-            if r["key"] in cache.keys:
-                report[job["task"]]["duplicate"] += 1
-                continue
-            errors = [r["error"]] if "error" in r else problems(job["schema"], job["checks"], r["output"])
-            status = "failed" if errors else "ok"
-            output = r.get("output")
-            if isinstance(output, dict):
-                output = {k: v for k, v in output.items() if k in job["store"]}
-            cache.add({k: job[k] for k in ("key", "task", "item", "attempt", "prompt_version", "prompt_hash", "input_hash")}
-                      | {"status": status, "source": r["source"], "output": output, "errors": errors})
-            report[job["task"]][status] += 1
+    caches: dict[str, Cache] = {}
+    for key, rows in by_key.items():
+        job = jobs[key]
+        cache = caches.setdefault(job["task"], Cache(paths["llm_cache"] / f"{job['task']}.jsonl"))
+        if key in cache.keys:
+            report[job["task"]]["duplicate"] += len(rows)
+            continue
+        judged = [(r, [r["error"]] if "error" in r else problems(job["schema"], job["checks"], r["output"])) for r in rows]
+        r, errors = next((x for x in judged if not x[1]), judged[0])
+        report[job["task"]]["duplicate"] += len(rows) - 1
+        status = "failed" if errors else "ok"
+        output = r.get("output")
+        output = {k: v for k, v in output.items() if k in job["store"]} if isinstance(output, dict) else None
+        cache.add({k: job[k] for k in ("key", "task", "item", "attempt", "prompt_version", "prompt_hash", "input_hash")}
+                  | {"status": status, "source": r["source"], "output": output, "errors": errors})
+        report[job["task"]][status] += 1
     for cache in caches.values():
         cache.save()
     for f in files:
@@ -301,11 +306,16 @@ def check_results(paths: dict, path: Path) -> dict[str, list[str]]:
 
 
 def pending(paths: dict, task: str) -> list[dict]:
-    """작업 파일 중 아직 캐시에 없는 것 — 들여온 뒤 make data 전에 다시 채워도 같은 건을 두 번 내지 않게"""
+    """작업 파일 중 아직 채우지 않은 것 — 캐시·들여오기 전 결과 파일·진행 중 배치에 있는 키는 뺀다(같은 건을 두 번 채우지 않게)"""
     path = paths["llm_jobs"] / f"{task}.jsonl"
     if not path.exists():
         return []
-    done = Cache(paths["llm_cache"] / f"{task}.jsonl").keys
+    done = set(Cache(paths["llm_cache"] / f"{task}.jsonl").keys)
+    if paths["llm_results"].exists():
+        done |= {r["key"] for f in paths["llm_results"].glob("*.jsonl") for _, r, _ in _results(f) if r}
+    state = paths["llm_jobs"] / f"{task}.batch.json"
+    if state.exists():
+        done |= set(json.loads(state.read_text(encoding="utf-8"))["keys"])
     return [j for j in _read_jsonl(path) if j["key"] not in done]
 
 

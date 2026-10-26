@@ -5,7 +5,6 @@
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). RAG는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), effective_date ≤ TODAY,
          누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
-         차트 본문의 근거 사실(소견 수치 등 — 9b 건별 검증과 함께)
   경고 — 통화 복수 주제 accepted ≥ 2(라벨 값 검사가 대신함), RAG
 결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
@@ -25,10 +24,10 @@ from pathlib import Path
 
 import yaml
 
-from generator import llm_jobs, transcripts
+from generator import chart, llm_jobs, transcripts
 from generator.paths import output_paths
-from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT, CONDITIONAL_INSURED_MIN_AGE,
-                              EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
+from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT,
+                              CONDITIONAL_INSURED_MIN_AGE, EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
                               add_years, age_band, age_on, daily_cap, insured_on, open_slots,
@@ -709,6 +708,20 @@ def check_chart_text(conn, ctx):
     return bad
 
 
+def check_chart_narrative_facts(conn, ctx):
+    """서술 줄 본문에 꼭 넣을 사실(9b 건별 검증과 같은 기준 — chart.narrative_must_include)이 있음"""
+    names = llm_jobs.procedure_names(conn)
+    bad = []
+    for r in _rows(conn, "SELECT n.treatment_id, n.note, c.facts FROM emr_chart_notes n"
+                         " JOIN truth.truth_chart_notes c USING (treatment_id) WHERE c.kind = 'narrative'"
+                         " ORDER BY n.treatment_id"):
+        missing = [alts[0] for alts in chart.narrative_must_include(json.loads(r["facts"]), names)
+                   if not any(llm_jobs.contains(r["note"], a) for a in alts)]
+        if missing:
+            bad.append({"treatment_id": r["treatment_id"], "missing": missing})
+    return bad
+
+
 # emr_chart_notes 허용 컬럼 — 특이·디코이·요건 충족 컬럼은 정답 누출 (§5.3 누출)
 CHART_NOTE_COLUMNS = {"id", "treatment_id", "dx_code", "note"}
 
@@ -1355,6 +1368,7 @@ REQUIRED = [
     check_requirement_facts,
     check_chart_special,
     check_chart_text,
+    check_chart_narrative_facts,
     check_chart_note_columns,
     check_ax_calls_columns,
     check_call_uid_format,

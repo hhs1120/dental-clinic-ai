@@ -199,3 +199,37 @@ def test_narrative_stage_fake_keeps_draft(db, tmp_path):
     row = conn.execute("SELECT n.note, t.facts FROM emr_chart_notes n JOIN truth.truth_chart_notes t USING (treatment_id)"
                        " WHERE t.kind = 'narrative' LIMIT 1").fetchone()
     assert row["note"] == chart.draft_note(json.loads(row["facts"]))
+
+
+
+def test_narrative_payload_hides_requirement_key_and_evidence():
+    """LLM 입력에 요건 사유 키·충족 여부(정답)가 없다 — 사실 필드만 history로"""
+    p = chart.narrative_payload(FACTS, "초안")
+    text = json.dumps(p, ensure_ascii=False)
+    assert "R02" not in text and "evidence" not in text and "requirement" not in text
+    assert p["facts"]["history"] == {"scaling_days_ago": 14, "linked": True} and p["draft"] == "초안"
+    r03 = chart.narrative_payload({**FACTS, "requirement": {"key": "R03", "evidence": False}}, "초안")
+    assert "history" not in r03["facts"]
+
+
+def test_narrative_stage_exports_then_applies_cache(tmp_path):
+    """실제 모드: 서술 줄 → 작업 → 들여오기 → 본문 덮어쓰기 (verify 테스트 DB의 3번 레진 서술 줄)"""
+    from types import SimpleNamespace
+    from generator import llm_jobs
+    from tests.generator.verify_db import make_db
+    conn = make_db(tmp_path)
+    paths = {k: tmp_path / k for k in ("llm_cache", "llm_jobs", "llm_results")}
+    ctx = llm_jobs.LLMContext(paths, fake=False)
+    chart.stage_narratives(SimpleNamespace(conn=conn, state={"llm": ctx}), None, None)
+    assert ctx.finish() == {"chart": 1}
+    (job,) = [json.loads(line) for line in (paths["llm_jobs"] / "chart.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert job["item"] == "3" and job["checks"]["must_include"] == [["16번"], ["레진"]]
+    assert "김하늘" in job["checks"]["forbidden_words"]  # 3번 진료 환자 이름
+    note = "16번 치아에 까만 점이 보여 레진 충전을 시행했습니다."
+    paths["llm_results"].mkdir()
+    (paths["llm_results"] / "chart.jsonl").write_text(
+        json.dumps({"key": job["key"], "output": {"note": note}, "source": "claude-code"}, ensure_ascii=False) + "\n",
+        encoding="utf-8")
+    assert llm_jobs.import_results(paths)["chart"]["ok"] == 1
+    chart.stage_narratives(SimpleNamespace(conn=conn, state={"llm": llm_jobs.LLMContext(paths, fake=False)}), None, None)
+    assert conn.execute("SELECT note FROM emr_chart_notes WHERE treatment_id = 3").fetchone()[0] == note

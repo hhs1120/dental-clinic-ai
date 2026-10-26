@@ -16,8 +16,8 @@ import numpy as np
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
-from generator.master import (ADJUST_REASONS, ALERT_TYPES, CHART_DECOY_RATIO, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT, CHECKUP_CODE, DIAGNOSES,
-                              DIAGNOSIS_ERROR_RATE, EXTRACTION_CODES, FULL_MOUTH, PERIO_LINK_DAYS, PROCEDURE_DIAGNOSES, PROCEDURES,
+from generator.master import (ADJUST_REASONS, ALERT_TYPES, CHART_DECOY_RATIO, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT,
+                              CHECKUP_CODE, DIAGNOSES, DIAGNOSIS_ERROR_RATE, EXTRACTION_CODES, FULL_MOUTH, PERIO_LINK_DAYS, PROCEDURE_DIAGNOSES, PROCEDURES,
                               RECALL_CYCLE_MONTHS, REQUIREMENT_CUT_ERROR_SHARE, REQUIREMENT_ERROR_RATE,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SUBMITTED_MONTHS)
 
@@ -374,6 +374,13 @@ def narrative_must_include(f: dict, names: dict) -> list[list[str]]:
     return out
 
 
+def narrative_payload(f: dict, draft: str) -> dict:
+    """LLM 입력 — 요건 사유 키·충족 여부(정답)는 빼고 사실 필드만 history로. 근거가 없는 오류 줄은 그 사실이 비어 있다"""
+    history = {k: v for k, v in (f["requirement"] or {}).items() if k not in ("key", "evidence")}
+    facts = {k: v for k, v in f.items() if k != "requirement"} | ({"history": history} if history else {})
+    return {"facts": facts, "draft": draft}
+
+
 def narrative_checks(f: dict, names: dict, patient_name: str) -> dict:
     return {"field": "note", "must_include": narrative_must_include(f, names),
             "forbidden_words": [*CHART_FORBIDDEN_WORDS, patient_name], "forbidden_patterns": llm_jobs.forbidden_patterns()}
@@ -388,7 +395,7 @@ def stage_narratives(run, rng, fake) -> None:
         " JOIN emr_patients p ON p.id = t.patient_id WHERE c.kind = 'narrative' ORDER BY n.treatment_id").fetchall()
     for treatment_id, draft, facts, patient_name in rows:
         f = json.loads(facts)
-        out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), {"facts": f, "draft": draft},
+        out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), narrative_payload(f, draft),
                           narrative_checks(f, names, patient_name))
         if out is not None:
             run.conn.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (out["note"], treatment_id))

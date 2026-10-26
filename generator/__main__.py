@@ -30,7 +30,7 @@ def main() -> None:
                   " /fill-llm-jobs → make llm-import → make data")
         for task, items in e.exhausted.items():
             print(f"{task}: 시도를 다 쓴 건 {', '.join(items[:10])}{' …' if len(items) > 10 else ''} — 프롬프트를 새 버전으로"
-                  " 고치거나 그 건의 캐시 줄을 지운 뒤 make data")
+                  " 고치거나 그 건의 캐시 줄을 모두 지운 뒤 make data")
         sys.exit(1)
 
 

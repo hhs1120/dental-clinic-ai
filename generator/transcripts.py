@@ -7,7 +7,7 @@ from datetime import date
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
-from generator.master import CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, TRANSCRIPT_CHARS_PER_SEC
+from generator.master import CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, FULL_MOUTH, TRANSCRIPT_CHARS_PER_SEC
 
 SPEAKERS = ["환자:", "직원:"]
 SCHEMA = {
@@ -20,7 +20,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 TASK = Task(name="transcript", prompt="gen_transcript/v1", schema=SCHEMA, store=("transcript",))
-INTERNAL_KEYS = ("appointment_id", "id")  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게
+INTERNAL_KEYS = ("appointment_id", "id")  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게. 치아 '00'(전체 구강)은 None
 
 
 def rows(conn) -> list[dict]:
@@ -33,7 +33,7 @@ def rows(conn) -> list[dict]:
 
 def _strip(obj):
     if isinstance(obj, dict):
-        return {k: _strip(v) for k, v in obj.items() if k not in INTERNAL_KEYS}
+        return {k: None if k == "tooth" and v == FULL_MOUTH else _strip(v) for k, v in obj.items() if k not in INTERNAL_KEYS}
     if isinstance(obj, list):
         return [_strip(v) for v in obj]
     return obj

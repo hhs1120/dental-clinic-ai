@@ -121,6 +121,17 @@ def test_cli_miss_exits_nonzero_with_message(tmp_path, monkeypatch, capsys):
     assert e.value.code == 1 and "transcript 3건" in capsys.readouterr().out
 
 
+def test_cli_reports_exhausted_items(tmp_path, monkeypatch, capsys):
+    from generator import __main__ as cli
+    monkeypatch.setattr(cli, "generate",
+                        lambda *a, **k: (_ for _ in ()).throw(build.LLMMissing({}, {"chart": ["12", "40"]})))
+    monkeypatch.setattr(sys, "argv", ["generator", "--db", str(tmp_path / "a"), "--truth", str(tmp_path / "b")])
+    with pytest.raises(SystemExit):
+        cli.main()
+    out = capsys.readouterr().out
+    assert "chart 시도 소진 2건" in out and "12, 40" in out and "모두 지운" in out and "작업을" not in out
+
+
 def _run_cli(out, hashseed):
     out.mkdir()
     env = {**os.environ, "PYTHONHASHSEED": str(hashseed)}

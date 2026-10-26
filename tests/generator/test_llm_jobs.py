@@ -22,7 +22,7 @@ def paths(tmp_path, monkeypatch):
 
 
 TOY = Task(name="toy", prompt="toy/v1", schema=SCHEMA, store=("text",))
-RULES = {"must_mention": ["사과"], "avoid_words": ["배"]}  # CHECKS에서 뽑아 입력에 넣는 지시
+RULES = {"must_mention": ["사과"], "avoid_words": ["배"], "avoid_patterns": []}  # CHECKS에서 뽑아 입력에 넣는 지시
 
 
 def _export(paths, items=("a", "b"), simplify=None, payload=lambda i: {"item": i}):
@@ -248,7 +248,7 @@ def test_split_and_fill_skip_already_imported(paths):
     assert sum(len(c.read_text(encoding="utf-8").splitlines()) for c in llm_jobs.split_jobs(paths)) == 1
     gateway = StubBatchGateway(lambda reqs: {})
     llm_jobs.fill_api(paths, "toy", gateway, sleep=lambda s: None)
-    assert [r["custom_id"] for r in gateway.submitted[3]] != [a] and len(gateway.submitted[3]) == 1
+    assert [r["custom_id"] for r in gateway.submitted[3]] == [_jobs(paths)[1]["key"]]
 
 
 def test_fill_api_nothing_to_do(paths, capsys):
@@ -282,3 +282,35 @@ def test_bad_lines_are_counted_not_fatal(paths):
 ])
 def test_contains_needs_no_digit_before(text, word, hit):
     assert llm_jobs.contains(text, word) is hit
+
+
+def test_pending_skips_unimported_results_and_running_batch(paths):
+    """들여오기 전 결과 파일·진행 중 배치에 있는 작업도 다시 채우지 않는다 (비용 두 번 방지)"""
+    _export(paths, items=("a", "b", "c"))
+    a, b, c = (j["key"] for j in _jobs(paths))
+    _result(paths, "toy.jsonl", [{"key": a, "output": {"text": "사과"}, "source": "x"}])
+    (paths["llm_jobs"] / "toy.batch.json").write_text(json.dumps({"batch_id": "b1", "keys": [b]}), encoding="utf-8")
+    assert [j["key"] for j in llm_jobs.pending(paths, "toy")] == [c]
+
+
+def test_import_prefers_passing_result(paths):
+    """같은 키에 실패·통과 결과가 둘 다 있으면 통과를 남긴다"""
+    _export(paths, items=("a",))
+    key = _jobs(paths)[0]["key"]
+    _result(paths, "toy-000.jsonl", [{"key": key, "output": {"text": "배"}, "source": "x"}])
+    _result(paths, "toy-001.jsonl", [{"key": key, "output": {"text": "사과"}, "source": "y"}])
+    assert llm_jobs.import_results(paths)["toy"] == {"ok": 1, "failed": 0, "unknown": 0, "duplicate": 1, "bad": 0}
+    assert _export(paths, items=("a",))[0]["a"] == {"text": "사과"}
+
+
+def test_non_object_output_not_stored(paths):
+    _export(paths, items=("a",))
+    _result(paths, "toy.jsonl", [{"key": _jobs(paths)[0]["key"], "output": "라벨이 든 문자열", "source": "x"}])
+    assert llm_jobs.import_results(paths)["toy"]["failed"] == 1
+    assert "라벨" not in (paths["llm_cache"] / "toy.jsonl").read_text(encoding="utf-8")
+
+
+def test_instructions_include_forbidden_topics():
+    """API도 Claude Code와 같은 금지 토픽을 본다"""
+    got = llm_jobs.instructions({"field": "t", "forbidden_patterns": ["턱관절"], "length": [1, 2]})
+    assert got == {"must_mention": [], "avoid_words": [], "avoid_patterns": ["턱관절"], "length_chars": [1, 2]}
