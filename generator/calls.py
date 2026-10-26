@@ -44,14 +44,21 @@ def _weighted(rng, weights: dict) -> str:
     return names[int(rng.choice(len(names), p=[weights[k] / total for k in names]))]
 
 
-def _is_open(d: date, holidays) -> bool:
+def is_open(d: date, holidays) -> bool:
     return open_slots(d.weekday()) > 0 and d not in holidays
 
 
-def _prev_open_day(d: date, holidays) -> date:
+def prev_open_day(d: date, holidays) -> date:
     d -= timedelta(days=1)
-    while not _is_open(d, holidays):
+    while not is_open(d, holidays):
         d -= timedelta(days=1)
+    return d
+
+
+def next_open_day(d: date, holidays) -> date:
+    d += timedelta(days=1)
+    while not is_open(d, holidays):
+        d += timedelta(days=1)
     return d
 
 
@@ -170,7 +177,7 @@ def _booking_events(led: Ledger, purpose: str, run, rng) -> list[tuple[dict, str
     out = []
     for a in appts:
         if a["confirmed"]:
-            day = _prev_open_day(date.fromisoformat(a["at"][:10]), run.holidays)
+            day = prev_open_day(date.fromisoformat(a["at"][:10]), run.holidays)
             t = datetime.combine(day, OPEN) + timedelta(minutes=int(rng.integers(1, DAY_MINUTES)))
             out.append((a, t.strftime(FMT)))
     return out
@@ -184,7 +191,7 @@ def stage_slots(run, rng, fake) -> None:
     led = Ledger(run.conn)
     n = run.cfg["calls_with_transcript"]
     days = [run.range_start + timedelta(days=i) for i in range((run.today - run.range_start).days)]
-    days = [d for d in days if _is_open(d, run.holidays)]
+    days = [d for d in days if is_open(d, run.holidays)]
     slots = []
     for purpose, k in quota(CALL_PURPOSE_SHARE, n).items():
         out_share = CALL_OUTBOUND_SHARE.get(purpose, 0) / CALL_PURPOSE_SHARE[purpose]
