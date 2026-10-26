@@ -181,6 +181,29 @@ BREAKS = {
     "pre_window_noshow": (PRE + _pre(1, "2026-09-15 10:00:00", status="noshow"), "check_pre_window_visit"),
     "pre_window_before_registration": (PRE + _pre(1, "2024-12-20 10:00:00", created="2024-12-10 10:00:00"),
                                        "check_pre_window_visit"),
+    # 주의사항 (4b단계): 대상 조건(기록일 나이·성별), 출처 규칙, 기록일, 환자당 ≤ 3개
+    "alert_unknown_code": ("UPDATE emr_patient_alerts SET code = 'NOPE' WHERE id = 1", "check_foreign_keys"),
+    "alert_future": ("UPDATE emr_patient_alerts SET recorded_at = '2026-12-02' WHERE id = 1", "check_timestamps_not_future"),
+    "alert_htn_child": ("UPDATE emr_patient_alerts SET code = 'HTN' WHERE id = 2", "check_alert_target"),
+    "alert_pregnant_male": ("UPDATE emr_patient_alerts SET code = 'PREGNANT' WHERE id = 1", "check_alert_target"),
+    "alert_child_coop_adult": ("UPDATE emr_patient_alerts SET code = 'CHILD_COOP' WHERE id = 1", "check_alert_target"),
+    "alert_before_registration": ("UPDATE emr_patient_alerts SET recorded_at = '2024-12-01' WHERE id = 1", "check_alert_recorded_at"),
+    "intake_not_on_rule_date": ("UPDATE emr_patient_alerts SET recorded_at = '2026-10-06' WHERE id = 1", "check_alert_recorded_at"),
+    "intake_with_appointment": ("UPDATE emr_patient_alerts SET appointment_id = 1 WHERE id = 1", "check_alert_source"),
+    "intake_code_as_visit": ("UPDATE emr_patient_alerts SET source = 'visit', recorded_at = '2026-10-06', appointment_id = 1"
+                             " WHERE id = 1", "check_alert_source"),
+    "visit_code_as_intake": ("UPDATE emr_patient_alerts SET source = 'intake', recorded_at = '2025-01-01', appointment_id = NULL"
+                             " WHERE id = 3", "check_alert_source"),
+    "visit_alert_unrelated_procedure": ("UPDATE emr_patient_alerts SET appointment_id = 2, recorded_at = '2026-11-03' WHERE id = 3",
+                                        "check_alert_source"),  # 스케일링은 마취 시술 아님
+    "visit_alert_other_day": ("UPDATE emr_patient_alerts SET recorded_at = '2026-10-07' WHERE id = 3", "check_alert_source"),
+    "visit_alert_on_noshow": ("UPDATE emr_patient_alerts SET appointment_id = 7, recorded_at = '2026-11-24' WHERE id = 3",
+                              "check_alert_source"),
+    "visit_alert_without_appointment": ("UPDATE emr_patient_alerts SET appointment_id = NULL WHERE id = 3", "check_alert_source"),
+    "visit_alert_other_patient": ("UPDATE emr_patient_alerts SET patient_id = 2 WHERE id = 3", "check_alert_source"),
+    "four_alerts": ("INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at) VALUES"
+                    " (1, 'PENICILLIN', 'intake', '2025-01-01'), (1, 'FEAR', 'intake', '2025-01-01')",
+                    "check_alerts_per_patient"),
     "caller_phone_real": ("UPDATE ax_calls SET caller_phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
     "real_phone": ("UPDATE emr_patients SET phone = '010-1234-5678' WHERE id = 2", "check_fake_phone"),
 }
@@ -430,3 +453,38 @@ def test_pre_window_scaling_last_year_not_claimed(tmp_path):
     assert verify.check_insured_claim_one_line(conn, CTX) == []
     _pre_window_scaling(conn, "2025-11-04 10:00:00", claim_status="paid")
     assert verify.check_insured_claim_one_line(conn, CTX)
+
+
+def test_intake_alert_of_returning_patient_on_pre_window_visit(tmp_path):
+    """구환 문진 기록일 = 창 이전 마지막 내원일 (그 내원이 있으면). 대상 나이도 그날 기준"""
+    conn = make_db(tmp_path)
+    conn.execute(PRE + _pre(1, "2026-09-15 10:00:00"))
+    assert verify.check_alert_recorded_at(conn, CTX)  # 등록일(2025-01-01) 기록은 이제 어긋남
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-09-15' WHERE id = 1")
+    assert verify.check_alert_recorded_at(conn, CTX) == []
+
+
+def test_intake_alert_of_new_patient_on_registration(tmp_path):
+    """신환(등록일 ≥ 창 시작) 문진 기록일 = 등록일"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-10-02' WHERE id = 1")
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-02' WHERE id = 1")
+    assert verify.check_alert_recorded_at(conn, CTX) == []
+    conn.execute("UPDATE emr_patient_alerts SET recorded_at = '2026-10-03' WHERE id = 1")
+    assert verify.check_alert_recorded_at(conn, CTX)
+
+
+def test_visit_alert_not_on_pre_window_visit(tmp_path):
+    """진료 중 발견은 창 안 completed 내원만 (창 이전 내원은 대상 아님 — §2.6 (1))"""
+    conn = make_db(tmp_path)
+    conn.execute(PRE + _pre(1, "2026-09-15 10:00:00"))  # 창 이전 스케일링 — 구역반사 관련 시술
+    pre_id = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+    conn.execute("INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at, appointment_id)"
+                 " VALUES (1, 'GAG', 'visit', '2026-09-15', ?)", (pre_id,))
+    assert verify.check_alert_source(conn, CTX)
+
+
+def test_alert_unique_per_patient_code(tmp_path):
+    conn = make_db(tmp_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at) VALUES (1, 'HTN', 'intake', '2025-01-01')")

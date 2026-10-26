@@ -54,7 +54,7 @@ tags:
 - **구환** = `range_start` 전 등록. 차트 번호는 등록순
 - 파생(쿼리): 마지막 내원일, 가족 리콜 지남(가족 구성원 `MAX(내원) + recall_cycle < 기준일`)
 - 연령 구간·비중은 `master.AGE_BANDS`. 비중은 추첨 없이 비중 × 인원을 반올림한 인원으로 맞춘다. 환자의 `master.FAMILY_SHARE`가 `master.FAMILY_SIZE`명 가족으로 묶이고, 소아는 100% 같은 가족 성인이 보호자. 소아 전화는 보호자 번호를 같이 쓴다(나머지는 환자마다 고유). 실손 `master.PRIVATE_INSURANCE_SHARE`, 이름은 전부 한국 이름, `recall_cycle_months`는 전원 `master.RECALL_CYCLE_MONTHS`. 노인 나이 상한 `master.MAX_AGE`
-- **주의사항**(`emr_patient_alerts` — 예전 `emr_patients.note`는 없앴다): 환자당 0~3개, 행마다 주의사항 코드·기록일·출처(`intake` 등록 시 문진 / `visit` 진료 중 발견)·발견한 내원. 정의(문구·행동·관련 시술·대상 연령·성별·비율)는 `master` 목록(4b단계 구현 때 추가 — 항목은 [[치과 AX - 기능 정의]] §9). 4b단계가 자기 시드로 만든다: 문진분은 구환·신환 모두 기록일 = 등록일, 진료 중 발견분(마취가 잘 안 됨·구역반사·마취 후 실신)은 관련 시술을 받은 창 안 completed 내원 일부에 기록일 = 그 내원일(그날 차트에도 서술, §4.3). 장부에서 계산되는 사실(노쇼·미수·지난 스케일링)은 두지 않는다. 기록일 이후에만 보인다 — ④ 준비표·`query_patient`·통화 fact 모두 그 시점 기준
+- **주의사항**(`emr_patient_alerts`): 환자당 0~`master.MAX_ALERTS_PER_PATIENT`개, 행마다 주의사항 코드·기록일·출처(`intake` 문진 / `visit` 진료 중 발견)·발견한 내원. 정의(문구·행동·관련 시술·대상 연령·성별·비율)는 `master.ALERT_TYPES`이고, 코드·문구·분류만 `emr_alert_types`에 적재한다(앱이 문구를 읽도록 — `emr_procedures`와 같은 방식). 4b단계가 자기 시드로 만든다: 문진분은 기록일 = 신환은 등록일, 구환은 창 이전 마지막 내원일(그때 문진을 갱신한 것으로 봄 — 등록일로 두면 10년 전 나이로 대상이 정해지고 오래된 '임신 중'·'협조 어려운 소아'가 준비표에 뜬다. 결정 2026-10-26), 대상 판정도 기록일 나이로. 문진이 상한을 넘으면 그중 균등하게 남긴다. 진료 중 발견분(마취가 잘 안 됨·구역반사·마취 후 실신)은 관련 시술을 받은 창 안 completed 내원 일부에 기록일 = 그 내원일(그날 차트에도 서술, §4.3). 장부에서 계산되는 사실(노쇼·미수·지난 스케일링)은 두지 않는다. 기록일 이후에만 보인다 — ④ 준비표·`query_patient`·통화 fact 모두 그 시점 기준
 
 ### 2.3 예약·진료
 
@@ -79,7 +79,7 @@ tags:
 - **대조 키** `(chart_no, service_date, procedure_code, tooth_no)` UNIQUE — 심사결과 대조용. 제출 월 결과 정답(`outcome`)은 `truth_claims`에만(앱 DB 쪽 전자 레코드는 슬롯 메모 ⑤-1)
 
 **심사 결과 추첨**(확정 월 `emr_claims`, 정형 5단계. 제출 월 `truth_claims`는 슬롯 착수 때 같은 규칙으로. `missing`·`extra`는 심사결과 대조 결과라 장부에 없음)
-1. **타 기관 이력**: 급여 스케일링 줄 중 `master.EXTERNAL_SCALING_DENY_RATE`는 denied + 외부 이력 사유(연 1회 초과) — 환자가 다른 치과에서 그해 이미 받은 경우. 우리 장부로는 오류가 아니라 `truth_claim_errors`에 넣지 않고, 데스크가 미리 알 수 없어 ⑤-2 대상도 아니다(현장 빈도 확인 필요)
+1. **타 기관 이력**: 급여 스케일링 줄 중 `master.EXTERNAL_SCALING_DENY_RATE`는 denied + 외부 이력 사유(연 1회 초과) — 환자가 다른 치과에서 그해 이미 받은 경우. 우리 장부로는 오류가 아니라 `truth_claim_errors`에 넣지 않고, 데스크가 미리 알 수 없어 ⑤-2 대상도 아니다(빈도는 추정값 — 판정 규칙은 빈도와 무관)
 2. **그 밖의 줄**: 시술군(`master.adjust_group` — 요건 사유가 있는 임상 시술 / 그 밖)별 `master.REVIEW_OUTCOME_WEIGHTS`로 paid / adjusted / denied. 임상 시술이 주로 깎인다(스케일링·검진·단순발치에는 요건 사유가 없다). 깎인 줄은 사유 유형을 시술군별 `master.ADJUST_TYPE_WEIGHTS`(요건 / 장부 밖 / 상병)로 뽑고 그 유형 안에서 그 시술에 맞는 상세 사유를 균등 추첨
 
 - 금액: paid → `paid_amount = claim_amount` / adjusted → `claim_amount` × `master.ADJUSTED_PAID_RANGE`, 10원 단위 내림 + 사유 / denied → `paid_amount = 0` + 사유(전액 조정. 반송해 보완하게 하는 심사불능은 두지 않는다 — 기재 누락도 조정으로)
@@ -293,7 +293,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 영역 | 검사 |
 |---|---|
 | 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.source_*`)는 타입별 조인 |
-| TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
+| TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date`·`recorded_at` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 충돌 | 같은 환자 같은 날 중복 없음 (§1 운영 제약은 생성 코드가 보장 — 기능이 의존하지 않아 검사하지 않음) |
 | 예약 | `created_at` < `scheduled_at`; 취소는 `created_at` ≤ `cancelled_at` < `scheduled_at`; `cancelled_at`은 cancelled에만(cancelled는 필수); `confirmed`는 리마인드 대상(직전 진료일 전에 잡혔고 그날까지 취소되지 않음 — §2.6 (3) 4)만; 취소는 변경 쌍의 원래 예약 또는 TODAY 이전 당일 취소뿐; 변경 쌍 = 원래 예약은 cancelled·새 `created_at` = 원래 `cancelled_at`; 예약류 통화 시각 == 대응 이벤트 시각(확인 통화는 리마인드 날, 리마인드 문자 `sent_at` 이후); 예약 이벤트 수 ≥ 그 목적 통화 수(6단계, LLM 전); 창 이전 내원(`scheduled_at` < 창 시작)은 환자당 completed 위생 1행·등록일 < 내원일 |
 | 시술·청구 | 진료 기록은 completed 예약에만, completed 예약은 정확히 1행; `performed_at` == 예약 일시; 진료 금액은 수가대로(급여 여부는 `master.insured_on` — 급여면 본인부담률로 나눔, 비급여면 전액 본인부담); `service_date` == 진료일; 비급여(`master.CONDITIONAL_INSURED_MIN_AGE` 미만 conditional 포함)는 claims에 없음; 스케일링 급여 `master.SCALING_MIN_AGE`↑ 연 1회; (`truth_claims`가 있을 때만) `extra_in_claim_review` 대조 키가 `emr_claims`와 겹치지 않음, 제출 월 `emr_claims` ↔ `truth_claims` 1:1(`claim_id`·대조 키·금액 일치), `extra_in_claim_review`도 제출 월 진료일; `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖; 전월 `pending`은 제출일 없음; 확정 월은 paid(금액 그대로·사유 없음) / adjusted(일부·사유) / denied(0원·사유), 사유는 `master.ADJUST_REASONS`의 상세 사유 하나와 일치(범주 문자·서술 템플릿, 그 시술에 맞음 — 외부 이력은 급여 스케일링 denied만); 창 안 급여 completed 진료는 청구가 정확히 1줄(창 이전은 그해 급여 스케일링만 1줄 `paid`)(코드·치아·금액 일치), 청구 줄은 `master` 급여 조건(나이·연 횟수·적용 연령)을 모두 충족 |
@@ -302,7 +302,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; `emr_chart_notes` 컬럼은 허용 목록만(특이·디코이·요건 충족 컬럼 없음); **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음 |
 | 결정성 | 같은 시드 2회 → `app.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일(`indexed_at`·`ax_chunk_vectors.embedding` 제외 — 임베딩 API 출력은 실행마다 비트 단위로 같지 않음). `make verify` 밖 — `tests/test_generator.py` |
 | 차트 | 진료 기록 1건당 `emr_chart_notes` 정확히 1행; 임상 요건형 시술 줄은 전부 서술; `truth_chart_notes.is_special` ⇔ (임상 요건형 오류 줄 ∪ 임상 요건형 시술 줄); 본문에 환자 이름·정답 어휘 없음; 근거 사실(치아 번호·시술 별칭) 존재 |
-| 주의사항 | 대상 조건(연령·성별 — `master`) 충족; 기록일 ≥ 등록일; `visit` 출처는 관련 시술의 completed 내원과 연결되고 기록일 = 그 내원일; 환자당 ≤ 3개 |
+| 주의사항 | 문진은 대상 조건(기록일 나이·성별 — `master.ALERT_TYPES`) 충족; 출처가 정의와 같음; 기록일 ≥ 등록일, 문진 기록일 = 신환 등록일 / 구환 창 이전 마지막 내원일; `visit` 출처는 같은 환자의 창 안 관련 시술 completed 내원과 연결되고 기록일 = 그 내원일; 환자당 ≤ `master.MAX_ALERTS_PER_PATIENT`개; (환자, 코드) 유일은 스키마 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
 **경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만 둔다. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일 등 추첨이 일어날 수 있었던 것만 센다. 설계 목표라 숫자를 여기 둔다 — 값의 원본은 '값 위치'의 코드이고, 둘이 어긋나면 `tests/test_doc_sync.py`가 실패한다)
@@ -321,7 +321,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 통화 | 라벨 enum 유효; 화자 형식; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 < 20%; 복수 주제는 `accepted_purposes` ≥ 2 |
 | RAG | (`rag_qa.json` 있을 때) 거절형 답이 어느 문서에도 없음(키워드); 질문 어휘가 정답 문단에 그대로 있는 비율 < 30% |
 
-**리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외), 잔액 있음 비율(준비표 범위 = 최근 `verify.PREP_SHEET_DAYS`일 + 오늘의 예약, 잔액 있음 정의는 [[치과 AX - 앱 설계]] §3 `has_unpaid_balance`)
+**리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring): 하루 채움(평균·최저, 시작 후 `master.MAX_LEAD_DAYS`일 제외), 잔액 있음 비율(준비표 범위 = 최근 `verify.PREP_SHEET_DAYS`일 + 오늘의 예약, 잔액 있음 정의는 [[치과 AX - 앱 설계]] §3 `has_unpaid_balance`), 주의사항 1개 이상 보유 비율(전체·연령 구간별)
 
 verify를 생성기보다 **먼저** 작성(TDD).
 

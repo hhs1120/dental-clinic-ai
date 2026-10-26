@@ -99,3 +99,11 @@ def test_reports_print_without_failing(tmp_path, capsys):
     conn = make_db(tmp_path)
     assert verify.run(conn, CTX) is True
     assert "[INFO] report_balance_holder_share" in capsys.readouterr().out
+
+
+def test_alert_holder_report(tmp_path):
+    """주의사항 1개 이상 보유 비율 — 전체·연령 구간별(TODAY 나이). 시드: 1번(성인)·2번(소아) 모두 보유"""
+    conn = make_db(tmp_path)
+    assert verify.report_alert_holder_share(conn, CTX) == {"n": 2, "share": 1.0, "adult": 1.0, "child": 1.0}
+    conn.execute("DELETE FROM emr_patient_alerts WHERE patient_id = 2")
+    assert verify.report_alert_holder_share(conn, CTX) == {"n": 2, "share": 0.5, "adult": 1.0, "child": 0.0}

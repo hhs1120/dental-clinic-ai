@@ -53,6 +53,24 @@ CREATE TABLE emr_patients (
     has_private_insurance  INTEGER NOT NULL DEFAULT 0
 );
 
+-- 주의사항 정의 (§2.2). 관련 시술·행동·대상·비율은 master.ALERT_TYPES에만
+CREATE TABLE emr_alert_types (
+    code     TEXT PRIMARY KEY,
+    label    TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('systemic', 'allergy', 'procedure'))
+);
+
+-- 환자 주의사항 (§2.2, 4b단계). intake = 문진(appointment_id 없음), visit = 진료 중 발견(발견한 내원)
+CREATE TABLE emr_patient_alerts (
+    id             INTEGER PRIMARY KEY,
+    patient_id     INTEGER NOT NULL REFERENCES emr_patients(id),
+    code           TEXT NOT NULL REFERENCES emr_alert_types(code),
+    source         TEXT NOT NULL CHECK (source IN ('intake', 'visit')),
+    recorded_at    TEXT NOT NULL,  -- 기록일 'YYYY-MM-DD'. 이 날부터 보인다
+    appointment_id INTEGER REFERENCES emr_appointments(id),
+    UNIQUE (patient_id, code)
+);
+
 CREATE TABLE emr_appointments (
     id                     INTEGER PRIMARY KEY,
     patient_id             INTEGER NOT NULL REFERENCES emr_patients(id),

@@ -7,7 +7,7 @@
          예약 이벤트 공급(목적별 이벤트 수 ≥ 통화 수 — 6단계),
          누출(풀 마킹 카테고리 추론·분류기 입력 덤프·emr_chart_notes 허용 컬럼), RAG 전부(청구 기준 문서의 상세 사유마다 절 1개 포함),
          truth_claim_errors 목록 검사(5b단계),
-         주의사항(4b단계), 차트(5b단계)
+         차트(5b단계)
   경고 — 목적·노이즈 분포, 문자, 통화, RAG, 차트 디코이 비율
 결정성 2회 비교는 make verify가 아니라 tests/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
@@ -28,9 +28,9 @@ from pathlib import Path
 import yaml
 
 from generator.paths import SCALES, output_paths
-from generator.master import (ADJUST_REASONS, AGE_BANDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
+from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, MAX_ALERTS_PER_PATIENT, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH, MAX_LEAD_DAYS,
                               PROCEDURES, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX, age_on, daily_cap,
-                              insured_on, open_slots)
+                              age_band, insured_on, open_slots)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -106,7 +106,7 @@ def check_no_records_after_today(conn, ctx):
 
 
 def check_timestamps_not_future(conn, ctx):
-    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date ≤ TODAY"""
+    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date·recorded_at ≤ TODAY"""
     today = ctx.today.isoformat()
     return (
         _rows(conn, "SELECT 'emr_appointments.created_at' AS tbl, id, created_at AS at FROM emr_appointments"
@@ -123,6 +123,8 @@ def check_timestamps_not_future(conn, ctx):
                       " WHERE date(sent_at) > ?", today)
         + _rows(conn, "SELECT 'ax_calls' AS tbl, id, started_at AS at FROM ax_calls"
                       " WHERE date(started_at) > ?", today)
+        + _rows(conn, "SELECT 'emr_patient_alerts' AS tbl, id, recorded_at AS at FROM emr_patient_alerts"
+                      " WHERE date(recorded_at) > ?", today)
     )
 
 
@@ -417,6 +419,66 @@ def check_payment_per_visit(conn, ctx):
     return bad + _rows(conn, "SELECT id, amount_due FROM emr_payments WHERE kind = 'settlement' AND amount_due != 0")
 
 
+# ── 주의사항 ────────────────────────────────────────────────
+
+def _alerts(conn) -> list[dict]:
+    return _rows(conn, "SELECT al.*, p.birth_date, p.sex, p.registered_at FROM emr_patient_alerts al"
+                       " JOIN emr_patients p ON p.id = al.patient_id ORDER BY al.id")
+
+
+def check_alert_target(conn, ctx):
+    """문진 주의사항은 master.ALERT_TYPES 대상 규칙(기록일 나이·성별) 중 하나에 맞음"""
+    bad = []
+    for r in _alerts(conn):
+        rules = ALERT_TYPES.get(r["code"], {}).get("rules", [])
+        age = age_on(date.fromisoformat(r["birth_date"]), date.fromisoformat(r["recorded_at"]))
+        if r["source"] == "intake" and not any(lo <= age and (hi is None or age <= hi) and sex in (None, r["sex"])
+                                               for lo, hi, sex, _ in rules):
+            bad.append({**r, "age": age})
+    return bad
+
+
+def check_alert_source(conn, ctx):
+    """출처가 master 정의와 같음. intake는 내원 없음, visit은 같은 환자의 창 안 completed 내원 중
+    관련 시술이고 기록일 = 그 내원일"""
+    appts = {r["id"]: r for r in _rows(conn, "SELECT id, patient_id, scheduled_at, status, planned_procedure_code"
+                                             " FROM emr_appointments")}
+    bad = []
+    for r in _alerts(conn):
+        a = ALERT_TYPES.get(r["code"])
+        if a is None or a["source"] != r["source"]:
+            bad.append({**r, "reason": "출처가 정의와 다름"})
+        elif r["source"] == "intake" and r["appointment_id"] is not None:
+            bad.append({**r, "reason": "문진에 내원 연결"})
+        elif r["source"] == "visit":
+            v = appts.get(r["appointment_id"])
+            if v is None or v["patient_id"] != r["patient_id"] or v["status"] != "completed" \
+                    or _dt(v["scheduled_at"]).date() < ctx.range_start or v["planned_procedure_code"] not in a["procedures"] \
+                    or _dt(v["scheduled_at"]).date().isoformat() != r["recorded_at"]:
+                bad.append({**r, "reason": "발견 내원이 맞지 않음", "appointment": v})
+    return bad
+
+
+def check_alert_recorded_at(conn, ctx):
+    """기록일 ≥ 등록일. 문진 기록일 = 신환은 등록일, 구환은 창 이전 마지막 completed 내원일(없으면 등록일)"""
+    pre = dict(conn.execute("SELECT patient_id, max(date(scheduled_at)) FROM emr_appointments"
+                            " WHERE status = 'completed' AND date(scheduled_at) < ? GROUP BY patient_id",
+                            (ctx.range_start.isoformat(),)).fetchall())
+    bad = []
+    for r in _alerts(conn):
+        expected = r["registered_at"] if r["registered_at"] >= ctx.range_start.isoformat() \
+            else pre.get(r["patient_id"], r["registered_at"])
+        if r["recorded_at"] < r["registered_at"] or (r["source"] == "intake" and r["recorded_at"] != expected):
+            bad.append({**r, "expected": expected})
+    return bad
+
+
+def check_alerts_per_patient(conn, ctx):
+    """환자당 주의사항 ≤ MAX_ALERTS_PER_PATIENT개"""
+    return _rows(conn, "SELECT patient_id, count(*) AS n FROM emr_patient_alerts GROUP BY patient_id HAVING n > ?",
+                 MAX_ALERTS_PER_PATIENT)
+
+
 # ── 누출 ────────────────────────────────────────────────────
 
 # shared/schema.sql의 ax_calls 컬럼(의미는 가상 데이터 생성 설계 §3). 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
@@ -482,6 +544,19 @@ def report_balance_holder_share(conn, ctx):
                              " WHERE patient_id = ? AND date(paid_at) < ?", (r["patient_id"], r["d"])).fetchone()[0] > 0
                 for r in rows)
     return {"n": len(rows), "share": round(owing / len(rows), 3)}
+
+
+def report_alert_holder_share(conn, ctx):
+    """주의사항 1개 이상 보유 비율 — TODAY까지 등록한 환자 전체와 연령 구간별(TODAY 나이). 기록일과 무관하게 센다"""
+    holders = {r[0] for r in conn.execute("SELECT DISTINCT patient_id FROM emr_patient_alerts")}
+    by_band = defaultdict(list)
+    for r in _rows(conn, "SELECT id, birth_date FROM emr_patients WHERE registered_at <= ?", ctx.today.isoformat()):
+        by_band[age_band(age_on(date.fromisoformat(r["birth_date"]), ctx.today))].append(r["id"] in holders)
+    flags = [f for fs in by_band.values() for f in fs]
+    if not flags:
+        return {"n": 0}
+    return {"n": len(flags), "share": round(sum(flags) / len(flags), 3),
+            **{band: round(sum(fs) / len(fs), 3) for band, fs in by_band.items()}}
 
 
 def check_visit_mix(conn, ctx):
@@ -551,6 +626,10 @@ REQUIRED = [
     check_balance_non_negative,
     check_visit_payment_completed,
     check_payment_per_visit,
+    check_alert_target,
+    check_alert_source,
+    check_alert_recorded_at,
+    check_alerts_per_patient,
     check_ax_calls_columns,
     check_call_uid_format,
     check_fake_phone,
@@ -563,6 +642,7 @@ WARNINGS = [
 REPORTS = [
     report_daily_fill,
     report_balance_holder_share,
+    report_alert_holder_share,
 ]
 
 

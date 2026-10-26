@@ -66,3 +66,22 @@ def test_insured_on():
     assert insured_on(by_name["실란트"], 12) and not insured_on(by_name["실란트"], 13)
     assert insured_on(by_name["임플란트 1차"], 65) and not insured_on(by_name["임플란트 1차"], 64)
     assert insured_on(by_name["신경치료"], 5) and not insured_on(by_name["레진"], 40)
+
+
+def test_alert_types():
+    # §2.2·기능 정의 §9: 주의사항 17개 — 문진(intake)은 대상 규칙(나이 범위·성별·비율), 진료 중 발견(visit)은 관련 시술 내원 비율
+    from generator.master import ALERT_TYPES
+    procedure_codes = {p["code"] for p in PROCEDURES}
+    assert len(ALERT_TYPES) == 17
+    assert len({a["label"] for a in ALERT_TYPES.values()}) == len(ALERT_TYPES)
+    for code, a in ALERT_TYPES.items():
+        assert a["category"] in {"systemic", "allergy", "procedure"}, code
+        assert a["source"] in {"intake", "visit"}, code
+        assert a["action"] and a["procedures"] and a["procedures"] <= procedure_codes, code
+        if a["source"] == "intake":
+            assert a["rules"] and "rate" not in a, code
+            for lo, hi, sex, rate in a["rules"]:
+                assert 0 <= lo and (hi is None or lo <= hi) and sex in (None, "M", "F") and 0 < rate < 1, code
+        else:
+            assert not a["rules"] and 0 < a["rate"] < 1, code
+    assert sorted(c for c, a in ALERT_TYPES.items() if a["source"] == "visit") == ["ANES_FAIL", "GAG", "SYNCOPE"]

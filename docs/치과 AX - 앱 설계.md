@@ -96,3 +96,4 @@ tags:
 - [ ] 리랭커 — Cohere vs LLM 리랭킹(Haiku) 비교 결과로 확정
 - [ ] 홈 화면·네비 (와이어프레임에서)
 - [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)
+- [ ] 주의 칩의 관련 시술·행동을 backend가 읽는 방법 (④ 착수 시) — 원본은 `generator/master.py` `ALERT_TYPES`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱 DB에는 코드·문구·분류(`emr_alert_types`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다

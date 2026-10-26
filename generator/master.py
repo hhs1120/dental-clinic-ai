@@ -169,6 +169,52 @@ def insured_on(procedure: dict, age: int) -> bool:
     lo, hi = _AGE_GROUP_RANGE.get(procedure["age_group"], (0, None))
     return lo <= age and (hi is None or age <= hi)
 
+# 주의사항 (§2.2, 4b단계). emr_alert_types에 code·label·category를 적재하고, 관련 시술·행동·대상·비율은 여기에만 둔다.
+# 관련 시술 = 그날 예정 시술이 여기 있으면 ④ 주의 칩이 켜진다(평가 설계 §4 반영률). 행동은 ④ 요약·차트(5b)의 처리 문구.
+# intake: rules = [(최소 나이, 최대 나이(포함, None = 상한 없음), 성별(None = 모두), 비율)] — 문진 기록일 나이로 판정
+# visit(진료 중 발견): rate = 관련 시술을 창 안에서 받은 환자 중 비율, 그 내원 하나에 기록
+_P = {p["name"]: p["code"] for p in PROCEDURES}
+_ALL = frozenset(_P.values())
+_SURGERY = frozenset(_P[n] for n in ("단순발치", "사랑니 발치", "임플란트 1차"))
+_BLEEDING = _SURGERY | {_P["스케일링"], _P["잇몸치료"]}
+_ANESTHESIA = _SURGERY | frozenset(_P[n] for n in ("레진", "아말감/GI", "인레이", "신경치료", "크라운", "브릿지", "잇몸치료"))
+_LONG_OPEN = frozenset(_P[n] for n in ("인레이", "신경치료", "크라운", "브릿지", "사랑니 발치", "임플란트 1차"))
+_IMPRESSION = frozenset(_P[n] for n in ("인레이", "크라운", "브릿지"))
+_ADULT, _SENIOR = (19, 64), (65, None)
+_ALERT_ROWS = [
+    # (code, label, category, action, 관련 시술, intake rules 또는 visit 비율)
+    ("HTN", "고혈압", "systemic", "진료 전 혈압 측정", _ANESTHESIA, [(*_ADULT, None, 0.08), (*_SENIOR, None, 0.40)]),
+    ("DM", "당뇨", "systemic", "혈당 확인 후 진행, 감염 주의", _SURGERY | {_P["잇몸치료"]},
+     [(*_ADULT, None, 0.04), (*_SENIOR, None, 0.25)]),
+    ("ANTICOAG", "항응고제 복용", "systemic", "복용 여부 확인, 지혈 준비", _BLEEDING,
+     [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.15)]),
+    ("OSTEO", "골다공증 약 복용", "systemic", "약 종류·복용 기간 확인 후 원장 판단", _SURGERY,
+     [(*_SENIOR, "F", 0.15), (*_SENIOR, "M", 0.02)]),
+    ("PROSTHESIS", "인공관절·인공판막", "systemic", "예방 항생제 필요 여부 확인", _BLEEDING, [(*_SENIOR, None, 0.06)]),
+    ("PREGNANT", "임신 중", "systemic", "방사선·약 처방 최소화, 원장 확인", _ANESTHESIA, [(19, 44, "F", 0.03)]),
+    ("LATEX", "라텍스 알레르기", "allergy", "비라텍스 장갑 사용", _ALL, [(0, None, None, 0.01)]),
+    ("PENICILLIN", "페니실린 알레르기", "allergy", "항생제 처방 시 대체 약", _SURGERY | {_P["신경치료"]},
+     [(0, None, None, 0.05)]),
+    ("EPI", "에피네프린 민감", "allergy", "무에피 마취제 준비", _ANESTHESIA, [(19, None, None, 0.03)]),
+    ("CLAUSTRO", "폐소공포증", "procedure", "러버댐·장시간 진료 시 중간 휴식", _LONG_OPEN, [(13, None, None, 0.05)]),
+    ("TRISMUS", "개구 제한", "procedure", "짧게 나눠 진행", _LONG_OPEN, [(19, None, None, 0.02)]),
+    ("FEAR", "치과 공포", "procedure", "시술 전 충분히 설명하고 천천히 진행", _ALL, [(0, None, None, 0.06)]),
+    ("CHILD_COOP", "협조 어려운 소아", "procedure", "보호자 동반, 짧게 진행", _ALL,
+     [(0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child"), None, 0.15)]),
+    ("UPRIGHT", "체어 눕히지 말고 진료", "procedure", "체어를 세운 자세로 진료", _ALL,
+     [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.06)]),
+    ("ANES_FAIL", "마취가 잘 안 됨", "procedure", "마취 추가 준비, 시간 여유", _ANESTHESIA, 0.05),
+    ("GAG", "구역반사", "procedure", "상체를 세우고 구역반사 대비", _IMPRESSION | {_P["스케일링"]}, 0.04),
+    ("SYNCOPE", "마취 후 실신 이력", "procedure", "눕힌 자세로 마취, 마취 후 관찰", _ANESTHESIA, 0.01),
+]
+ALERT_TYPES = {
+    code: {"label": label, "category": category, "action": action, "procedures": frozenset(procs),
+           **({"source": "visit", "rules": [], "rate": target} if isinstance(target, float)
+              else {"source": "intake", "rules": target})}
+    for code, label, category, action, procs, target in _ALERT_ROWS
+}
+MAX_ALERTS_PER_PATIENT = 3
+
 # 치아 단위 시술의 치아 후보 (§2.1). 뽑기만 한다 — 순서 고정을 위해 정렬된 튜플(frozenset 순회 순서는 실행마다 다름)
 _WISDOM = tuple(f"{q}8" for q in (1, 2, 3, 4))
 _MOLARS_6_7 = tuple(f"{q}{n}" for q in (1, 2, 3, 4) for n in (6, 7))
