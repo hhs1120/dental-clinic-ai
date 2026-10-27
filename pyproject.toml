@@ -12,7 +12,10 @@ generator = [
     "numpy",
     "pyyaml",
 ]
-dev = ["pytest"]
+dev = [
+    "pytest",
+    "ruff==0.16.10",
+]
 
 [tool.uv]
 default-groups = ["generator", "dev"]  # uv sync·uv run 기본 — 앱 착수 때 backend 그룹 추가
@@ -20,3 +23,16 @@ default-groups = ["generator", "dev"]  # uv sync·uv run 기본 — 앱 착수 �
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+# 코드 컨벤션: PEP 8을 ruff로 (CLAUDE.md '코드 컨벤션'). 코드 줄은 PEP 8이 허용하는 최대 99자로 포매터가 맞추고,
+# 한국어 독스트링·주석·긴 문자열은 줄 길이 검사(E501)에서 뺀다
+[tool.ruff]
+line-length = 99
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["generator", "evaluation", "shared", "tests"]
