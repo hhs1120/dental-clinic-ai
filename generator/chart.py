@@ -10,7 +10,7 @@
 """
 import json
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import numpy as np
 
@@ -48,6 +48,15 @@ CC = {CODE[n]: cc for n, cc in {
 }.items()}
 
 
+# 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
+CC_NO_EVIDENCE = {"R01": ("예전에 치료한 이가 신경 쓰여요",), "R03": ("잇몸 상태 확인하러 왔어요",),
+                  "R04": ("아이 치아 관리 받으러 왔어요",), "R06": ("임플란트 치료 받으러 왔어요",)}
+# 요건 근거를 드러내는 말 (§4.3) — 근거가 있으면 그 말을 꼭 넣고(R01은 사유마다 하나), 없으면 모두 금지
+EVIDENCE_WORDS = {"R01": ("파절", "2차 우식"), "R02": ("재평가",), "R04": ("소와열구",), "R05": ("매복", "골삭제"),
+                  "R06": ("무치악",)}
+R01_REASON_WORD = {"기존 충전물 파절": "파절", "2차 우식": "2차 우식"}
+
+
 def _pick(rng, seq):
     return seq[int(rng.integers(len(seq)))]
 
@@ -74,6 +83,12 @@ def _lines(run) -> list[dict]:
     return rows
 
 
+def _prior_course(r, treated: dict) -> date | None:
+    """같은 치아·같은 시술을 다른 코스에서 한 마지막 날 — 코스 안 반복(신경치료 2회차)은 이어지는 치료라 재시행이 아니다"""
+    days = [day for day, root in treated[r["patient_id"]].get((r["tooth"], r["code"]), ()) if root != r["root"]]
+    return max(days) if days else None
+
+
 def _requirement(r, treated: dict, scaled: dict) -> str | None:
     """요건 사유 키 (창 안 급여 줄만) — 확정 월 요건 사유로 깎였으면 그 사유, 아니면 시술 규칙"""
     if not (r["window"] and r["claimed"]):
@@ -84,8 +99,8 @@ def _requirement(r, treated: dict, scaled: dict) -> str | None:
         if r["code"] == PERIO_CODE and _last_scaling(r, scaled) is not None:
             return "R02"
         return CHART_REQUIREMENT[r["code"]]
-    if r["code"] in ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"] and (r["tooth"], r["code"]) in treated[r["patient_id"]]:
-        return RETREATMENT_REQUIREMENT  # 같은 치아·같은 시술을 다시 — 같은 치아의 다음 단계 치료(신경치료 뒤 충전)는 아님
+    if r["code"] in ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"] and _prior_course(r, treated):
+        return RETREATMENT_REQUIREMENT  # 다른 코스에서 같은 치아·같은 시술 — 같은 치아의 다음 단계 치료(신경치료 뒤 충전)는 아님
     return None
 
 
@@ -100,7 +115,7 @@ def _requirement_facts(rng, key: str, evidence: bool, r, treated: dict, scaled: 
     (other_clinic)으로 둔다. 장부 날짜를 지어내면 ⑤-3이 장부를 보고 모순을 찾는다"""
     f = {"key": key, "evidence": evidence}
     if key == "R01":
-        prev = treated[r["patient_id"]].get((r["tooth"], r["code"]))
+        prev = _prior_course(r, treated)
         if prev:
             f["prev_days"] = (r["day"] - prev).days
         else:
@@ -147,10 +162,9 @@ def _alerts(run) -> dict:
     return by_patient
 
 
-def _plan(r, episode: dict, later: dict) -> dict | None:
-    """다음 계획 — 그 시점에 잡혀 있던(created ≤ 그날) 같은 코스의 이후 예약 수, 위생 내원은 다음 정기 검진"""
-    ep = episode.get(r["appointment_id"])
-    remaining = sum(1 for appt_day, created in later.get(ep, ()) if appt_day > r["day"] and created <= r["day"])
+def _plan(r, course_left: dict) -> dict | None:
+    """다음 계획 — 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획), 위생 내원은 다음 정기 검진"""
+    remaining = course_left.get(r["appointment_id"])
     if remaining:
         return {"remaining": remaining}
     if r["code"] in HYGIENE_CODES:
@@ -163,18 +177,15 @@ def stage_facts(run, rng, fake) -> None:
     조건에 따라 뽑는 횟수가 달라도 다른 줄이 밀리지 않게). 심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 그대로"""
     settled_rng, open_rng, fact_rng = rng.spawn(3)
     fact_seed = int(fact_rng.integers(1 << 62))
-    episode = run.state["episode"]
-    later = defaultdict(list)  # 에피소드 → (예약일, 예약을 잡은 날) (취소 제외)
-    for appt_id, day, created in run.conn.execute(
-            "SELECT id, date(scheduled_at), date(created_at) FROM emr_appointments WHERE status != 'cancelled'"):
-        if appt_id in episode:
-            later[episode[appt_id]].append((date.fromisoformat(day), date.fromisoformat(created)))
+    course_left = run.state["course_left"]
     alerts = _alerts(run)
-    treated = defaultdict(dict)  # 환자 → (치아, 시술) → 마지막 진료일
+    episode = run.state["episode"]  # 예약 → 코스. 창 이전 내원은 없음 — 예약마다 따로
+    treated = defaultdict(lambda: defaultdict(list))  # 환자 → (치아, 시술) → [(진료일, 코스)]
     extracted = defaultdict(dict)  # 환자 → 치아 → 발치일
     scaled = defaultdict(list)
     lines, errors = [], []
     for r in _lines(run):
+        r["root"] = episode.get(r["appointment_id"], ("pre", r["appointment_id"]))
         key = _requirement(r, treated, scaled)
         error = None
         if r["window"] and r["claimed"]:
@@ -198,11 +209,13 @@ def stage_facts(run, rng, fake) -> None:
                    if recorded <= day and (ends is None or day < ends)]
         facts = {
             "procedure": NAME[r["code"]], "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
-            "cc": _pick(rng, CC[r["code"]]), "findings": _findings(rng, r, requirement), "requirement": requirement,
+            "cc": _pick(rng, CC_NO_EVIDENCE.get(key, CC[r["code"]]) if requirement and not requirement["evidence"]
+                        else CC[r["code"]]),
+            "findings": _findings(rng, r, requirement), "requirement": requirement,
             "alerts": [{"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]} for c, appt in visible
                        if appt != r["appointment_id"] and r["code"] in ALERT_TYPES[c]["procedures"]],
             "discovered": [ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]],
-            "plan": _plan(r, episode, later),
+            "plan": _plan(r, course_left),
         }
         lines.append({"id": r["id"], "window": r["window"], "code": r["code"], "dx": dx, "requirement": key,
                       "evidence": None if key is None else int(error != "requirement"),
@@ -210,7 +223,7 @@ def stage_facts(run, rng, fake) -> None:
         if error:
             errors.append((r["id"], error, key if error == "requirement" else None))
         if r["tooth"] != FULL_MOUTH:
-            treated[r["patient_id"]][(r["tooth"], r["code"])] = r["day"]
+            treated[r["patient_id"]][(r["tooth"], r["code"])].append((r["day"], r["root"]))
         if r["code"] in EXTRACTION_CODES:
             extracted[r["patient_id"]][r["tooth"]] = r["day"]
         if r["code"] == SCALING_CODE:
@@ -332,7 +345,7 @@ NARRATIVE_SCHEMA = {
     "additionalProperties": False,
 }
 # 가짜 모드(테스트)는 채우지 않는다 — 초안이 그대로 남는다
-NARRATIVE_TASK = Task(name="chart", prompt="gen_chart/v1", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
+NARRATIVE_TASK = Task(name="chart", prompt="gen_chart", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
 
 
 def _period(days: int) -> str:
@@ -341,26 +354,34 @@ def _period(days: int) -> str:
 
 
 def _requirement_words(req: dict) -> list[str]:
+    """요건 수치 + 근거가 있으면 근거 말"""
     key = req["key"]
     if key == "R01":
-        return [f"{req['prev_months']}개월" if req.get("other_clinic") else _period(req["prev_days"])]
+        period = f"{req['prev_months']}개월" if req.get("other_clinic") else _period(req["prev_days"])
+        return [period] + ([R01_REASON_WORD[req["reason"]]] if req["evidence"] else [])
     if key == "R02":
-        return [f"{req['scaling_days_ago']}일"]
+        return [f"{req['scaling_days_ago']}일"] + (["재평가"] if req["evidence"] else [])
     if key == "R04":
         return ["소와열구" if req["evidence"] else "충전물"]
     if key == "R05" and req["impaction"]:
-        return [req["impaction"]]
+        return [req["impaction"], "골삭제"]
     if key == "R06" and req.get("extracted_days_ago"):
-        return [_period(req["extracted_days_ago"])]
+        return [_period(req["extracted_days_ago"]), "무치악"]
     if key == "R06" and req.get("other_clinic"):
-        return [f"{req['edentulous_months']}개월"]
+        return [f"{req['edentulous_months']}개월", "무치악"]
     return []
 
 
-def narrative_must_include(f: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(별칭)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
+def evidence_forbidden(f: dict) -> list[str]:
+    """근거 없는 요건 줄에 쓰면 안 되는 근거 말"""
+    req = f["requirement"]
+    return list(EVIDENCE_WORDS.get(req["key"], ())) if req and not req["evidence"] else []
+
+
+def narrative_must_include(f: dict) -> list[list[str]]:
+    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
-    out.append(names.get(f["procedure"], [f["procedure"]]))
+    out.append([f["procedure"]])
     if f["findings"]:
         out.append([f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
@@ -381,14 +402,14 @@ def narrative_payload(f: dict, draft: str) -> dict:
     return {"facts": facts, "draft": draft}
 
 
-def narrative_checks(f: dict, names: dict, patient_name: str) -> dict:
-    return {"field": "note", "must_include": narrative_must_include(f, names),
-            "forbidden_words": [*CHART_FORBIDDEN_WORDS, patient_name], "forbidden_patterns": llm_jobs.forbidden_patterns()}
+def narrative_checks(f: dict, patient_name: str) -> dict:
+    return {"field": "note", "must_include": narrative_must_include(f),
+            "forbidden_words": [*CHART_FORBIDDEN_WORDS, *evidence_forbidden(f), patient_name],
+            "forbidden_patterns": llm_jobs.forbidden_patterns()}
 
 
 def stage_narratives(run, rng, fake) -> None:
     ctx = run.state["llm"]
-    names = llm_jobs.procedure_names(run.conn)
     rows = run.conn.execute(
         "SELECT n.treatment_id, n.note, c.facts, p.name FROM emr_chart_notes n"
         " JOIN truth.truth_chart_notes c USING (treatment_id) JOIN emr_treatments t ON t.id = n.treatment_id"
@@ -396,6 +417,6 @@ def stage_narratives(run, rng, fake) -> None:
     for treatment_id, draft, facts, patient_name in rows:
         f = json.loads(facts)
         out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), narrative_payload(f, draft),
-                          narrative_checks(f, names, patient_name))
+                          narrative_checks(f, patient_name))
         if out is not None:
             run.conn.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (out["note"], treatment_id))

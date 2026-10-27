@@ -1,8 +1,9 @@
 """병원 마스터 — 생성기와 verify가 함께 쓰는 값의 원본. 의미·규칙은 docs/치과 AX - 가상 데이터 생성 설계.md §1·§2"""
 
+import json
 from datetime import date, timedelta
 
-CLINIC_NAME = "AX치과"  # 가상 병원
+CLINIC_NAME = "클로드치과"  # 가상 병원
 
 # 직원 구성 (§1). (role, 인원). 진료=원장, 위생=위생사(순환), 상담=상담실장
 STAFF = [("doctor", 1), ("hygienist", 3), ("desk", 2), ("consultant", 1)]
@@ -81,6 +82,9 @@ _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
 COURSE_VISITS = (2, 4)  # 양 끝 포함
+# 치아 번호가 영구치(PERMANENT_TEETH)뿐이라 영구치가 나기 전 나이에는 치료 수요가 없다 — 이 나이 미만은 위생(신환은 상담도)만
+TOOTH_TREATMENT_MIN_AGE = 6
+MIN_VISIT_AGE = 1  # 첫 등록(첫 내원) 나이 하한 — 젖니가 나기 전 영아는 등록하지 않는다
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
 # 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
@@ -145,9 +149,17 @@ _ROWS = [
 _KEYS = ("code", "name", "category", "is_insured", "fee_total", "duration_min",
          "insured_limit", "limit_scope", "age_group", "is_tooth_level")
 
-# aliases는 비어 있다(스키마 기본값 '[]') — 채울지는 기능 정의 §9
+# 구어 별칭 (§2.1 aliases) — 전사의 꼭 넣을 시술 검사(글자 포함)·검색 동의어(차트는 표준 이름만). 다른 시술과 겹치는 말·
+# 낱말이 아닌 조각은 넣지 않는다(때우는 — 레진과, 발치 — 사랑니 발치와, 교정 — 교정 상담과, '이 뽑' — '아이 뽑'에도 맞음)
+PROCEDURE_ALIASES = {
+    "스케일링": ["치석 제거"], "구강검진": ["검진"], "불소도포": ["불소"], "실란트": ["홈 메우기", "홈메우기"],
+    "아말감/GI": ["아말감"], "신경치료": ["신경 치료"], "브릿지": ["브리지"], "단순발치": ["단순 발치"],
+    "사랑니 발치": ["사랑니"], "임플란트 1차": ["임플란트"], "임플란트 2차": ["임플란트"],
+    "교정 월 체크": ["교정 체크", "교정 점검"], "미백": ["화이트닝"], "잇몸치료": ["잇몸 치료"],
+}
 PROCEDURES = [
-    {**dict(zip(_KEYS, row)), "patient_share_rate": 1.0 if row[3] == "no" else 0.3}
+    {**dict(zip(_KEYS, row)), "patient_share_rate": 1.0 if row[3] == "no" else 0.3,
+     "aliases": json.dumps(PROCEDURE_ALIASES.get(row[1], []), ensure_ascii=False)}
     for row in _ROWS
 ]
 
@@ -354,8 +366,8 @@ CALL_OUTBOUND_SHARE = {"recall": 0.08, "confirm": 0.04, "billing_q": 0.03, "docu
 OUTBOUND_MULTI_SHARE = 0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
 CALL_NOISE_SHARE = {"two_topics": 0.10, "interrupted": 0.08, "ambiguous_pain": 0.04, "guardian_confused": 0.03}
 # 상대 분포(§4.1) — 목표가 아니라 근사(상대는 목적·환자에서 정해짐). 리포트로만 본다
-CALL_COUNTERPART_SHARE = {"patient": 0.60, "guardian": 0.15, "new_caller": 0.15, "insurer": 0.03, "vendor": 0.04,
-                          "other": 0.03}
+# 상대 enum. 비율은 정하지 않는다 — 예약류는 이벤트 환자, 그 밖은 CALL_COUNTERPART_WEIGHTS에서 나온다(리포트로만)
+CALL_COUNTERPARTS = ("patient", "guardian", "new_caller", "insurer", "vendor", "other")
 URGENCIES = ("urgent", "normal", "low")
 # 목적별 상대 가중(%) — 예약류 아닌 목적. side = 환자 측(통화일에 소아면 guardian, 아니면 patient). outbound는 항상 side
 CALL_COUNTERPART_WEIGHTS = {
@@ -389,9 +401,9 @@ CALL_URGENCY_WEIGHTS = {"normal": 85, "low": 15}  # emergency 플래그·애매�
 APPT_CONFIRMED_SHARE = 0.7                    # book·reschedule 중 appt_confirmed
 HAS_TODO_SHARE = {"confirm": 0.3, "recall": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
 HAS_TODO_DEFAULT = 0.8
-CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 1~3분 분량(§4.1 절차 5)
+CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 분량(§4.1 절차 5)
 # 통화 전사 (§4.1 '7단계 구현 결정'). 발화 글자 수(화자 표시·공백 제외) ÷ 이 값 = 통화 길이(초)
-TRANSCRIPT_CHARS_PER_SEC = 4
+TRANSCRIPT_CHARS_PER_SEC = 3.5  # 말 사이 틈·조회 대기를 포함한 통화 평균
 # 라벨 어휘 — 전사에 그대로 나오면 검증 실패(§4.1 절차 6(b)). 목적 이름(§4.1 목적 분포 표)과 그 조각
 CALL_LABEL_WORDS = ("예약 잡기", "예약 변경", "예약 확인", "예약 취소", "리콜", "치료 문의", "보험 문의", "가격 문의",
                     "비용 문의", "수납 문의", "청구 문의", "서류 요청", "기록 요청", "응급", "불만")

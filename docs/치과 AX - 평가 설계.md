@@ -34,6 +34,7 @@ tags:
 4. **분수 병기.** 모수가 작아(RAG dev 20·6·5·4문항, 분류 dev 판정 풀의 절반 — 카테고리별로는 몇 건) 1문항이 5~25%p를 움직임. 퍼센트만 쓰지 않음
 5. **폴백 건 제외.** `ax_llm_calls.fallback_used`면 활성 모델 결과가 실제로는 폴백 모델 출력 → 블라인드·정확도 집계에서 제외
 6. **재샘플링하지 않음.** 생성 분포의 치우침([[치과 AX - 가상 데이터 생성 설계]] §4.1)은 가중/단순 평균 병기로 드러냄
+7. **EMR 지름길은 평가 입력에 넣지 않음.** 통화 뒤 EMR에 남는 결과가 라벨을 드러내는 경우가 있다 — 서류·기록 요청 통화 다음 진료일의 준비 완료 문자(`doc_ready`), 확정 예약 통화 시각에 생긴 예약. 분류는 `classify(transcript, direction)`만 받으므로 지표에는 영향이 없고, EMR을 조인하는 기능(④·요약)의 평가에서 이 연결을 정답 근거로 쓰지 않는다
 
 ## 2. 통화 분류 (①·②)
 
@@ -161,6 +162,7 @@ tags:
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |
 | `truth_claim_qa` | 사람(슬롯 ⑤ 착수 시, 조건부) | ⑤-3 청구 기준 질문과 정답 절(상세 사유 → 절은 생성 규칙에서, 질문 규칙은 §5). `truth_rag_qa`와 같은 형식, ③ 평가에는 쓰지 않음 |
+| `truth_appointment_courses` | 생성기(4단계) | 예약 → 코스(수요 에피소드). 앱 DB에는 없음(회차 추적 없음) — 5b R01(다른 코스의 재시행)과 verify가 읽는다 |
 | `truth_claim_errors` | 생성기(정형 5b단계) | 청구 기록에 심은 오류(전 기간)·종류 — 상병 착오·임상 요건형 오류를 5b단계가 채운다. 키 `treatment_id`, 진료 1건당 최대 1개. ⑤-2·⑤-3 정답, verify 제외 목록(목록도 검사 — 가상 데이터 생성 설계 §5.3). 컬럼은 `ground_truth/schema.sql` |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.

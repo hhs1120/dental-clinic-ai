@@ -2,14 +2,14 @@
 폴더는 generator/llm/(cache 커밋, jobs·results 일회용) — 입력·출력에 라벨이 들어 있어 앱이 읽는 data/ 밖에 둔다.
 - 단계는 건마다 LLMContext.resolve(작업, 건 id, 입력, 검증 기준)를 부른다: 캐시에 통과한 출력이 있으면 그것,
   없으면 작업을 모아 두고 None. 생성이 끝나면 finish()가 빈 건을 jobs/<작업>.jsonl에 쓴다(build.py가 멈춤)
-- 작업 한 줄은 완결: 시스템 프롬프트(prompts/<task>/<version>.md)·사용자 입력(JSON — 검증 기준에서 뽑은
-  must_mention·avoid_words·avoid_patterns·length_chars 포함)·출력 스키마·검증 기준·캐시 키
+- 작업 한 줄은 완결: 시스템 프롬프트(prompts/<task>.md)·사용자 입력(JSON — 검증 기준에서 뽑은
+  must_mention(별칭이 있으면 후보 목록)·avoid_words·avoid_patterns·length_chars 포함)·출력 스키마·검증 기준·캐시 키
 - 채우기: API(fill-api — 게이트웨이 Batch) 또는 Claude Code(/fill-llm-jobs — split·check). 결과는 results/*.jsonl,
   파일 이름은 작업 이름으로 시작, 한 줄 = {key, output | error, source}. 캐시·결과 파일·진행 중 배치에 있는 작업은 다시 채우지 않는다
 - 들여오기(import): 건별 검증 → 캐시(cache/<작업>.jsonl, 한 줄 = 한 시도)에 ok/failed. 출력은 Task.store 필드만 남긴다
   (전사의 scenario는 라벨을 풀어 쓴 문장이라 버림). 실패는 다음 시도 번호로 다시, MAX_ATTEMPTS번 넘게 실패하면 멈춤
 - 가짜 모드(테스트)는 FakeGateway로 채우고 캐시·검증을 건너뛴다. fake=False 작업(차트 서술)은 채우지 않는다(초안 유지)
-CLI: python -m generator.llm_jobs {import, check FILE, split [--size N], fill-api --task T}
+CLI: python -m generator.llm_jobs {import, check FILE, split [--size N], fill-api --task T [--limit N]}
 """
 import argparse
 import hashlib
@@ -39,7 +39,7 @@ REPORT_KEYS = ("ok", "failed", "unknown", "duplicate", "bad")
 @dataclass(frozen=True)
 class Task:
     name: str  # 캐시·작업 파일 이름
-    prompt: str  # 'gen_transcript/v1' — prompts/ 아래 파일 경로이자 prompt_version
+    prompt: str  # 'gen_transcript' — prompts/ 아래 파일 경로(.md 뺌). prompt_version은 여기에 내용 해시 앞 8자를 붙인다
     schema: dict  # 출력 JSON 스키마
     store: tuple[str, ...]  # 캐시에 남기는 출력 필드
     fake: bool = True  # 가짜 모드에서 FakeGateway로 채울지 (False면 그 건은 단계가 그대로 둔다)
@@ -69,7 +69,7 @@ def procedure_names(conn) -> dict[str, list[str]]:
 
 def instructions(checks: dict) -> dict:
     """검증 기준 중 쓰는 쪽이 알아야 하는 것 — 입력에 넣어 API·Claude Code가 같은 기준을 본다"""
-    out = {"must_mention": [alts[0] for alts in checks.get("must_include", [])],
+    out = {"must_mention": [alts if len(alts) > 1 else alts[0] for alts in checks.get("must_include", [])],
            "avoid_words": checks.get("forbidden_words", []), "avoid_patterns": checks.get("forbidden_patterns", [])}
     if checks.get("length"):
         out["length_chars"] = checks["length"]
@@ -142,7 +142,8 @@ class LLMContext:
                                       messages=[{"role": "user", "content": user_message(payload | instructions(checks))}])
             return r.data
         self.jobs.setdefault(task.name, [])
-        prompt_hash, input_hash = _hash(system), _hash([payload, checks])
+        prompt_hash = _hash(system)
+        input_hash = _hash([user_message(payload | instructions(checks)), checks])  # 모델이 받는 메시지 전부
         output, attempt = self._cache(task.name).find(item, prompt_hash, input_hash)
         if output is not None:
             return output
@@ -152,7 +153,7 @@ class LLMContext:
         used = simplify(payload) if simplify and attempt > SIMPLIFY_AFTER else payload
         self.jobs[task.name].append({
             "key": _hash([task.name, item, prompt_hash, input_hash, attempt]), "task": task.name, "item": item,
-            "attempt": attempt, "prompt_version": task.prompt, "prompt_hash": prompt_hash, "input_hash": input_hash,
+            "attempt": attempt, "prompt_version": f"{task.prompt}@{prompt_hash[:8]}", "prompt_hash": prompt_hash, "input_hash": input_hash,
             "system": system, "user": user_message(used | instructions(checks)), "schema": task.schema,
             "checks": checks, "store": list(task.store),
         })
@@ -184,6 +185,14 @@ def forbidden_patterns() -> list[str]:
 def contains(text: str, word: str) -> bool:
     """앞에 숫자가 붙지 않은 word가 있음 — '2월 5일'이 '12월 5일'에, '1회'가 '11회'에 맞지 않게"""
     return re.search(r"(?<!\d)" + re.escape(word), text) is not None
+
+
+def has_word(text: str, word: str) -> bool:
+    """금지 어휘 검사 — contains, 띄어쓰기가 있는 말은 띄어쓰기를 무시('예약 변경' 금지가 '예약변경'도 잡는다).
+    한 낱말은 그대로 — 공백을 지우면 '요건'이 '필요 건수'에 맞는다"""
+    if " " in word:
+        return contains(text.replace(" ", ""), word.replace(" ", ""))
+    return contains(text, word)
 
 
 def spoken(text: str, speakers: list[str] | None) -> str:
@@ -230,7 +239,7 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
     text = output[checks["field"]]
     out = [f"꼭 넣을 사실 없음: {' / '.join(alts)}" for alts in checks.get("must_include", [])
            if not any(contains(text, a) for a in alts)]
-    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if w in text]
+    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if has_word(text, w)]
     out += [f"금지 토픽: {p}" for p in checks.get("forbidden_patterns", []) if re.search(p, text)]
     speakers = checks.get("speakers")
     if speakers:
@@ -364,9 +373,11 @@ class StaleBatch(RuntimeError):
     """저장된 배치가 지금 작업 파일과 맞지 않음 (프롬프트·입력이 바뀌어 make data가 작업을 다시 냄)"""
 
 
-def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = POLL_SEC) -> Path | None:
+def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = POLL_SEC,
+             limit: int | None = None) -> Path | None:
     """남은 작업을 Batch로 제출하고 끝날 때까지 기다려 결과 파일을 쓴다. 배치 번호·제출 키를 저장해 두어 끊긴 뒤 다시
-    부르면 이어서 기다린다. 거절·잘림·JSON 오류는 error 줄(실패 시도), 처리 안 된 건(오류·만료)은 줄 없음(같은 작업 그대로)"""
+    부르면 이어서 기다린다. 거절·잘림·JSON 오류는 error 줄(실패 시도), 처리 안 된 건(오류·만료)은 줄 없음(같은 작업 그대로).
+    limit(시험 채우기)이면 남은 작업에서 그만큼을 같은 간격으로 뽑는다"""
     state = paths["llm_jobs"] / f"{task}.batch.json"
     jobs = {j["key"]: j for j in _read_jsonl(paths["llm_jobs"] / f"{task}.jsonl")} \
         if (paths["llm_jobs"] / f"{task}.jsonl").exists() else {}
@@ -380,6 +391,8 @@ def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = 
         if not todo:
             print(f"{task}: 채울 작업 없음 (make data가 내보낸 작업이 없거나 전부 들여옴)")
             return None
+        if limit is not None and limit < len(todo):
+            todo = [todo[i * len(todo) // limit] for i in range(limit)]
         requests = [{"custom_id": j["key"], "system": j["system"], "schema": j["schema"],
                      "messages": [{"role": "user", "content": j["user"]}]} for j in todo]
         batch_id = gateway.submit_batch(ALIAS, requests, task=task, prompt_version=todo[0]["prompt_version"])
@@ -401,6 +414,13 @@ def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = 
     return out
 
 
+def _positive(text: str) -> int:
+    n = int(text)
+    if n < 1:
+        raise argparse.ArgumentTypeError("1 이상이어야 합니다")
+    return n
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -411,6 +431,7 @@ def main(argv=None) -> int:
     split.add_argument("--size", type=int, default=CHUNK_SIZE)
     fill = sub.add_parser("fill-api", help="작업 하나의 남은 작업을 Batch API로 채운다")
     fill.add_argument("--task", required=True)
+    fill.add_argument("--limit", type=_positive, help="시험용 — 남은 작업에서 같은 간격으로 N건만")
     args = parser.parse_args(argv)
     paths = output_paths()
     if args.cmd == "import":
@@ -431,7 +452,7 @@ def main(argv=None) -> int:
         return 0
     gateway = llm.Gateway(llm.load_config(), llm.JsonlLog(paths["llm_log"]), scope="generator")
     try:
-        fill_api(paths, args.task, gateway)
+        fill_api(paths, args.task, gateway, limit=args.limit)
     except StaleBatch as e:
         print(e)
         return 1

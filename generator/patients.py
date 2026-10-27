@@ -5,7 +5,7 @@
 """
 from datetime import date, timedelta
 
-from generator.master import (AGE_BANDS, FAMILY_SHARE, FAMILY_SIZE, GUARDIAN_MIN_AGE_GAP, MAX_AGE,
+from generator.master import (AGE_BANDS, FAMILY_SHARE, FAMILY_SIZE, GUARDIAN_MIN_AGE_GAP, MAX_AGE, MIN_VISIT_AGE,
                               PRIVATE_INSURANCE_SHARE, RECALL_CYCLE, RECALL_CYCLE_MONTHS, REGISTERED_FROM, add_years)
 from generator.seeding import stage_faker, stage_rng
 
@@ -80,11 +80,11 @@ def stage(run, rng, fake) -> None:
     bands = _exact_bands(rng, n)
     people = []
     for band in bands:
-        # 마지막 위생 내원 = 시뮬레이션 시작 전 한 리콜 주기에 고르게. 등록은 출생 후 ~ 그 전날
+        # 마지막 위생 내원 = 시뮬레이션 시작 전 한 리콜 주기에 고르게. 등록은 MIN_VISIT_AGE세 생일 ~ 그 전날
         last_hygiene = run.range_start - timedelta(days=int(rng.integers(1, RECALL_CYCLE.days + 1)))
         while True:
             birth = _birth(rng, band, run.today)
-            lo, hi = max(REGISTERED_FROM, birth + timedelta(days=1)), last_hygiene - timedelta(days=1)
+            lo, hi = max(REGISTERED_FROM, add_years(birth, MIN_VISIT_AGE)), last_hygiene - timedelta(days=1)
             if lo <= hi:
                 break
         sex = "M" if rng.random() < 0.5 else "F"

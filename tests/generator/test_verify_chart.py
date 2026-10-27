@@ -113,6 +113,20 @@ def test_retreatment_is_requirement_line(tmp_path):
 # ── 위반 (잡아야 함) ────────────────────────────────────────
 
 BREAKS = {
+    "plan_remaining_too_many": ("UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan', json('{\"remaining\": 9}'))"
+                                " WHERE treatment_id = 3", "check_chart_plan"),
+    "evidence_word_without_evidence": ("UPDATE truth.truth_chart_notes SET is_special = 1, requirement = 'R01',"
+                                       " evidence_present = 0, is_decoy = 0, facts = json_set(facts, '$.requirement',"
+                                       " json('{\"key\": \"R01\", \"evidence\": false, \"prev_days\": 30, \"reason\": null}'))"
+                                       " WHERE treatment_id = 3; UPDATE emr_chart_notes SET note = note || ' 충전물 파절'"
+                                       " WHERE treatment_id = 3", "check_chart_evidence_words"),
+    # 장부에 같은 치아·같은 시술이 있는데 '타 기관' 이력 — 1번 환자의 10/06 신경치료 26번을 같은 코스의 3번 줄로 다시
+    "r01_other_clinic_with_ledger": ("INSERT INTO truth.truth_appointment_courses VALUES (1, 9), (4, 9);"
+                                     " UPDATE emr_treatments SET patient_id = 1, tooth_no = '26', procedure_code = 'U0008'"
+                                     " WHERE id = 3; UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.requirement',"
+                                     " json('{\"key\": \"R01\", \"evidence\": true, \"other_clinic\": true,"
+                                     " \"prev_months\": 5, \"reason\": \"2차 우식\"}')) WHERE treatment_id = 3",
+                                     "check_requirement_facts"),
     "chart_missing": ("DELETE FROM emr_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "chart_truth_missing": ("DELETE FROM truth.truth_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "dx_unknown": ("UPDATE emr_chart_notes SET dx_code = 'D99' WHERE treatment_id = 1", "check_foreign_keys"),
@@ -140,6 +154,8 @@ BREAKS = {
                               "check_chart_text"),
     "note_without_tooth": ("UPDATE emr_chart_notes SET note = '레진 충전을 했습니다.' WHERE treatment_id = 3",
                            "check_chart_text"),
+    "note_with_alias_only": ("UPDATE emr_chart_notes SET note = '26번 치아 신경 치료를 진행했습니다. 마취가 잘 안 됨'"
+                             " WHERE treatment_id = 1", "check_chart_text"),  # 별칭(신경 치료)만 — 차트는 표준 이름
     "note_without_procedure": ("UPDATE emr_chart_notes SET note = '16번 치아를 치료했습니다.' WHERE treatment_id = 3",
                                "check_chart_text"),
     "note_without_discovered_alert": ("UPDATE emr_chart_notes SET note = '26번 치아 신경치료를 진행했습니다.'"
@@ -152,7 +168,7 @@ BREAKS = {
 def test_break_is_caught(tmp_path, case):
     sql, check = BREAKS[case]
     conn = make_db(tmp_path)
-    conn.execute(sql)
+    conn.executescript(sql)  # 여러 문장인 경우가 있다
     assert getattr(verify, check)(conn, CTX), f"{check}가 {case}를 못 잡음"
 
 

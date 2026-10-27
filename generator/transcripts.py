@@ -7,7 +7,7 @@ from datetime import date
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
-from generator.master import (AGE_BANDS, CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH,
+from generator.master import (AGE_BANDS, CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, CLINIC_NAME, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH,
                               PROCEDURES, SCALING_MIN_AGE, TRANSCRIPT_CHARS_PER_SEC)
 
 SPEAKERS = ["환자:", "직원:"]
@@ -20,7 +20,7 @@ SCHEMA = {
     "required": ["scenario", "transcript"],
     "additionalProperties": False,
 }
-TASK = Task(name="transcript", prompt="gen_transcript/v1", schema=SCHEMA, store=("transcript",))
+TASK = Task(name="transcript", prompt="gen_transcript", schema=SCHEMA, store=("transcript",))
 INTERNAL_KEYS = ("appointment_id", "id")  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게. 치아 '00'(전체 구강)은 None
 
 
@@ -61,9 +61,10 @@ def topic_price(name: str) -> dict:
 def payload(row: dict) -> dict:
     fact = json.loads(row["used_fact"])
     facts = _strip(fact)
-    if row["primary_purpose"] in PRICE_PURPOSES and fact.get("topic_procedure"):
+    if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get("topic_procedure"):  # 부 주제 포함
         facts["topic_price"] = topic_price(fact["topic_procedure"])
     return {
+        "clinic": CLINIC_NAME,
         "direction": row["direction"],
         "call_date": fact["call_date"],
         "labels": {"primary_purpose": row["primary_purpose"], "accepted_purposes": json.loads(row["accepted_purposes"]),
@@ -101,7 +102,7 @@ def checks(row: dict, names: dict) -> dict:
     lo, hi = CALL_DURATION_SEC
     return {"field": "transcript", "must_include": must_include(json.loads(row["used_fact"]), names),
             "forbidden_words": list(CALL_LABEL_WORDS), "forbidden_patterns": llm_jobs.forbidden_patterns(),
-            "speakers": SPEAKERS, "length": [lo * TRANSCRIPT_CHARS_PER_SEC, hi * TRANSCRIPT_CHARS_PER_SEC]}
+            "speakers": SPEAKERS, "length": [round(lo * TRANSCRIPT_CHARS_PER_SEC), round(hi * TRANSCRIPT_CHARS_PER_SEC)]}
 
 
 def duration_sec(transcript: str) -> int:

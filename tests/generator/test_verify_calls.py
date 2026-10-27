@@ -22,6 +22,14 @@ def test_valid_db_passes_call_checks(tmp_path):
     assert all(c in verify.REQUIRED for c in CALL_CHECKS)
 
 
+def test_unconfirmed_booking_call_precedes_booking(tmp_path):
+    """미확정 예약류 통화는 그날 예약 생성보다 앞 — 통화 뒤 회신해서 확정 (§4.1)"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE truth.truth_call_labels SET appt_confirmed = 0 WHERE call_uid = 'c-0003'")
+    conn.execute("UPDATE ax_calls SET started_at = '2026-10-02 10:00:00' WHERE id = 1")
+    assert verify.check_booking_call_event(conn, CTX) == []
+
+
 def _fact(conn, uid, **change):
     fact = json.loads(conn.execute("SELECT used_fact FROM truth.truth_call_labels WHERE call_uid = ?", (uid,)).fetchone()[0])
     fact.update(change)
@@ -72,6 +80,7 @@ BREAKS = {
     "row_order": ("UPDATE ax_calls SET started_at = '2026-11-28 10:00:00' WHERE id = 3", "check_call_row_order"),
     # 예약류 ↔ 이벤트
     "book_time_mismatch": ("UPDATE ax_calls SET started_at = '2026-10-02 11:05:00' WHERE id = 1", "check_booking_call_event"),
+    "unconfirmed_call_at_booking": (L + "appt_confirmed = 0 WHERE call_uid = 'c-0003'", "check_booking_call_event"),
     "book_on_desk_appt": ("UPDATE emr_appointments SET booked_via = 'desk' WHERE id = 1", "check_booking_call_event"),
     "reschedule_not_pair": ("UPDATE emr_appointments SET rescheduled_from_id = NULL WHERE id = 4", "check_booking_call_event"),
     "booking_other_patient": ("UPDATE ax_calls SET patient_id = 1, caller_phone = '010-0000-0001' WHERE id = 3",
@@ -245,3 +254,15 @@ def test_transcript_warnings(tmp_path):
     assert [v["id"] for v in verify.check_transcript_facts(conn, CTX)] == [1, 3]  # 1은 위에서 덮어씀, 3은 원래 날짜 11월 17일 없음
     conn.execute("UPDATE ax_calls SET transcript = '환자: 불만이 있어요\n직원: 네' WHERE id = 2")
     assert verify.check_transcript_label_words(conn, CTX)  # 4건 중 1건 = 25% ≥ 20%
+    conn.execute("UPDATE ax_calls SET transcript = '환자: 예약변경 하려고요\n직원: 네' WHERE id = 2")
+    assert verify.check_transcript_label_words(conn, CTX)  # 띄어쓰기만 다른 '예약 변경'
+
+
+def test_label_tokens_in_stored_text(tmp_path):
+    """저장 텍스트(전사·차트)에 영문 라벨 값(two_topics·urgent·R01 등)이 없음 — 경고"""
+    conn = make_db(tmp_path)
+    assert verify.check_label_tokens(conn, CTX) == [] and verify.check_label_tokens in verify.WARNINGS
+    conn.execute("UPDATE ax_calls SET transcript = '환자: 안녕하세요 [noise: two_topics]\n직원: 네' WHERE id = 2")
+    conn.execute("UPDATE emr_chart_notes SET note = note || ' (R01)' WHERE treatment_id = 3")
+    assert {(v["table"], v["token"]) for v in verify.check_label_tokens(conn, CTX)} == {("ax_calls", "two_topics"),
+                                                                                       ("emr_chart_notes", "R01")}

@@ -14,7 +14,7 @@ from generator.master import (CHECKUP_CODE, COURSE_INTERVAL_DAYS, COURSE_VISITS,
                               GUARDIAN_MIN_AGE_GAP, HOURS, HYGIENE_SCALING_BANDS, MAX_LEAD_DAYS, NEW_PATIENT_SHARE,
                               PLANNED_WEIGHTS, PROCEDURES, RESCHEDULE_MAX_DAYS, SAMEDAY_CANCEL_LEAD_MIN, SATURDAY,
                               SCALING_CODE, SCALING_MIN_AGE, SLOT_MIN, VISIT_MIX, RECALL_CYCLE_MONTHS, add_years,
-                              age_band, age_on, daily_cap, open_slots)
+                              MIN_VISIT_AGE, TOOTH_TREATMENT_MIN_AGE, age_band, age_on, daily_cap, open_slots)
 from generator.patients import new_patient_candidates
 
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
@@ -68,6 +68,7 @@ class Appt:
     confirmed: int = 0
     change_day: date | None = None
     episode: Episode | None = None  # 이 예약이 속한 수요 — 5단계가 코스 안에서 같은 치아를 유지하려고 (창 이전 내원은 None)
+    left: int | None = None  # 내원을 마친 시점의 코스 남은 횟수 — 5b 다음 계획 (completed만)
 
 
 class Sim:
@@ -247,6 +248,7 @@ class Sim:
                 p.scaling_years.add(d.year)
             p.recall_due = recall_due(self.rng, p.last_hygiene or d)
             p.ep.remaining -= 1
+            a.left = p.ep.remaining
             if p.ep.remaining == 0:
                 p.ep = None
                 continue
@@ -304,13 +306,15 @@ class Sim:
         for _ in range(k):
             while True:
                 c = next(self.candidates)
-                if c["birth_date"] >= d:  # 출생 전 등록 금지 — 버림
+                if age_on(c["birth_date"], d) < MIN_VISIT_AGE:  # 출생 전·영아 등록 금지 — 버림
                     continue
                 family = self.pick_family(c) if c["band"] == "child" else None
                 if c["band"] == "child" and family is None:
                     continue
                 break
             visit_type = self.weighted(VISIT_MIX)
+            if visit_type == "treatment" and age_on(c["birth_date"], d) < TOOTH_TREATMENT_MIN_AGE:
+                visit_type = "hygiene"  # 영구치가 나기 전 — 치아 단위 치료 대신 검진
             visits = 1
             if visit_type == "treatment":
                 mix = EPISODE_MIX[c["band"]]
@@ -390,10 +394,12 @@ class Sim:
             [(a.id, a.patient.id, a.staff_id, a.start.strftime(fmt), a.duration, a.type, a.code, a.status,
               a.rescheduled_from, a.booked_via, a.confirmed, a.created.strftime(fmt),
               a.cancelled.strftime(fmt) if a.cancelled else None) for a in self.appts])
-        # 예약 id → 에피소드 번호(처음 나온 순). DB에는 두지 않는다(회차 추적 없음) — 5단계 치아 유지에만
+        # 예약 id → 에피소드 번호(처음 나온 순) — 5단계 치아 유지, 5b R01. 앱 DB에는 두지 않는다(회차 추적 없음)
         numbers: dict[int, int] = {}
         self.run.state["episode"] = {a.id: numbers.setdefault(id(a.episode), len(numbers))
                                      for a in self.appts if a.episode is not None}
+        conn.executemany("INSERT INTO truth.truth_appointment_courses VALUES (?, ?)", self.run.state["episode"].items())
+        self.run.state["course_left"] = {a.id: a.left for a in self.appts if a.left}
 
 
 def stage(run, rng, fake) -> None:

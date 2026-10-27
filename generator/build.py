@@ -1,4 +1,4 @@
-"""생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체. 단계는 가상 데이터 생성 설계 §5.1.
+"""생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체, 정답 JSON. 단계는 가상 데이터 생성 설계 §5.1.
 LLM 단계(7·9·9b)는 캐시만 읽는다 — 빈 건이 있으면 끝까지 돌아 작업을 내보내고 DB를 바꾸지 않은 채 LLMMissing(generator/llm_jobs.py)."""
 import json
 import os
@@ -111,4 +111,24 @@ def generate(app_path: Path, truth_path: Path, config_path: Path, fake_llm: bool
         raise LLMMissing(missing, exhausted)
     os.replace(tmp_app, app_path)
     os.replace(tmp_truth, truth_path)
+    write_truth_json(truth_path)
     return run
+
+
+# 정답 JSON (평가 설계 §6 — git diff·리뷰용, truth.sqlite 옆). 파일 → (테이블, 정렬 키, JSON 문자열 컬럼)
+TRUTH_JSON = {
+    "call_labels.json": ("truth_call_labels", "call_uid", ("accepted_purposes", "used_fact")),
+    "doc_meta.json": ("truth_doc_meta", "doc_id", ("avoid_doc_ids", "planted_facts")),
+}
+
+
+def write_truth_json(truth_path: Path) -> None:
+    conn = sqlite3.connect(truth_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        for name, (table, key, json_cols) in TRUTH_JSON.items():
+            rows = [{k: json.loads(r[k]) if k in json_cols else r[k] for k in r.keys()}
+                    for r in conn.execute(f"SELECT * FROM {table} ORDER BY {key}")]
+            (truth_path.parent / name).write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    finally:
+        conn.close()

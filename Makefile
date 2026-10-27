@@ -11,7 +11,7 @@ llm-import:
 
 llm-fill-api:
 	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
-	uv run python -m generator.llm_jobs fill-api --task $(TASK)
+	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT))
 
 verify:
 	uv run python -m generator.verify

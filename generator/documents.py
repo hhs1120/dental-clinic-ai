@@ -21,7 +21,7 @@ SCHEMA = {
     "required": ["body"],
     "additionalProperties": False,
 }
-TASK = Task(name="document", prompt="gen_document/v1", schema=SCHEMA, store=("body",), fake=False)
+TASK = Task(name="document", prompt="gen_document", schema=SCHEMA, store=("body",), fake=False)
 
 
 def version(d: Doc) -> str:

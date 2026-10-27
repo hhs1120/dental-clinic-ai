@@ -66,6 +66,37 @@ def test_purpose_direction_noise_follow_quota(db):
         assert all(r["noise_type"] != "two_topics" for r in out)
 
 
+def test_unconfirmed_booking_calls_precede_booking(db):
+    """예약·변경 통화: 확정이면 통화 시각 = 예약 생성 시각, 미확정이면 그날 그보다 앞(회신해서 확정)"""
+    rows = db.execute("SELECT c.started_at, l.appt_confirmed, a.created_at FROM ax_calls c"
+                      " JOIN truth.truth_call_labels l USING (call_uid)"
+                      " JOIN emr_appointments a ON a.id = json_extract(l.used_fact, '$.appointment_id')"
+                      " WHERE l.primary_purpose IN ('book', 'reschedule')").fetchall()
+    assert all(t == created for t, ok, created in rows if ok)
+    unconfirmed = [(t, created) for t, ok, created in rows if not ok]
+    assert unconfirmed and all(t[:10] == created[:10] and t < created for t, created in unconfirmed)
+
+
+def test_price_subtopic_has_topic_procedure(db):
+    """부 주제가 가격 문의여도 주제 시술이 있다(가격 정보를 입력에 넣으려고) — 예약류는 그 예약의 시술"""
+    rows = db.execute("SELECT l.primary_purpose, l.used_fact FROM truth.truth_call_labels l"
+                      " WHERE l.accepted_purposes LIKE '%price_q%'").fetchall()
+    assert rows
+    for purpose, fact in rows:
+        f = json.loads(fact)
+        assert f.get("topic_procedure") in calls.PRICED, (purpose, f)  # 0원 시술(상담 등)의 가격은 묻지 않는다
+        if "appointment" in f and f["appointment"]["procedure"] in calls.PRICED:
+            assert f["topic_procedure"] == f["appointment"]["procedure"]
+
+
+def test_new_child_booking_is_guardian(db):
+    """처음 등록하는 소아의 예약 잡기는 기존 환자인 보호자가 건다 — 처음 연락이 아니라 보호자"""
+    rows = db.execute("SELECT l.counterpart FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+                      " JOIN emr_patients p ON p.id = c.patient_id WHERE l.primary_purpose = 'book'"
+                      " AND p.registered_at = date(c.started_at) AND p.guardian_patient_id IS NOT NULL").fetchall()
+    assert all(r[0] == "guardian" for r in rows)
+
+
 def _adjacent_same(purposes: list) -> tuple[int, float]:
     """이웃한 쌍 중 같은 카테고리 수와 셔플(무작위 순열)일 때의 기대값 Σ n_c(n_c − 1) / n"""
     same = sum(a == b for a, b in zip(purposes, purposes[1:]))
