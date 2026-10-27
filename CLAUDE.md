@@ -43,6 +43,12 @@
   - DB는 sqlite3에 SQL 그대로(ORM 없음)
 - Next.js(frontend 착수 때 켠다): ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`
 
+## 깃
+- 브랜치는 작업 묶음마다 `feat/<묶음>`(예: `feat/eval-set`) — main에서 따고, PR 머지 뒤 main에서 다음 브랜치
+- 커밋 메시지는 `<영역>: <무엇>` + 본문 글머리. 영역: `generator` · `eval` · `docs` · `claude`(`.claude/` 설정) · `chore`(도구·의존성) · `style`(동작 없는 정리)
+- `git add`는 파일 이름으로 — 폴더 단위·`-A` 금지(임시 파일이 커밋된 적이 있다)
+- PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`·`make test`를 돌린다
+
 ## 현재 단계
 진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.
 
