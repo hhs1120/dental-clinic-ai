@@ -30,6 +30,12 @@ spec.loader.exec_module(guard)
         "git commit -am 'msg'",
         "git commit -a -m msg",
         "git commit --all -m msg",
+        "git status\ngit add -A",  # 여러 줄 명령의 둘째 줄
+        "git add :/docs",  # pathspec 매직
+        "git add :.",
+        "env git add -A",
+        "sudo git add .",
+        "command git add -A",
     ],
 )
 def test_bulk_add_blocked(command):
@@ -52,6 +58,11 @@ def test_bulk_add_blocked(command):
 def test_other_commands_pass(command, monkeypatch):
     monkeypatch.setattr(guard, "lint_failure", lambda root: None)
     assert guard.check_bash(command, ROOT) is None
+
+
+def test_multiline_commit_still_linted(monkeypatch):
+    monkeypatch.setattr(guard, "lint_failure", lambda root: "E501")
+    assert guard.check_bash("git add a.py\ngit commit -m x", ROOT)
 
 
 def test_commit_blocked_when_lint_fails(monkeypatch):
@@ -129,6 +140,10 @@ def test_main_blocks_with_exit_2():
         "uv run python -m generator.llm_jobs fill-api --task chart",
         "uv run python -m evaluation.eval --split test --section retrieval",
         "uv run python -m evaluation.eval --section chat --split=test",
+        "git status\ngit push",
+        "git commit -F - <<'EOF' && git push\nm\nEOF",  # 히어독 여는 줄 뒤의 명령
+        "make -C . llm-fill-api TASK=x",
+        "make LIMIT=3 llm-fill-api TASK=x",
     ],
 )
 def test_costly_commands_ask(command):
@@ -170,7 +185,16 @@ def test_main_asks_with_json():
 
 
 @pytest.mark.parametrize(
-    "path", ["generator/calls.py", "generator/master.py", "prompts/gen_transcript.md"]
+    "path",
+    [
+        "generator/calls.py",
+        "generator/master.py",
+        "prompts/gen_transcript.md",
+        "config/generator.yaml",
+        "config/holidays.json",
+        "config/forbidden_topics.json",
+        "shared/schema.sql",
+    ],
 )
 def test_stage_edit_warns(path):
     assert "make data" in guard.check_post_edit(str(ROOT / path))
@@ -226,6 +250,20 @@ SCRATCH = "/private/tmp/claude-501/x/scratchpad"
         f"cp {SCRATCH}/a.sqlite data/app.sqlite",
         "uv run python -m evaluation.eval --split dev",
         "git branch -D feat/x",
+        "make",  # 첫 대상이 data
+        "ls\nrm -rf reports",
+        "cat <<EOF > notes.md\nx\nEOF",
+        "git branch newname",
+        "git branch -f main HEAD~1",
+        "git worktree add wt HEAD",
+        "git worktree remove /private/tmp/x",
+        "uv add requests",
+        "uv sync",
+        "find . -name '*.pyc' -delete",
+        "git ls-files | xargs rm",
+        "sed --in-place s/a/b/ CLAUDE.md",
+        "uv run pytest &>> out.log",
+        "uv run python generator/__main__.py",
     ],
 )
 def test_readonly_blocks_writes(command):
@@ -252,6 +290,12 @@ def test_readonly_blocks_writes(command):
         f"echo x > {SCRATCH}/out.txt",
         "uv run pytest -q 2>&1 | tail -3",
         "ls > /dev/null",
+        "make test 2>&1 | tail -3",
+        "make lint > /private/tmp/x.log",
+        f"uv run python -m evaluation.eval --split dev --reports-dir={SCRATCH}/r",
+        "git branch --list 'feat/*'",
+        "git branch -vv",
+        "git worktree list",
     ],
 )
 def test_readonly_allows_reading(command):

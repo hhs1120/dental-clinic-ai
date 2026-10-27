@@ -14,7 +14,7 @@
 - `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
-- `.claude/` Claude Code 설정 — 에이전트(`agents/` 리뷰어·문서 점검), 훅(`settings.json` → `hooks/guard.py`: 폴더 단위 add·`commit -a` 막기, 커밋 전 lint, 생성물 직접 수정 막기, push·PR 머지·LLM API·test 평가는 확인 창, 생성 단계 수정 알림. 테스트 `tests/test_claude_hooks.py`)
+- `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
 
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`를 import하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
@@ -30,7 +30,7 @@
 - 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/generator/test_doc_sync.py`에 비교를 추가한다
 
 ## 명령
-- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 착수 때 `backend` 그룹 추가
+- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 테스트·린트(pytest·ruff)는 `dev`, 앱은 착수 때 `backend` 그룹 추가
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 - `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — ruff, 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음)
@@ -40,7 +40,7 @@
 - 표준에 없는 이 프로젝트 관례:
   - 주석·독스트링은 한국어로, 규칙의 근거 문서 절을 가리킨다(예: `평가 설계 §3.2`). 모듈 첫 독스트링에 하는 일과 원본 문서
   - 값은 직접 쓰지 않고 `generator/master.py`·`config`·스키마의 이름으로 읽는다(위 절대 규칙)
-  - verify 검사는 `check_*(conn, ctx) → 위반 행 목록`, 독스트링 첫 줄이 출력되는 규칙 설명
+  - verify 검사는 `check_*(conn, ctx) → 위반 행 목록`, 독스트링이 실패·경고 때 출력되는 규칙 설명
   - DB는 sqlite3에 SQL 그대로(ORM 없음)
 - Next.js(frontend 착수 때 켠다): ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`
 

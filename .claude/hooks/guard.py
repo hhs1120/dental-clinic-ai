@@ -14,6 +14,10 @@ PostToolUse
 아니면 exit 0. 표준 라이브러리만 쓴다.
 """
 
+from __future__ import (
+    annotations,
+)  # 시스템 파이썬(3.9)으로 돌아도 주석 문법 때문에 죽지 않게 — 죽으면 훅이 조용히 꺼진다
+
 import json
 import re
 import shlex
@@ -31,6 +35,7 @@ GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
 # 고친 뒤 캐시 미스 확인을 알릴 파일 — 생성 결과를 바꾸지 않는 생성기 파일은 뺀다
 STAGE_FILES = re.compile(
     r"generator/(?!verify\.py|paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
+    r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/schema\.sql"
 )
 READONLY_GIT = {
     "status",
@@ -49,14 +54,18 @@ READONLY_GIT = {
     "shortlog",
 }
 READONLY_MAKE = {"test", "lint", "verify"}
+_MAKE_OPTS_WITH_ARG = {"-C", "-f", "-j", "-I", "-o", "-W", "--directory", "--file"}
+_PREFIX = {"env", "command", "sudo", "nice", "time", "exec"}  # 앞붙임 — 그 뒤가 진짜 명령
+_REDIRECTS = {">", ">>", "&>", "&>>", ">|"}
 ROOT = Path(__file__).resolve().parents[2]
-_HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n.*?\n\1[ \t]*(?:\n|$)", re.S)
+# 히어독은 본문만 지우고 여는 줄은 남긴다(여는 줄 뒤의 '&& git push'·'> 파일'도 검사하게)
+_HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\2[ \t]*(?=\n|$)", re.S)
 _SEPARATORS = {"&&", "||", ";", "|", "&", "\n", "(", ")"}
 
 
 def _segments(command: str) -> list[list[str]]:
     """명령 문자열 → 단순 명령들(토큰 목록). 히어독 본문은 지운다(커밋 메시지의 따옴표가 파싱을 깨지 않게)"""
-    lexer = shlex.shlex(_HEREDOC.sub("\n", command), posix=True, punctuation_chars=";&|()<>")
+    lexer = shlex.shlex(_HEREDOC.sub(r"\1", command), posix=True, punctuation_chars=";&|()<>\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     segments, current = [], []
@@ -66,7 +75,17 @@ def _segments(command: str) -> list[list[str]]:
             current = []
         else:
             current.append(token)
-    return [s for s in segments + [current] if s]
+    return [_unprefix(s) for s in segments + [current] if _unprefix(s)]
+
+
+def _unprefix(tokens: list[str]) -> list[str]:
+    """'env A=1 sudo git add .' → ['git', 'add', '.'] — 앞붙임과 변수 대입을 뗀다"""
+    i = 0
+    while i < len(tokens) and (
+        Path(tokens[i]).name in _PREFIX or re.fullmatch(r"\w+=.*", tokens[i])
+    ):
+        i += 1
+    return tokens[i:]
 
 
 def _git_subcommand(tokens: list[str]) -> tuple[str, list[str]] | None:
@@ -88,7 +107,7 @@ def _bulk_add(args: list[str], cwd: Path) -> str | None:
         if a == "--":
             continue
         if not a.startswith("-") and (
-            a in (".", ":/") or any(c in a for c in "*?[") or (cwd / a).is_dir()
+            a == "." or a.startswith(":") or any(c in a for c in "*?[") or (cwd / a).is_dir()
         ):
             return a
     return None
@@ -122,7 +141,8 @@ def check_bash(command: str, cwd: Path) -> str | None:
             commit = True
     if commit and (out := lint_failure(ROOT)):
         return (
-            f"커밋 전 `make lint` 실패 — `make fmt`로 정리하고 남은 것을 고친 뒤 커밋하라:\n{out}"
+            "커밋 전 `make lint` 실패(스테이징한 파일만이 아니라 작업 트리 전체 — CI와 같은 범위) — "
+            f"`make fmt`로 정리하고 남은 것을 고친 뒤 커밋하라:\n{out}"
         )
     return None
 
@@ -150,7 +170,8 @@ def check_ask(command: str) -> str | None:
         if tokens[:3] == ["gh", "pr", "merge"]:
             return "PR 머지 — 되돌리기 어려워 확인한다"
         if (
-            tokens[:2] == ["make", "llm-fill-api"]
+            Path(tokens[0]).name == "make"
+            and "llm-fill-api" in tokens
             or "fill-api" in tokens
             and any("llm_jobs" in t for t in tokens)
         ):
@@ -169,59 +190,109 @@ def check_readonly(command: str, cwd: Path) -> str | None:
     except ValueError:
         return "명령을 해석할 수 없다(따옴표) — 읽기 전용 에이전트는 해석되는 명령만 돌린다"
     for tokens in segments:
-        for i, t in enumerate(tokens):  # 저장소 안을 향한 리디렉션
-            if (
-                t in (">", ">>", "&>", ">|")
-                and i + 1 < len(tokens)
-                and tokens[i + 1] != "/dev/null"
-            ):
-                if _in_repo(tokens[i + 1], cwd):
-                    return f"저장소 안 파일로 리디렉션({tokens[i + 1]})"
-        sub = _git_subcommand(tokens)
-        if sub:
-            name, args = sub
-            if name not in READONLY_GIT:
-                return f"git {name}은 저장소를 바꾼다"
-            if name == "branch" and any(
-                a in ("-d", "-D", "-m", "-M", "--delete", "--move") for a in args
-            ):
-                return "git branch 삭제·이름 변경"
-            if (
-                name == "worktree"
-                and args[:1] == ["add"]
-                and any(_in_repo(a, cwd) for a in args[1:] if not a.startswith("-") and "/" in a)
-            ):
-                return "git worktree는 저장소 밖(임시 폴더)에만"
-            continue
-        prog = Path(tokens[0]).name
-        if prog == "make" and any(
-            t not in READONLY_MAKE for t in tokens[1:] if not t.startswith("-") and "=" not in t
-        ):
-            return f"{' '.join(tokens)} — 읽기 전용 에이전트는 make test·lint·verify만"
-        if prog in ("rm", "mv", "rmdir"):
-            return f"{prog}는 쓰지 않는다"
-        if prog in ("cp", "touch", "mkdir", "tee", "ln") and any(
-            _in_repo(a, cwd) for a in tokens[1:][-1:] if not a.startswith("-")
-        ):
-            return f"{prog}로 저장소 안에 쓴다 — 쓰기는 임시 폴더에만"
-        if prog == "sed" and any(a == "-i" or a.startswith("-i") for a in tokens[1:]):
-            return "sed -i는 파일을 고친다"
-        if "ruff" in tokens and (
-            "format" in tokens and "--check" not in tokens or "--fix" in tokens
-        ):
-            return "ruff 정리는 파일을 고친다(검사는 ruff check·ruff format --check)"
-        text = " ".join(tokens)
-        if (
-            "evaluation.eval" in text or "evaluation/eval.py" in text
-        ) and "--reports-dir" not in tokens:
-            return "eval.py는 --reports-dir로 임시 폴더를 줘야 한다(기본은 저장소 reports/)"
-        if (
-            tokens[:2] == ["make", "data"]
-            or "generator" in tokens
-            and "-m" in tokens
-            and "generator.verify" not in tokens
-        ):
-            return "생성기는 DB를 다시 쓴다(make data 금지)"
+        why = _readonly_problem(tokens, cwd)
+        if why:
+            return why
+    return None
+
+
+def _make_targets(args: list[str]) -> list[str]:
+    """make 인자 → 대상(옵션·변수 대입·리디렉션 뒤는 뺀다)"""
+    targets, skip = [], False
+    for i, a in enumerate(args):
+        nxt = args[i + 1] if i + 1 < len(args) else ""
+        if skip:
+            skip = False
+        elif (
+            any(c in a for c in "<>") or a.isdigit() and any(c in nxt for c in "<>")
+        ):  # '2>&1'의 2
+            break
+        elif a in _MAKE_OPTS_WITH_ARG:
+            skip = True
+        elif not a.startswith("-") and "=" not in a:
+            targets.append(a)
+    return targets
+
+
+def _readonly_problem(tokens: list[str], cwd: Path) -> str | None:
+    for i, t in enumerate(tokens):  # 저장소 안을 향한 리디렉션
+        if t in _REDIRECTS and i + 1 < len(tokens) and tokens[i + 1] != "/dev/null":
+            if _in_repo(tokens[i + 1], cwd):
+                return f"저장소 안 파일로 리디렉션({tokens[i + 1]})"
+    names = [Path(t).name for t in tokens]
+    sub = _git_subcommand(tokens)
+    if sub:
+        name, args = sub
+        if name not in READONLY_GIT:
+            return f"git {name}은 저장소를 바꾼다"
+        if name == "branch":
+            listing = any(
+                a in ("--list", "-l", "--contains", "--merged", "--no-merged") for a in args
+            )
+            changing = any(
+                a
+                in (
+                    "-d",
+                    "-D",
+                    "-m",
+                    "-M",
+                    "-c",
+                    "-C",
+                    "-f",
+                    "--delete",
+                    "--move",
+                    "--copy",
+                    "--force",
+                    "-u",
+                    "--set-upstream-to",
+                    "--unset-upstream",
+                )
+                for a in args
+            )
+            if changing or not listing and any(not a.startswith("-") for a in args):
+                return "git branch는 목록 보기만(만들기·삭제·이름 변경 금지)"
+        if name == "worktree":
+            if args[:1] not in (["list"], ["add"]):
+                return "git worktree는 list와 저장소 밖 add만"
+            paths = [a for a in args[1:] if not a.startswith("-")]
+            if args[:1] == ["add"] and (not paths or _in_repo(paths[0], cwd)):
+                return "git worktree add는 저장소 밖(임시 폴더)에만"
+        return None
+    prog = names[0]
+    if prog == "make":
+        targets = _make_targets(tokens[1:])
+        if not targets or any(t not in READONLY_MAKE for t in targets):
+            return f"{' '.join(tokens)} — 읽기 전용 에이전트는 make test·lint·verify만(대상 없는 make는 make data)"
+    if any(n in ("rm", "mv", "rmdir") for n in names):
+        return "rm·mv는 쓰지 않는다"
+    if prog == "find" and any(t in ("-delete", "-exec", "-execdir") for t in tokens):
+        return "find -delete·-exec는 쓰지 않는다"
+    if prog in ("cp", "touch", "mkdir", "tee", "ln") and any(
+        _in_repo(a, cwd) for a in tokens[1:][-1:] if not a.startswith("-")
+    ):
+        return f"{prog}로 저장소 안에 쓴다 — 쓰기는 임시 폴더에만"
+    if prog == "sed" and any(a.startswith("-i") or a.startswith("--in-place") for a in tokens[1:]):
+        return "sed -i는 파일을 고친다"
+    if (
+        prog == "uv"
+        and len(tokens) > 1
+        and tokens[1] in ("add", "remove", "sync", "lock", "pip", "venv")
+    ):
+        return f"uv {tokens[1]}는 의존성·환경을 바꾼다"
+    if "ruff" in tokens and ("format" in tokens and "--check" not in tokens or "--fix" in tokens):
+        return "ruff 정리는 파일을 고친다(검사는 ruff check·ruff format --check)"
+    text = " ".join(tokens)
+    if ("evaluation.eval" in text or "evaluation/eval.py" in text) and not any(
+        t == "--reports-dir" or t.startswith("--reports-dir=") for t in tokens
+    ):
+        return "eval.py는 --reports-dir로 임시 폴더를 줘야 한다(기본은 저장소 reports/)"
+    runs_generator = (
+        "generator" in tokens
+        and "-m" in tokens
+        or any(t.startswith("generator/") and t.endswith(".py") for t in tokens)
+    )
+    if runs_generator and "generator.verify" not in tokens and "generator/verify.py" not in tokens:
+        return "생성기는 DB를 다시 쓴다(make data 금지)"
     return None
 
 

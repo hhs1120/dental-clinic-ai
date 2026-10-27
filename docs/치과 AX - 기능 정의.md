@@ -19,7 +19,7 @@ tags:
 - 기간: 준비(문서·데이터셋 생성·평가셋·환경) → 개발 3~4주
 - 인원: 1인 기준. 팀이 되면 슬롯을 사람별로 배분
 - 목표: "AI 도구를 잘 다루는 개발자" 포트폴리오. 풀스택 직접 구현, 프론트를 일부러 줄이지 않음
-- 스택: [[치과 AX - 앱 설계]] §7. Claude Code 설정(`CLAUDE.md`·서브에이전트·스킬)은 깃에 포함
+- 스택: [[치과 AX - 앱 설계]] §7. Claude Code 설정(`CLAUDE.md`·`.claude/` — 구성은 `CLAUDE.md` 폴더)은 깃에 포함
 
 ## 2. 범위
 
@@ -183,7 +183,7 @@ tags:
 1. ①·②·③ 완료 기준 전부(§4) — 분류·평가 수치는 실데이터 DB(캐시된 실모델 분류, dev 수치), UI 테스트(Playwright)는 `make fixture` DB 또는 실데이터 복사본
 2. `next build` exit 0
 
-`make ci`(매 커밋: fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright)와는 다른 타겟.
+`make ci`(앱 착수 뒤 CI가 돌릴 타깃: `make lint` + fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright. 그 전의 CI는 `CLAUDE.md` 깃 절)와는 다른 타겟.
 
 
 ## 7. 운영 결정
@@ -225,9 +225,8 @@ tags:
 
 ## 9. 다음 액션
 
-- [ ] 준비 4 — Claude Code 세팅. CLAUDE.md·테스트 구조·서브에이전트 완료, 남은 것: 훅
-- [ ] 프론트 착수 시 — `create-next-app` 기본 ESLint(`eslint-config-next`)에 TypeScript strict·Prettier를 켜고 `make lint`·`make fmt`에 프론트 검사를 넣는다(규칙은 `CLAUDE.md` 코드 컨벤션)
-- [ ] 준비 5 — 와이어프레임 4개(판정·검색·준비표·가상 EMR 뷰어) + 그 기준으로 [[치과 AX - 앱 설계]] §9 프론트 추가: 페이지·라우트 목록, 페이지별 사용 API, 데이터 가져오기 방식(배치 진행률은 `ax_jobs` 폴링), 공통 레이아웃(작업자 선택), 판정 키 매핑표(목적 14개 → 2자리, 나머지 항목 → 1자리 — enum은 [[치과 AX - 가상 데이터 생성 설계]] §4.1)
+- [ ] 와이어프레임 4개(판정·검색·준비표·가상 EMR 뷰어) + 그 기준으로 [[치과 AX - 앱 설계]] §9 프론트 추가: 페이지·라우트 목록, 페이지별 사용 API, 데이터 가져오기 방식(배치 진행률은 `ax_jobs` 폴링), 공통 레이아웃(작업자 선택), 판정 키 매핑표(목적 14개 → 2자리, 나머지 항목 → 1자리 — enum은 [[치과 AX - 가상 데이터 생성 설계]] §4.1)
+- [ ] 프론트 착수 시 — `CLAUDE.md` 코드 컨벤션의 Next.js 규칙을 켜고 `make lint`·`make fmt`에 프론트 검사를 넣는다
 - [ ] 평가 설계 반영 — ② 오류 유형 태그 집계(아래 앱 설계 반영의 판정 오류 유형 컬럼과 같이 정하고 `eval.py` 리포트에 추가 — ①·② 앱 착수 전)
 - [ ] 앱 설계 반영 — 가상 EMR 뷰어(라우트·API), 판정 오류 유형 컬럼(`export-human` 키 포함), ④ 제안 출력에 `action`, **생성기 출력과 앱 DB의 경계**(지금은 `data/app.sqlite` 한 파일에 생성기가 `emr_*`·`ax_calls`·`ax_documents`를 쓰고 앱이 판정 등 `ax_*`를 같은 파일에 써서 재생성하면 사람 작업이 덮어써짐 — `export-human`/`import-human`으로 버틸지, 앱 DB를 따로 두고 생성 DB를 읽기 전용으로 붙일지 결정. 같은 파일이면 앱이 판정을 쓴 뒤 verify `check_eval_pool`(판정 상태 pending/none 요구)이 실패하므로 함께 정리. eval.py가 읽는 앱 테이블 DDL이 지금 `shared/schema.sql`에 있어 결정에 따라 위치도 옮긴다)
 - [ ] backend 착수 시 — 훅(`.claude/hooks/guard.py`)에 `backend/`가 `ground_truth`·`generator`를 import하는 편집을 막는 검사 추가(`CLAUDE.md` 절대 규칙 — 지금은 `tests/test_no_ground_truth_import.py`만)
