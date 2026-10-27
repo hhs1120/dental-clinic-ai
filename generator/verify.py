@@ -961,6 +961,9 @@ def _label_problem(r) -> str | None:
         return "부 주제가 CALL_SUBTOPICS 밖"
     if r["emergency"] and r["urgency"] != "urgent":
         return "응급인데 urgent 아님"
+    if purpose in ("book", "reschedule") and r["urgency"] == "urgent" \
+            and r["fact"].get("appointment", {}).get("date") != r["started_at"][:10]:
+        return "예약·변경 통화가 urgent인데 예약이 그날이 아님"
     if r["appt_confirmed"] and purpose not in ("book", "reschedule"):
         return "appt_confirmed는 book·reschedule만"
     if r["direction"] == "outbound" and purpose not in CALL_OUTBOUND_SHARE:
@@ -977,6 +980,7 @@ def _label_problem(r) -> str | None:
 
 def check_call_label_values(conn, ctx):
     """골드 라벨: enum, 함의 플래그, accepted = 주 목적 + 부 주제(CALL_SUBTOPICS 안 1개), 응급 → urgent,
+    예약·변경 통화의 urgent는 예약이 그날일 때만,
     outbound 목적, inbound 복합 ⇔ 노이즈 '주제 2개', 노이즈 대상(보호자·통증 목적)"""
     return [{"call_uid": r["call_uid"], "problem": p} for r in _calls(conn) if (p := _label_problem(r))]
 

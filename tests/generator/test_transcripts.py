@@ -6,7 +6,7 @@ import pytest
 
 from generator import llm_jobs, transcripts
 from generator.llm_jobs import LLMContext
-from generator.master import CALL_DURATION_SEC, CLINIC_NAME, PROCEDURES, SCALING_MIN_AGE, CALL_LABEL_WORDS, TRANSCRIPT_CHARS_PER_SEC
+from generator.master import CALL_DURATION_SEC, CLINIC_NAME, PROCEDURES, RECALL_CYCLE_MONTHS, SCALING_MIN_AGE, CALL_LABEL_WORDS, TRANSCRIPT_CHARS_PER_SEC
 from tests.generator.verify_db import make_db
 
 
@@ -123,3 +123,10 @@ def test_price_and_insurance_calls_get_master_price(conn):
     assert "topic_price" not in transcripts.payload(_row(conn, "c-0001"))["facts"]  # 수납 문의
     sub = dict(_row(conn, "c-0002")) | {"primary_purpose": "treatment_q", "accepted_purposes": '["treatment_q", "price_q"]'}
     assert transcripts.payload(sub)["facts"]["topic_price"]["procedure"] == "미백"  # 부 주제 가격 문의도
+
+
+def test_recall_calls_get_recall_cycle(conn):
+    """리콜 통화는 병원의 정기 검진 주기를 입력에 — 없으면 모델이 '6개월' 같은 상식을 지어낸다"""
+    recall = dict(_row(conn, "c-0001")) | {"primary_purpose": "recall", "accepted_purposes": '["recall"]'}
+    assert transcripts.payload(recall)["facts"]["recall_months"] == RECALL_CYCLE_MONTHS
+    assert "recall_months" not in transcripts.payload(_row(conn, "c-0001"))["facts"]

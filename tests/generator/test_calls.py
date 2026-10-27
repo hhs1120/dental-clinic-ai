@@ -89,6 +89,27 @@ def test_price_subtopic_has_topic_procedure(db):
             assert f["topic_procedure"] == f["appointment"]["procedure"]
 
 
+def test_booking_calls_not_urgent_for_later_visit(db):
+    """급함 urgent = 오늘 봐야 함 — 예약·변경 통화의 예약이 그날이 아니면 urgent가 아니다(애매한 통증 노이즈도)"""
+    rows = db.execute("SELECT c.started_at, l.used_fact FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+                      " WHERE l.primary_purpose IN ('book', 'reschedule') AND l.urgency = 'urgent'").fetchall()
+    assert all(json.loads(f)["appointment"]["date"] == t[:10] for t, f in rows)
+
+
+def test_price_topic_is_not_a_past_visit(db):
+    """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약 시술이거나 지난 진료에 없는 시술.
+    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    checked = 0
+    for (fact,) in db.execute("SELECT used_fact FROM truth.truth_call_labels WHERE accepted_purposes LIKE '%price_q%'"):
+        f = json.loads(fact)
+        if "patient" not in f:
+            continue
+        upcoming = {x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x}
+        assert f["topic_procedure"] in upcoming or f["topic_procedure"] not in {v["procedure"] for v in f["recent_visits"]}, f
+        checked += 1
+    assert checked
+
+
 def test_new_child_booking_is_guardian(db):
     """처음 등록하는 소아의 예약 잡기는 기존 환자인 보호자가 건다 — 처음 연락이 아니라 보호자"""
     rows = db.execute("SELECT l.counterpart FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"

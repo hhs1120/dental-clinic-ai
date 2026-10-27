@@ -50,6 +50,7 @@ BREAKS = {
     "counterpart_enum": (L + "counterpart = 'doctor' WHERE call_uid = 'c-0001'", "check_call_label_values"),
     "urgency_enum": (L + "urgency = 'high' WHERE call_uid = 'c-0001'", "check_call_label_values"),
     "noise_enum": (L + "noise_type = 'static' WHERE call_uid = 'c-0001'", "check_call_label_values"),
+    "booking_urgent_later_appt": (L + "urgency = 'urgent' WHERE call_uid = 'c-0003'", "check_call_label_values"),
     "implied_flag_off": (L + "wants_appt = 0 WHERE call_uid = 'c-0003'", "check_call_label_values"),
     "accepted_not_primary_first": (L + "accepted_purposes = '[\"complaint\", \"billing_q\"]' WHERE call_uid = 'c-0001'",
                                    "check_call_label_values"),

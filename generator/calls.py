@@ -7,6 +7,7 @@
 - call_pools: 판정 풀 층화·dev/test·순번, 블라인드 풀 (평가 설계 §2.1)
 """
 import json
+import zlib
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -14,8 +15,8 @@ from generator.master import (AGE_BANDS, APPT_CONFIRMED_SHARE, BOOKING_PURPOSES,
                               CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE, CALL_OUTBOUND_SHARE, CALL_PAIN_PURPOSES,
                               CALL_PATIENT_RULES, CALL_PURPOSE_SHARE, CALL_SUBTOPICS, CALL_URGENCY_WEIGHTS,
                               EVAL_MIN_PER_SPLIT, EVAL_RARE_PURPOSES, EVAL_RARE_SHARE, HAS_TODO_DEFAULT, HAS_TODO_SHARE,
-                              HOURS, IMPLIED_FLAG, OUTBOUND_MULTI_SHARE, PAIN_URGENT_SHARE, PROCEDURES, RECALL_CYCLE,
-                              SUBTOPIC_PURPOSE, age_on, open_slots)
+                              HOURS, IMPLIED_FLAG, OUTBOUND_MULTI_SHARE, PAIN_URGENT_SHARE, PLANNED_WEIGHTS, PROCEDURES, RECALL_CYCLE,
+                              SUBTOPIC_PURPOSE, age_band, age_on, open_slots)
 
 FMT = "%Y-%m-%d %H:%M:%S"
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
@@ -284,8 +285,23 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
         else:
             known = []
         pool = known or PRICED
-        fact["topic_procedure"] = pool[int(rng.integers(len(pool)))]
+        topic = pool[int(rng.integers(len(pool)))]
+        if s["about"] is not None and "price_q" in s["accepted"] and topic not in (upcoming := _upcoming(fact)):
+            # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
+            topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
+        fact["topic_procedure"] = topic
     return fact
+
+
+def _upcoming(fact: dict) -> list[str]:
+    """가격 문의 주제 후보 — 앞으로 받을 시술: 다음 예약 시술, 없으면 그 나이의 치료 시술 중 지난 진료에 없는 것.
+    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    nxt = fact["next_appointment"]
+    if nxt and nxt["procedure"] in PRICED:
+        return [nxt["procedure"]]
+    done = {v["procedure"] for v in fact["recent_visits"]}
+    band = age_band(fact["patient"]["age"])
+    return [n for n in PLANNED_WEIGHTS["treatment"][band] if n in PRICED and n not in done] or PRICED
 
 
 def _before_booking(rng, s: dict) -> None:
@@ -330,6 +346,8 @@ def stage_labels(run, rng, fake) -> None:
             urgency = "urgent" if rng.random() < PAIN_URGENT_SHARE else "normal"
         else:
             urgency = _weighted(rng, CALL_URGENCY_WEIGHTS)
+        if urgency == "urgent" and s["appointment"] is not None and s["appointment"]["at"][:10] != s["t"][:10]:
+            urgency = "normal"  # 오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지는 않는다 — 추첨 뒤 덮어써 난수 흐름은 그대로
         s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []))
         s["fact"] = _used_fact(rng, led, s)
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
