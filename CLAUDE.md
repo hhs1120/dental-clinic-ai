@@ -2,7 +2,7 @@
 
 동네 치과 AX 포트폴리오 프로젝트. 가상 데이터(미니 EMR + 통화·문서·문자 + 정답)로 통화 분류·사람 판정·RAG 챗·진료 준비표를 구현한다.
 
-## 설계 문서 (규칙·절차의 원본 — 코드와 어긋나면 문서를 먼저 확인. 단 **값**(숫자·enum·컬럼·인덱스)은 `generator/master.py`·`shared/schema.sql`·`config/generator.yaml`이 원본(verify 허용치·기준값은 `generator/verify.py`)이고 문서는 이름으로 가리킨다)
+## 설계 문서 (규칙·절차의 원본 — 코드와 어긋나면 문서를 먼저 확인. 단 **값**(숫자·enum·컬럼·인덱스)은 `generator/master.py`·`shared/schema.sql`·`ground_truth/schema.sql`·`config/generator.yaml`이 원본(verify 허용치·기준값은 `generator/verify.py`, 채점 상수는 `evaluation/metrics.py`)이고 문서는 이름으로 가리킨다)
 - `docs/치과 AX - 기능 정의.md` — 무엇을 만드나, `make gate` 기준
 - `docs/치과 AX - 가상 데이터 생성 설계.md` — `emr_*`·생성기 적재 `ax_*` 스키마, 생성 규칙, `make verify` 검사 목록 (생성기가 읽음)
 - `docs/치과 AX - 앱 설계.md` — 앱 `ax_*` 테이블, 도구 시그니처, 고정 쿼리, 앱 기술 선택 (backend가 읽음)
@@ -11,7 +11,7 @@
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
 
@@ -34,7 +34,7 @@
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음)
 
 ## 현재 단계
-진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9. 앱(backend/frontend)은 준비 3(평가셋 + `eval.py`)이 끝날 때까지 손대지 않는다.
+진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.
 
 ---
 
