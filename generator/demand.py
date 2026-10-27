@@ -1,11 +1,21 @@
 """3단계 첫 수요 — 구환의 첫 리콜 기한과 창 전체의 치료 수요 발생 (가상 데이터 생성 설계 §2.6 (1)(2)).
 DB에 쓰지 않고 run.state에 둔다. 4단계는 열린 수요가 있으면 새 수요를 그 뒤로 미루기만 한다 —
 수요 발생을 자기 시드로 미리 뽑아 두면 예약 파라미터를 바꿔도 수요는 그대로다."""
+
 from datetime import date, timedelta
 from typing import NamedTuple
 
-from generator.master import (COURSE_VISITS, EPISODE_MIX, MAX_LEAD_DAYS, RECALL_CYCLE, RECALL_JITTER_DAYS,
-                              TOOTH_TREATMENT_MIN_AGE, add_years, age_band, age_on)
+from generator.master import (
+    COURSE_VISITS,
+    EPISODE_MIX,
+    MAX_LEAD_DAYS,
+    RECALL_CYCLE,
+    RECALL_JITTER_DAYS,
+    TOOTH_TREATMENT_MIN_AGE,
+    add_years,
+    age_band,
+    age_on,
+)
 
 DAYS_PER_MONTH = 365.25 / 12
 
@@ -13,11 +23,15 @@ DAYS_PER_MONTH = 365.25 / 12
 class Arrival(NamedTuple):
     day: date
     visit_type: str  # treatment | consult
-    visits: int      # T1·상담 1, Tn COURSE_VISITS
+    visits: int  # T1·상담 1, Tn COURSE_VISITS
 
 
 def recall_due(rng, last_hygiene: date) -> date:
-    return last_hygiene + RECALL_CYCLE + timedelta(days=int(rng.integers(-RECALL_JITTER_DAYS, RECALL_JITTER_DAYS + 1)))
+    return (
+        last_hygiene
+        + RECALL_CYCLE
+        + timedelta(days=int(rng.integers(-RECALL_JITTER_DAYS, RECALL_JITTER_DAYS + 1)))
+    )
 
 
 def draw_episode(rng, band: str) -> tuple[str, int]:
@@ -53,7 +67,9 @@ def arrivals(rng, birth: date, start: date, end: date, rates: dict) -> list[Arri
 
 def stage(run, rng, fake) -> None:
     people = run.state["patients"]
-    lapsed = set(rng.choice(len(people), round(run.cfg["lapse_rate"] * len(people)), replace=False).tolist())
+    lapsed = set(
+        rng.choice(len(people), round(run.cfg["lapse_rate"] * len(people)), replace=False).tolist()
+    )
     rates = run.cfg["treatment_demand_monthly"]
     due, arr = {}, {}
     for k, p in enumerate(people):

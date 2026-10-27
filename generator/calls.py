@@ -6,17 +6,43 @@
 - call_labels: 복합 주제·노이즈 할당량·급함·플래그·used_fact → 행 쓰기(id = 통화 시각순, call_uid = 셔플 순번)
 - call_pools: 판정 풀 층화·dev/test·순번, 블라인드 풀 (평가 설계 §2.1)
 """
+
 import json
 import zlib
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from generator.master import (AGE_BANDS, APPT_CONFIRMED_SHARE, BOOKING_PURPOSES, CALL_COUNTERPART_WEIGHTS,
-                              CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE, CALL_OUTBOUND_SHARE, CALL_PAIN_PURPOSES,
-                              CALL_PATIENT_RULES, CALL_PURPOSE_SHARE, CALL_SUBTOPICS, CALL_URGENCY_WEIGHTS,
-                              EVAL_MIN_PER_SPLIT, EVAL_RARE_PURPOSES, EVAL_RARE_SHARE, HAS_TODO_DEFAULT, HAS_TODO_SHARE,
-                              HOURS, IMPLIED_FLAG, OUTBOUND_MULTI_SHARE, PAIN_URGENT_SHARE, PLANNED_WEIGHTS, PROCEDURES, RECALL_CYCLE,
-                              SUBTOPIC_PURPOSE, age_band, age_on, open_slots)
+from generator.master import (
+    AGE_BANDS,
+    APPT_CONFIRMED_SHARE,
+    BOOKING_PURPOSES,
+    CALL_COUNTERPART_WEIGHTS,
+    CALL_DURATION_SEC,
+    CALL_FLAGS,
+    CALL_NOISE_SHARE,
+    CALL_OUTBOUND_SHARE,
+    CALL_PAIN_PURPOSES,
+    CALL_PATIENT_RULES,
+    CALL_PURPOSE_SHARE,
+    CALL_SUBTOPICS,
+    CALL_URGENCY_WEIGHTS,
+    EVAL_MIN_PER_SPLIT,
+    EVAL_RARE_PURPOSES,
+    EVAL_RARE_SHARE,
+    HAS_TODO_DEFAULT,
+    HAS_TODO_SHARE,
+    HOURS,
+    IMPLIED_FLAG,
+    OUTBOUND_MULTI_SHARE,
+    PAIN_URGENT_SHARE,
+    PLANNED_WEIGHTS,
+    PROCEDURES,
+    RECALL_CYCLE,
+    SUBTOPIC_PURPOSE,
+    age_band,
+    age_on,
+    open_slots,
+)
 
 FMT = "%Y-%m-%d %H:%M:%S"
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
@@ -34,7 +60,7 @@ def quota(shares: dict, n: int) -> dict:
     raw = {k: v * n for k, v in shares.items()}
     out = {k: int(x) for k, x in raw.items()}
     rest = sorted(raw, key=lambda k: -(raw[k] - out[k]))
-    for k in rest[:n - sum(out.values())]:
+    for k in rest[: n - sum(out.values())]:
         out[k] += 1
     return out
 
@@ -71,28 +97,64 @@ class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
     def __init__(self, conn):
-        self.patients = {r[0]: {"id": r[0], "name": r[1], "birth": date.fromisoformat(r[2]), "sex": r[3], "phone": r[4],
-                                "family": r[5], "guardian": r[6], "registered": r[7], "private": r[8]}
-                         for r in conn.execute("SELECT id, name, birth_date, sex, phone, family_id, guardian_patient_id,"
-                                               " registered_at, has_private_insurance FROM emr_patients ORDER BY id")}
-        self.appts = {r[0]: {"id": r[0], "patient": r[1], "at": r[2], "type": r[3], "code": r[4], "status": r[5],
-                             "from": r[6], "via": r[7], "confirmed": r[8], "created": r[9], "cancelled": r[10]}
-                      for r in conn.execute("SELECT id, patient_id, scheduled_at, type, planned_procedure_code, status,"
-                                            " rescheduled_from_id, booked_via, confirmed, created_at, cancelled_at"
-                                            " FROM emr_appointments ORDER BY id")}
+        self.patients = {
+            r[0]: {
+                "id": r[0],
+                "name": r[1],
+                "birth": date.fromisoformat(r[2]),
+                "sex": r[3],
+                "phone": r[4],
+                "family": r[5],
+                "guardian": r[6],
+                "registered": r[7],
+                "private": r[8],
+            }
+            for r in conn.execute(
+                "SELECT id, name, birth_date, sex, phone, family_id, guardian_patient_id,"
+                " registered_at, has_private_insurance FROM emr_patients ORDER BY id"
+            )
+        }
+        self.appts = {
+            r[0]: {
+                "id": r[0],
+                "patient": r[1],
+                "at": r[2],
+                "type": r[3],
+                "code": r[4],
+                "status": r[5],
+                "from": r[6],
+                "via": r[7],
+                "confirmed": r[8],
+                "created": r[9],
+                "cancelled": r[10],
+            }
+            for r in conn.execute(
+                "SELECT id, patient_id, scheduled_at, type, planned_procedure_code, status,"
+                " rescheduled_from_id, booked_via, confirmed, created_at, cancelled_at"
+                " FROM emr_appointments ORDER BY id"
+            )
+        }
         self.by_patient = defaultdict(list)
         for a in self.appts.values():
             self.by_patient[a["patient"]].append(a)
         self.treatments = defaultdict(list)
-        for r in conn.execute("SELECT patient_id, performed_at, procedure_code, tooth_no FROM emr_treatments"
-                              " ORDER BY performed_at, id"):
-            self.treatments[r[0]].append({"at": r[1], "procedure": PROCEDURE_NAME[r[2]], "tooth": r[3]})
+        for r in conn.execute(
+            "SELECT patient_id, performed_at, procedure_code, tooth_no FROM emr_treatments"
+            " ORDER BY performed_at, id"
+        ):
+            self.treatments[r[0]].append(
+                {"at": r[1], "procedure": PROCEDURE_NAME[r[2]], "tooth": r[3]}
+            )
         self.payments = defaultdict(list)
-        for r in conn.execute("SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"):
+        for r in conn.execute(
+            "SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
+        ):
             self.payments[r[0]].append((r[1], r[2]))
         self.alerts = defaultdict(list)
-        for r in conn.execute("SELECT a.patient_id, a.recorded_at, a.ends_at, t.label FROM emr_patient_alerts a"
-                              " JOIN emr_alert_types t USING (code) ORDER BY a.recorded_at, a.code"):
+        for r in conn.execute(
+            "SELECT a.patient_id, a.recorded_at, a.ends_at, t.label FROM emr_patient_alerts a"
+            " JOIN emr_alert_types t USING (code) ORDER BY a.recorded_at, a.code"
+        ):
             self.alerts[r[0]].append((r[1], r[2], r[3]))
         self.family = defaultdict(list)
         for p in self.patients.values():
@@ -100,14 +162,19 @@ class Ledger:
                 self.family[p["family"]].append(p)
 
     def completed_before(self, pid: int, day: str) -> list[dict]:
-        return [a for a in self.by_patient[pid] if a["status"] == "completed" and a["at"][:10] < day]
+        return [
+            a for a in self.by_patient[pid] if a["status"] == "completed" and a["at"][:10] < day
+        ]
 
     def balance(self, pid: int, t: str) -> int:
         return sum(owed for at, owed in self.payments[pid] if at <= t)
 
     def next_appointment(self, pid: int, t: str) -> dict | None:
-        live = [a for a in self.by_patient[pid]
-                if a["created"] <= t < a["at"] and (a["cancelled"] is None or a["cancelled"] > t)]
+        live = [
+            a
+            for a in self.by_patient[pid]
+            if a["created"] <= t < a["at"] and (a["cancelled"] is None or a["cancelled"] > t)
+        ]
         return min(live, key=lambda a: a["at"]) if live else None
 
     def matches(self, pid: int, rule: tuple, t: str) -> bool:
@@ -120,14 +187,22 @@ class Ledger:
         d = date.fromisoformat(day)
         if kind == "recall_due":
             hygiene = [a for a in visits if a["type"] == "hygiene"]
-            return bool(hygiene) and date.fromisoformat(hygiene[-1]["at"][:10]) + RECALL_CYCLE < d \
+            return (
+                bool(hygiene)
+                and date.fromisoformat(hygiene[-1]["at"][:10]) + RECALL_CYCLE < d
                 and self.next_appointment(pid, t) is None
+            )
         if kind == "balance":
             return self.balance(pid, t) > 0
         if kind == "recent_treatment":
             lo, hi = value
-            return any(a["type"] == "treatment" and (d - timedelta(days=hi)).isoformat() <= a["at"][:10]
-                       <= (d - timedelta(days=lo)).isoformat() for a in visits)
+            return any(
+                a["type"] == "treatment"
+                and (d - timedelta(days=hi)).isoformat()
+                <= a["at"][:10]
+                <= (d - timedelta(days=lo)).isoformat()
+                for a in visits
+            )
         if kind == "recent_visit":
             return any(a["at"][:10] >= (d - timedelta(days=value)).isoformat() for a in visits)
         return True
@@ -138,19 +213,39 @@ class Ledger:
         nxt = self.next_appointment(pid, t)
         visits = [v for v in self.treatments[pid] if v["at"] <= t][-3:][::-1]
         return {
-            "patient": {"id": pid, "name": p["name"], "age": age_on(p["birth"], date.fromisoformat(day)), "sex": p["sex"]},
-            "recent_visits": [{"date": v["at"][:10], "procedure": v["procedure"], "tooth": v["tooth"]} for v in visits],
+            "patient": {
+                "id": pid,
+                "name": p["name"],
+                "age": age_on(p["birth"], date.fromisoformat(day)),
+                "sex": p["sex"],
+            },
+            "recent_visits": [
+                {"date": v["at"][:10], "procedure": v["procedure"], "tooth": v["tooth"]}
+                for v in visits
+            ],
             "balance": self.balance(pid, t),
             "next_appointment": {"appointment_id": nxt["id"]} | _appt_fact(nxt) if nxt else None,
-            "family": [m["name"] for m in self.family[p["family"]] if m["id"] != pid and m["registered"] <= day]
-            if p["family"] is not None else [],
-            "alerts": [label for rec, ends, label in self.alerts[pid] if rec <= day and (ends is None or day < ends)],
+            "family": [
+                m["name"]
+                for m in self.family[p["family"]]
+                if m["id"] != pid and m["registered"] <= day
+            ]
+            if p["family"] is not None
+            else [],
+            "alerts": [
+                label
+                for rec, ends, label in self.alerts[pid]
+                if rec <= day and (ends is None or day < ends)
+            ],
         }
 
     def is_child(self, pid: int, day: str) -> bool:
         """보호자가 거는 환자 — 통화일에 소아이고 보호자 기록이 있음(TODAY에 청소년인 환자는 보호자 기록이 없다)"""
         p = self.patients[pid]
-        return p["guardian"] is not None and age_on(p["birth"], date.fromisoformat(day)) <= CHILD_MAX_AGE
+        return (
+            p["guardian"] is not None
+            and age_on(p["birth"], date.fromisoformat(day)) <= CHILD_MAX_AGE
+        )
 
     def speaker(self, pid: int, day: str) -> dict:
         """실제로 말하는 사람 — 소아면 보호자"""
@@ -172,8 +267,11 @@ def _booking_events(led: Ledger, purpose: str, run, rng) -> list[tuple[dict, str
         return [(a, a["created"]) for a in appts if a["from"] is not None]
     if purpose == "cancel":
         origins = {a["from"] for a in led.appts.values() if a["from"] is not None}
-        return [(a, a["cancelled"]) for a in appts
-                if a["status"] == "cancelled" and a["id"] not in origins and _in_hours(a["cancelled"])]
+        return [
+            (a, a["cancelled"])
+            for a in appts
+            if a["status"] == "cancelled" and a["id"] not in origins and _in_hours(a["cancelled"])
+        ]
     # confirm: 리마인드 날 개원 뒤 임의 분 — 8단계가 리마인드 문자를 그 전에 보낸다
     out = []
     for a in appts:
@@ -197,41 +295,76 @@ def stage_slots(run, rng, fake) -> None:
     for purpose, k in quota(CALL_PURPOSE_SHARE, n).items():
         out_share = CALL_OUTBOUND_SHARE.get(purpose, 0) / CALL_PURPOSE_SHARE[purpose]
         out = quota({"outbound": out_share, "inbound": 1 - out_share}, k)["outbound"]
-        multi = quota({"multi": OUTBOUND_MULTI_SHARE, "single": 1 - OUTBOUND_MULTI_SHARE}, out)["multi"]
+        multi = quota({"multi": OUTBOUND_MULTI_SHARE, "single": 1 - OUTBOUND_MULTI_SHARE}, out)[
+            "multi"
+        ]
         shape = [("outbound", i < multi) for i in range(out)] + [("inbound", False)] * (k - out)
         if purpose in BOOKING_PURPOSES:
             events = _booking_events(led, purpose, run, rng)
             if len(events) < k:
                 raise ValueError(f"{purpose} 이벤트 {len(events)}건 < 통화 {k}건")
-            for (direction, structural), i in zip(shape, rng.choice(len(events), size=k, replace=False).tolist()):
+            for (direction, structural), i in zip(
+                shape, rng.choice(len(events), size=k, replace=False).tolist(), strict=True
+            ):
                 a, t = events[i]
                 pid = a["patient"]
                 new = purpose == "book" and led.patients[pid]["registered"] == t[:10]
-                slots.append({"purpose": purpose, "direction": direction, "structural": structural, "t": t,
-                              "patient": pid, "about": pid, "appointment": a,
-                              "counterpart": "new_caller" if new and not led.is_child(pid, t[:10])
-                              else _side(led, pid, t[:10])})  # 처음 오는 소아는 기존 환자인 보호자가 건다
+                slots.append(
+                    {
+                        "purpose": purpose,
+                        "direction": direction,
+                        "structural": structural,
+                        "t": t,
+                        "patient": pid,
+                        "about": pid,
+                        "appointment": a,
+                        "counterpart": "new_caller"
+                        if new and not led.is_child(pid, t[:10])
+                        else _side(led, pid, t[:10]),
+                    }
+                )  # 처음 오는 소아는 기존 환자인 보호자가 건다
             continue
         for direction, structural in shape:
-            who = "side" if direction == "outbound" else _weighted(rng, CALL_COUNTERPART_WEIGHTS[purpose])
+            who = (
+                "side"
+                if direction == "outbound"
+                else _weighted(rng, CALL_COUNTERPART_WEIGHTS[purpose])
+            )
             rule = CALL_PATIENT_RULES.get((purpose, direction), ("visited", None))
             for _ in range(MAX_DATE_TRIES):
                 d = days[int(rng.integers(len(days)))]
-                t = (datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))).strftime(FMT)
+                t = (
+                    datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
+                ).strftime(FMT)
                 if who not in ("side", "insurer"):
                     about = None
                     break
-                cands = [pid for pid in led.patients if led.matches(pid, rule, t)
-                         and (who == "side" or led.patients[pid]["private"])]
+                cands = [
+                    pid
+                    for pid in led.patients
+                    if led.matches(pid, rule, t)
+                    and (who == "side" or led.patients[pid]["private"])
+                ]
                 if cands:
                     about = cands[int(rng.integers(len(cands)))]
                     break
             else:
-                raise ValueError(f"{purpose} {direction} {who}: {MAX_DATE_TRIES}일 동안 조건에 맞는 환자 없음")
+                raise ValueError(
+                    f"{purpose} {direction} {who}: {MAX_DATE_TRIES}일 동안 조건에 맞는 환자 없음"
+                )
             side = who == "side"
-            slots.append({"purpose": purpose, "direction": direction, "structural": structural, "t": t,
-                          "patient": about if side else None, "about": about, "appointment": None,
-                          "counterpart": _side(led, about, t[:10]) if side else who})
+            slots.append(
+                {
+                    "purpose": purpose,
+                    "direction": direction,
+                    "structural": structural,
+                    "t": t,
+                    "patient": about if side else None,
+                    "about": about,
+                    "appointment": None,
+                    "counterpart": _side(led, about, t[:10]) if side else who,
+                }
+            )
     for s in slots:
         if s["patient"] is not None:
             speaker = led.speaker(s["patient"], s["t"][:10])
@@ -275,18 +408,29 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             fact["appointment"] |= {"from_date": orig["at"][:10], "from_time": orig["at"][11:16]}
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
-    if s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]:  # 부 주제 가격 문의도 무엇의 가격인지
-        if a is not None and fact["appointment"]["procedure"] in PRICED:  # 0원(상담 등)이면 아래 후보에서
+    if (
+        s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]
+    ):  # 부 주제 가격 문의도 무엇의 가격인지
+        if (
+            a is not None and fact["appointment"]["procedure"] in PRICED
+        ):  # 0원(상담 등)이면 아래 후보에서
             fact["topic_procedure"] = fact["appointment"]["procedure"]
             return fact
         if s["about"] is not None:
             nxt = fact["next_appointment"]
-            known = sorted({v["procedure"] for v in fact["recent_visits"]} | ({nxt["procedure"]} if nxt else set()))
+            known = sorted(
+                {v["procedure"] for v in fact["recent_visits"]}
+                | ({nxt["procedure"]} if nxt else set())
+            )
         else:
             known = []
         pool = known or PRICED
         topic = pool[int(rng.integers(len(pool)))]
-        if s["about"] is not None and "price_q" in s["accepted"] and topic not in (upcoming := _upcoming(fact)):
+        if (
+            s["about"] is not None
+            and "price_q" in s["accepted"]
+            and topic not in (upcoming := _upcoming(fact))
+        ):
             # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
             topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
         fact["topic_procedure"] = topic
@@ -301,7 +445,9 @@ def _upcoming(fact: dict) -> list[str]:
         return [nxt["procedure"]]
     done = {v["procedure"] for v in fact["recent_visits"]}
     band = age_band(fact["patient"]["age"])
-    return [n for n in PLANNED_WEIGHTS["treatment"][band] if n in PRICED and n not in done] or PRICED
+    return [
+        n for n in PLANNED_WEIGHTS["treatment"][band] if n in PRICED and n not in done
+    ] or PRICED
 
 
 def _before_booking(rng, s: dict) -> None:
@@ -310,7 +456,9 @@ def _before_booking(rng, s: dict) -> None:
     created = datetime.strptime(s["t"], FMT)
     room = int((created - datetime.combine(created.date(), OPEN)).total_seconds() // 60)
     if room > 1:
-        s["t"] = (datetime.combine(created.date(), OPEN) + timedelta(minutes=int(rng.integers(1, room)))).strftime(FMT)
+        s["t"] = (
+            datetime.combine(created.date(), OPEN) + timedelta(minutes=int(rng.integers(1, room)))
+        ).strftime(FMT)
     else:
         s["confirmed"] = 1
 
@@ -346,9 +494,17 @@ def stage_labels(run, rng, fake) -> None:
             urgency = "urgent" if rng.random() < PAIN_URGENT_SHARE else "normal"
         else:
             urgency = _weighted(rng, CALL_URGENCY_WEIGHTS)
-        if urgency == "urgent" and s["appointment"] is not None and s["appointment"]["at"][:10] != s["t"][:10]:
+        if (
+            urgency == "urgent"
+            and s["appointment"] is not None
+            and s["appointment"]["at"][:10] != s["t"][:10]
+        ):
             urgency = "normal"  # 오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지는 않는다 — 추첨 뒤 덮어써 난수 흐름은 그대로
-        s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []))
+        s.update(
+            flags=flags,
+            urgency=urgency,
+            accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []),
+        )
         s["fact"] = _used_fact(rng, led, s)
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
     width = max(4, len(str(len(slots))))
@@ -356,12 +512,37 @@ def stage_labels(run, rng, fake) -> None:
     for row_id, i in enumerate(order, start=1):
         s = slots[i]
         uid = f"c-{uids[row_id - 1]:0{width}d}"
-        calls.append((row_id, uid, s["patient"], *s["caller"], s["direction"], s["t"], durations[row_id - 1]))
-        labels.append((uid, s["purpose"], json.dumps(s["accepted"]), s["counterpart"], s["urgency"],
-                       *(s["flags"][f] for f in CALL_FLAGS), s["noise"], json.dumps(s["fact"], ensure_ascii=False)))
-    run.conn.executemany("INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_name, direction,"
-                         " started_at, duration_sec) VALUES (?, ?, 'generated', ?, ?, ?, ?, ?, ?)", calls)
-    run.conn.executemany(f"INSERT INTO truth.truth_call_labels VALUES ({', '.join('?' * 13)}, 'silver')", labels)
+        calls.append(
+            (
+                row_id,
+                uid,
+                s["patient"],
+                *s["caller"],
+                s["direction"],
+                s["t"],
+                durations[row_id - 1],
+            )
+        )
+        labels.append(
+            (
+                uid,
+                s["purpose"],
+                json.dumps(s["accepted"]),
+                s["counterpart"],
+                s["urgency"],
+                *(s["flags"][f] for f in CALL_FLAGS),
+                s["noise"],
+                json.dumps(s["fact"], ensure_ascii=False),
+            )
+        )
+    run.conn.executemany(
+        "INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_name, direction,"
+        " started_at, duration_sec) VALUES (?, ?, 'generated', ?, ?, ?, ?, ?, ?)",
+        calls,
+    )
+    run.conn.executemany(
+        f"INSERT INTO truth.truth_call_labels VALUES ({', '.join('?' * 13)}, 'silver')", labels
+    )
 
 
 def _allocate(by: dict, size: int) -> dict:
@@ -384,24 +565,41 @@ def _allocate(by: dict, size: int) -> dict:
 def stage_pools(run, rng, fake) -> None:
     conn = run.conn
     by = defaultdict(list)
-    for uid, purpose in conn.execute("SELECT c.call_uid, l.primary_purpose FROM ax_calls c"
-                                     " JOIN truth.truth_call_labels l USING (call_uid) ORDER BY c.id"):
+    for uid, purpose in conn.execute(
+        "SELECT c.call_uid, l.primary_purpose FROM ax_calls c"
+        " JOIN truth.truth_call_labels l USING (call_uid) ORDER BY c.id"
+    ):
         by[purpose].append(uid)
     by = {c: by[c] for c in CALL_PURPOSE_SHARE if by[c]}
     size = run.cfg["eval_pool_size"]
     dev, test, odd = [], [], 0
     for c, k in _allocate(by, size).items():
         picked = [by[c][i] for i in rng.choice(len(by[c]), size=k, replace=False).tolist()]
-        half = k // 2 + (k % 2 if odd % 2 == 0 else 0)  # 홀수 잔여는 카테고리를 돌며 dev/test 번갈아
+        half = k // 2 + (
+            k % 2 if odd % 2 == 0 else 0
+        )  # 홀수 잔여는 카테고리를 돌며 dev/test 번갈아
         odd += k % 2
         dev += picked[:half]
         test += picked[half:]
-    pool = [dev[i] for i in rng.permutation(len(dev)).tolist()] + [test[i] for i in rng.permutation(len(test)).tolist()]
+    pool = [dev[i] for i in rng.permutation(len(dev)).tolist()] + [
+        test[i] for i in rng.permutation(len(test)).tolist()
+    ]
     split = {uid: "dev" for uid in dev} | {uid: "test" for uid in test}
-    conn.executemany("UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ?, judge_status = 'pending' WHERE call_uid = ?",
-                     [(i, uid) for i, uid in enumerate(pool, start=1)])
-    conn.executemany("UPDATE truth.truth_call_labels SET split = ? WHERE call_uid = ?",
-                     [(s, uid) for uid, s in split.items()])
+    conn.executemany(
+        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ?, judge_status = 'pending' WHERE call_uid = ?",
+        [(i, uid) for i, uid in enumerate(pool, start=1)],
+    )
+    conn.executemany(
+        "UPDATE truth.truth_call_labels SET split = ? WHERE call_uid = ?",
+        [(s, uid) for uid, s in split.items()],
+    )
     blind = run.cfg["blind_pool_size"]
-    conn.executemany("UPDATE ax_calls SET in_blind_pool = 1, blind_sort_order = ? WHERE call_uid = ?",
-                     [(i, pool[j]) for i, j in enumerate(rng.choice(len(pool), size=blind, replace=False).tolist(), start=1)])
+    conn.executemany(
+        "UPDATE ax_calls SET in_blind_pool = 1, blind_sort_order = ? WHERE call_uid = ?",
+        [
+            (i, pool[j])
+            for i, j in enumerate(
+                rng.choice(len(pool), size=blind, replace=False).tolist(), start=1
+            )
+        ],
+    )

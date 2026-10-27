@@ -1,4 +1,5 @@
 """평가 지표 순수 함수 — 정의는 docs/치과 AX - 평가 설계.md §2.2(분류)·§3.2·§3.3(RAG)."""
+
 import re
 from collections import defaultdict
 from math import comb
@@ -18,7 +19,7 @@ def mcnemar_exact(b: int, c: int) -> float:
     n = b + c
     if n == 0:
         return 1.0
-    tail = sum(comb(n, i) for i in range(min(b, c) + 1)) / 2 ** n
+    tail = sum(comb(n, i) for i in range(min(b, c) + 1)) / 2**n
     return min(1.0, 2 * tail)
 
 
@@ -109,6 +110,9 @@ def tool_path(calls: list[dict], tools: list[str], args: dict) -> str | None:
     it = iter(names)
     if not all(t in it for t in tools):
         return "순서"
-    if not all(any(c["name"] == tool and args_match(want, c["args"]) for c in calls) for tool, want in args.items()):
+    if not all(
+        any(c["name"] == tool and args_match(want, c["args"]) for c in calls)
+        for tool, want in args.items()
+    ):
         return "인자"
     return None

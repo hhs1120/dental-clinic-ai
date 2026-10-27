@@ -11,6 +11,7 @@
 - 가짜 모드(테스트)는 FakeGateway로 채우고 캐시·검증을 건너뛴다. fake=False 작업(차트 서술)은 채우지 않는다(초안 유지)
 CLI: python -m generator.llm_jobs {import, check FILE, split [--size N], fill-api --task T [--limit N]}
 """
+
 import argparse
 import hashlib
 import json
@@ -50,12 +51,17 @@ def _hash(obj) -> str:
 
 
 def _read_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
 
 
 def _write_jsonl(path: Path, rows) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows), encoding="utf-8")
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows),
+        encoding="utf-8",
+    )
 
 
 def user_message(payload: dict) -> str:
@@ -64,13 +70,21 @@ def user_message(payload: dict) -> str:
 
 def procedure_names(conn) -> dict[str, list[str]]:
     """시술 이름 → [이름, 별칭...] — 꼭 넣을 시술은 이 중 하나"""
-    return {name: [name, *json.loads(aliases)] for name, aliases in conn.execute("SELECT name, aliases FROM emr_procedures")}
+    return {
+        name: [name, *json.loads(aliases)]
+        for name, aliases in conn.execute("SELECT name, aliases FROM emr_procedures")
+    }
 
 
 def instructions(checks: dict) -> dict:
     """검증 기준 중 쓰는 쪽이 알아야 하는 것 — 입력에 넣어 API·Claude Code가 같은 기준을 본다"""
-    out = {"must_mention": [alts if len(alts) > 1 else alts[0] for alts in checks.get("must_include", [])],
-           "avoid_words": checks.get("forbidden_words", []), "avoid_patterns": checks.get("forbidden_patterns", [])}
+    out = {
+        "must_mention": [
+            alts if len(alts) > 1 else alts[0] for alts in checks.get("must_include", [])
+        ],
+        "avoid_words": checks.get("forbidden_words", []),
+        "avoid_patterns": checks.get("forbidden_patterns", []),
+    }
     if checks.get("length"):
         out["length_chars"] = checks["length"]
     return out
@@ -131,19 +145,30 @@ class LLMContext:
             self.caches[task] = Cache(self.paths["llm_cache"] / f"{task}.jsonl")
         return self.caches[task]
 
-    def resolve(self, task: Task, item: str, payload: dict, checks: dict, simplify=None) -> dict | None:
+    def resolve(
+        self, task: Task, item: str, payload: dict, checks: dict, simplify=None
+    ) -> dict | None:
         if task.prompt not in self.prompts:
             self.prompts[task.prompt] = (PROMPTS / f"{task.prompt}.md").read_text(encoding="utf-8")
         system = self.prompts[task.prompt]
         if self.fake:
             if not task.fake:
                 return None
-            r = self.gateway.complete(ALIAS, task=task.name, system=system, schema=task.schema,
-                                      messages=[{"role": "user", "content": user_message(payload | instructions(checks))}])
+            r = self.gateway.complete(
+                ALIAS,
+                task=task.name,
+                system=system,
+                schema=task.schema,
+                messages=[
+                    {"role": "user", "content": user_message(payload | instructions(checks))}
+                ],
+            )
             return r.data
         self.jobs.setdefault(task.name, [])
         prompt_hash = _hash(system)
-        input_hash = _hash([user_message(payload | instructions(checks)), checks])  # 모델이 받는 메시지 전부
+        input_hash = _hash(
+            [user_message(payload | instructions(checks)), checks]
+        )  # 모델이 받는 메시지 전부
         output, attempt = self._cache(task.name).find(item, prompt_hash, input_hash)
         if output is not None:
             return output
@@ -151,12 +176,22 @@ class LLMContext:
             self.exhausted[task.name].append(item)
             return None
         used = simplify(payload) if simplify and attempt > SIMPLIFY_AFTER else payload
-        self.jobs[task.name].append({
-            "key": _hash([task.name, item, prompt_hash, input_hash, attempt]), "task": task.name, "item": item,
-            "attempt": attempt, "prompt_version": f"{task.prompt}@{prompt_hash[:8]}", "prompt_hash": prompt_hash, "input_hash": input_hash,
-            "system": system, "user": user_message(used | instructions(checks)), "schema": task.schema,
-            "checks": checks, "store": list(task.store),
-        })
+        self.jobs[task.name].append(
+            {
+                "key": _hash([task.name, item, prompt_hash, input_hash, attempt]),
+                "task": task.name,
+                "item": item,
+                "attempt": attempt,
+                "prompt_version": f"{task.prompt}@{prompt_hash[:8]}",
+                "prompt_hash": prompt_hash,
+                "input_hash": input_hash,
+                "system": system,
+                "user": user_message(used | instructions(checks)),
+                "schema": task.schema,
+                "checks": checks,
+                "store": list(task.store),
+            }
+        )
         return None
 
     def finish(self) -> dict[str, int]:
@@ -173,6 +208,7 @@ class LLMContext:
 
 
 # ── 검증 ────────────────────────────────────────────────────
+
 
 @lru_cache
 def forbidden_topics() -> list[dict]:
@@ -203,7 +239,7 @@ def spoken(text: str, speakers: list[str] | None) -> str:
     """화자 표시·공백을 뺀 발화"""
     lines = text.splitlines()
     if speakers:
-        lines = [next((ln[len(s):] for s in speakers if ln.startswith(s)), ln) for ln in lines]
+        lines = [next((ln[len(s) :] for s in speakers if ln.startswith(s)), ln) for ln in lines]
     return re.sub(r"\s", "", "".join(lines))
 
 
@@ -237,12 +273,19 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
     sections(마크다운 절 — section_problems)"""
     if not isinstance(output, dict):
         return ["출력이 JSON 객체가 아님"]
-    empty = [k for k in schema.get("required", []) if not isinstance(output.get(k), str) or not output[k].strip()]
+    empty = [
+        k
+        for k in schema.get("required", [])
+        if not isinstance(output.get(k), str) or not output[k].strip()
+    ]
     if empty:
         return [f"필드 없음: {k}" for k in empty]
     text = output[checks["field"]]
-    out = [f"꼭 넣을 사실 없음: {' / '.join(alts)}" for alts in checks.get("must_include", [])
-           if not any(contains(text, a) for a in alts)]
+    out = [
+        f"꼭 넣을 사실 없음: {' / '.join(alts)}"
+        for alts in checks.get("must_include", [])
+        if not any(contains(text, a) for a in alts)
+    ]
     out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if has_word(text, w)]
     out += [f"금지 토픽: {p}" for p in checks.get("forbidden_patterns", []) if re.search(p, text)]
     speakers = checks.get("speakers")
@@ -262,6 +305,7 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
 
 # ── 들여오기·검사·나누기 ─────────────────────────────────────
 
+
 def _jobs(paths: dict) -> dict[str, dict]:
     if not paths["llm_jobs"].exists():
         return {}
@@ -278,8 +322,12 @@ def _results(path: Path):
         except json.JSONDecodeError:
             yield n, None, "JSON 아님"
             continue
-        if not isinstance(r, dict) or not isinstance(r.get("key"), str) or not isinstance(r.get("source"), str) \
-                or ("output" in r) == ("error" in r):
+        if (
+            not isinstance(r, dict)
+            or not isinstance(r.get("key"), str)
+            or not isinstance(r.get("source"), str)
+            or ("output" in r) == ("error" in r)
+        ):
             yield n, None, "형식 — {key, source, output 또는 error}"
             continue
         yield n, r, None
@@ -311,14 +359,39 @@ def import_results(paths: dict) -> dict[str, dict]:
         if key in cache.keys:
             report[job["task"]]["duplicate"] += len(rows)
             continue
-        judged = [(r, [r["error"]] if "error" in r else problems(job["schema"], job["checks"], r["output"])) for r in rows]
+        judged = [
+            (
+                r,
+                [r["error"]]
+                if "error" in r
+                else problems(job["schema"], job["checks"], r["output"]),
+            )
+            for r in rows
+        ]
         r, errors = next((x for x in judged if not x[1]), judged[0])
         report[job["task"]]["duplicate"] += len(rows) - 1
         status = "failed" if errors else "ok"
         output = r.get("output")
-        output = {k: v for k, v in output.items() if k in job["store"]} if isinstance(output, dict) else None
-        cache.add({k: job[k] for k in ("key", "task", "item", "attempt", "prompt_version", "prompt_hash", "input_hash")}
-                  | {"status": status, "source": r["source"], "output": output, "errors": errors})
+        output = (
+            {k: v for k, v in output.items() if k in job["store"]}
+            if isinstance(output, dict)
+            else None
+        )
+        cache.add(
+            {
+                k: job[k]
+                for k in (
+                    "key",
+                    "task",
+                    "item",
+                    "attempt",
+                    "prompt_version",
+                    "prompt_hash",
+                    "input_hash",
+                )
+            }
+            | {"status": status, "source": r["source"], "output": output, "errors": errors}
+        )
         report[job["task"]][status] += 1
     for cache in caches.values():
         cache.save()
@@ -336,8 +409,13 @@ def check_results(paths: dict, path: Path) -> dict[str, list[str]]:
             out[f"줄 {n}"] = [bad]
             continue
         job = jobs.get(r["key"])
-        errors = ["모르는 키"] if job is None else \
-            [r["error"]] if "error" in r else problems(job["schema"], job["checks"], r["output"])
+        errors = (
+            ["모르는 키"]
+            if job is None
+            else [r["error"]]
+            if "error" in r
+            else problems(job["schema"], job["checks"], r["output"])
+        )
         if errors:
             out[r["key"]] = errors
     return out
@@ -350,7 +428,9 @@ def pending(paths: dict, task: str) -> list[dict]:
         return []
     done = set(Cache(paths["llm_cache"] / f"{task}.jsonl").keys)
     if paths["llm_results"].exists():
-        done |= {r["key"] for f in paths["llm_results"].glob("*.jsonl") for _, r, _ in _results(f) if r}
+        done |= {
+            r["key"] for f in paths["llm_results"].glob("*.jsonl") for _, r, _ in _results(f) if r
+        }
     state = paths["llm_jobs"] / f"{task}.batch.json"
     if state.exists():
         done |= set(json.loads(state.read_text(encoding="utf-8"))["keys"])
@@ -367,24 +447,34 @@ def split_jobs(paths: dict, size: int = CHUNK_SIZE) -> list[Path]:
         rows = pending(paths, f.stem)
         for i in range(0, len(rows), size):
             chunks.append(out_dir / f"{f.stem}-{i // size:03d}.jsonl")
-            _write_jsonl(chunks[-1], rows[i:i + size])
+            _write_jsonl(chunks[-1], rows[i : i + size])
     return chunks
 
 
 # ── API 채우기 (Batch) ──────────────────────────────────────
 
+
 class StaleBatch(RuntimeError):
     """저장된 배치가 지금 작업 파일과 맞지 않음 (프롬프트·입력이 바뀌어 make data가 작업을 다시 냄)"""
 
 
-def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = POLL_SEC,
-             limit: int | None = None) -> Path | None:
+def fill_api(
+    paths: dict,
+    task: str,
+    gateway,
+    sleep=time.sleep,
+    poll_sec: int = POLL_SEC,
+    limit: int | None = None,
+) -> Path | None:
     """남은 작업을 Batch로 제출하고 끝날 때까지 기다려 결과 파일을 쓴다. 배치 번호·제출 키를 저장해 두어 끊긴 뒤 다시
     부르면 이어서 기다린다. 거절·잘림·JSON 오류는 error 줄(실패 시도), 처리 안 된 건(오류·만료)은 줄 없음(같은 작업 그대로).
     limit(시험 채우기)이면 남은 작업에서 그만큼을 같은 간격으로 뽑는다"""
     state = paths["llm_jobs"] / f"{task}.batch.json"
-    jobs = {j["key"]: j for j in _read_jsonl(paths["llm_jobs"] / f"{task}.jsonl")} \
-        if (paths["llm_jobs"] / f"{task}.jsonl").exists() else {}
+    jobs = (
+        {j["key"]: j for j in _read_jsonl(paths["llm_jobs"] / f"{task}.jsonl")}
+        if (paths["llm_jobs"] / f"{task}.jsonl").exists()
+        else {}
+    )
     if state.exists():
         saved = json.loads(state.read_text(encoding="utf-8"))
         batch_id, keys = saved["batch_id"], saved["keys"]
@@ -397,9 +487,18 @@ def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = 
             return None
         if limit is not None and limit < len(todo):
             todo = [todo[i * len(todo) // limit] for i in range(limit)]
-        requests = [{"custom_id": j["key"], "system": j["system"], "schema": j["schema"],
-                     "messages": [{"role": "user", "content": j["user"]}]} for j in todo]
-        batch_id = gateway.submit_batch(ALIAS, requests, task=task, prompt_version=todo[0]["prompt_version"])
+        requests = [
+            {
+                "custom_id": j["key"],
+                "system": j["system"],
+                "schema": j["schema"],
+                "messages": [{"role": "user", "content": j["user"]}],
+            }
+            for j in todo
+        ]
+        batch_id = gateway.submit_batch(
+            ALIAS, requests, task=task, prompt_version=todo[0]["prompt_version"]
+        )
         keys = [j["key"] for j in todo]
         state.write_text(json.dumps({"batch_id": batch_id, "keys": keys}), encoding="utf-8")
         print(f"{task}: 배치 {batch_id} 제출 ({len(todo)}건)")
@@ -407,10 +506,14 @@ def fill_api(paths: dict, task: str, gateway, sleep=time.sleep, poll_sec: int = 
         print(f"{task}: 배치 {batch_id} {status} — {poll_sec}초 뒤 다시 확인")
         sleep(poll_sec)
     first = jobs[keys[0]]
-    results = gateway.batch_results(batch_id, ALIAS, task=task, prompt_version=first["prompt_version"],
-                                    schema=first["schema"])
-    rows = [{"key": key, "source": r.model} | ({"output": r.data} if r.ok else {"error": r.error})
-            for key, r in sorted(results.items()) if r is not None]
+    results = gateway.batch_results(
+        batch_id, ALIAS, task=task, prompt_version=first["prompt_version"], schema=first["schema"]
+    )
+    rows = [
+        {"key": key, "source": r.model} | ({"output": r.data} if r.ok else {"error": r.error})
+        for key, r in sorted(results.items())
+        if r is not None
+    ]
     out = paths["llm_results"] / f"{task}.api-{batch_id}.jsonl"
     _write_jsonl(out, rows)
     state.unlink()
@@ -426,7 +529,9 @@ def _positive(text: str) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("import", help="결과를 검증해 캐시에 넣는다")
     check = sub.add_parser("check", help="결과 파일 하나를 검증만")

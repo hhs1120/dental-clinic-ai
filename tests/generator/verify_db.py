@@ -1,4 +1,5 @@
 """verify 테스트용 작은 정상 DB — 테스트가 한 곳씩 깨뜨려 검사가 잡는지 본다."""
+
 import json
 import sqlite3
 from datetime import date
@@ -12,8 +13,18 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
-CTX = Ctx(today=date(2026, 12, 1), holidays=frozenset({date(2026, 11, 25)}), visits_per_day=26, range_start=date(2026, 10, 1), range_end=date(2026, 12, 15),
-          call_slots=4, eval_pool=2, blind_pool=1, documents_core=3, documents_distractor=3)
+CTX = Ctx(
+    today=date(2026, 12, 1),
+    holidays=frozenset({date(2026, 11, 25)}),
+    visits_per_day=26,
+    range_start=date(2026, 10, 1),
+    range_end=date(2026, 12, 15),
+    call_slots=4,
+    eval_pool=2,
+    blind_pool=1,
+    documents_core=3,
+    documents_distractor=3,
+)
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
 SEED = """
@@ -115,24 +126,99 @@ def _fact(fid, text, *words, reason=None):
 
 # RAG 문서(9단계): 1 매뉴얼 / 2 비슷한 주제(1의 짝, 1의 사실 없음) / 3 최신 공지(4를 대체) / 4 옛 공지(생성 기간 전) /
 # 5 청구 기준(사유마다 절 하나) / 6 타 병원(1의 주제를 다른 값으로)
-_CLAIM_BODY = "# 청구 기준\n\n" + "\n\n".join(f"## {h}\n\n기준을 적는다." for h in CLAIM_HEADINGS.values())
+_CLAIM_BODY = "# 청구 기준\n\n" + "\n\n".join(
+    f"## {h}\n\n기준을 적는다." for h in CLAIM_HEADINGS.values()
+)
 DOCS = [
-    (1, "manual", "예약 부도 관리", "1", None, "docs/manual/001.md",
-     "# 예약 부도 관리\n\n예약 부도가 3회 쌓이면 3개월 동안 전화 예약만 받습니다."),
-    (2, "manual", "예약 접수 기본", "1", None, "docs/manual/002.md", "# 예약 접수 기본\n\n전화로 예약을 받습니다."),
-    (3, "notice", "미백 비용 변경", "2", "2026-09-01", "docs/notice/003.md", "미백 비용은 300,000원입니다."),
-    (4, "notice", "미백 비용 변경", "1", "2025-01-02", "docs/notice/004.md", "미백 비용은 250,000원입니다."),
+    (
+        1,
+        "manual",
+        "예약 부도 관리",
+        "1",
+        None,
+        "docs/manual/001.md",
+        "# 예약 부도 관리\n\n예약 부도가 3회 쌓이면 3개월 동안 전화 예약만 받습니다.",
+    ),
+    (
+        2,
+        "manual",
+        "예약 접수 기본",
+        "1",
+        None,
+        "docs/manual/002.md",
+        "# 예약 접수 기본\n\n전화로 예약을 받습니다.",
+    ),
+    (
+        3,
+        "notice",
+        "미백 비용 변경",
+        "2",
+        "2026-09-01",
+        "docs/notice/003.md",
+        "미백 비용은 300,000원입니다.",
+    ),
+    (
+        4,
+        "notice",
+        "미백 비용 변경",
+        "1",
+        "2025-01-02",
+        "docs/notice/004.md",
+        "미백 비용은 250,000원입니다.",
+    ),
     (5, "claim_standard", "공통 청구 기준", "1", None, "docs/claim_standard/005.md", _CLAIM_BODY),
-    (6, "external", "다른 치과 부도 규정", "1", None, "docs/external/006.md", "부도 2회면 6개월간 예약을 받지 않습니다."),
+    (
+        6,
+        "external",
+        "다른 치과 부도 규정",
+        "1",
+        None,
+        "docs/external/006.md",
+        "부도 2회면 6개월간 예약을 받지 않습니다.",
+    ),
 ]
 DOC_META = [  # (doc_key, kind, pair_doc_id, supersedes_doc_id, avoid_doc_ids, planted_facts) — 2는 3(미백 공지)의 사실도 피함
-    ("manual-noshow", "core", None, None, [], [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")]),
+    (
+        "manual-noshow",
+        "core",
+        None,
+        None,
+        [],
+        [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")],
+    ),
     ("sim-booking-basics", "similar", 1, None, [3], []),
-    ("notice-whitening", "core", None, 4, [], [_fact("notice.white", "미백 300,000원", "300,000원")]),
-    ("old-whitening", "old_version", 3, None, [], [_fact("old.white", "미백 250,000원", "250,000원")]),
-    ("claim-all", "core", None, None, [],
-     [_fact(f"claim.{r}.heading", h, f"## {h}", reason=r) for r, h in CLAIM_HEADINGS.items()]),
-    ("ext-noshow", "external", 1, None, [], [_fact("ext.noshow", "부도 2회 → 6개월", "2회", "6개월")]),
+    (
+        "notice-whitening",
+        "core",
+        None,
+        4,
+        [],
+        [_fact("notice.white", "미백 300,000원", "300,000원")],
+    ),
+    (
+        "old-whitening",
+        "old_version",
+        3,
+        None,
+        [],
+        [_fact("old.white", "미백 250,000원", "250,000원")],
+    ),
+    (
+        "claim-all",
+        "core",
+        None,
+        None,
+        [],
+        [_fact(f"claim.{r}.heading", h, f"## {h}", reason=r) for r, h in CLAIM_HEADINGS.items()],
+    ),
+    (
+        "ext-noshow",
+        "external",
+        1,
+        None,
+        [],
+        [_fact("ext.noshow", "부도 2회 → 6개월", "2회", "6개월")],
+    ),
 ]
 
 
@@ -141,26 +227,52 @@ def make_db(tmp_path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     cols = list(PROCEDURES[0])
-    conn.executemany(f"INSERT INTO emr_procedures ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
-                     [tuple(p[c] for c in cols) for p in PROCEDURES])
+    conn.executemany(
+        f"INSERT INTO emr_procedures ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+        [tuple(p[c] for c in cols) for p in PROCEDURES],
+    )
     conn.executemany("INSERT INTO emr_diagnoses VALUES (?, ?)", sorted(DIAGNOSES.items()))
-    conn.executemany("INSERT INTO emr_alert_types VALUES (?, ?, ?)",
-                     [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()])
+    conn.executemany(
+        "INSERT INTO emr_alert_types VALUES (?, ?, ?)",
+        [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()],
+    )
     conn.executescript(SEED)
-    conn.executemany("INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS])
+    conn.executemany(
+        "INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS]
+    )
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA + TRUTH_SEED)
-    truth.executemany("INSERT INTO truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      [(d[0], key, kind, int(kind != "core"), pair, sup, json.dumps(avoid), json.dumps(facts, ensure_ascii=False))
-                       for d, (key, kind, pair, sup, avoid, facts) in zip(DOCS, DOC_META)])
+    truth.executemany(
+        "INSERT INTO truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            (
+                d[0],
+                key,
+                kind,
+                int(kind != "core"),
+                pair,
+                sup,
+                json.dumps(avoid),
+                json.dumps(facts, ensure_ascii=False),
+            )
+            for d, (key, kind, pair, sup, avoid, facts) in zip(DOCS, DOC_META, strict=True)
+        ],
+    )
     truth.commit()
     truth.close()
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))
     return conn
 
 
-def appt(conn, scheduled_at, type="treatment", patient=2, duration=30, status="completed",
-         created_at="2026-10-02 10:00:00"):
+def appt(
+    conn,
+    scheduled_at,
+    type="treatment",
+    patient=2,
+    duration=30,
+    status="completed",
+    created_at="2026-10-02 10:00:00",
+):
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
     conn.execute(
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"

@@ -14,7 +14,7 @@ HOURS = {
     "weekday_close": "18:30",
     "saturday_close": "13:30",
     "lunch": ["13:00", "14:00"],  # 평일만
-    "closed_weekdays": [3, 6],    # 목, 일 (+ 공휴일)
+    "closed_weekdays": [3, 6],  # 목, 일 (+ 공휴일)
 }
 
 # 진료 슬롯 길이(분)와 토요일 (§1). 요일은 월=0
@@ -62,25 +62,34 @@ def age_on(birth: date, on: date) -> int:
 
 def age_band(age: int) -> str | None:
     """AGE_BANDS 구간 이름. 음수(미래 출생)면 None"""
-    return next((name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi)), None)
+    return next(
+        (name for name, lo, hi, _ in AGE_BANDS if lo <= age and (hi is None or age <= hi)), None
+    )
 
 
 # 환자 (§2.2). 비중은 추첨 없이 비중 × 인원을 반올림한 인원으로 맞춘다(가족은 ±1명, 소아가 많으면 넘을 수 있음)
-FAMILY_SHARE = 0.35            # 가족으로 묶인 환자 비중
-FAMILY_SIZE = (2, 4)           # 가족 인원 (양 끝 포함)
-GUARDIAN_MIN_AGE_GAP = 20      # 보호자는 가족의 소아·청소년보다 이 나이 이상 많다
+FAMILY_SHARE = 0.35  # 가족으로 묶인 환자 비중
+FAMILY_SIZE = (2, 4)  # 가족 인원 (양 끝 포함)
+GUARDIAN_MIN_AGE_GAP = 20  # 보호자는 가족의 소아·청소년보다 이 나이 이상 많다
 PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
-RECALL_CYCLE_MONTHS = 12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
+RECALL_CYCLE_MONTHS = (
+    12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
+)
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
 # 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
 _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
-EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
+EPISODE_MIX = {
+    "child": _EPISODE_YOUNG,
+    "teen": _EPISODE_YOUNG,
+    "adult": _EPISODE_ADULT,
+    "senior": _EPISODE_ADULT,
+}
 COURSE_VISITS = (2, 4)  # 양 끝 포함
 # 치아 번호가 영구치(PERMANENT_TEETH)뿐이라 영구치가 나기 전 나이에는 치료 수요가 없다 — 이 나이 미만은 위생(신환은 상담도)만
 TOOTH_TREATMENT_MIN_AGE = 6
@@ -126,46 +135,71 @@ ADJUST_JUDGMENT_TARGET = {"justified": 50, "contestable": 20, "resubmit": 30}
 # (code, name, category, is_insured, fee_total, duration_min, insured_limit, limit_scope, age_group, is_tooth_level)
 # age_group: child = 0–12세, age19plus = 19세 이상(노인 포함), senior = 65세 이상 — AGE_BANDS의 구간 이름과 별개
 _ROWS = [
-    ("U0001", "스케일링",      "preventive",  "yes",         60_000,    30, 1,    "year", "age19plus", 0),
-    ("U0002", "구강검진",      "preventive",  "yes",         15_000,    30, None, None,   None,     0),
-    ("U0003", "불소도포",      "preventive",  "no",          30_000,    30, None, None,   "child",  0),
-    ("U0004", "실란트",        "preventive",  "yes",         40_000,    30, None, None,   "child",  1),
-    ("U0005", "레진",          "restorative", "no",          80_000,    30, None, None,   None,     1),
-    ("U0006", "아말감/GI",     "restorative", "yes",         25_000,    30, None, None,   None,     1),
-    ("U0007", "인레이",        "restorative", "no",          350_000,   60, None, None,   None,     1),
-    ("U0008", "신경치료",      "endo",        "yes",         120_000,   60, None, None,   None,     1),
-    ("U0009", "크라운",        "prosth",      "no",          550_000,   60, None, None,   None,     1),
-    ("U0010", "브릿지",        "prosth",      "no",          1_500_000, 60, None, None,   None,     0),
-    ("U0011", "단순발치",      "surgery",     "yes",         30_000,    30, None, None,   None,     1),
-    ("U0012", "사랑니 발치",   "surgery",     "yes",         90_000,    60, None, None,   None,     1),
-    ("U0013", "임플란트 1차",  "implant",     "conditional", 1_300_000, 90, None, None,   "senior", 1),
-    ("U0014", "임플란트 2차",  "implant",     "no",          0,         60, None, None,   None,     0),
-    ("U0015", "교정 상담",     "ortho",       "no",          0,         30, None, None,   None,     0),
-    ("U0016", "교정 월 체크",  "ortho",       "no",          80_000,    30, None, None,   None,     0),
-    ("U0017", "미백",          "cosmetic",    "no",          300_000,   60, None, None,   None,     0),
-    ("U0018", "잇몸치료",      "perio",       "yes",         35_000,    30, None, None,   None,     0),
-    ("U0019", "상담",          "consult",     "no",          0,         30, None, None,   None,     0),
+    ("U0001", "스케일링", "preventive", "yes", 60_000, 30, 1, "year", "age19plus", 0),
+    ("U0002", "구강검진", "preventive", "yes", 15_000, 30, None, None, None, 0),
+    ("U0003", "불소도포", "preventive", "no", 30_000, 30, None, None, "child", 0),
+    ("U0004", "실란트", "preventive", "yes", 40_000, 30, None, None, "child", 1),
+    ("U0005", "레진", "restorative", "no", 80_000, 30, None, None, None, 1),
+    ("U0006", "아말감/GI", "restorative", "yes", 25_000, 30, None, None, None, 1),
+    ("U0007", "인레이", "restorative", "no", 350_000, 60, None, None, None, 1),
+    ("U0008", "신경치료", "endo", "yes", 120_000, 60, None, None, None, 1),
+    ("U0009", "크라운", "prosth", "no", 550_000, 60, None, None, None, 1),
+    ("U0010", "브릿지", "prosth", "no", 1_500_000, 60, None, None, None, 0),
+    ("U0011", "단순발치", "surgery", "yes", 30_000, 30, None, None, None, 1),
+    ("U0012", "사랑니 발치", "surgery", "yes", 90_000, 60, None, None, None, 1),
+    ("U0013", "임플란트 1차", "implant", "conditional", 1_300_000, 90, None, None, "senior", 1),
+    ("U0014", "임플란트 2차", "implant", "no", 0, 60, None, None, None, 0),
+    ("U0015", "교정 상담", "ortho", "no", 0, 30, None, None, None, 0),
+    ("U0016", "교정 월 체크", "ortho", "no", 80_000, 30, None, None, None, 0),
+    ("U0017", "미백", "cosmetic", "no", 300_000, 60, None, None, None, 0),
+    ("U0018", "잇몸치료", "perio", "yes", 35_000, 30, None, None, None, 0),
+    ("U0019", "상담", "consult", "no", 0, 30, None, None, None, 0),
 ]
-_KEYS = ("code", "name", "category", "is_insured", "fee_total", "duration_min",
-         "insured_limit", "limit_scope", "age_group", "is_tooth_level")
+_KEYS = (
+    "code",
+    "name",
+    "category",
+    "is_insured",
+    "fee_total",
+    "duration_min",
+    "insured_limit",
+    "limit_scope",
+    "age_group",
+    "is_tooth_level",
+)
 
 # 구어 별칭 (§2.1 aliases) — 전사의 꼭 넣을 시술 검사(글자 포함)·검색 동의어(차트는 표준 이름만). 다른 시술과 겹치는 말·
 # 낱말이 아닌 조각은 넣지 않는다(때우는 — 레진과, 발치 — 사랑니 발치와, 교정 — 교정 상담과, '이 뽑' — '아이 뽑'에도 맞음)
 PROCEDURE_ALIASES = {
-    "스케일링": ["치석 제거"], "구강검진": ["검진"], "불소도포": ["불소"], "실란트": ["홈 메우기", "홈메우기"],
-    "아말감/GI": ["아말감"], "신경치료": ["신경 치료"], "브릿지": ["브리지"], "단순발치": ["단순 발치"],
-    "사랑니 발치": ["사랑니"], "임플란트 1차": ["임플란트"], "임플란트 2차": ["임플란트"],
-    "교정 월 체크": ["교정 체크", "교정 점검"], "미백": ["화이트닝"], "잇몸치료": ["잇몸 치료"],
+    "스케일링": ["치석 제거"],
+    "구강검진": ["검진"],
+    "불소도포": ["불소"],
+    "실란트": ["홈 메우기", "홈메우기"],
+    "아말감/GI": ["아말감"],
+    "신경치료": ["신경 치료"],
+    "브릿지": ["브리지"],
+    "단순발치": ["단순 발치"],
+    "사랑니 발치": ["사랑니"],
+    "임플란트 1차": ["임플란트"],
+    "임플란트 2차": ["임플란트"],
+    "교정 월 체크": ["교정 체크", "교정 점검"],
+    "미백": ["화이트닝"],
+    "잇몸치료": ["잇몸 치료"],
 }
 PROCEDURES = [
-    {**dict(zip(_KEYS, row)), "patient_share_rate": 1.0 if row[3] == "no" else 0.3,
-     "aliases": json.dumps(PROCEDURE_ALIASES.get(row[1], []), ensure_ascii=False)}
+    {
+        **dict(zip(_KEYS, row, strict=True)),
+        "patient_share_rate": 1.0 if row[3] == "no" else 0.3,
+        "aliases": json.dumps(PROCEDURE_ALIASES.get(row[1], []), ensure_ascii=False),
+    }
     for row in _ROWS
 ]
 
 SCALING_CODE = "U0001"
 # 발치한 치아에는 이후 진료가 없다 — 임플란트 1차만 그 자리에 한다 (§2.1)
-EXTRACTION_CODES = frozenset(p["code"] for p in PROCEDURES if p["name"] in ("단순발치", "사랑니 발치"))
+EXTRACTION_CODES = frozenset(
+    p["code"] for p in PROCEDURES if p["name"] in ("단순발치", "사랑니 발치")
+)
 IMPLANT_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "임플란트 1차")
 
 # 적용 연령(age_group)별 나이 범위 (양 끝 포함, None = 상한 없음) — 급여 조건 (§2.1·§2.6 (4))
@@ -184,6 +218,7 @@ def insured_on(procedure: dict, age: int) -> bool:
     lo, hi = _AGE_GROUP_RANGE.get(procedure["age_group"], (0, None))
     return lo <= age and (hi is None or age <= hi)
 
+
 # 주의사항 (§2.2, 4b단계). emr_alert_types에 code·label·category를 적재하고, 관련 시술·행동·대상·비율은 여기에만 둔다.
 # 관련 시술 = 그날 예정 시술이 여기 있으면 ④ 주의 칩이 켜진다(평가 설계 §4 반영률). 행동은 ④ 요약·차트(5b)의 처리 문구.
 # intake: rules = [(최소 나이, 최대 나이(포함, None = 상한 없음), 성별(None = 모두), 비율)] — 문진 기록일 나이로 판정
@@ -192,40 +227,144 @@ _P = {p["name"]: p["code"] for p in PROCEDURES}
 _ALL = frozenset(_P.values())
 _SURGERY = frozenset(_P[n] for n in ("단순발치", "사랑니 발치", "임플란트 1차"))
 _BLEEDING = _SURGERY | {_P["스케일링"], _P["잇몸치료"]}
-_ANESTHESIA = _SURGERY | frozenset(_P[n] for n in ("레진", "아말감/GI", "인레이", "신경치료", "크라운", "브릿지", "잇몸치료"))
-_LONG_OPEN = frozenset(_P[n] for n in ("인레이", "신경치료", "크라운", "브릿지", "사랑니 발치", "임플란트 1차"))
+_ANESTHESIA = _SURGERY | frozenset(
+    _P[n] for n in ("레진", "아말감/GI", "인레이", "신경치료", "크라운", "브릿지", "잇몸치료")
+)
+_LONG_OPEN = frozenset(
+    _P[n] for n in ("인레이", "신경치료", "크라운", "브릿지", "사랑니 발치", "임플란트 1차")
+)
 _IMPRESSION = frozenset(_P[n] for n in ("인레이", "크라운", "브릿지"))
 _ADULT, _SENIOR = (19, 64), (65, None)
 _ALERT_ROWS = [
     # (code, label, category, action, 관련 시술, intake rules 또는 visit 비율)
-    ("HTN", "고혈압", "systemic", "진료 전 혈압 측정", _ANESTHESIA, [(*_ADULT, None, 0.08), (*_SENIOR, None, 0.40)]),
-    ("DM", "당뇨", "systemic", "혈당 확인 후 진행, 감염 주의", _SURGERY | {_P["잇몸치료"]},
-     [(*_ADULT, None, 0.04), (*_SENIOR, None, 0.25)]),
-    ("ANTICOAG", "항응고제 복용", "systemic", "복용 여부 확인, 지혈 준비", _BLEEDING,
-     [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.15)]),
-    ("OSTEO", "골다공증 약 복용", "systemic", "약 종류·복용 기간 확인 후 원장 판단", _SURGERY,
-     [(*_SENIOR, "F", 0.15), (*_SENIOR, "M", 0.02)]),
-    ("PROSTHESIS", "인공관절·인공판막", "systemic", "예방 항생제 필요 여부 확인", _BLEEDING, [(*_SENIOR, None, 0.06)]),
-    ("PREGNANT", "임신 중", "systemic", "방사선·약 처방 최소화, 원장 확인", _ANESTHESIA, [(19, 44, "F", 0.03)]),  # 끝: PREGNANCY_LEFT_DAYS
+    (
+        "HTN",
+        "고혈압",
+        "systemic",
+        "진료 전 혈압 측정",
+        _ANESTHESIA,
+        [(*_ADULT, None, 0.08), (*_SENIOR, None, 0.40)],
+    ),
+    (
+        "DM",
+        "당뇨",
+        "systemic",
+        "혈당 확인 후 진행, 감염 주의",
+        _SURGERY | {_P["잇몸치료"]},
+        [(*_ADULT, None, 0.04), (*_SENIOR, None, 0.25)],
+    ),
+    (
+        "ANTICOAG",
+        "항응고제 복용",
+        "systemic",
+        "복용 여부 확인, 지혈 준비",
+        _BLEEDING,
+        [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.15)],
+    ),
+    (
+        "OSTEO",
+        "골다공증 약 복용",
+        "systemic",
+        "약 종류·복용 기간 확인 후 원장 판단",
+        _SURGERY,
+        [(*_SENIOR, "F", 0.15), (*_SENIOR, "M", 0.02)],
+    ),
+    (
+        "PROSTHESIS",
+        "인공관절·인공판막",
+        "systemic",
+        "예방 항생제 필요 여부 확인",
+        _BLEEDING,
+        [(*_SENIOR, None, 0.06)],
+    ),
+    (
+        "PREGNANT",
+        "임신 중",
+        "systemic",
+        "방사선·약 처방 최소화, 원장 확인",
+        _ANESTHESIA,
+        [(19, 44, "F", 0.03)],
+    ),  # 끝: PREGNANCY_LEFT_DAYS
     ("LATEX", "라텍스 알레르기", "allergy", "비라텍스 장갑 사용", _ALL, [(0, None, None, 0.01)]),
-    ("PENICILLIN", "페니실린 알레르기", "allergy", "항생제 처방 시 대체 약", _SURGERY | {_P["신경치료"]},
-     [(0, None, None, 0.05)]),
-    ("EPI", "에피네프린 민감", "allergy", "무에피 마취제 준비", _ANESTHESIA, [(19, None, None, 0.03)]),
-    ("CLAUSTRO", "폐소공포증", "procedure", "러버댐·장시간 진료 시 중간 휴식", _LONG_OPEN, [(13, None, None, 0.05)]),
+    (
+        "PENICILLIN",
+        "페니실린 알레르기",
+        "allergy",
+        "항생제 처방 시 대체 약",
+        _SURGERY | {_P["신경치료"]},
+        [(0, None, None, 0.05)],
+    ),
+    (
+        "EPI",
+        "에피네프린 민감",
+        "allergy",
+        "무에피 마취제 준비",
+        _ANESTHESIA,
+        [(19, None, None, 0.03)],
+    ),
+    (
+        "CLAUSTRO",
+        "폐소공포증",
+        "procedure",
+        "러버댐·장시간 진료 시 중간 휴식",
+        _LONG_OPEN,
+        [(13, None, None, 0.05)],
+    ),
     ("TRISMUS", "개구 제한", "procedure", "짧게 나눠 진행", _LONG_OPEN, [(19, None, None, 0.02)]),
-    ("FEAR", "치과 공포", "procedure", "시술 전 충분히 설명하고 천천히 진행", _ALL, [(0, None, None, 0.06)]),
-    ("CHILD_COOP", "협조 어려운 소아", "procedure", "보호자 동반, 짧게 진행", _ALL,  # 끝: 소아 구간을 벗어나는 생일
-     [(0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child"), None, 0.15)]),
-    ("UPRIGHT", "체어 눕히지 말고 진료", "procedure", "체어를 세운 자세로 진료", _ALL,
-     [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.06)]),
+    (
+        "FEAR",
+        "치과 공포",
+        "procedure",
+        "시술 전 충분히 설명하고 천천히 진행",
+        _ALL,
+        [(0, None, None, 0.06)],
+    ),
+    (
+        "CHILD_COOP",
+        "협조 어려운 소아",
+        "procedure",
+        "보호자 동반, 짧게 진행",
+        _ALL,  # 끝: 소아 구간을 벗어나는 생일
+        [(0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child"), None, 0.15)],
+    ),
+    (
+        "UPRIGHT",
+        "체어 눕히지 말고 진료",
+        "procedure",
+        "체어를 세운 자세로 진료",
+        _ALL,
+        [(*_ADULT, None, 0.01), (*_SENIOR, None, 0.06)],
+    ),
     ("ANES_FAIL", "마취가 잘 안 됨", "procedure", "마취 추가 준비, 시간 여유", _ANESTHESIA, 0.05),
-    ("GAG", "구역반사", "procedure", "상체를 세우고 구역반사 대비", _IMPRESSION | {_P["스케일링"]}, 0.04),
-    ("SYNCOPE", "마취 후 실신 이력", "procedure", "눕힌 자세로 마취, 마취 후 관찰", _ANESTHESIA, 0.01),
+    (
+        "GAG",
+        "구역반사",
+        "procedure",
+        "상체를 세우고 구역반사 대비",
+        _IMPRESSION | {_P["스케일링"]},
+        0.04,
+    ),
+    (
+        "SYNCOPE",
+        "마취 후 실신 이력",
+        "procedure",
+        "눕힌 자세로 마취, 마취 후 관찰",
+        _ANESTHESIA,
+        0.01,
+    ),
 ]
 ALERT_TYPES = {
-    code: {"label": label, "category": category, "action": action, "procedures": frozenset(procs),
-           **({"source": "visit", "rules": [], "rate": target} if isinstance(target, float)
-              else {"source": "intake", "rules": target})}
+    code: {
+        "label": label,
+        "category": category,
+        "action": action,
+        "procedures": frozenset(procs),
+        **(
+            {"source": "visit", "rules": [], "rate": target}
+            if isinstance(target, float)
+            else {"source": "intake", "rules": target}
+        ),
+    }
     for code, label, category, action, procs, target in _ALERT_ROWS
 }
 MAX_ALERTS_PER_PATIENT = 3
@@ -239,7 +378,8 @@ _MOLARS_6_7 = tuple(f"{q}{n}" for q in (1, 2, 3, 4) for n in (6, 7))
 _DEFAULT_TEETH = tuple(sorted(PERMANENT_TEETH - set(_WISDOM)))
 TOOTH_CHOICES = {
     p["code"]: {"사랑니 발치": _WISDOM, "실란트": _MOLARS_6_7}.get(p["name"], _DEFAULT_TEETH)
-    for p in PROCEDURES if p["is_tooth_level"]
+    for p in PROCEDURES
+    if p["is_tooth_level"]
 }
 
 
@@ -276,10 +416,30 @@ PLANNED_WEIGHTS = {
     "treatment": {
         "child": {"아말감/GI": 35, "실란트": 30, "레진": 20, "단순발치": 15},
         "teen": {"교정 월 체크": 50, "레진": 30, "아말감/GI": 10, "사랑니 발치": 10},
-        "adult": {"레진": 27, "잇몸치료": 15, "아말감/GI": 10, "신경치료": 9, "단순발치": 8, "크라운": 7,
-                  "교정 월 체크": 7, "사랑니 발치": 6, "인레이": 5, "임플란트 1차": 3, "미백": 2, "브릿지": 1},
-        "senior": {"잇몸치료": 26, "단순발치": 18, "임플란트 1차": 14, "레진": 12, "아말감/GI": 10, "신경치료": 8,
-                   "크라운": 8, "브릿지": 4},
+        "adult": {
+            "레진": 27,
+            "잇몸치료": 15,
+            "아말감/GI": 10,
+            "신경치료": 9,
+            "단순발치": 8,
+            "크라운": 7,
+            "교정 월 체크": 7,
+            "사랑니 발치": 6,
+            "인레이": 5,
+            "임플란트 1차": 3,
+            "미백": 2,
+            "브릿지": 1,
+        },
+        "senior": {
+            "잇몸치료": 26,
+            "단순발치": 18,
+            "임플란트 1차": 14,
+            "레진": 12,
+            "아말감/GI": 10,
+            "신경치료": 8,
+            "크라운": 8,
+            "브릿지": 4,
+        },
     },
     "consult": {
         "child": {"상담": 100},
@@ -293,7 +453,17 @@ CHECKUP_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "구강검진"
 
 # 심사 조정 상세 사유 (§2.4). category = 심평원 조정 사유 범주 문자(청구방법 매뉴얼 2020.7 별첨 3 — 대응은 추정),
 # note = 일반사유 서술(adjust_note). 범주 문자는 여러 사유가 공유하므로 서술이 사유를 구별한다. 나이 사유는 두지 않는다
-_INSURED_NAMES = ("스케일링", "구강검진", "실란트", "아말감/GI", "신경치료", "단순발치", "사랑니 발치", "임플란트 1차", "잇몸치료")
+_INSURED_NAMES = (
+    "스케일링",
+    "구강검진",
+    "실란트",
+    "아말감/GI",
+    "신경치료",
+    "단순발치",
+    "사랑니 발치",
+    "임플란트 1차",
+    "잇몸치료",
+)
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
     ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),
@@ -302,69 +472,152 @@ _REASON_ROWS = [
     ("R04", "B", "requirement", "실란트 대상 치아 기준 적용착오", ("실란트",)),
     ("R05", "AK", "requirement", "발치 난이도 산정 근거 부족으로 하향 인정", ("사랑니 발치",)),
     ("R06", "B", "requirement", "임플란트 급여 대상 부위 기준 적용착오", ("임플란트 1차",)),
-    ("D01", "C", "documentation", "내역설명 미기재로 인정 근거 없음", ("잇몸치료", "신경치료", "사랑니 발치", "임플란트 1차", "실란트")),
-    ("D02", "M", "documentation", "방사선 등 증빙자료 미확인", ("신경치료", "단순발치", "사랑니 발치", "임플란트 1차")),
+    (
+        "D01",
+        "C",
+        "documentation",
+        "내역설명 미기재로 인정 근거 없음",
+        ("잇몸치료", "신경치료", "사랑니 발치", "임플란트 1차", "실란트"),
+    ),
+    (
+        "D02",
+        "M",
+        "documentation",
+        "방사선 등 증빙자료 미확인",
+        ("신경치료", "단순발치", "사랑니 발치", "임플란트 1차"),
+    ),
     ("D03", "K", "documentation", "부위·산정 내역 기재 누락", None),
     ("C01", "B", "diagnosis", "상병과 시행 행위 불일치", None),
     ("E01", "C", "external", "연 1회 산정 횟수 초과(타 기관 이력)", ("스케일링",)),
 ]
 _CODE_BY_NAME = {p["name"]: p["code"] for p in PROCEDURES}
 ADJUST_REASONS = {
-    key: {"category": category, "type": adjust_type, "note": note,
-          "procedures": frozenset(_CODE_BY_NAME[n] for n in (names or _INSURED_NAMES))}
+    key: {
+        "category": category,
+        "type": adjust_type,
+        "note": note,
+        "procedures": frozenset(_CODE_BY_NAME[n] for n in (names or _INSURED_NAMES)),
+    }
     for key, category, adjust_type, note, names in _REASON_ROWS
 }
 
 
 # 차트 상병 (§4.3, 5b단계). 시술처럼 가상 코드 — 뜻은 이름이 갖는다. emr_diagnoses에 적재
 DIAGNOSES = {
-    "D01": "상아질 우식", "D02": "치수염", "D03": "만성 근단 치주염", "D04": "만성 치은염", "D05": "만성 치주염",
-    "D06": "치아 침착물(치석)", "D07": "매복치", "D08": "치아 상실", "D09": "치아 위치 이상", "D10": "치아 변색",
-    "D11": "치과 검사", "D12": "우식 예방 처치",
+    "D01": "상아질 우식",
+    "D02": "치수염",
+    "D03": "만성 근단 치주염",
+    "D04": "만성 치은염",
+    "D05": "만성 치주염",
+    "D06": "치아 침착물(치석)",
+    "D07": "매복치",
+    "D08": "치아 상실",
+    "D09": "치아 위치 이상",
+    "D10": "치아 변색",
+    "D11": "치과 검사",
+    "D12": "우식 예방 처치",
 }
 # 시술별 허용 상병 — 차트 상병이 이 밖이면 상병 착오(⑤-2 상병 확인 경고). 예방 시술(불소도포·실란트 → D12)은 확신이 낮다
 _DX_BY_NAME = {
-    "스케일링": ("D06", "D04"), "구강검진": ("D11",), "불소도포": ("D12",), "실란트": ("D12",), "레진": ("D01",),
-    "아말감/GI": ("D01",), "인레이": ("D01",), "신경치료": ("D02", "D03"), "크라운": ("D01", "D03"), "브릿지": ("D08",),
-    "단순발치": ("D03", "D05"), "사랑니 발치": ("D07",), "임플란트 1차": ("D08",), "임플란트 2차": ("D08",),
-    "교정 상담": ("D09",), "교정 월 체크": ("D09",), "미백": ("D10",), "잇몸치료": ("D05",), "상담": ("D11",),
+    "스케일링": ("D06", "D04"),
+    "구강검진": ("D11",),
+    "불소도포": ("D12",),
+    "실란트": ("D12",),
+    "레진": ("D01",),
+    "아말감/GI": ("D01",),
+    "인레이": ("D01",),
+    "신경치료": ("D02", "D03"),
+    "크라운": ("D01", "D03"),
+    "브릿지": ("D08",),
+    "단순발치": ("D03", "D05"),
+    "사랑니 발치": ("D07",),
+    "임플란트 1차": ("D08",),
+    "임플란트 2차": ("D08",),
+    "교정 상담": ("D09",),
+    "교정 월 체크": ("D09",),
+    "미백": ("D10",),
+    "잇몸치료": ("D05",),
+    "상담": ("D11",),
 }
 PROCEDURE_DIAGNOSES = {_CODE_BY_NAME[n]: frozenset(dx) for n, dx in _DX_BY_NAME.items()}
 
 # 임상 요건 (§4.3, 5b단계) — 요건 사유(ADJUST_REASONS의 requirement 유형)와 1:1. 차트에 그 요건의 근거가 있는지가 ⑤-2·⑤-3의 기준.
 # 요건 줄: 이 시술의 창 안 급여 줄은 항상 요건 줄(잇몸치료는 직전 PERIO_LINK_DAYS일 안에 치석제거가 있으면 R02, 아니면 R03)
-CHART_REQUIREMENT = {_CODE_BY_NAME[n]: key for n, key in
-                     (("잇몸치료", "R03"), ("실란트", "R04"), ("사랑니 발치", "R05"), ("임플란트 1차", "R06"))}
+CHART_REQUIREMENT = {
+    _CODE_BY_NAME[n]: key
+    for n, key in (
+        ("잇몸치료", "R03"),
+        ("실란트", "R04"),
+        ("사랑니 발치", "R05"),
+        ("임플란트 1차", "R06"),
+    )
+}
 PERIO_LINK_DAYS = 90
 # 아말감/GI·신경치료는 같은 치아에 같은 시술을 다시 할 때(장부에 이전 진료가 있거나 이 사유로 깎였을 때)만 요건 줄
 RETREATMENT_REQUIREMENT = "R01"
 # 제출 월·전월 오류 비율 — ⑤-2 평가가 성립하는 평가용 분포(확정 월은 심사 결과에서 정한다). 진료 1건당 오류 최대 1개
 REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
-DIAGNOSIS_ERROR_RATE = 0.03    # 요건 오류가 아닌 급여 줄 중 상병 착오
+DIAGNOSIS_ERROR_RATE = 0.03  # 요건 오류가 아닌 급여 줄 중 상병 착오
 # 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
 CHART_DECOY_RATIO = 1.5
-CHART_FORBIDDEN_WORDS = ("청구 오류", "삭감", "조정", "요건", "급여 기준")  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
+CHART_FORBIDDEN_WORDS = (
+    "청구 오류",
+    "삭감",
+    "조정",
+    "요건",
+    "급여 기준",
+)  # 차트 본문에 정답 어휘 금지 (§4.3 서술 규칙)
 
 
 def adjust_group(procedure_code: str) -> str:
     """심사 결과 추첨의 시술군 — 요건 사유가 있는 시술이 clinical (REVIEW_OUTCOME_WEIGHTS·ADJUST_TYPE_WEIGHTS의 키)"""
-    return "clinical" if any(r["type"] == "requirement" and procedure_code in r["procedures"]
-                             for r in ADJUST_REASONS.values()) else "other"
+    return (
+        "clinical"
+        if any(
+            r["type"] == "requirement" and procedure_code in r["procedures"]
+            for r in ADJUST_REASONS.values()
+        )
+        else "other"
+    )
 
 
 # 통화 슬롯 (§4.1, 6단계). 목적·노이즈·방향 비중은 §4.1 표가 설계 목표 — 어긋나면 tests/generator/test_doc_sync.py가 실패.
 # 목적·목적 안 방향·노이즈는 할당량(최대 잔여 반올림)으로 맞추고, 급함·플래그는 건마다 추첨한다
 CALL_PURPOSE_SHARE = {
-    "book": 0.18, "reschedule": 0.15, "confirm": 0.08, "cancel": 0.06, "recall": 0.08, "treatment_q": 0.10,
-    "insurance_q": 0.06, "price_q": 0.08, "billing_q": 0.04, "document_req": 0.04, "emergency": 0.05,
-    "complaint": 0.03, "other": 0.03, "unknown": 0.02,
+    "book": 0.18,
+    "reschedule": 0.15,
+    "confirm": 0.08,
+    "cancel": 0.06,
+    "recall": 0.08,
+    "treatment_q": 0.10,
+    "insurance_q": 0.06,
+    "price_q": 0.08,
+    "billing_q": 0.04,
+    "document_req": 0.04,
+    "emergency": 0.05,
+    "complaint": 0.03,
+    "other": 0.03,
+    "unknown": 0.02,
 }
 # 예약 이벤트에서 역산하는 목적 — 이벤트 하나에 통화 최대 1건
 BOOKING_PURPOSES = ("book", "reschedule", "cancel", "confirm")
 # outbound 비중(전체 통화 대비 %p). 목적 안 방향 할당량 = 이 값 / 목적 비중. 나머지 목적은 전부 inbound
-CALL_OUTBOUND_SHARE = {"recall": 0.08, "confirm": 0.04, "billing_q": 0.03, "document_req": 0.02, "treatment_q": 0.03}
-OUTBOUND_MULTI_SHARE = 0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
-CALL_NOISE_SHARE = {"two_topics": 0.10, "interrupted": 0.08, "ambiguous_pain": 0.04, "guardian_confused": 0.03}
+CALL_OUTBOUND_SHARE = {
+    "recall": 0.08,
+    "confirm": 0.04,
+    "billing_q": 0.03,
+    "document_req": 0.02,
+    "treatment_q": 0.03,
+}
+OUTBOUND_MULTI_SHARE = (
+    0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
+)
+CALL_NOISE_SHARE = {
+    "two_topics": 0.10,
+    "interrupted": 0.08,
+    "ambiguous_pain": 0.04,
+    "guardian_confused": 0.03,
+}
 # 상대 분포(§4.1) — 목표가 아니라 근사(상대는 목적·환자에서 정해짐). 리포트로만 본다
 # 상대 enum. 비율은 정하지 않는다 — 예약류는 이벤트 환자, 그 밖은 CALL_COUNTERPART_WEIGHTS에서 나온다(리포트로만)
 CALL_COUNTERPARTS = ("patient", "guardian", "new_caller", "insurer", "vendor", "other")
@@ -383,30 +636,71 @@ CALL_COUNTERPART_WEIGHTS = {
     "unknown": {"side": 30, "new_caller": 30, "other": 40},
 }
 # 플래그 6개. 주 목적이 함의하는 플래그는 항상 true
-CALL_FLAGS = ("emergency", "complaint", "price_inquiry", "wants_appt", "appt_confirmed", "has_todo")
-IMPLIED_FLAG = {"emergency": "emergency", "complaint": "complaint", "price_q": "price_inquiry", "book": "wants_appt"}
+CALL_FLAGS = (
+    "emergency",
+    "complaint",
+    "price_inquiry",
+    "wants_appt",
+    "appt_confirmed",
+    "has_todo",
+)
+IMPLIED_FLAG = {
+    "emergency": "emergency",
+    "complaint": "complaint",
+    "price_q": "price_inquiry",
+    "book": "wants_appt",
+}
 # 부 주제 플래그 → accepted_purposes에 들어가는 목적
-SUBTOPIC_PURPOSE = {"price_inquiry": "price_q", "complaint": "complaint", "emergency": "emergency", "wants_appt": "book"}
+SUBTOPIC_PURPOSE = {
+    "price_inquiry": "price_q",
+    "complaint": "complaint",
+    "emergency": "emergency",
+    "wants_appt": "book",
+}
 # 목적별로 가능한 부 주제 플래그(주 목적이 함의하는 것 제외). 빈 목적은 복합 주제를 만들지 않는다
 CALL_SUBTOPICS = {
-    "book": ("price_inquiry",), "reschedule": ("price_inquiry", "complaint"), "cancel": ("complaint",),
-    "confirm": ("price_inquiry",), "recall": ("wants_appt", "price_inquiry"),
-    "treatment_q": ("price_inquiry", "wants_appt", "emergency"), "insurance_q": ("price_inquiry", "wants_appt"),
-    "price_q": ("wants_appt",), "billing_q": ("complaint",), "document_req": ("wants_appt",),
-    "emergency": ("wants_appt",), "complaint": ("wants_appt",), "other": (), "unknown": (),
+    "book": ("price_inquiry",),
+    "reschedule": ("price_inquiry", "complaint"),
+    "cancel": ("complaint",),
+    "confirm": ("price_inquiry",),
+    "recall": ("wants_appt", "price_inquiry"),
+    "treatment_q": ("price_inquiry", "wants_appt", "emergency"),
+    "insurance_q": ("price_inquiry", "wants_appt"),
+    "price_q": ("wants_appt",),
+    "billing_q": ("complaint",),
+    "document_req": ("wants_appt",),
+    "emergency": ("wants_appt",),
+    "complaint": ("wants_appt",),
+    "other": (),
+    "unknown": (),
 }
 CALL_PAIN_PURPOSES = ("book", "treatment_q")  # 노이즈 '급함 애매한 통증' 대상
-PAIN_URGENT_SHARE = 0.5                       # 그중 urgent (나머지 normal)
+PAIN_URGENT_SHARE = 0.5  # 그중 urgent (나머지 normal)
 CALL_URGENCY_WEIGHTS = {"normal": 85, "low": 15}  # emergency 플래그·애매한 통증이 아닌 통화
-APPT_CONFIRMED_SHARE = 0.7                    # book·reschedule 중 appt_confirmed
+APPT_CONFIRMED_SHARE = 0.7  # book·reschedule 중 appt_confirmed
 HAS_TODO_SHARE = {"confirm": 0.3, "recall": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
 HAS_TODO_DEFAULT = 0.8
 CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 분량(§4.1 절차 5)
 # 통화 전사 (§4.1 '7단계 구현 결정'). 발화 글자 수(화자 표시·공백 제외) ÷ 이 값 = 통화 길이(초)
 TRANSCRIPT_CHARS_PER_SEC = 3.5  # 말 사이 틈·조회 대기를 포함한 통화 평균
 # 라벨 어휘 — 전사에 그대로 나오면 검증 실패(§4.1 절차 6(b)). 목적 이름(§4.1 목적 분포 표)과 그 조각
-CALL_LABEL_WORDS = ("예약 잡기", "예약 변경", "예약 확인", "예약 취소", "리콜", "치료 문의", "보험 문의", "가격 문의",
-                    "비용 문의", "수납 문의", "청구 문의", "서류 요청", "기록 요청", "응급", "불만")
+CALL_LABEL_WORDS = (
+    "예약 잡기",
+    "예약 변경",
+    "예약 확인",
+    "예약 취소",
+    "리콜",
+    "치료 문의",
+    "보험 문의",
+    "가격 문의",
+    "비용 문의",
+    "수납 문의",
+    "청구 문의",
+    "서류 요청",
+    "기록 요청",
+    "응급",
+    "불만",
+)
 # 환자 측(예약류 아님) 환자 조건 — (목적, 방향) → (규칙, 값). 없으면 'visited'(통화일 전 completed 내원이 있음)
 # recall_due: 마지막 위생 내원 + RECALL_CYCLE < 통화일이고 그 시점 잡힌 예약 없음 / balance: 그 시점 잔액 > 0 /
 # recent_treatment: 통화일 값[0]~값[1]일 전에 진료(treatment) 내원 / recent_visit: 통화일 값일 안에 내원
@@ -424,7 +718,7 @@ EVAL_MIN_PER_SPLIT = 2
 
 # 문자 (§2.5, 8단계). 리마인드는 리마인드 날 개원 시각(HOURS["open"])에 일괄
 MESSAGE_CONFIRM_DELAY_MIN = (1, 5)  # 예약 확정 문자 = 예약을 잡은 뒤 (양 끝 포함, 분)
-MESSAGE_DELAY_MIN = (1, 30)         # 노쇼 문자(진료가 끝났을 시각 뒤)·답장(out 뒤)
+MESSAGE_DELAY_MIN = (1, 30)  # 노쇼 문자(진료가 끝났을 시각 뒤)·답장(out 뒤)
 # 트리거별 본문. date = '11월 3일(화)', 리마인드도 '내일'이라 쓰지 않는다(직전 진료일이 전날이 아닐 수 있음)
 MESSAGE_TEMPLATES = {
     "appt_confirm": "[{clinic}] {name}님, {date} {time} {procedure} 예약이 확정되었습니다.",

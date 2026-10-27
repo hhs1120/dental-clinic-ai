@@ -5,6 +5,7 @@
 - documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실·청구 기준 소제목 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
   건 id는 문서 번호(작업 파일에도 표 이름이 없게)
 """
+
 import json
 
 from generator import llm_jobs
@@ -17,7 +18,9 @@ DOC_LENGTH_CHARS = {"notice": (150, 1500), "default": (400, 3000)}
 CLAIM_CHARS_PER_SECTION = 120
 SCHEMA = {
     "type": "object",
-    "properties": {"body": {"type": "string", "description": "마크다운 문서 본문 (첫 줄 '# 제목')"}},
+    "properties": {
+        "body": {"type": "string", "description": "마크다운 문서 본문 (첫 줄 '# 제목')"}
+    },
     "required": ["body"],
     "additionalProperties": False,
 }
@@ -53,7 +56,12 @@ def draft(d: Doc) -> str:
         lines.append(f"시행일: {d.effective}")
     if d.type == "claim_standard":
         for r in d.sections:
-            lines += ["", f"## {CLAIM_HEADINGS[r]}", "", *(f"- {t}." for t in _rules(d, r) or ["기록 기준을 지킨다"])]
+            lines += [
+                "",
+                f"## {CLAIM_HEADINGS[r]}",
+                "",
+                *(f"- {t}." for t in _rules(d, r) or ["기록 기준을 지킨다"]),
+            ]
     else:
         lines += [""] + [f"- {f.text}." for f in d.facts]
     return "\n".join(lines)
@@ -71,8 +79,10 @@ def payload(d: Doc) -> dict:
     if d.kind == "similar":
         p["skip_topic"] = d.skip
     old = next((o for o in CATALOG if o.kind == "old_version" and o.pair == d.key), None)
-    if old is not None and not d.recurring:  # 최신 공지 — "기존 ○○에서"를 지어내지 않게 옛 버전 값(휴진처럼 해마다 내는 공지는 뺌)
-            p["previous"] = {"effective_date": old.effective, "facts": [f.text for f in old.facts]}
+    if (
+        old is not None and not d.recurring
+    ):  # 최신 공지 — "기존 ○○에서"를 지어내지 않게 옛 버전 값(휴진처럼 해마다 내는 공지는 뺌)
+        p["previous"] = {"effective_date": old.effective, "facts": [f.text for f in old.facts]}
     if d.kind == "external":
         p["source"] = "다른 치과·일반 자료"
     else:
@@ -86,32 +96,79 @@ def checks(d: Doc) -> dict:
         forbidden = [w for k in (d.pair, *d.avoid) for w in _words(BY_KEY[k])]
     elif d.kind == "external":
         forbidden = [CLINIC_NAME]
-    c = {"field": "body", "must_include": [[w] for w in _words(d)], "forbidden_words": forbidden,
-         "forbidden_patterns": llm_jobs.forbidden_patterns(), "length": length(d)}
-    if d.type == "claim_standard":  # 사유마다 소제목 한 번, 그 기준 말은 그 절 안 (verify check_claim_sections와 같은 기준)
-        c["sections"] = [[f"## {CLAIM_HEADINGS[r]}", [w for f in d.facts if f.reason == r and not f.id.endswith(".heading")
-                                                         for w in f.words]] for r in d.sections]
+    c = {
+        "field": "body",
+        "must_include": [[w] for w in _words(d)],
+        "forbidden_words": forbidden,
+        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+        "length": length(d),
+    }
+    if (
+        d.type == "claim_standard"
+    ):  # 사유마다 소제목 한 번, 그 기준 말은 그 절 안 (verify check_claim_sections와 같은 기준)
+        c["sections"] = [
+            [
+                f"## {CLAIM_HEADINGS[r]}",
+                [
+                    w
+                    for f in d.facts
+                    if f.reason == r and not f.id.endswith(".heading")
+                    for w in f.words
+                ],
+            ]
+            for r in d.sections
+        ]
     return c
 
 
 def stage_plan(run, rng, fake) -> None:
-    ids = {CATALOG[i].key: n for n, i in enumerate(rng.permutation(len(CATALOG)).tolist(), start=1)}
+    ids = {
+        CATALOG[i].key: n for n, i in enumerate(rng.permutation(len(CATALOG)).tolist(), start=1)
+    }
     old_of = {d.pair: d.key for d in CATALOG if d.kind == "old_version"}
     docs, meta = [], []
     for d in CATALOG:
-        docs.append((ids[d.key], d.type, d.title, version(d), d.effective, path(d, ids[d.key]), draft(d)))
-        facts = [{"id": f.id, "text": f.text, "words": list(f.words), "reason": f.reason, "same": f.same} for f in d.facts]
-        meta.append((ids[d.key], d.key, d.kind, int(d.kind != "core"), ids.get(d.pair), ids.get(old_of.get(d.key)),
-                     json.dumps(sorted(ids[k] for k in d.avoid)), json.dumps(facts, ensure_ascii=False)))
-    run.conn.executemany("INSERT INTO ax_documents (id, type, title, version, effective_date, path, body)"
-                         " VALUES (?, ?, ?, ?, ?, ?, ?)", docs)
+        docs.append(
+            (ids[d.key], d.type, d.title, version(d), d.effective, path(d, ids[d.key]), draft(d))
+        )
+        facts = [
+            {
+                "id": f.id,
+                "text": f.text,
+                "words": list(f.words),
+                "reason": f.reason,
+                "same": f.same,
+            }
+            for f in d.facts
+        ]
+        meta.append(
+            (
+                ids[d.key],
+                d.key,
+                d.kind,
+                int(d.kind != "core"),
+                ids.get(d.pair),
+                ids.get(old_of.get(d.key)),
+                json.dumps(sorted(ids[k] for k in d.avoid)),
+                json.dumps(facts, ensure_ascii=False),
+            )
+        )
+    run.conn.executemany(
+        "INSERT INTO ax_documents (id, type, title, version, effective_date, path, body)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        docs,
+    )
     run.conn.executemany("INSERT INTO truth.truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?, ?)", meta)
 
 
 def stage_bodies(run, rng, fake) -> None:
     ctx = run.state["llm"]
-    for doc_id, key in run.conn.execute("SELECT doc_id, doc_key FROM truth.truth_doc_meta ORDER BY doc_id").fetchall():
+    for doc_id, key in run.conn.execute(
+        "SELECT doc_id, doc_key FROM truth.truth_doc_meta ORDER BY doc_id"
+    ).fetchall():
         d = BY_KEY[key]
         out = ctx.resolve(TASK, str(doc_id), payload(d), checks(d))
         if out is not None:
-            run.conn.execute("UPDATE ax_documents SET body = ? WHERE id = ?", (out["body"], doc_id))
+            run.conn.execute(
+                "UPDATE ax_documents SET body = ? WHERE id = ?", (out["body"], doc_id)
+            )

@@ -1,4 +1,5 @@
 """RAG 문서 목록 표 (generator/doc_catalog.py, 가상 데이터 생성 설계 §4.2 '9단계 구현 결정') — 표 자체의 규칙."""
+
 import json
 from collections import Counter
 from datetime import date, timedelta
@@ -85,7 +86,9 @@ def test_notice_versions():
         assert old.effective < RANGE_START and old.effective < new.effective <= TODAY, old.key
         if new.emr:
             assert new.effective <= EMR_START, new.key
-        assert {w for f in old.facts for w in f.words} != {w for f in new.facts for w in f.words}, old.key
+        assert {w for f in old.facts for w in f.words} != {
+            w for f in new.facts for w in f.words
+        }, old.key
     assert all(d.effective is None for d in CATALOG if d.type != "notice")
 
 
@@ -106,7 +109,9 @@ def test_notice_effective_is_open_day_and_planted():
             continue
         day = date.fromisoformat(d.effective)
         if d.effective[5:] != "01-01":
-            assert day.weekday() not in HOURS["closed_weekdays"] and d.effective not in HOLIDAYS, d.key
+            assert day.weekday() not in HOURS["closed_weekdays"] and d.effective not in HOLIDAYS, (
+                d.key
+            )
         assert f"{day.month}월 {day.day}일" in [w for f in d.facts for w in f.words], d.key
 
 
@@ -132,6 +137,7 @@ def test_words_not_in_title_or_topic():
 
 def test_similar_avoid_targets_core_and_drafts_clean():
     from generator import documents
+
     for d in CATALOG:
         if d.kind == "similar":
             assert all(BY_KEY[k].kind == "core" and k != d.pair for k in d.avoid), d.key
@@ -143,16 +149,30 @@ def test_claim_standard_covers_every_reason_once():
     assert set(CLAIM_HEADINGS) == set(ADJUST_REASONS)
     reasons = [r for rs in CLAIM_DOCS.values() for r in rs]
     assert sorted(reasons) == sorted(ADJUST_REASONS)
-    heads = [f.reason for d in CATALOG if d.type == "claim_standard" for f in d.facts if f.id.endswith(".heading")]
+    heads = [
+        f.reason
+        for d in CATALOG
+        if d.type == "claim_standard"
+        for f in d.facts
+        if f.id.endswith(".heading")
+    ]
     assert sorted(heads) == sorted(ADJUST_REASONS)
-    rules = [f.reason for d in CATALOG if d.type == "claim_standard" for f in d.facts if not f.id.endswith(".heading")]
+    rules = [
+        f.reason
+        for d in CATALOG
+        if d.type == "claim_standard"
+        for f in d.facts
+        if not f.id.endswith(".heading")
+    ]
     assert sorted(rules) == sorted(ADJUST_REASONS)  # 사유마다 기준 문장 하나
 
 
 def test_emr_values_from_master():
     """EMR과 겹치는 값은 master에서 — 진료시간·미백 가격이 master와 같다"""
     hours = {w for f in BY_KEY["faq-hours"].facts for w in f.words}
-    assert {"오전 9시 30분부터", "오후 6시 30분까지", "오후 1시 30분까지"} <= hours and HOURS["weekday_close"] == "18:30"
+    assert {"오전 9시 30분부터", "오후 6시 30분까지", "오후 1시 30분까지"} <= hours and HOURS[
+        "weekday_close"
+    ] == "18:30"
     whitening = next(p for p in PROCEDURES if p["name"] == "미백")["fee_total"]
     assert f"{whitening:,}원" in BY_KEY["notice-whitening"].facts[0].words
 

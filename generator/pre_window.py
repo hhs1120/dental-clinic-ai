@@ -3,10 +3,19 @@
 (담당 위생사 순환을 이어 가고, 그해 급여 스케일링을 연 1회 이력에 넣으려고).
 2·3단계 결과를 바꾸지 않게 자기 시드로 따로 뽑는다 — 리콜 기한(3단계)은 2단계 날짜 그대로라 며칠 어긋날 수 있다(지터 안).
 """
+
 from datetime import date, datetime, timedelta
 
-from generator.master import (HYGIENE_SCALING_BANDS, MAX_LEAD_DAYS, PLANNED_WEIGHTS, PROCEDURES, SCALING_CODE,
-                              age_band, age_on, open_slots)
+from generator.master import (
+    HYGIENE_SCALING_BANDS,
+    MAX_LEAD_DAYS,
+    PLANNED_WEIGHTS,
+    PROCEDURES,
+    SCALING_CODE,
+    age_band,
+    age_on,
+    open_slots,
+)
 from generator.schedule import DAY_MINUTES, DURATION, OPEN, Sim
 
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
@@ -32,7 +41,10 @@ def visit_day(last: date, registered: date, range_start: date, holidays) -> date
 
 
 def stage(run, rng, fake) -> None:
-    registered = {pid: date.fromisoformat(r) for pid, r in run.conn.execute("SELECT id, registered_at FROM emr_patients")}
+    registered = {
+        pid: date.fromisoformat(r)
+        for pid, r in run.conn.execute("SELECT id, registered_at FROM emr_patients")
+    }
     visits = {}
     for p in run.state["patients"]:
         d = visit_day(p["last_hygiene"], registered[p["id"]], run.range_start, run.holidays)
@@ -50,6 +62,8 @@ def stage(run, rng, fake) -> None:
         days = [d - timedelta(days=k) for k in range(1, MAX_LEAD_DAYS + 1)]
         days = [x for x in days if x >= registered[p["id"]] and _is_open(x, run.holidays)]
         booked = days[int(rng.integers(len(days)))] if days else registered[p["id"]]
-        created = datetime.combine(booked, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
+        created = datetime.combine(booked, OPEN) + timedelta(
+            minutes=int(rng.integers(DAY_MINUTES))
+        )
         visits[p["id"]] = {"code": code, "start": start, "created": created}
     run.state["pre_window"] = visits
