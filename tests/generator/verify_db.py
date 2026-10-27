@@ -1,9 +1,8 @@
 """verify 테스트용 작은 정상 DB — 테스트가 한 곳씩 깨뜨려 검사가 잡는지 본다."""
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
-
-import json
 
 from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
@@ -118,13 +117,13 @@ def _fact(fid, text, *words, reason=None):
 # 5 청구 기준(사유마다 절 하나) / 6 타 병원(1의 주제를 다른 값으로)
 _CLAIM_BODY = "# 청구 기준\n\n" + "\n\n".join(f"## {h}\n\n기준을 적는다." for h in CLAIM_HEADINGS.values())
 DOCS = [
-    (1, "manual", "예약 부도 관리", "1", None, "docs/manual/manual-noshow.md",
+    (1, "manual", "예약 부도 관리", "1", None, "docs/manual/001.md",
      "# 예약 부도 관리\n\n예약 부도가 3회 쌓이면 3개월 동안 전화 예약만 받습니다."),
-    (2, "manual", "예약 접수 기본", "1", None, "docs/manual/sim-booking-basics.md", "# 예약 접수 기본\n\n전화로 예약을 받습니다."),
-    (3, "notice", "미백 비용 변경", "2", "2026-09-01", "docs/notice/notice-whitening.md", "미백 비용은 300,000원입니다."),
-    (4, "notice", "미백 비용 변경", "1", "2025-01-02", "docs/notice/old-whitening.md", "미백 비용은 250,000원입니다."),
-    (5, "claim_standard", "공통 청구 기준", "1", None, "docs/claim_standard/claim-all.md", _CLAIM_BODY),
-    (6, "external", "다른 치과 부도 규정", "1", None, "docs/external/ext-noshow.md", "부도 2회면 6개월간 예약을 받지 않습니다."),
+    (2, "manual", "예약 접수 기본", "1", None, "docs/manual/002.md", "# 예약 접수 기본\n\n전화로 예약을 받습니다."),
+    (3, "notice", "미백 비용 변경", "2", "2026-09-01", "docs/notice/003.md", "미백 비용은 300,000원입니다."),
+    (4, "notice", "미백 비용 변경", "1", "2025-01-02", "docs/notice/004.md", "미백 비용은 250,000원입니다."),
+    (5, "claim_standard", "공통 청구 기준", "1", None, "docs/claim_standard/005.md", _CLAIM_BODY),
+    (6, "external", "다른 치과 부도 규정", "1", None, "docs/external/006.md", "부도 2회면 6개월간 예약을 받지 않습니다."),
 ]
 DOC_META = [  # (doc_key, kind, pair_doc_id, supersedes_doc_id, planted_facts)
     ("manual-noshow", "core", None, None, [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")]),

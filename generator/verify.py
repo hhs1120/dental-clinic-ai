@@ -28,7 +28,7 @@ import yaml
 from generator import chart, llm_jobs, transcripts
 from generator.paths import output_paths
 from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT,
-                              CONDITIONAL_INSURED_MIN_AGE, EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
+                              CLINIC_NAME, CONDITIONAL_INSURED_MIN_AGE, EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, MAX_ALERTS_PER_PATIENT, MAX_LEAD_DAYS,
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
                               add_years, age_band, age_on, daily_cap, insured_on, open_slots,
@@ -788,10 +788,28 @@ def check_doc_similar_clean(conn, ctx):
     return bad
 
 
+def check_doc_external_clean(conn, ctx):
+    """타 병원·일반 문서에 우리 병원 이름(master.CLINIC_NAME) 없음"""
+    return [{"id": r["id"], "key": r["doc_key"]} for r in _docs(conn) if r["kind"] == "external" and CLINIC_NAME in r["body"]]
+
+
+DOC_PATH = re.compile(r"docs/[a-z_]+/\d{3}\.md")
+
+
+def check_doc_key_leak(conn, ctx):
+    """문서 경로는 docs/<type>/<번호>.md, 경로·제목에 목록 이름(doc_key — sim-·old- 같은 종류 표시) 없음"""
+    return [{"id": r["id"], "path": r["path"]} for r in _docs(conn)
+            if not DOC_PATH.fullmatch(r["path"]) or r["path"] != f"docs/{r['type']}/{r['id']:03d}.md"
+            or r["doc_key"] in r["path"] or r["doc_key"] in r["title"]]
+
+
 def check_notice_versions(conn, ctx):
-    """옛 공지: 공지끼리, 최신이 대체(supersedes), 옛 시행일 < 최신 시행일 ≤ TODAY, 옛 시행일 < 생성 기간 시작"""
+    """최신 공지마다 옛 공지 정확히 1개. 옛 공지: 공지끼리, 최신이 대체(supersedes), 옛 시행일 < 최신 시행일 ≤ TODAY,
+    옛 시행일 < 생성 기간 시작"""
     docs = {r["id"]: r for r in _docs(conn)}
-    bad = []
+    olds = Counter(r["pair_doc_id"] for r in docs.values() if r["kind"] == "old_version")
+    bad = [{"id": r["id"], "key": r["doc_key"], "reason": f"옛 공지 {olds[r['id']]}개"} for r in docs.values()
+           if r["kind"] == "core" and r["type"] == "notice" and olds[r["id"]] != 1]
     for r in docs.values():
         if r["kind"] != "old_version":
             continue
@@ -808,12 +826,34 @@ def check_notice_versions(conn, ctx):
     return bad
 
 
+def _sections(body: str) -> list[tuple[str, str]]:
+    """본문의 '## ' 절 → (소제목 줄, 절 본문)"""
+    out = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            out.append([line.strip(), ""])
+        elif out:
+            out[-1][1] += line + "\n"
+    return [tuple(x) for x in out]
+
+
 def check_claim_sections(conn, ctx):
-    """청구 기준 문서에 master.ADJUST_REASONS 상세 사유마다 절(소제목)이 정확히 1개"""
-    n = Counter(f["reason"] for r in _docs(conn) if r["type"] == "claim_standard" for f in r["facts"]
-                if f.get("reason") and any(w.startswith("## ") for w in f["words"]))
-    return [{"reason": k, "sections": n.get(k, 0)} for k in sorted(ADJUST_REASONS) if n.get(k, 0) != 1] + \
-           [{"reason": k, "sections": v} for k, v in sorted(n.items()) if k not in ADJUST_REASONS]
+    """청구 기준 문서에 master.ADJUST_REASONS 상세 사유마다 절(본문의 '## 소제목')이 정확히 1개, 그 사유의 기준 말이 그 절 안에"""
+    found, bad = Counter(), []
+    for r in _docs(conn):
+        if r["type"] != "claim_standard":
+            continue
+        sections = _sections(r["body"])
+        for f in r["facts"]:
+            heading = next((w for w in f["words"] if w.startswith("## ")), None)
+            if f.get("reason") and heading:
+                hits = [text for head, text in sections if head == heading]
+                found[f["reason"]] += len(hits)
+                rules = [w for g in r["facts"] if g.get("reason") == f["reason"] and g is not f for w in g["words"]]
+                if len(hits) == 1 and not all(llm_jobs.contains(hits[0], w) for w in rules):
+                    bad.append({"reason": f["reason"], "id": r["id"], "problem": "기준이 절 밖"})
+    bad += [{"reason": k, "sections": found.get(k, 0)} for k in sorted(ADJUST_REASONS) if found.get(k, 0) != 1]
+    return bad + [{"reason": k, "sections": v} for k, v in sorted(found.items()) if k not in ADJUST_REASONS]
 
 
 def check_doc_patient_names(conn, ctx):
@@ -1495,6 +1535,8 @@ REQUIRED = [
     check_doc_meta_match,
     check_doc_planted_facts,
     check_doc_similar_clean,
+    check_doc_external_clean,
+    check_doc_key_leak,
     check_notice_versions,
     check_claim_sections,
     check_doc_patient_names,

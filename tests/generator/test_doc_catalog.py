@@ -1,18 +1,20 @@
 """RAG 문서 목록 표 (generator/doc_catalog.py, 가상 데이터 생성 설계 §4.2 '9단계 구현 결정') — 표 자체의 규칙."""
 import json
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
 import yaml
 
 from generator.doc_catalog import BY_KEY, CATALOG, CLAIM_DOCS, CLAIM_HEADINGS, KINDS
-from generator.master import ADJUST_REASONS, HOURS, PROCEDURES
+from generator.master import ADJUST_REASONS, HOURS, PROCEDURES, RECALL_CYCLE
 from generator.paths import ROOT
 
 CFG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
 HOLIDAYS = set(json.loads((ROOT / CFG["holidays"]).read_text(encoding="utf-8")))
 RANGE_START = CFG["range"]["start"].isoformat()
 TODAY = CFG["today"].isoformat()
+# EMR 최초 기록일의 하한 — 창 이전 내원(생성 기간 시작 − 리콜 주기 안, 진료일에 맞추며 며칠 당겨짐)
+EMR_START = (CFG["range"]["start"] - RECALL_CYCLE - timedelta(days=30)).isoformat()
 NOTICE = [d for d in CATALOG if d.type == "notice" and d.kind == "core"]
 OLD = [d for d in CATALOG if d.kind == "old_version"]
 
@@ -67,7 +69,8 @@ def test_distractor_pairs():
         pair = BY_KEY[d.pair]
         assert pair.kind == "core", d.key
         if d.kind == "similar":
-            assert d.type == pair.type and not d.facts, d.key
+            assert d.type == pair.type and not d.facts and d.skip, d.key
+            assert d.skip not in (d.topic, pair.topic), d.key  # 자기 주제를 금지하지 않게
         elif d.kind == "external":
             assert d.type == "external" and d.facts, d.key
         else:
@@ -75,13 +78,13 @@ def test_distractor_pairs():
 
 
 def test_notice_versions():
-    """최신 공지마다 옛 버전 정확히 1개. 옛 < 생성 기간 시작, 옛 < 최신 ≤ TODAY, EMR과 겹치면 최신 ≤ 생성 기간 시작"""
+    """최신 공지마다 옛 버전 정확히 1개. 옛 < 생성 기간 시작, 옛 < 최신 ≤ TODAY, EMR과 겹치면 최신 ≤ EMR 최초 기록일"""
     assert sorted(d.pair for d in OLD) == sorted(d.key for d in NOTICE)
     for old in OLD:
         new = BY_KEY[old.pair]
         assert old.effective < RANGE_START and old.effective < new.effective <= TODAY, old.key
         if new.emr:
-            assert new.effective <= RANGE_START, new.key
+            assert new.effective <= EMR_START, new.key
         assert {w for f in old.facts for w in f.words} != {w for f in new.facts for w in f.words}, old.key
     assert all(d.effective is None for d in CATALOG if d.type != "notice")
 
@@ -107,6 +110,13 @@ def test_claim_standard_covers_every_reason_once():
 def test_emr_values_from_master():
     """EMR과 겹치는 값은 master에서 — 진료시간·미백 가격이 master와 같다"""
     hours = {w for f in BY_KEY["faq-hours"].facts for w in f.words}
-    assert {"9시 30분", "6시 30분", "1시 30분"} <= hours and HOURS["weekday_close"] == "18:30"
+    assert {"오전 9시 30분부터", "오후 6시 30분까지", "오후 1시 30분까지"} <= hours and HOURS["weekday_close"] == "18:30"
     whitening = next(p for p in PROCEDURES if p["name"] == "미백")["fee_total"]
     assert f"{whitening:,}원" in BY_KEY["notice-whitening"].facts[0].words
+
+
+def test_words_not_inside_other_words_of_same_doc():
+    """짧은 말이 같은 문서의 다른 말 안에 들어 있으면 검증이 비어 있다 ('1시'는 '1시 30분'에도 맞음)"""
+    for d in CATALOG:
+        words = [w for f in d.facts for w in f.words]
+        assert not [(a, b) for a in words for b in words if a != b and a in b], d.key
