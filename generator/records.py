@@ -5,12 +5,29 @@
 - 수납: 창 안만. visit 1행(paid_at = 내원 종료 시각), 미수 정산은 다음 completed 내원 종료 시각에 settlement 행
 - 청구: 창 안 급여 진료마다 1줄 + 창 이전은 TODAY와 같은 해 급여 스케일링만 paid. 확정 월은 심사 결과 추첨
 """
+
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from generator.master import (ADJUST_REASONS, ADJUST_TYPE_WEIGHTS, ADJUSTED_PAID_RANGE, EXTERNAL_SCALING_DENY_RATE,
-                              EXTRACTION_CODES, FULL_MOUTH, IMPLANT_CODE, PAYMENT_METHOD_WEIGHTS, PROCEDURES, REVIEW_OUTCOME_WEIGHTS, SCALING_CODE,
-                              SUBMITTED_MONTHS, TOOTH_CHOICES, UNPAID_PAID_RANGE, adjust_group, age_on, insured_on)
+from generator.master import (
+    ADJUST_REASONS,
+    ADJUST_TYPE_WEIGHTS,
+    ADJUSTED_PAID_RANGE,
+    EXTERNAL_SCALING_DENY_RATE,
+    EXTRACTION_CODES,
+    FULL_MOUTH,
+    IMPLANT_CODE,
+    PAYMENT_METHOD_WEIGHTS,
+    PROCEDURES,
+    REVIEW_OUTCOME_WEIGHTS,
+    SCALING_CODE,
+    SUBMITTED_MONTHS,
+    TOOTH_CHOICES,
+    UNPAID_PAID_RANGE,
+    adjust_group,
+    age_on,
+    insured_on,
+)
 
 PROCEDURE = {p["code"]: p for p in PROCEDURES}
 FMT = "%Y-%m-%d %H:%M:%S"
@@ -27,7 +44,10 @@ def _floor10(x: float) -> int:
 
 
 def _birth(conn) -> dict[int, date]:
-    return {pid: date.fromisoformat(b) for pid, b in conn.execute("SELECT id, birth_date FROM emr_patients")}
+    return {
+        pid: date.fromisoformat(b)
+        for pid, b in conn.execute("SELECT id, birth_date FROM emr_patients")
+    }
 
 
 def stage_treatments(run, rng, fake) -> None:
@@ -42,15 +62,19 @@ def stage_treatments(run, rng, fake) -> None:
     history: dict[int, set] = defaultdict(set)
     rows = []
     for appt_id, pid, start, code in run.conn.execute(
-            "SELECT id, patient_id, scheduled_at, planned_procedure_code FROM emr_appointments"
-            " WHERE status = 'completed' ORDER BY scheduled_at, id"):
+        "SELECT id, patient_id, scheduled_at, planned_procedure_code FROM emr_appointments"
+        " WHERE status = 'completed' ORDER BY scheduled_at, id"
+    ):
         p = PROCEDURE[code]
         tooth = FULL_MOUTH
         if p["is_tooth_level"]:
             choices = TOOTH_CHOICES[code]
             if code == IMPLANT_CODE:
-                choices = tuple(t for t in choices if t not in implanted[pid]
-                                and (t in extracted[pid] or t not in history[pid]))
+                choices = tuple(
+                    t
+                    for t in choices
+                    if t not in implanted[pid] and (t in extracted[pid] or t not in history[pid])
+                )
             else:
                 choices = tuple(t for t in choices if t not in extracted[pid] | implanted[pid])
             ep = episode.get(appt_id)
@@ -66,9 +90,14 @@ def stage_treatments(run, rng, fake) -> None:
         insured = 0
         if insured_on(p, age_on(birth[pid], datetime.fromisoformat(start).date())):
             insured = round(p["fee_total"] * (1 - p["patient_share_rate"]))
-        rows.append((appt_id, pid, code, tooth, start, p["fee_total"], insured, p["fee_total"] - insured))
-    run.conn.executemany("INSERT INTO emr_treatments (appointment_id, patient_id, procedure_code, tooth_no, performed_at,"
-                         " fee_total, insured_amount, patient_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        rows.append(
+            (appt_id, pid, code, tooth, start, p["fee_total"], insured, p["fee_total"] - insured)
+        )
+    run.conn.executemany(
+        "INSERT INTO emr_treatments (appointment_id, patient_id, procedure_code, tooth_no, performed_at,"
+        " fee_total, insured_amount, patient_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
 
 
 def stage_payments(run, rng, fake) -> None:
@@ -78,23 +107,39 @@ def stage_payments(run, rng, fake) -> None:
     owed: dict[int, int] = defaultdict(int)  # 환자 → 다음 내원 때 정산할 미수
     rows = []
     for appt_id, pid, start, duration, due in run.conn.execute(
-            "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, t.patient_amount FROM emr_appointments a"
-            " JOIN emr_treatments t ON t.appointment_id = a.id"
-            " WHERE a.status = 'completed' AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at, a.id",
-            (run.range_start.isoformat(),)):
+        "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, t.patient_amount FROM emr_appointments a"
+        " JOIN emr_treatments t ON t.appointment_id = a.id"
+        " WHERE a.status = 'completed' AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at, a.id",
+        (run.range_start.isoformat(),),
+    ):
         end = (datetime.fromisoformat(start) + timedelta(minutes=duration)).strftime(FMT)
         paid, settle = due, False
         if due > 0 and rng.random() < unpaid_rate:
             paid = _floor10(due * rng.uniform(*UNPAID_PAID_RANGE))
             settle = rng.random() < settle_rate
-        rows.append((pid, appt_id, "visit", due, paid, end, _weighted(rng, PAYMENT_METHOD_WEIGHTS)))
+        rows.append(
+            (pid, appt_id, "visit", due, paid, end, _weighted(rng, PAYMENT_METHOD_WEIGHTS))
+        )
         if owed[pid]:
-            rows.append((pid, appt_id, "settlement", 0, owed[pid], end, _weighted(rng, PAYMENT_METHOD_WEIGHTS)))
+            rows.append(
+                (
+                    pid,
+                    appt_id,
+                    "settlement",
+                    0,
+                    owed[pid],
+                    end,
+                    _weighted(rng, PAYMENT_METHOD_WEIGHTS),
+                )
+            )
             owed[pid] = 0
         if settle:
             owed[pid] += due - paid
-    run.conn.executemany("INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at,"
-                         " method) VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+    run.conn.executemany(
+        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at,"
+        " method) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )
 
 
 def _months_before(today: date, month: str) -> int:
@@ -119,8 +164,11 @@ def review(rng, code: str, amount: int) -> tuple:
     if status == "paid":
         return "paid", amount, None, None
     adjust_type = _weighted(rng, ADJUST_TYPE_WEIGHTS[group])
-    reasons = [ADJUST_REASONS[k] for k in sorted(ADJUST_REASONS)
-               if ADJUST_REASONS[k]["type"] == adjust_type and code in ADJUST_REASONS[k]["procedures"]]
+    reasons = [
+        ADJUST_REASONS[k]
+        for k in sorted(ADJUST_REASONS)
+        if ADJUST_REASONS[k]["type"] == adjust_type and code in ADJUST_REASONS[k]["procedures"]
+    ]
     reason = reasons[int(rng.integers(len(reasons)))]
     paid = 0 if status == "denied" else _floor10(amount * rng.uniform(*ADJUSTED_PAID_RANGE))
     return status, paid, reason["category"], reason["note"]
@@ -132,8 +180,9 @@ def stage_claims(run, rng, fake) -> None:
     birth = _birth(run.conn)
     rows = []
     for tid, pid, chart_no, tooth, performed, code, amount in run.conn.execute(
-            "SELECT t.id, t.patient_id, p.chart_no, t.tooth_no, t.performed_at, t.procedure_code, t.insured_amount"
-            " FROM emr_treatments t JOIN emr_patients p ON p.id = t.patient_id ORDER BY t.id"):
+        "SELECT t.id, t.patient_id, p.chart_no, t.tooth_no, t.performed_at, t.procedure_code, t.insured_amount"
+        " FROM emr_treatments t JOIN emr_patients p ON p.id = t.patient_id ORDER BY t.id"
+    ):
         served = datetime.fromisoformat(performed).date()
         if not insured_on(PROCEDURE[code], age_on(birth[pid], served)):
             continue
@@ -150,7 +199,23 @@ def stage_claims(run, rng, fake) -> None:
         else:
             result = review(rng, code, amount)
         submitted = None if result[0] == "pending" else _submitted_at(month)
-        rows.append((tid, pid, chart_no, tooth, month, served.isoformat(), code, amount, submitted, *result))
-    run.conn.executemany("INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
-                         " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note)"
-                         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        rows.append(
+            (
+                tid,
+                pid,
+                chart_no,
+                tooth,
+                month,
+                served.isoformat(),
+                code,
+                amount,
+                submitted,
+                *result,
+            )
+        )
+    run.conn.executemany(
+        "INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
+        " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rows,
+    )

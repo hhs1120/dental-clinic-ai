@@ -8,18 +8,36 @@
 9b단계 chart_narratives: 서술 줄의 초안을 LLM 서술로 덮어쓴다(§4.3 '9b단계 구현 결정' — 채우기는 llm_jobs).
 창 이전 내원은 템플릿만(특이·디코이 대상 아님).
 """
+
 import json
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import numpy as np
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
-from generator.master import (ADJUST_REASONS, ALERT_TYPES, CHART_DECOY_RATIO, CHART_FORBIDDEN_WORDS, CHART_REQUIREMENT,
-                              CHECKUP_CODE, DIAGNOSES, DIAGNOSIS_ERROR_RATE, EXTRACTION_CODES, FULL_MOUTH, PERIO_LINK_DAYS, PROCEDURE_DIAGNOSES, PROCEDURES,
-                              RECALL_CYCLE_MONTHS, REQUIREMENT_CUT_ERROR_SHARE, REQUIREMENT_ERROR_RATE,
-                              RETREATMENT_REQUIREMENT, SCALING_CODE, SUBMITTED_MONTHS)
+from generator.master import (
+    ADJUST_REASONS,
+    ALERT_TYPES,
+    CHART_DECOY_RATIO,
+    CHART_FORBIDDEN_WORDS,
+    CHART_REQUIREMENT,
+    CHECKUP_CODE,
+    DIAGNOSES,
+    DIAGNOSIS_ERROR_RATE,
+    EXTRACTION_CODES,
+    FULL_MOUTH,
+    PERIO_LINK_DAYS,
+    PROCEDURE_DIAGNOSES,
+    PROCEDURES,
+    RECALL_CYCLE_MONTHS,
+    REQUIREMENT_CUT_ERROR_SHARE,
+    REQUIREMENT_ERROR_RATE,
+    RETREATMENT_REQUIREMENT,
+    SCALING_CODE,
+    SUBMITTED_MONTHS,
+)
 
 NAME = {p["code"]: p["name"] for p in PROCEDURES}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
@@ -29,31 +47,51 @@ HYGIENE_CODES = {SCALING_CODE, CHECKUP_CODE, CODE["불소도포"]}
 
 # C.C — 시술별 환자 말 (§4.3 사실 (3))
 _FILLING = ("찬 거 먹으면 이가 시려요", "이에 까만 점이 생겼어요", "음식이 자꾸 껴요")
-CC = {CODE[n]: cc for n, cc in {
-    "스케일링": ("잇몸에서 피가 나요", "치석이 많이 낀 것 같아요", "정기 검진 겸 스케일링 받으러 왔어요"),
-    "구강검진": ("정기 검진 받으러 왔어요", "특별히 불편한 곳은 없어요"),
-    "불소도포": ("아이 충치 예방하려고 왔어요",),
-    "실란트": ("어금니 홈 메우려고 왔어요", "아이 어금니 충치를 예방하고 싶어요"),
-    "레진": _FILLING, "아말감/GI": _FILLING, "인레이": _FILLING,
-    "신경치료": ("밤에 이가 욱신거려요", "씹을 때 아파요", "뜨거운 걸 먹으면 아파요"),
-    "크라운": ("신경치료한 이를 씌우러 왔어요", "이가 깨졌어요"),
-    "브릿지": ("빠진 자리를 채우고 싶어요",),
-    "단순발치": ("이가 흔들려요", "부러진 이를 빼야 한대요"),
-    "사랑니 발치": ("사랑니 쪽이 붓고 아파요", "사랑니 빼러 왔어요"),
-    "임플란트 1차": ("빠진 자리에 임플란트를 하고 싶어요",), "임플란트 2차": ("임플란트 마무리하러 왔어요",),
-    "교정 상담": ("치아 배열이 신경 쓰여요",), "교정 월 체크": ("교정 장치 점검하러 왔어요",),
-    "미백": ("이가 누렇게 보여요",),
-    "잇몸치료": ("잇몸이 붓고 피가 나요", "잇몸이 내려간 것 같아요"),
-    "상담": ("치료 계획을 상담받고 싶어요",),
-}.items()}
+CC = {
+    CODE[n]: cc
+    for n, cc in {
+        "스케일링": (
+            "잇몸에서 피가 나요",
+            "치석이 많이 낀 것 같아요",
+            "정기 검진 겸 스케일링 받으러 왔어요",
+        ),
+        "구강검진": ("정기 검진 받으러 왔어요", "특별히 불편한 곳은 없어요"),
+        "불소도포": ("아이 충치 예방하려고 왔어요",),
+        "실란트": ("어금니 홈 메우려고 왔어요", "아이 어금니 충치를 예방하고 싶어요"),
+        "레진": _FILLING,
+        "아말감/GI": _FILLING,
+        "인레이": _FILLING,
+        "신경치료": ("밤에 이가 욱신거려요", "씹을 때 아파요", "뜨거운 걸 먹으면 아파요"),
+        "크라운": ("신경치료한 이를 씌우러 왔어요", "이가 깨졌어요"),
+        "브릿지": ("빠진 자리를 채우고 싶어요",),
+        "단순발치": ("이가 흔들려요", "부러진 이를 빼야 한대요"),
+        "사랑니 발치": ("사랑니 쪽이 붓고 아파요", "사랑니 빼러 왔어요"),
+        "임플란트 1차": ("빠진 자리에 임플란트를 하고 싶어요",),
+        "임플란트 2차": ("임플란트 마무리하러 왔어요",),
+        "교정 상담": ("치아 배열이 신경 쓰여요",),
+        "교정 월 체크": ("교정 장치 점검하러 왔어요",),
+        "미백": ("이가 누렇게 보여요",),
+        "잇몸치료": ("잇몸이 붓고 피가 나요", "잇몸이 내려간 것 같아요"),
+        "상담": ("치료 계획을 상담받고 싶어요",),
+    }.items()
+}
 
 
 # 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
-CC_NO_EVIDENCE = {"R01": ("예전에 치료한 이가 신경 쓰여요",), "R03": ("잇몸 상태 확인하러 왔어요",),
-                  "R04": ("아이 치아 관리 받으러 왔어요",), "R06": ("임플란트 치료 받으러 왔어요",)}
+CC_NO_EVIDENCE = {
+    "R01": ("예전에 치료한 이가 신경 쓰여요",),
+    "R03": ("잇몸 상태 확인하러 왔어요",),
+    "R04": ("아이 치아 관리 받으러 왔어요",),
+    "R06": ("임플란트 치료 받으러 왔어요",),
+}
 # 요건 근거를 드러내는 말 (§4.3) — 근거가 있으면 그 말을 꼭 넣고(R01은 사유마다 하나), 없으면 모두 금지
-EVIDENCE_WORDS = {"R01": ("파절", "2차 우식"), "R02": ("재평가",), "R04": ("소와열구",), "R05": ("매복", "골삭제"),
-                  "R06": ("무치악",)}
+EVIDENCE_WORDS = {
+    "R01": ("파절", "2차 우식"),
+    "R02": ("재평가",),
+    "R04": ("소와열구",),
+    "R05": ("매복", "골삭제"),
+    "R06": ("무치악",),
+}
 R01_REASON_WORD = {"기존 충전물 파절": "파절", "2차 우식": "2차 우식"}
 
 
@@ -65,27 +103,56 @@ def _bucket(today: date, month: str) -> str:
     """청구월 구간 — pending(전월 이후) / submitted(그 전 SUBMITTED_MONTHS개월) / settled"""
     y, m = map(int, month.split("-"))
     before = today.year * 12 + today.month - (y * 12 + m)
-    return "pending" if before <= 1 else "submitted" if before <= 1 + SUBMITTED_MONTHS else "settled"
+    return (
+        "pending" if before <= 1 else "submitted" if before <= 1 + SUBMITTED_MONTHS else "settled"
+    )
 
 
 def _lines(run) -> list[dict]:
-    rows = [dict(zip(("id", "appointment_id", "patient_id", "code", "tooth", "performed_at", "claim_month",
-                      "adjust_code", "adjust_note"), r)) for r in run.conn.execute(
-        "SELECT t.id, t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
-        " c.claim_month, c.adjust_code, c.adjust_note FROM emr_treatments t"
-        " LEFT JOIN emr_claims c ON c.treatment_id = t.id ORDER BY t.patient_id, t.performed_at, t.id")]
+    rows = [
+        dict(
+            zip(
+                (
+                    "id",
+                    "appointment_id",
+                    "patient_id",
+                    "code",
+                    "tooth",
+                    "performed_at",
+                    "claim_month",
+                    "adjust_code",
+                    "adjust_note",
+                ),
+                r,
+                strict=True,
+            )
+        )
+        for r in run.conn.execute(
+            "SELECT t.id, t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
+            " c.claim_month, c.adjust_code, c.adjust_note FROM emr_treatments t"
+            " LEFT JOIN emr_claims c ON c.treatment_id = t.id ORDER BY t.patient_id, t.performed_at, t.id"
+        )
+    ]
     for r in rows:
         r["day"] = datetime.fromisoformat(r["performed_at"]).date()
         r["window"] = r["day"] >= run.range_start
         r["claimed"] = r["claim_month"] is not None
         r["bucket"] = _bucket(run.today, r["claim_month"]) if r["claimed"] else None
-        r["cut"] = REASON_KEY.get((r["adjust_code"], r["adjust_note"])) if r["bucket"] == "settled" else None
+        r["cut"] = (
+            REASON_KEY.get((r["adjust_code"], r["adjust_note"]))
+            if r["bucket"] == "settled"
+            else None
+        )
     return rows
 
 
 def _prior_course(r, treated: dict) -> date | None:
     """같은 치아·같은 시술을 다른 코스에서 한 마지막 날 — 코스 안 반복(신경치료 2회차)은 이어지는 치료라 재시행이 아니다"""
-    days = [day for day, root in treated[r["patient_id"]].get((r["tooth"], r["code"]), ()) if root != r["root"]]
+    days = [
+        day
+        for day, root in treated[r["patient_id"]].get((r["tooth"], r["code"]), ())
+        if root != r["root"]
+    ]
     return max(days) if days else None
 
 
@@ -99,18 +166,26 @@ def _requirement(r, treated: dict, scaled: dict) -> str | None:
         if r["code"] == PERIO_CODE and _last_scaling(r, scaled) is not None:
             return "R02"
         return CHART_REQUIREMENT[r["code"]]
-    if r["code"] in ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"] and _prior_course(r, treated):
+    if r["code"] in ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"] and _prior_course(
+        r, treated
+    ):
         return RETREATMENT_REQUIREMENT  # 다른 코스에서 같은 치아·같은 시술 — 같은 치아의 다음 단계 치료(신경치료 뒤 충전)는 아님
     return None
 
 
 def _last_scaling(r, scaled: dict) -> int | None:
     """직전 PERIO_LINK_DAYS일 안 치석제거로부터 지난 일수"""
-    days = [(r["day"] - d).days for d in scaled[r["patient_id"]] if 0 < (r["day"] - d).days <= PERIO_LINK_DAYS]
+    days = [
+        (r["day"] - d).days
+        for d in scaled[r["patient_id"]]
+        if 0 < (r["day"] - d).days <= PERIO_LINK_DAYS
+    ]
     return min(days) if days else None
 
 
-def _requirement_facts(rng, key: str, evidence: bool, r, treated: dict, scaled: dict, extracted: dict) -> dict:
+def _requirement_facts(
+    rng, key: str, evidence: bool, r, treated: dict, scaled: dict, extracted: dict
+) -> dict:
     """요건 사실 — 장부에 근거 사건이 있으면 그 날짜에서 계산하고, 없으면(확정 월 사유로 정해진 줄) '타 기관' 이력
     (other_clinic)으로 둔다. 장부 날짜를 지어내면 ⑤-3이 장부를 보고 모순을 찾는다"""
     f = {"key": key, "evidence": evidence}
@@ -129,7 +204,9 @@ def _requirement_facts(rng, key: str, evidence: bool, r, treated: dict, scaled: 
             f["other_clinic"], f["scaling_days_ago"] = True, int(rng.integers(14, 61))
         f["linked"] = evidence
     elif key == "R04":
-        f["surface"] = "깊은 소와열구가 있고 우식이 없는 교합면" if evidence else "이미 충전물이 있는 교합면"
+        f["surface"] = (
+            "깊은 소와열구가 있고 우식이 없는 교합면" if evidence else "이미 충전물이 있는 교합면"
+        )
     elif key == "R05":
         f["impaction"] = _pick(rng, ("부분 매복", "완전 매복")) if evidence else None
         f["bone_removal"] = evidence
@@ -148,16 +225,19 @@ def _findings(rng, r, requirement: dict | None) -> dict | None:
         return None
     perio = r["code"] == PERIO_CODE
     shallow = perio and requirement and requirement["key"] == "R03" and not requirement["evidence"]
-    return {"pocket_mm": int(rng.integers(2, 4)) if shallow or not perio else int(rng.integers(4, 7)),
-            "bleeding": True if perio and not shallow else bool(rng.random() < 0.4),
-            "calculus": _pick(rng, ("적음", "중간", "많음")),
-            "mobility": int(rng.integers(0, 2)) if perio else 0}
+    return {
+        "pocket_mm": int(rng.integers(2, 4)) if shallow or not perio else int(rng.integers(4, 7)),
+        "bleeding": True if perio and not shallow else bool(rng.random() < 0.4),
+        "calculus": _pick(rng, ("적음", "중간", "많음")),
+        "mobility": int(rng.integers(0, 2)) if perio else 0,
+    }
 
 
 def _alerts(run) -> dict:
     by_patient = defaultdict(list)
     for pid, code, recorded, ends, appt in run.conn.execute(
-            "SELECT patient_id, code, recorded_at, ends_at, appointment_id FROM emr_patient_alerts ORDER BY code"):
+        "SELECT patient_id, code, recorded_at, ends_at, appointment_id FROM emr_patient_alerts ORDER BY code"
+    ):
         by_patient[pid].append((code, recorded, ends, appt))
     return by_patient
 
@@ -193,7 +273,10 @@ def stage_facts(run, rng, fake) -> None:
                 cut_type = ADJUST_REASONS[r["cut"]]["type"] if r["cut"] else None
                 if cut_type == "diagnosis":
                     error = "diagnosis"
-                elif cut_type == "requirement" and settled_rng.random() < REQUIREMENT_CUT_ERROR_SHARE:
+                elif (
+                    cut_type == "requirement"
+                    and settled_rng.random() < REQUIREMENT_CUT_ERROR_SHARE
+                ):
                     error = "requirement"
             else:
                 if key and open_rng.random() < REQUIREMENT_ERROR_RATE:
@@ -202,24 +285,55 @@ def stage_facts(run, rng, fake) -> None:
                     error = "diagnosis"
         rng = np.random.default_rng([fact_seed, r["id"]])
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
-        dx = _pick(rng, sorted(set(DIAGNOSES) - set(allowed))) if error == "diagnosis" else _pick(rng, allowed)
-        requirement = _requirement_facts(rng, key, error != "requirement", r, treated, scaled, extracted) if key else None
+        dx = (
+            _pick(rng, sorted(set(DIAGNOSES) - set(allowed)))
+            if error == "diagnosis"
+            else _pick(rng, allowed)
+        )
+        requirement = (
+            _requirement_facts(rng, key, error != "requirement", r, treated, scaled, extracted)
+            if key
+            else None
+        )
         day = r["day"].isoformat()
-        visible = [(c, appt) for c, recorded, ends, appt in alerts[r["patient_id"]]
-                   if recorded <= day and (ends is None or day < ends)]
+        visible = [
+            (c, appt)
+            for c, recorded, ends, appt in alerts[r["patient_id"]]
+            if recorded <= day and (ends is None or day < ends)
+        ]
         facts = {
-            "procedure": NAME[r["code"]], "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
-            "cc": _pick(rng, CC_NO_EVIDENCE.get(key, CC[r["code"]]) if requirement and not requirement["evidence"]
-                        else CC[r["code"]]),
-            "findings": _findings(rng, r, requirement), "requirement": requirement,
-            "alerts": [{"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]} for c, appt in visible
-                       if appt != r["appointment_id"] and r["code"] in ALERT_TYPES[c]["procedures"]],
-            "discovered": [ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]],
+            "procedure": NAME[r["code"]],
+            "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
+            "cc": _pick(
+                rng,
+                CC_NO_EVIDENCE.get(key, CC[r["code"]])
+                if requirement and not requirement["evidence"]
+                else CC[r["code"]],
+            ),
+            "findings": _findings(rng, r, requirement),
+            "requirement": requirement,
+            "alerts": [
+                {"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]}
+                for c, appt in visible
+                if appt != r["appointment_id"] and r["code"] in ALERT_TYPES[c]["procedures"]
+            ],
+            "discovered": [
+                ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]
+            ],
             "plan": _plan(r, course_left),
         }
-        lines.append({"id": r["id"], "window": r["window"], "code": r["code"], "dx": dx, "requirement": key,
-                      "evidence": None if key is None else int(error != "requirement"),
-                      "special": bool(key or error), "facts": facts})
+        lines.append(
+            {
+                "id": r["id"],
+                "window": r["window"],
+                "code": r["code"],
+                "dx": dx,
+                "requirement": key,
+                "evidence": None if key is None else int(error != "requirement"),
+                "special": bool(key or error),
+                "facts": facts,
+            }
+        )
         if error:
             errors.append((r["id"], error, key if error == "requirement" else None))
         if r["tooth"] != FULL_MOUTH:
@@ -244,7 +358,9 @@ def _decoys(rng, lines: list[dict]) -> set:
         return set()
     exact = {code: want * len(g) / total for code, g in groups.items()}
     quota = {code: int(e) for code, e in exact.items()}
-    for code in sorted(exact, key=lambda c: (-(exact[c] - quota[c]), c))[:want - sum(quota.values())]:
+    for code in sorted(exact, key=lambda c: (-(exact[c] - quota[c]), c))[
+        : want - sum(quota.values())
+    ]:
         quota[code] += 1
     picked = set()
     for code in sorted(groups):
@@ -267,15 +383,18 @@ TEMPLATES = (
 def template_note(rng, f) -> str:
     """템플릿 — 시술·부위·소견 + 주의사항 처리와 그날 발견한 주의사항(§2.2 — 그날 차트에도 남긴다)"""
     alerts = _alert_sentences(f)
-    note = _pick(rng, TEMPLATES[:2] if alerts else TEMPLATES).format(site=_site(f), procedure=f["procedure"], cc=f["cc"])
+    note = _pick(rng, TEMPLATES[:2] if alerts else TEMPLATES).format(
+        site=_site(f), procedure=f["procedure"], cc=f["cc"]
+    )
     if f["findings"]:
         note += f" 치주낭 {f['findings']['pocket_mm']}mm, 치석 {f['findings']['calculus']}."
     return " ".join([note, *alerts])
 
 
 def _alert_sentences(f) -> list[str]:
-    return [f"{a['label']} 주의사항이 있어 {a['action']}." for a in f["alerts"]] + [f"진료 중 확인: {label}."
-                                                                                  for label in f["discovered"]]
+    return [f"{a['label']} 주의사항이 있어 {a['action']}." for a in f["alerts"]] + [
+        f"진료 중 확인: {label}." for label in f["discovered"]
+    ]
 
 
 def _ro(word: str) -> str:
@@ -290,20 +409,30 @@ def _ago(days: int) -> str:
 
 def draft_note(f) -> str:
     """서술 초안 — 사실을 그대로 문장으로. 9b단계가 자연스러운 서술로 덮어쓴다"""
-    out = [f"\"{f['cc']}\"라고 하시며 내원했습니다."]
+    out = [f'"{f["cc"]}"라고 하시며 내원했습니다.']
     if f["findings"]:
         x = f["findings"]
-        out.append(f"치주낭 깊이 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
-                   f" 동요도 {x['mobility']}도로 확인했습니다.")
+        out.append(
+            f"치주낭 깊이 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
+            f" 동요도 {x['mobility']}도로 확인했습니다."
+        )
     req = f["requirement"]
     if req and req["key"] == "R01":
-        history = (f"타 기관에서 약 {req['prev_months']}개월 전" if req.get("other_clinic") else _ago(req["prev_days"]))
-        out.append(f"같은 치아에 {history} 같은 치료를 한 이력이 있습니다."
-                   + (f" {_ro(req['reason'])} 다시 치료합니다." if req["reason"] else ""))
+        history = (
+            f"타 기관에서 약 {req['prev_months']}개월 전"
+            if req.get("other_clinic")
+            else _ago(req["prev_days"])
+        )
+        out.append(
+            f"같은 치아에 {history} 같은 치료를 한 이력이 있습니다."
+            + (f" {_ro(req['reason'])} 다시 치료합니다." if req["reason"] else "")
+        )
     elif req and req["key"] == "R02":
         where = "타 기관에서 " if req.get("other_clinic") else ""
-        out.append(f"{where}{req['scaling_days_ago']}일 전 치석제거를 했습니다."
-                   + (" 재평가 후 치주치료를 이어서 진행합니다." if req["linked"] else ""))
+        out.append(
+            f"{where}{req['scaling_days_ago']}일 전 치석제거를 했습니다."
+            + (" 재평가 후 치주치료를 이어서 진행합니다." if req["linked"] else "")
+        )
     elif req and req["key"] == "R04":
         out.append(f"대상 치아는 {req['surface']}입니다.")
     elif req and req["key"] == "R05" and req["impaction"]:
@@ -330,9 +459,20 @@ def stage_notes(run, rng, fake) -> None:
         narrative = x["special"] or x["id"] in decoys
         note = draft_note(x["facts"]) if narrative else template_note(rng, x["facts"])
         notes.append((x["id"], x["dx"], note))
-        truth.append((x["id"], "narrative" if narrative else "template", int(x["special"]), x["requirement"], x["evidence"],
-                      int(x["id"] in decoys), json.dumps(x["facts"], ensure_ascii=False, sort_keys=True)))
-    run.conn.executemany("INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES (?, ?, ?)", notes)
+        truth.append(
+            (
+                x["id"],
+                "narrative" if narrative else "template",
+                int(x["special"]),
+                x["requirement"],
+                x["evidence"],
+                int(x["id"] in decoys),
+                json.dumps(x["facts"], ensure_ascii=False, sort_keys=True),
+            )
+        )
+    run.conn.executemany(
+        "INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES (?, ?, ?)", notes
+    )
     run.conn.executemany("INSERT INTO truth.truth_chart_notes VALUES (?, ?, ?, ?, ?, ?, ?)", truth)
 
 
@@ -345,7 +485,9 @@ NARRATIVE_SCHEMA = {
     "additionalProperties": False,
 }
 # 가짜 모드(테스트)는 채우지 않는다 — 초안이 그대로 남는다
-NARRATIVE_TASK = Task(name="chart", prompt="gen_chart", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
+NARRATIVE_TASK = Task(
+    name="chart", prompt="gen_chart", schema=NARRATIVE_SCHEMA, store=("note",), fake=False
+)
 
 
 def _period(days: int) -> str:
@@ -357,7 +499,9 @@ def _requirement_words(req: dict) -> list[str]:
     """요건 수치 + 근거가 있으면 근거 말"""
     key = req["key"]
     if key == "R01":
-        period = f"{req['prev_months']}개월" if req.get("other_clinic") else _period(req["prev_days"])
+        period = (
+            f"{req['prev_months']}개월" if req.get("other_clinic") else _period(req["prev_days"])
+        )
         return [period] + ([R01_REASON_WORD[req["reason"]]] if req["evidence"] else [])
     if key == "R02":
         return [f"{req['scaling_days_ago']}일"] + (["재평가"] if req["evidence"] else [])
@@ -398,14 +542,19 @@ def narrative_must_include(f: dict) -> list[list[str]]:
 def narrative_payload(f: dict, draft: str) -> dict:
     """LLM 입력 — 요건 사유 키·충족 여부(정답)는 빼고 사실 필드만 history로. 근거가 없는 오류 줄은 그 사실이 비어 있다"""
     history = {k: v for k, v in (f["requirement"] or {}).items() if k not in ("key", "evidence")}
-    facts = {k: v for k, v in f.items() if k != "requirement"} | ({"history": history} if history else {})
+    facts = {k: v for k, v in f.items() if k != "requirement"} | (
+        {"history": history} if history else {}
+    )
     return {"facts": facts, "draft": draft}
 
 
 def narrative_checks(f: dict, patient_name: str) -> dict:
-    return {"field": "note", "must_include": narrative_must_include(f),
-            "forbidden_words": [*CHART_FORBIDDEN_WORDS, *evidence_forbidden(f), patient_name],
-            "forbidden_patterns": llm_jobs.forbidden_patterns()}
+    return {
+        "field": "note",
+        "must_include": narrative_must_include(f),
+        "forbidden_words": [*CHART_FORBIDDEN_WORDS, *evidence_forbidden(f), patient_name],
+        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+    }
 
 
 def stage_narratives(run, rng, fake) -> None:
@@ -413,10 +562,18 @@ def stage_narratives(run, rng, fake) -> None:
     rows = run.conn.execute(
         "SELECT n.treatment_id, n.note, c.facts, p.name FROM emr_chart_notes n"
         " JOIN truth.truth_chart_notes c USING (treatment_id) JOIN emr_treatments t ON t.id = n.treatment_id"
-        " JOIN emr_patients p ON p.id = t.patient_id WHERE c.kind = 'narrative' ORDER BY n.treatment_id").fetchall()
+        " JOIN emr_patients p ON p.id = t.patient_id WHERE c.kind = 'narrative' ORDER BY n.treatment_id"
+    ).fetchall()
     for treatment_id, draft, facts, patient_name in rows:
         f = json.loads(facts)
-        out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), narrative_payload(f, draft),
-                          narrative_checks(f, patient_name))
+        out = ctx.resolve(
+            NARRATIVE_TASK,
+            str(treatment_id),
+            narrative_payload(f, draft),
+            narrative_checks(f, patient_name),
+        )
         if out is not None:
-            run.conn.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (out["note"], treatment_id))
+            run.conn.execute(
+                "UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?",
+                (out["note"], treatment_id),
+            )

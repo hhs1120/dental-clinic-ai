@@ -1,4 +1,5 @@
 """분류 채점 (평가 설계 §2.2·§2.4·§7) — fixture는 eval_db 머리말."""
+
 import pytest
 
 from evaluation import EvalRefused, classification
@@ -19,7 +20,10 @@ def test_model_vs_gold_dev_weighted(conn):
     assert g["purpose"]["weighted"] == pytest.approx(0.8)
     assert g["purpose"]["macro"] == pytest.approx(0.5)
     assert (g["items"]["complaint"]["k"], g["items"]["complaint"]["n"]) == (2, 3)
-    assert g["purpose"]["by_category"] == {"book": {"k": 2, "n": 2}, "complaint": {"k": 0, "n": 1}}  # 가중의 근거 n
+    assert g["purpose"]["by_category"] == {
+        "book": {"k": 2, "n": 2},
+        "complaint": {"k": 0, "n": 1},
+    }  # 가중의 근거 n
     assert r["excluded"] == {"fallback": 1, "failed": 0, "fewshot": 0}
     assert r["model_actual"] == ["claude-haiku-5-5"]
 
@@ -51,20 +55,33 @@ def test_version_compare_on_intersection(conn):
     assert (gold["ref"], gold["a"], gold["b"], gold["n"]) == ("gold", "v1", "v2", 3)
     p = gold["items"]["primary_purpose"]
     assert (p["a"], p["b"], p["p"]) == (2, 3, 1.0)
-    assert (human["ref"], human["n"], human["items"]["primary_purpose"]["a"], human["items"]["primary_purpose"]["b"]) == \
-        ("human", 2, 1, 2)
+    assert (
+        human["ref"],
+        human["n"],
+        human["items"]["primary_purpose"]["a"],
+        human["items"]["primary_purpose"]["b"],
+    ) == ("human", 2, 1, 2)
 
 
 def test_versions_sort_naturally():
-    assert sorted(["v10", "v2", "v1", "v3-final"], key=classification.version_key) == ["v1", "v2", "v3-final", "v10"]
+    assert sorted(["v10", "v2", "v1", "v3-final"], key=classification.version_key) == [
+        "v1",
+        "v2",
+        "v3-final",
+        "v10",
+    ]
 
 
 def test_two_models_in_one_version_refused(conn):
     """같은 버전에 모델이 둘이면 정확도가 섞인다 — 교차검증(평가 설계 §2.5) 착수 전엔 막는다"""
-    conn.execute("INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
-                 " VALUES (99, 'classify', 'classify_b', 'claude-sonnet-5-5', 'v1', 1, '2026-12-01 09:00:00')")
-    conn.execute("INSERT INTO ax_call_classifications (call_id, model_alias, model_actual, prompt_version, status, labels, llm_call_id)"
-                 " VALUES (1, 'classify_b', 'claude-sonnet-5-5', 'v1', 'ok', '{}', 99)")
+    conn.execute(
+        "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+        " VALUES (99, 'classify', 'classify_b', 'claude-sonnet-5-5', 'v1', 1, '2026-12-01 09:00:00')"
+    )
+    conn.execute(
+        "INSERT INTO ax_call_classifications (call_id, model_alias, model_actual, prompt_version, status, labels, llm_call_id)"
+        " VALUES (1, 'classify_b', 'claude-sonnet-5-5', 'v1', 'ok', '{}', 99)"
+    )
     with pytest.raises(EvalRefused, match="모델"):
         classification.evaluate(conn, "dev")
 
@@ -72,8 +89,10 @@ def test_two_models_in_one_version_refused(conn):
 def test_blind_pairwise_and_position(conn):
     """버전 쌍별 승수(좌우를 풀어 버전에 돌림) + 좌/우 선택 비율"""
     (b,) = classification.evaluate(conn, "dev")["blind"]
-    assert b["sides"] == [{"version": "v1", "model": "claude-haiku-5-5", "wins": 0},
-                          {"version": "v2", "model": "claude-haiku-5-5", "wins": 2}]
+    assert b["sides"] == [
+        {"version": "v1", "model": "claude-haiku-5-5", "wins": 0},
+        {"version": "v2", "model": "claude-haiku-5-5", "wins": 2},
+    ]
     assert b["tie"] == 0 and b["both_wrong"] == 0
     assert (b["left"], b["right"]) == (1, 1)
     assert classification.evaluate(conn, "test")["blind"] == []
@@ -88,6 +107,8 @@ def test_blind_excludes_fallback(conn):
 
 def test_dump_lists_wrong_items_in_dev_pool(conn):
     dump = classification.evaluate(conn, "dev", dump=True)["dump"]
-    assert {(d["call_uid"], d["version"], d["item"]) for d in dump} >= {("c-0002", "v1", "primary_purpose")}
+    assert {(d["call_uid"], d["version"], d["item"]) for d in dump} >= {
+        ("c-0002", "v1", "primary_purpose")
+    }
     assert all(d["call_uid"] in ("c-0001", "c-0002") for d in dump)
     assert "dump" not in classification.evaluate(conn, "dev")

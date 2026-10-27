@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test index fixture llm-import llm-fill-api
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -18,6 +18,15 @@ verify:
 
 test:
 	uv run pytest
+
+# 코드 컨벤션(PEP 8, 설정은 pyproject.toml [tool.ruff]) — lint는 검사만, fmt는 모양 정리 + 안전한 자동 수정
+lint:
+	uv run ruff check .
+	uv run ruff format --check .
+
+fmt:
+	uv run ruff format .
+	uv run ruff check --fix .
 
 index fixture:
 	@echo "TODO: $@"

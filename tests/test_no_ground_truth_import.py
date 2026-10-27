@@ -1,5 +1,6 @@
 """정답 격리: 앱 코드는 ground_truth·generator를 참조하지 않는다 (평가 설계 §1).
 .py만이 아니라 설정·SQL·노트북 등 모든 텍스트 파일을 본다 — 경로·테이블 이름으로 정답에 닿는 것도 막는다."""
+
 import os
 from pathlib import Path
 
@@ -7,7 +8,14 @@ ROOT = Path(__file__).resolve().parents[1]
 # backend: 정답 DB·테이블·JSON, 생성기, 정답을 읽는 평가 코드(import하면 정답이 옮겨 온다)
 BACKEND_FORBIDDEN = ("ground_truth", "generator", "evaluation", "truth.sqlite", "truth_")
 # frontend: 정답 파일·테이블 (generator는 JS 라이브러리 이름에도 흔해 뺀다)
-FRONTEND_FORBIDDEN = ("ground_truth", "truth.sqlite", "truth_", "call_labels", "doc_meta", "rag_qa")
+FRONTEND_FORBIDDEN = (
+    "ground_truth",
+    "truth.sqlite",
+    "truth_",
+    "call_labels",
+    "doc_meta",
+    "rag_qa",
+)
 SKIP_DIRS = {"node_modules", ".next", "dist", "build", "__pycache__", ".venv"}
 
 
@@ -40,4 +48,8 @@ def test_offenders_catch_non_python_files(tmp_path):
     (tmp_path / "node_modules" / "lib.js").write_text("ground_truth\n", encoding="utf-8")
     (tmp_path / "logo.png").write_bytes(b"\x89PNG\xff\xfe")
     got = offenders(tmp_path, BACKEND_FORBIDDEN)
-    assert sorted(got) == ["query.sql: truth_", "settings.yaml: ground_truth", "settings.yaml: truth.sqlite"]
+    assert sorted(got) == [
+        "query.sql: truth_",
+        "settings.yaml: ground_truth",
+        "settings.yaml: truth.sqlite",
+    ]
