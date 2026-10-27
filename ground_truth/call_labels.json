@@ -35,7 +35,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -1149,7 +1149,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "잇몸치료"
   },
   "split": "test"
  },
@@ -1681,7 +1681,7 @@
     "이서윤"
    ],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "단순발치"
   },
   "split": "silver"
  },
@@ -4276,7 +4276,7 @@
    },
    "family": [],
    "alerts": [],
-   "topic_procedure": "잇몸치료"
+   "topic_procedure": "스케일링"
   },
   "split": "silver"
  },
@@ -4418,7 +4418,7 @@
     "김현주"
    ],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "레진"
   },
   "split": "silver"
  },
@@ -8071,7 +8071,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -8391,7 +8391,7 @@
    "alerts": [
     "치과 공포"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "잇몸치료"
   },
   "split": "silver"
  },
@@ -8932,7 +8932,7 @@
     "고혈압",
     "체어 눕히지 말고 진료"
    ],
-   "topic_procedure": "크라운"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -9219,7 +9219,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "신경치료"
   },
   "split": "test"
  },
@@ -10131,7 +10131,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "브릿지"
   },
   "split": "silver"
  },
@@ -10963,7 +10963,7 @@
     "박도윤"
    ],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "실란트"
   },
   "split": "test"
  },
@@ -11564,7 +11564,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "단순발치"
   },
   "split": "silver"
  },
@@ -13083,7 +13083,7 @@
     "김지영"
    ],
    "alerts": [],
-   "topic_procedure": "구강검진"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -14104,7 +14104,7 @@
     "당뇨",
     "페니실린 알레르기"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "교정 월 체크"
   },
   "split": "silver"
  },
@@ -15187,7 +15187,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -15642,7 +15642,7 @@
     "고혈압",
     "구역반사"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -18393,7 +18393,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "아말감/GI"
   },
   "split": "test"
  },
@@ -19058,7 +19058,7 @@
     "김예진"
    ],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "단순발치"
   },
   "split": "silver"
  },
@@ -19543,7 +19543,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -19851,7 +19851,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -20356,7 +20356,7 @@
    "alerts": [
     "마취가 잘 안 됨"
    ],
-   "topic_procedure": "단순발치"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -20678,7 +20678,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "크라운"
   },
   "split": "silver"
  },
@@ -20767,7 +20767,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -21591,7 +21591,7 @@
     "주성현"
    ],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "미백"
   },
   "split": "silver"
  },
@@ -22292,7 +22292,7 @@
     "당뇨",
     "라텍스 알레르기"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "미백"
   },
   "split": "silver"
  },
@@ -22393,7 +22393,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -22431,7 +22431,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -23111,7 +23111,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "구강검진"
+   "topic_procedure": "사랑니 발치"
   },
   "split": "dev"
  },
@@ -23722,7 +23722,7 @@
    },
    "family": [],
    "alerts": [],
-   "topic_procedure": "레진"
+   "topic_procedure": "크라운"
   },
   "split": "silver"
  },
@@ -24505,7 +24505,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "사랑니 발치"
   },
   "split": "silver"
  },
@@ -25048,7 +25048,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "레진"
   },
   "split": "silver"
  },
@@ -25259,7 +25259,7 @@
    "alerts": [
     "당뇨"
    ],
-   "topic_procedure": "잇몸치료"
+   "topic_procedure": "교정 월 체크"
   },
   "split": "silver"
  },
@@ -25297,7 +25297,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "사랑니 발치"
   },
   "split": "silver"
  },
@@ -25640,7 +25640,7 @@
     "에피네프린 민감",
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -25683,7 +25683,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "사랑니 발치"
   },
   "split": "dev"
  },
@@ -25722,7 +25722,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "미백"
   },
   "split": "silver"
  },
@@ -25941,7 +25941,7 @@
    },
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "레진"
   },
   "split": "silver"
  },
@@ -26577,7 +26577,7 @@
    "alerts": [
     "협조 어려운 소아"
    ],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -26668,7 +26668,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "단순발치"
   },
   "split": "silver"
  },
@@ -28245,7 +28245,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "레진"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -28512,7 +28512,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "브릿지"
   },
   "split": "silver"
  },
@@ -29045,7 +29045,7 @@
    "alerts": [
     "항응고제 복용"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "크라운"
   },
   "split": "silver"
  },
@@ -29279,7 +29279,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "교정 월 체크"
+   "topic_procedure": "사랑니 발치"
   },
   "split": "silver"
  },
@@ -30355,7 +30355,7 @@
     "김현주"
    ],
    "alerts": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "실란트"
   },
   "split": "silver"
  },
@@ -31396,7 +31396,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "임플란트 1차"
   },
   "split": "silver"
  },
@@ -33489,7 +33489,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "잇몸치료"
   },
   "split": "silver"
  },
@@ -33530,7 +33530,7 @@
    "alerts": [
     "폐소공포증"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "인레이"
   },
   "split": "silver"
  },
@@ -33695,7 +33695,7 @@
    "alerts": [
     "페니실린 알레르기"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "레진"
   },
   "split": "silver"
  },
@@ -34697,7 +34697,7 @@
     "이중수"
    ],
    "alerts": [],
-   "topic_procedure": "임플란트 1차"
+   "topic_procedure": "아말감/GI"
   },
   "split": "silver"
  },
@@ -34953,7 +34953,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "크라운"
   },
   "split": "silver"
  },
@@ -38728,7 +38728,7 @@
    "alerts": [
     "항응고제 복용"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "단순발치"
   },
   "split": "silver"
  },
@@ -40204,7 +40204,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "신경치료"
   },
   "split": "silver"
  },
@@ -40280,7 +40280,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "크라운"
   },
   "split": "silver"
  },
@@ -41160,7 +41160,7 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "미백"
   },
   "split": "silver"
  },
@@ -41241,7 +41241,7 @@
     "골다공증 약 복용",
     "인공관절·인공판막"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "브릿지"
   },
   "split": "silver"
  },
@@ -44125,7 +44125,7 @@
    "alerts": [
     "고혈압"
    ],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "잇몸치료"
   },
   "split": "silver"
  },
@@ -44641,7 +44641,7 @@
     "윤현주"
    ],
    "alerts": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "레진"
   },
   "split": "silver"
  },
