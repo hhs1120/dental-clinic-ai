@@ -1,4 +1,5 @@
 """생성기 뼈대 — 단계별 시드, DB 쓰기, truth_gen_meta, 결정성 (가상 데이터 생성 설계 §5.1·§5.3)."""
+import json
 import os
 import sqlite3
 import subprocess
@@ -77,6 +78,24 @@ def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
     assert {"emr_patients", "emr_appointments", "ax_calls"} <= app_tables
     assert {"truth_gen_meta", "truth_claims"} <= truth_tables
     assert not any(t.startswith("truth_") for t in app_tables)  # 정답은 app.sqlite에 넣지 않는다
+
+
+def test_truth_json_written_next_to_truth_db(tmp_path, monkeypatch):
+    """정답 JSON(평가 설계 §6 — git diff·리뷰용): truth.sqlite 옆에 call_labels.json·doc_meta.json, JSON 컬럼은 풀어서"""
+    def toy(run, rng, fake):
+        run.conn.execute("INSERT INTO truth.truth_call_labels VALUES ('c-0001', 'book', '[\"book\"]', 'patient', 'normal',"
+                         " 0, 0, 0, 1, 1, 0, NULL, '{\"call_date\": \"2026-10-02\"}', 'silver')")
+        run.conn.execute("INSERT INTO truth.truth_doc_meta VALUES (1, 'faq-a', 'core', 0, NULL, NULL, '[]', '[]')")
+    monkeypatch.setattr(build, "STAGES", [("toy", toy)])
+    _, truth = _generate(tmp_path)
+    labels = json.loads((tmp_path / "call_labels.json").read_text(encoding="utf-8"))
+    assert labels == [{"call_uid": "c-0001", "primary_purpose": "book", "accepted_purposes": ["book"],
+                       "counterpart": "patient", "urgency": "normal", "emergency": 0, "complaint": 0, "price_inquiry": 0,
+                       "wants_appt": 1, "appt_confirmed": 1, "has_todo": 0, "noise_type": None,
+                       "used_fact": {"call_date": "2026-10-02"}, "split": "silver"}]
+    meta = json.loads((tmp_path / "doc_meta.json").read_text(encoding="utf-8"))
+    assert meta == [{"doc_id": 1, "doc_key": "faq-a", "kind": "core", "is_distractor": 0, "pair_doc_id": None,
+                     "supersedes_doc_id": None, "avoid_doc_ids": [], "planted_facts": []}]
 
 
 def test_regenerate_replaces_existing_db(tmp_path, no_stages):

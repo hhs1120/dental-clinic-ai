@@ -6,7 +6,7 @@ import pytest
 
 from generator import llm_jobs, transcripts
 from generator.llm_jobs import LLMContext
-from generator.master import CALL_DURATION_SEC, CLINIC_NAME, CALL_LABEL_WORDS, TRANSCRIPT_CHARS_PER_SEC
+from generator.master import CALL_DURATION_SEC, CLINIC_NAME, PROCEDURES, SCALING_MIN_AGE, CALL_LABEL_WORDS, TRANSCRIPT_CHARS_PER_SEC
 from tests.generator.verify_db import make_db
 
 
@@ -113,7 +113,13 @@ def test_stage_exports_misses_then_applies_cache(conn, tmp_path):
 def test_price_and_insurance_calls_get_master_price(conn):
     """가격·보험 문의는 주제 시술의 비용·급여를 입력에 — RAG 문서와 같은 master 값"""
     p = transcripts.payload(_row(conn, "c-0002"))  # 가격 문의, 주제 미백
-    assert p["facts"]["topic_price"] == {"procedure": "미백", "total": "300,000원", "insured": False}
-    assert transcripts.topic_price("스케일링") == {"procedure": "스케일링", "total": "60,000원", "insured": True,
-                                                 "patient_pays": "18,000원", "insured_age": "19세 이상"}
+    fee = {pr["name"]: pr for pr in PROCEDURES}
+    assert p["facts"]["topic_price"] == {"procedure": "미백", "total": f"{fee['미백']['fee_total']:,}원", "insured": False}
+    scaling = fee["스케일링"]
+    assert transcripts.topic_price("스케일링") == {
+        "procedure": "스케일링", "total": f"{scaling['fee_total']:,}원", "insured": True,
+        "patient_pays": f"{round(scaling['fee_total'] * scaling['patient_share_rate']):,}원",
+        "insured_age": f"{SCALING_MIN_AGE}세 이상"}
     assert "topic_price" not in transcripts.payload(_row(conn, "c-0001"))["facts"]  # 수납 문의
+    sub = dict(_row(conn, "c-0002")) | {"primary_purpose": "treatment_q", "accepted_purposes": '["treatment_q", "price_q"]'}
+    assert transcripts.payload(sub)["facts"]["topic_price"]["procedure"] == "미백"  # 부 주제 가격 문의도

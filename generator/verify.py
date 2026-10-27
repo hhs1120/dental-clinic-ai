@@ -32,10 +32,11 @@ from generator.master import (ADJUST_REASONS, AGE_BANDS, ALERT_TYPES, CHART_FORB
                               PERIO_LINK_DAYS, PREGNANCY_LEFT_DAYS, PROCEDURES, PROCEDURE_DIAGNOSES,
                               RETREATMENT_REQUIREMENT, SCALING_CODE, SCALING_MIN_AGE, SUBMITTED_MONTHS, VISIT_MIX,
                               add_years, age_band, age_on, daily_cap, insured_on, open_slots,
-                              BOOKING_PURPOSES, CALL_COUNTERPART_SHARE, CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE,
+                              BOOKING_PURPOSES, CALL_COUNTERPARTS, CALL_DURATION_SEC, CALL_FLAGS, CALL_NOISE_SHARE,
                               CALL_OUTBOUND_SHARE, CALL_PAIN_PURPOSES, CALL_PURPOSE_SHARE, CALL_SUBTOPICS,
                               EVAL_RARE_PURPOSES, EVAL_RARE_SHARE, EVAL_MIN_PER_SPLIT, HOURS, IMPLIED_FLAG,
-                              SUBTOPIC_PURPOSE, URGENCIES, CALL_LABEL_WORDS)
+                              SUBTOPIC_PURPOSE, URGENCIES, CALL_LABEL_WORDS, MIN_VISIT_AGE, TOOTH_TREATMENT_MIN_AGE,
+                              COURSE_VISITS)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = 5
@@ -551,7 +552,7 @@ def _month_bucket(ctx, month: str) -> str:
 
 def _chart_lines(conn, ctx) -> list[dict]:
     """진료마다 차트·차트 정답·청구·오류를 붙인 행. window = 창 안, cut = 확정 월 조정 사유(master 사유 dict)"""
-    rows = _rows(conn, "SELECT t.id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
+    rows = _rows(conn, "SELECT t.id, t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
                        " n.dx_code, n.note, pt.name AS patient_name,"
                        " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy, tc.facts,"
                        " c.id AS claim_id, c.claim_month, c.status, c.adjust_code, c.adjust_note,"
@@ -562,7 +563,9 @@ def _chart_lines(conn, ctx) -> list[dict]:
                        " LEFT JOIN emr_claims c ON c.treatment_id = t.id"
                        " LEFT JOIN truth.truth_claim_errors e ON e.treatment_id = t.id"
                        " ORDER BY t.patient_id, datetime(t.performed_at), t.id")
+    course = _courses(conn)
     for r in rows:
+        r["course"] = course[r["appointment_id"]]
         r["day"] = _dt(r["performed_at"]).date()
         r["window"] = r["day"] >= ctx.range_start
         r["bucket"] = _month_bucket(ctx, r["claim_month"]) if r["claim_id"] else None
@@ -570,11 +573,31 @@ def _chart_lines(conn, ctx) -> list[dict]:
     return rows
 
 
+def _courses(conn) -> dict[int, int]:
+    """예약 → 코스 첫 예약 id. 데스크 예약은 같은 환자 completed 예약의 종료 시각(scheduled_at + duration_min)에 잡힌
+    다음 회차, 변경 새 예약은 원래 예약과 같은 코스"""
+    appts = _rows(conn, "SELECT id, patient_id, booked_via, rescheduled_from_id, created_at,"
+                        " strftime('%Y-%m-%d %H:%M:%S', scheduled_at, '+' || duration_min || ' minutes') AS ends_at,"
+                        " status FROM emr_appointments ORDER BY created_at, id")
+    by_end = {(a["patient_id"], a["ends_at"]): a["id"] for a in appts if a["status"] == "completed"}
+    course = {}
+    for a in appts:
+        prev = a["rescheduled_from_id"] or (by_end.get((a["patient_id"], a["created_at"])) if a["booked_via"] == "desk" else None)
+        course[a["id"]] = course[prev] if prev else a["id"]
+    return course
+
+
+def _other_course(history: list, r) -> date | None:
+    """같은 치아·같은 시술을 다른 코스에서 한 마지막 날"""
+    days = [d for d, c in history if c != r["course"]]
+    return max(days) if days else None
+
+
 def _expected_requirement(rows: list[dict]) -> dict[int, str | None]:
     """진료 id → 요건 사유 키. 창 안 급여 줄만: 확정 월 요건 사유로 깎였으면 그 사유, 아니면 CHART_REQUIREMENT
     (잇몸치료는 직전 PERIO_LINK_DAYS일 안에 치석제거가 있으면 R02), 아말감/GI·신경치료는 같은 치아에 같은 시술을
-    다시 할 때 R01 (같은 치아의 다른 시술 — 신경치료 뒤 충전 — 은 다음 단계 치료라 재시행이 아니다)"""
-    expected, treated, scaled = {}, defaultdict(set), defaultdict(list)
+    다른 코스에서 다시 할 때 R01 (같은 치아의 다른 시술 — 신경치료 뒤 충전 — 과 코스 안 반복은 이어지는 치료라 재시행이 아니다)"""
+    expected, treated, scaled = {}, defaultdict(lambda: defaultdict(list)), defaultdict(list)
     retreat_codes = ADJUST_REASONS[RETREATMENT_REQUIREMENT]["procedures"]
     key_of = {id(r): k for k, r in ADJUST_REASONS.items()}
     for r in rows:  # 환자·시각순
@@ -586,11 +609,12 @@ def _expected_requirement(rows: list[dict]) -> dict[int, str | None]:
                 key = CHART_REQUIREMENT[r["procedure_code"]]
                 if key == "R03" and any(0 < (r["day"] - d).days <= PERIO_LINK_DAYS for d in scaled[r["patient_id"]]):
                     key = "R02"
-            elif r["procedure_code"] in retreat_codes and (r["tooth_no"], r["procedure_code"]) in treated[r["patient_id"]]:
+            elif r["procedure_code"] in retreat_codes and \
+                    _other_course(treated[r["patient_id"]][(r["tooth_no"], r["procedure_code"])], r):
                 key = RETREATMENT_REQUIREMENT
         expected[r["id"]] = key
         if r["tooth_no"] != FULL_MOUTH:
-            treated[r["patient_id"]].add((r["tooth_no"], r["procedure_code"]))
+            treated[r["patient_id"]][(r["tooth_no"], r["procedure_code"])].append((r["day"], r["course"]))
         if r["procedure_code"] == SCALING_CODE:
             scaled[r["patient_id"]].append(r["day"])
     return expected
@@ -650,16 +674,16 @@ def check_chart_requirement(conn, ctx):
 
 def check_requirement_facts(conn, ctx):
     """요건 사실이 장부와 모순되지 않음 — 장부에 근거 사건이 있으면 그 날짜에서 계산한 값(other_clinic 아님),
-    없으면 '타 기관' 이력(other_clinic). R01 = 같은 치아·같은 시술 이전 진료, R02 = 직전 PERIO_LINK_DAYS일 안
+    없으면 '타 기관' 이력(other_clinic). R01 = 다른 코스의 같은 치아·같은 시술 이전 진료, R02 = 직전 PERIO_LINK_DAYS일 안
     치석제거, R06 = 같은 치아 발치(근거 있는 줄만)"""
     bad = []
-    last, scaled, extracted = defaultdict(dict), defaultdict(list), defaultdict(dict)
+    last, scaled, extracted = defaultdict(lambda: defaultdict(list)), defaultdict(list), defaultdict(dict)
     for r in _chart_lines(conn, ctx):  # 환자·시각순
         pid, day = r["patient_id"], r["day"]
         f = json.loads(r["facts"]).get("requirement") if r["facts"] else None
         if f:
             ledger, field = {
-                "R01": (last[pid].get((r["tooth_no"], r["procedure_code"])), "prev_days"),
+                "R01": (_other_course(last[pid][(r["tooth_no"], r["procedure_code"])], r), "prev_days"),
                 "R02": (min([(day - d).days for d in scaled[pid] if 0 < (day - d).days <= PERIO_LINK_DAYS], default=None),
                         "scaling_days_ago"),
                 "R06": (extracted[pid].get(r["tooth_no"]), "extracted_days_ago"),
@@ -671,7 +695,7 @@ def check_requirement_facts(conn, ctx):
                 if not ok:
                     bad.append({"id": r["id"], "requirement": f, "ledger_days": ledger})
         if r["tooth_no"] != FULL_MOUTH:
-            last[pid][(r["tooth_no"], r["procedure_code"])] = day
+            last[pid][(r["tooth_no"], r["procedure_code"])].append((day, r["course"]))
         if r["procedure_code"] == SCALING_CODE:
             scaled[pid].append(day)
         if r["procedure_code"] in EXTRACTION_CODES:
@@ -712,6 +736,27 @@ def check_chart_text(conn, ctx):
                else "발견한 주의사항 없음" if not all(label in note for label in discovered[r["id"]]) else None)
         if why:
             bad.append({"id": r["id"], "reason": why, "note": note[:60]})
+    return bad
+
+
+def check_chart_plan(conn, ctx):
+    """다음 계획의 코스 남은 횟수는 1 ~ COURSE_VISITS 최대 - 1"""
+    bad = []
+    for r in _rows(conn, "SELECT treatment_id, facts FROM truth.truth_chart_notes WHERE kind = 'narrative'"):
+        remaining = (json.loads(r["facts"]).get("plan") or {}).get("remaining")
+        if remaining is not None and not 1 <= remaining < COURSE_VISITS[1]:
+            bad.append({"treatment_id": r["treatment_id"], "remaining": remaining})
+    return bad
+
+
+def check_chart_evidence_words(conn, ctx):
+    """근거 없는 요건 서술 줄에 근거 말(chart.EVIDENCE_WORDS) 없음 — 9b 건별 검증과 같은 기준"""
+    bad = []
+    for r in _rows(conn, "SELECT n.treatment_id, n.note, c.facts FROM emr_chart_notes n"
+                         " JOIN truth.truth_chart_notes c USING (treatment_id) WHERE c.kind = 'narrative'"):
+        hits = [w for w in chart.evidence_forbidden(json.loads(r["facts"])) if w in r["note"]]
+        if hits:
+            bad.append({"treatment_id": r["treatment_id"], "words": hits})
     return bad
 
 
@@ -915,7 +960,7 @@ def check_call_labels_match(conn, ctx):
 
 def _label_problem(r) -> str | None:
     purpose = r["primary_purpose"]
-    if purpose not in CALL_PURPOSE_SHARE or r["counterpart"] not in CALL_COUNTERPART_SHARE \
+    if purpose not in CALL_PURPOSE_SHARE or r["counterpart"] not in CALL_COUNTERPARTS \
             or r["urgency"] not in URGENCIES or (r["noise_type"] is not None and r["noise_type"] not in CALL_NOISE_SHARE):
         return "enum 밖"
     implied = IMPLIED_FLAG.get(purpose)
@@ -1010,11 +1055,25 @@ TRANSCRIPT_LABEL_WORD_MAX = 0.2  # 라벨 어휘가 그대로 나오는 전사 �
 
 
 def check_transcript_label_words(conn, ctx):
-    """라벨 어휘(master.CALL_LABEL_WORDS)가 그대로 나오는 전사 < 20% (경고)"""
+    """라벨 어휘(master.CALL_LABEL_WORDS)가 그대로 나오는 전사 < 20% (경고). 띄어쓰기는 무시('예약변경'도 잡음)"""
     rows = _transcripts(conn)
-    hit = [r["id"] for r in rows if any(w in r["transcript"] for w in CALL_LABEL_WORDS)]
+    words = [w.replace(" ", "") for w in CALL_LABEL_WORDS]
+    hit = [r["id"] for r in rows if any(w in r["transcript"].replace(" ", "") for w in words)]
     share = len(hit) / len(rows) if rows else 0.0
     return [{"share": round(share, 3), "ids": hit[:EXAMPLES]}] if share >= TRANSCRIPT_LABEL_WORD_MAX else []
+
+
+_LABEL_TOKENS = sorted({*CALL_PURPOSE_SHARE, *CALL_NOISE_SHARE, *CALL_COUNTERPARTS, *URGENCIES, *CALL_FLAGS})
+
+
+def check_label_tokens(conn, ctx):
+    """저장 텍스트(전사·차트 본문)에 영문 라벨 값·요건 키(R01 등) 없음 (경고) — LLM이 입력 라벨을 옮겨 적은 누출"""
+    token = re.compile(r"(?<![A-Za-z_])(" + "|".join(map(re.escape, _LABEL_TOKENS)) + r"|R0\d)(?![A-Za-z_\d])")
+    bad = []
+    for table, key, col in (("ax_calls", "id", "transcript"), ("emr_chart_notes", "treatment_id", "note")):
+        for r in _rows(conn, f"SELECT {key} AS id, {col} AS text FROM {table} WHERE {col} IS NOT NULL"):
+            bad += [{"table": table, "id": r["id"], "token": t} for t in sorted(set(token.findall(r["text"])))]
+    return bad
 
 
 def check_call_row_order(conn, ctx):
@@ -1031,10 +1090,13 @@ def _booking_problem(r, a, origins, reminders, ctx) -> str | None:
     if a["created_at"] < ctx.range_start.isoformat():
         return "창 이전 예약"
     t, purpose = r["started_at"], r["primary_purpose"]
-    if purpose == "book" and not (a["booked_via"] == "phone" and a["rescheduled_from_id"] is None and t == a["created_at"]):
-        return "예약 잡기 = 전화 예약(변경 새 예약 아님)의 created_at"
-    if purpose == "reschedule" and not (a["rescheduled_from_id"] is not None and t == a["created_at"]):
-        return "변경 = 변경 쌍 새 예약의 created_at"
+    # 확정 통화는 예약을 잡은 그 시각, 미확정은 그날 그보다 앞(통화 뒤 회신해서 확정)
+    at_booking = t == a["created_at"] if r["appt_confirmed"] else \
+        t[:10] == a["created_at"][:10] and _dt(t).time() > OPEN_TIME and t < a["created_at"]
+    if purpose == "book" and not (a["booked_via"] == "phone" and a["rescheduled_from_id"] is None and at_booking):
+        return "예약 잡기 = 전화 예약(변경 새 예약 아님)의 created_at (미확정이면 그날 그 전)"
+    if purpose == "reschedule" and not (a["rescheduled_from_id"] is not None and at_booking):
+        return "변경 = 변경 쌍 새 예약의 created_at (미확정이면 그날 그 전)"
     if purpose == "cancel" and not (a["status"] == "cancelled" and a["id"] not in origins and t == a["cancelled_at"]):
         return "취소 = 당일 취소의 cancelled_at"
     if purpose == "confirm":
@@ -1046,7 +1108,7 @@ def _booking_problem(r, a, origins, reminders, ctx) -> str | None:
 
 
 def check_booking_call_event(conn, ctx):
-    """예약류 통화 ↔ 예약 이벤트: 통화 시각 == 이벤트 시각(확인은 리마인드 날·문자 뒤), 같은 환자, 창 안 예약,
+    """예약류 통화 ↔ 예약 이벤트: 통화 시각 == 이벤트 시각(미확정 예약·변경은 그날 그 전, 확인은 리마인드 날·문자 뒤), 같은 환자, 창 안 예약,
     이벤트 하나에 통화 최대 1건(= 목적별 이벤트 수 ≥ 통화 수)"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
     origins = {a["rescheduled_from_id"] for a in appts.values() if a["rescheduled_from_id"]}
@@ -1071,7 +1133,7 @@ def _is_child(p: dict, day: date) -> bool:
 
 def check_call_counterpart(conn, ctx):
     """상대 ↔ 환자·발신자: 환자 측은 환자 연결·통화일 소아 ⇔ 보호자·번호/이름 = 말하는 사람(소아면 보호자), 처음 연락 예약은
-    그날 등록한 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측"""
+    그날 등록한 소아 아닌 환자(소아는 기존 환자인 보호자가 건다), 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT * FROM emr_patients")}
     phones = {p["phone"] for p in patients.values()}
     bad = []
@@ -1081,10 +1143,12 @@ def check_call_counterpart(conn, ctx):
         if who in _SIDE or (who == "new_caller" and r["primary_purpose"] in BOOKING_PURPOSES):
             if p is None:
                 problem = "환자 측인데 환자 없음"
-            elif who == "new_caller" and (r["primary_purpose"] != "book" or p["registered_at"] != day.isoformat()):
-                problem = "처음 연락 예약은 그날 등록한 환자의 예약 잡기만"
-            elif r["primary_purpose"] == "book" and who != "new_caller" and p["registered_at"] == day.isoformat():
-                problem = "그날 등록한 환자의 예약 잡기는 처음 연락"
+            elif who == "new_caller" and (r["primary_purpose"] != "book" or p["registered_at"] != day.isoformat()
+                                          or _is_child(p, day)):
+                problem = "처음 연락 예약은 그날 등록한 소아 아닌 환자의 예약 잡기만"
+            elif r["primary_purpose"] == "book" and who != "new_caller" and p["registered_at"] == day.isoformat() \
+                    and not _is_child(p, day):
+                problem = "그날 등록한 소아 아닌 환자의 예약 잡기는 처음 연락"
             elif who != "new_caller" and (who == "guardian") != _is_child(p, day):
                 problem = "통화일 소아 ⇔ 보호자"
             else:
@@ -1450,6 +1514,18 @@ def _treatments_with_age(conn) -> list[dict]:
     return rows
 
 
+def check_tooth_treatment_age(conn, ctx):
+    """치아 단위 시술은 시술일 기준 TOOTH_TREATMENT_MIN_AGE세 이상 — 치아 번호가 영구치뿐"""
+    tooth_level = {code for code, in conn.execute("SELECT code FROM emr_procedures WHERE is_tooth_level = 1")}
+    return [r for r in _treatments_with_age(conn) if r["procedure_code"] in tooth_level and r["age"] < TOOTH_TREATMENT_MIN_AGE]
+
+
+def check_registration_age(conn, ctx):
+    """등록일 기준 MIN_VISIT_AGE세 이상"""
+    return [r for r in _rows(conn, "SELECT id, birth_date, registered_at FROM emr_patients")
+            if age_on(date.fromisoformat(r["birth_date"]), date.fromisoformat(r["registered_at"])) < MIN_VISIT_AGE]
+
+
 def check_child_procedures(conn, ctx):
     """소아 시술(age_group='child': 불소도포·실란트)은 시술일 기준 0–12세만"""
     return [r for r in _treatments_with_age(conn) if r["age_group"] == "child" and r["age"] > CHILD_MAX_AGE]
@@ -1457,6 +1533,10 @@ def check_child_procedures(conn, ctx):
 
 REQUIRED = [
     check_foreign_keys,
+    check_tooth_treatment_age,
+    check_registration_age,
+    check_chart_plan,
+    check_chart_evidence_words,
     check_status_from_today,
     check_no_records_after_today,
     check_timestamps_not_future,
@@ -1542,6 +1622,7 @@ WARNINGS = [
     check_transcript_speakers,
     check_transcript_facts,
     check_transcript_label_words,
+    check_label_tokens,
 ]
 REPORTS = [
     report_daily_fill,

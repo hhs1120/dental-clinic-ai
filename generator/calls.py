@@ -208,7 +208,8 @@ def stage_slots(run, rng, fake) -> None:
                 new = purpose == "book" and led.patients[pid]["registered"] == t[:10]
                 slots.append({"purpose": purpose, "direction": direction, "structural": structural, "t": t,
                               "patient": pid, "about": pid, "appointment": a,
-                              "counterpart": "new_caller" if new else _side(led, pid, t[:10])})
+                              "counterpart": "new_caller" if new and not led.is_child(pid, t[:10])
+                              else _side(led, pid, t[:10])})  # 처음 오는 소아는 기존 환자인 보호자가 건다
             continue
         for direction, structural in shape:
             who = "side" if direction == "outbound" else _weighted(rng, CALL_COUNTERPART_WEIGHTS[purpose])
@@ -273,7 +274,10 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             fact["appointment"] |= {"from_date": orig["at"][:10], "from_time": orig["at"][11:16]}
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
-    if s["purpose"] in TOPIC_PURPOSES:
+    if s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]:  # 부 주제 가격 문의도 무엇의 가격인지
+        if a is not None:
+            fact["topic_procedure"] = fact["appointment"]["procedure"]
+            return fact
         if s["about"] is not None:
             nxt = fact["next_appointment"]
             known = sorted({v["procedure"] for v in fact["recent_visits"]} | ({nxt["procedure"]} if nxt else set()))
@@ -284,12 +288,28 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
     return fact
 
 
+def _before_booking(rng, s: dict) -> None:
+    """미확정 예약·변경 통화는 그날 예약을 잡은 시각보다 앞 — 통화 뒤 회신해서 확정된다(EMR 예약은 그 시각에 생김).
+    개원 직후에 잡힌 예약이라 앞설 자리가 없으면 확정 통화로 둔다"""
+    created = datetime.strptime(s["t"], FMT)
+    room = int((created - datetime.combine(created.date(), OPEN)).total_seconds() // 60)
+    if room > 1:
+        s["t"] = (datetime.combine(created.date(), OPEN) + timedelta(minutes=int(rng.integers(1, room)))).strftime(FMT)
+    else:
+        s["confirmed"] = 1
+
+
 def stage_labels(run, rng, fake) -> None:
     slots, led = run.state["call_slots"], run.state["call_ledger"]
     # call_uid(7단계 LLM 캐시 키)·길이는 라벨 추첨보다 먼저 — 라벨 파라미터를 바꿔도 그대로
     lo, hi = CALL_DURATION_SEC
     uids = (rng.permutation(len(slots)) + 1).tolist()
     durations = rng.integers(lo, hi + 1, size=len(slots)).tolist()
+    for s in slots:  # 확정 여부가 통화 시각을 정하므로 노이즈 할당보다 먼저 — 노이즈 비중을 바꿔도 통화 행은 그대로
+        if s["purpose"] in ("book", "reschedule"):
+            s["confirmed"] = int(rng.random() < APPT_CONFIRMED_SHARE)
+            if not s["confirmed"]:
+                _before_booking(rng, s)
     _assign_noise(rng, slots)
     for s in slots:
         purpose = s["purpose"]
@@ -302,7 +322,7 @@ def stage_labels(run, rng, fake) -> None:
             sub = options[int(rng.integers(len(options)))]
             flags[sub] = 1
         if purpose in ("book", "reschedule"):
-            flags["appt_confirmed"] = int(rng.random() < APPT_CONFIRMED_SHARE)
+            flags["appt_confirmed"] = s["confirmed"]
         flags["has_todo"] = int(rng.random() < HAS_TODO_SHARE.get(purpose, HAS_TODO_DEFAULT))
         if flags["emergency"]:
             urgency = "urgent"
@@ -310,8 +330,8 @@ def stage_labels(run, rng, fake) -> None:
             urgency = "urgent" if rng.random() < PAIN_URGENT_SHARE else "normal"
         else:
             urgency = _weighted(rng, CALL_URGENCY_WEIGHTS)
-        s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []),
-                 fact=_used_fact(rng, led, s))
+        s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []))
+        s["fact"] = _used_fact(rng, led, s)
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
     width = max(4, len(str(len(slots))))
     calls, labels = [], []

@@ -21,7 +21,7 @@ CREATE TABLE truth_claims (
 
 CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_date, procedure_code, tooth_no);
 
--- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
+-- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool·documents_core·documents_distractor). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
 -- (verify 테스트 DB는 config와 값이 다름).
 -- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
 CREATE TABLE truth_gen_meta (

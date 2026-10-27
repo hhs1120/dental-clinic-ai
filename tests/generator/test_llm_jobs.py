@@ -346,6 +346,13 @@ def test_non_object_output_not_stored(paths):
     assert "라벨" not in (paths["llm_cache"] / "toy.jsonl").read_text(encoding="utf-8")
 
 
+def test_forbidden_words_ignore_longer_numbers():
+    """금지 어휘도 꼭 넣을 말처럼 앞에 숫자가 붙으면 다른 말 — '3회' 금지가 '13회'에 걸리지 않게"""
+    checks = {"field": "text", "forbidden_words": ["3회"]}
+    assert llm_jobs.problems(SCHEMA, checks, {"text": "13회 내원"}) == []
+    assert llm_jobs.problems(SCHEMA, checks, {"text": "3회 내원"})
+
+
 def test_instructions_include_forbidden_topics():
     """API도 Claude Code와 같은 금지 토픽을 본다"""
     got = llm_jobs.instructions({"field": "t", "forbidden_patterns": ["턱관절"], "length": [1, 2]})

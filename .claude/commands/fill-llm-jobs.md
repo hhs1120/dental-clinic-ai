@@ -11,7 +11,7 @@ argument-hint: "[작업 이름(transcript·document·chart) — 없으면 전부
 
 보조 에이전트 지시 (`<조각>`을 조각 파일 경로로 바꿔 넘긴다):
 
-> `<조각>`은 JSONL이고 한 줄이 LLM 작업 하나다. 줄마다 `system`이 작성 지시, `user`가 입력(JSON), `schema`가 출력 JSON 스키마, `checks`가 통과 기준이다(`must_include`의 각 묶음 중 하나는 글자 그대로 넣기, `forbidden_words`·`forbidden_patterns`는 쓰지 않기, `speakers`가 있으면 줄마다 그 머리로 시작하고 모두 한 번 이상, `length`가 있으면 화자 머리·공백을 뺀 글자 수가 그 범위 안).
+> `<조각>`은 JSONL이고 한 줄이 LLM 작업 하나다. 줄마다 `system`이 작성 지시, `user`가 입력(JSON), `schema`가 출력 JSON 스키마, `checks`가 통과 기준이다(`must_include`의 각 묶음 중 하나는 글자 그대로 넣기, `forbidden_words`·`forbidden_patterns`는 쓰지 않기, `speakers`가 있으면 줄마다 그 머리로 시작하고 모두 한 번 이상, `length`가 있으면 화자 머리·공백을 뺀 글자 수가 그 범위 안, `sections`가 있으면 그 소제목이 정확히 한 번이고 묶인 말은 그 절 안).
 > 1. 작업마다 `system` 지시대로 `user` 입력에 맞는 출력 객체를 직접 쓴다(코드나 템플릿으로 찍어내지 않는다 — 건마다 다른 자연스러운 글).
 > 2. `generator/llm/results/<조각 파일 이름에서 .jsonl을 뺀 것>.claude-code.jsonl`에 작업마다 한 줄 `{"key": <작업의 key>, "output": <출력 객체>, "source": "claude-code"}`를 쓴다(조각의 작업 전부, 순서대로).
 > 3. `uv run python -m generator.llm_jobs check <결과 파일>`로 검사하고(첫 검사의 실패 수를 기억해 둔다), 실패한 키의 줄만 고쳐 다시 검사한다(최대 2번). 그래도 실패한 건은 그대로 둔다.

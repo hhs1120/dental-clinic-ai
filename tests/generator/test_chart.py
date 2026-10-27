@@ -137,22 +137,46 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
     assert [tuple(r) for r in conn.execute(settled)] != [tuple(r) for r in other.execute(settled)]  # 심사 결과는 바뀜
 
 
-def test_plan_counts_only_booked_by_that_day(db):
-    """다음 계획의 남은 내원 = 같은 에피소드에서 그날까지 잡혀 있던(created ≤ 그날) 이후 비취소 예약 — 미래 사실 없음 (§4.3)"""
+def test_plan_remaining_is_course_visits_left(db):
+    """다음 계획의 남은 내원 = 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획) — 다음 예약이 잡혔는지·나중에
+    바뀌었는지와 무관 (§4.3)"""
     conn, _, _ = db
-    episode = RUN["run"].state["episode"]
-    later = defaultdict(list)
-    for a in conn.execute("SELECT id, date(scheduled_at), date(created_at) FROM emr_appointments WHERE status != 'cancelled'"):
-        if a[0] in episode:
-            later[episode[a[0]]].append((a[1], a[2]))
-    checked = 0
-    for tid, appt_id, day, facts in conn.execute(
-            "SELECT t.id, t.appointment_id, date(t.performed_at), n.facts FROM emr_treatments t"
-            " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id"):
-        expected = sum(1 for sched, created in later.get(episode.get(appt_id), ()) if sched > day and created <= day)
+    left = RUN["run"].state["course_left"]
+    got = Counter()
+    for tid, appt_id, facts in conn.execute(
+            "SELECT t.id, t.appointment_id, n.facts FROM emr_treatments t JOIN truth.truth_chart_notes n ON n.treatment_id = t.id"):
         plan = json.loads(facts)["plan"] or {}
-        assert plan.get("remaining", 0) == expected, (tid, plan, expected)
-        checked += bool(expected)
+        assert plan.get("remaining", 0) == left.get(appt_id, 0), (tid, plan)
+        got[plan.get("remaining", 0)] += 1
+    assert got[1] and got[2]  # 코스 첫 회차는 2회 이상 남는다
+
+
+def test_course_roots_follow_desk_and_reschedule_links():
+    """같은 코스 = 직전 내원 종료 시각에 데스크에서 잡은 다음 회차, 변경 새 예약은 원래 예약을 잇는다(DB에 보이는 연결만)"""
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE emr_appointments (id, patient_id, scheduled_at, duration_min, status, rescheduled_from_id,"
+                 " booked_via, created_at)")
+    conn.executemany("INSERT INTO emr_appointments VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+        (1, 7, "2026-03-02 10:00:00", 60, "completed", None, "phone", "2026-02-20 09:40:00"),
+        (2, 7, "2026-03-12 10:00:00", 60, "cancelled", None, "desk", "2026-03-02 11:00:00"),  # 1 종료 시각
+        (3, 7, "2026-03-13 10:00:00", 60, "completed", 2, "phone", "2026-03-10 14:00:00"),  # 2의 변경
+        (4, 7, "2026-06-01 10:00:00", 60, "completed", None, "phone", "2026-05-20 10:00:00"),  # 새 수요
+    ])
+    assert chart.course_roots(conn) == {1: 1, 2: 1, 3: 1, 4: 4}
+
+
+def test_retreatment_is_across_courses(db):
+    """R01(같은 부위 재시행)의 장부 이력은 다른 코스의 같은 치아·시술 — 코스 안 반복(신경치료 2회차)은 재시행이 아니다"""
+    conn, _, _ = db
+    roots = chart.course_roots(conn)
+    checked = 0
+    for aid, pid, tooth, code, at in conn.execute(
+            "SELECT t.appointment_id, t.patient_id, t.tooth_no, t.procedure_code, t.performed_at FROM emr_treatments t"
+            " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id WHERE n.requirement = 'R01'"):
+        prior = [r[0] for r in conn.execute("SELECT appointment_id FROM emr_treatments WHERE patient_id = ? AND tooth_no = ?"
+                                            " AND procedure_code = ? AND performed_at < ?", (pid, tooth, code, at))]
+        assert not prior or any(roots[p] != roots[aid] for p in prior), aid
+        checked += 1
     assert checked
 
 
@@ -175,16 +199,26 @@ FACTS = {"alerts": [{"label": "고혈압", "action": "혈압 측정 후 진행"}
 def test_narrative_must_include_facts():
     """시술은 표준 이름만 — 진료 기록이라 별칭(검색·전사용)은 인정하지 않는다"""
     got = chart.narrative_must_include(FACTS)
-    assert got == [["잇몸치료"], ["6mm"], ["고혈압"], ["마취가 잘 안 됨"], ["14일"], ["2회"]]
+    assert got == [["잇몸치료"], ["6mm"], ["고혈압"], ["마취가 잘 안 됨"], ["14일"], ["재평가"], ["2회"]]  # 근거 말
     tooth = {**FACTS, "tooth": "26", "procedure": "신경치료", "findings": None, "alerts": [], "discovered": [],
              "requirement": {"key": "R01", "evidence": True, "prev_days": 200, "reason": "2차 우식"}, "plan": None}
-    assert chart.narrative_must_include(tooth) == [["26번"], ["신경치료"], ["7개월"]]
+    assert chart.narrative_must_include(tooth) == [["26번"], ["신경치료"], ["7개월"], ["2차 우식"]]
     other = {**tooth, "requirement": {"key": "R06", "evidence": True, "other_clinic": True, "edentulous_months": 5}}
-    assert chart.narrative_must_include(other)[-1] == ["5개월"]
+    assert chart.narrative_must_include(other)[-2:] == [["5개월"], ["무치악"]]
     sealant = {**tooth, "requirement": {"key": "R04", "evidence": True, "surface": "깊은 소와열구가 있고 우식이 없는 교합면"}}
     assert chart.narrative_must_include(sealant)[-1] == ["소와열구"]
     impacted = {**tooth, "requirement": {"key": "R05", "evidence": True, "impaction": "부분 매복", "bone_removal": True}}
-    assert chart.narrative_must_include(impacted)[-1] == ["부분 매복"]
+    assert chart.narrative_must_include(impacted)[-2:] == [["부분 매복"], ["골삭제"]]
+
+
+def test_narrative_checks_forbid_evidence_words_without_evidence():
+    """근거 없는 요건 줄은 근거 말이 금지 — 지어 넣으면 ⑤-2·⑤-3 정답(근거 없음)과 어긋난다"""
+    no_link = {**FACTS, "requirement": {"key": "R02", "evidence": False, "scaling_days_ago": 14, "linked": False}}
+    assert "재평가" in chart.narrative_checks(no_link, "김철수")["forbidden_words"]
+    assert ["재평가"] not in chart.narrative_must_include(no_link)
+    no_reason = {**FACTS, "requirement": {"key": "R01", "evidence": False, "prev_days": 200, "reason": None}}
+    assert {"파절", "2차 우식"} <= set(chart.narrative_checks(no_reason, "김철수")["forbidden_words"])
+    assert "재평가" not in chart.narrative_checks(FACTS, "김철수")["forbidden_words"]  # 근거 있음
 
 
 def test_narrative_checks_forbid_answer_words_and_patient_name():

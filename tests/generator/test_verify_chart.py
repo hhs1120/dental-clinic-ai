@@ -113,6 +113,13 @@ def test_retreatment_is_requirement_line(tmp_path):
 # ── 위반 (잡아야 함) ────────────────────────────────────────
 
 BREAKS = {
+    "plan_remaining_too_many": ("UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan', json('{\"remaining\": 9}'))"
+                                " WHERE treatment_id = 3", "check_chart_plan"),
+    "evidence_word_without_evidence": ("UPDATE truth.truth_chart_notes SET is_special = 1, requirement = 'R01',"
+                                       " evidence_present = 0, is_decoy = 0, facts = json_set(facts, '$.requirement',"
+                                       " json('{\"key\": \"R01\", \"evidence\": false, \"prev_days\": 30, \"reason\": null}'))"
+                                       " WHERE treatment_id = 3; UPDATE emr_chart_notes SET note = note || ' 충전물 파절'"
+                                       " WHERE treatment_id = 3", "check_chart_evidence_words"),
     "chart_missing": ("DELETE FROM emr_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "chart_truth_missing": ("DELETE FROM truth.truth_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "dx_unknown": ("UPDATE emr_chart_notes SET dx_code = 'D99' WHERE treatment_id = 1", "check_foreign_keys"),
@@ -154,7 +161,7 @@ BREAKS = {
 def test_break_is_caught(tmp_path, case):
     sql, check = BREAKS[case]
     conn = make_db(tmp_path)
-    conn.execute(sql)
+    conn.executescript(sql)  # 여러 문장인 경우가 있다
     assert getattr(verify, check)(conn, CTX), f"{check}가 {case}를 못 잡음"
 
 

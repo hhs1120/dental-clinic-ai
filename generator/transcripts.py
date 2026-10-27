@@ -61,7 +61,7 @@ def topic_price(name: str) -> dict:
 def payload(row: dict) -> dict:
     fact = json.loads(row["used_fact"])
     facts = _strip(fact)
-    if row["primary_purpose"] in PRICE_PURPOSES and fact.get("topic_procedure"):
+    if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get("topic_procedure"):  # 부 주제 포함
         facts["topic_price"] = topic_price(fact["topic_procedure"])
     return {
         "clinic": CLINIC_NAME,

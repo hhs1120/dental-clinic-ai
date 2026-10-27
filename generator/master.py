@@ -82,6 +82,9 @@ _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {"child": _EPISODE_YOUNG, "teen": _EPISODE_YOUNG, "adult": _EPISODE_ADULT, "senior": _EPISODE_ADULT}
 COURSE_VISITS = (2, 4)  # 양 끝 포함
+# 치아 번호가 영구치(PERMANENT_TEETH)뿐이라 영구치가 나기 전 나이에는 치료 수요가 없다 — 이 나이 미만은 위생(신환은 상담도)만
+TOOTH_TREATMENT_MIN_AGE = 6
+MIN_VISIT_AGE = 1  # 첫 등록(첫 내원) 나이 하한 — 젖니가 나기 전 영아는 등록하지 않는다
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
 # 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
@@ -146,7 +149,7 @@ _ROWS = [
 _KEYS = ("code", "name", "category", "is_insured", "fee_total", "duration_min",
          "insured_limit", "limit_scope", "age_group", "is_tooth_level")
 
-# 구어 별칭 (§1 aliases) — 전사의 꼭 넣을 시술 검사(글자 포함)·검색 동의어(차트는 표준 이름만). 다른 시술과 겹치는 말·
+# 구어 별칭 (§2.1 aliases) — 전사의 꼭 넣을 시술 검사(글자 포함)·검색 동의어(차트는 표준 이름만). 다른 시술과 겹치는 말·
 # 낱말이 아닌 조각은 넣지 않는다(때우는 — 레진과, 발치 — 사랑니 발치와, 교정 — 교정 상담과, '이 뽑' — '아이 뽑'에도 맞음)
 PROCEDURE_ALIASES = {
     "스케일링": ["치석 제거"], "구강검진": ["검진"], "불소도포": ["불소"], "실란트": ["홈 메우기", "홈메우기"],
@@ -363,8 +366,8 @@ CALL_OUTBOUND_SHARE = {"recall": 0.08, "confirm": 0.04, "billing_q": 0.03, "docu
 OUTBOUND_MULTI_SHARE = 0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
 CALL_NOISE_SHARE = {"two_topics": 0.10, "interrupted": 0.08, "ambiguous_pain": 0.04, "guardian_confused": 0.03}
 # 상대 분포(§4.1) — 목표가 아니라 근사(상대는 목적·환자에서 정해짐). 리포트로만 본다
-CALL_COUNTERPART_SHARE = {"patient": 0.60, "guardian": 0.15, "new_caller": 0.15, "insurer": 0.03, "vendor": 0.04,
-                          "other": 0.03}
+# 상대 enum. 비율은 정하지 않는다 — 예약류는 이벤트 환자, 그 밖은 CALL_COUNTERPART_WEIGHTS에서 나온다(리포트로만)
+CALL_COUNTERPARTS = ("patient", "guardian", "new_caller", "insurer", "vendor", "other")
 URGENCIES = ("urgent", "normal", "low")
 # 목적별 상대 가중(%) — 예약류 아닌 목적. side = 환자 측(통화일에 소아면 guardian, 아니면 patient). outbound는 항상 side
 CALL_COUNTERPART_WEIGHTS = {

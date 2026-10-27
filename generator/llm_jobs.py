@@ -231,7 +231,7 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
     text = output[checks["field"]]
     out = [f"꼭 넣을 사실 없음: {' / '.join(alts)}" for alts in checks.get("must_include", [])
            if not any(contains(text, a) for a in alts)]
-    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if w in text]
+    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if contains(text, w)]
     out += [f"금지 토픽: {p}" for p in checks.get("forbidden_patterns", []) if re.search(p, text)]
     speakers = checks.get("speakers")
     if speakers:

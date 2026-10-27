@@ -27,6 +27,10 @@ def _pre(patient, at, type="hygiene", status="completed", created="2026-09-01 10
 
 # (깨뜨리는 SQL, 잡아야 하는 검사)
 BREAKS = {
+    # 시드 소아(2번, 2018년생)의 11/18 레진 '16' — 6세 미만이면 영구치 번호의 치아 시술이 불가능
+    "tooth_treatment_too_young": ("UPDATE emr_patients SET birth_date = '2022-01-01' WHERE id = 2",
+                                  "check_tooth_treatment_age"),
+    "registered_as_infant": ("UPDATE emr_patients SET registered_at = '2018-06-01' WHERE id = 2", "check_registration_age"),
     "fk_dangling": ("UPDATE emr_treatments SET appointment_id = 999 WHERE id = 3", "check_foreign_keys"),
     "today_completed": ("UPDATE emr_appointments SET status = 'completed' WHERE id = 5", "check_status_from_today"),
     "future_noshow": ("UPDATE emr_appointments SET status = 'noshow' WHERE id = 6", "check_status_from_today"),

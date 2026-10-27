@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import NamedTuple
 
 from generator.master import (COURSE_VISITS, EPISODE_MIX, MAX_LEAD_DAYS, RECALL_CYCLE, RECALL_JITTER_DAYS,
-                              add_years, age_band, age_on)
+                              TOOTH_TREATMENT_MIN_AGE, add_years, age_band, age_on)
 
 DAYS_PER_MONTH = 365.25 / 12
 
@@ -31,7 +31,8 @@ def draw_episode(rng, band: str) -> tuple[str, int]:
 
 
 def arrivals(rng, birth: date, start: date, end: date, rates: dict) -> list[Arrival]:
-    """[start, end) 안의 치료 수요 — 그날 나이 구간의 월 발생률(rates)로 포아송 과정. 생일마다 발생률을 다시 본다(무기억성)"""
+    """[start, end) 안의 치료 수요 — 그날 나이 구간의 월 발생률(rates)로 포아송 과정. 생일마다 발생률을 다시 본다(무기억성).
+    TOOTH_TREATMENT_MIN_AGE세 미만은 발생률 0"""
     out, t = [], 0.0  # start로부터의 일수(실수)
     total = (end - start).days
     while t < total:
@@ -40,7 +41,7 @@ def arrivals(rng, birth: date, start: date, end: date, rates: dict) -> list[Arri
         band = age_band(age)
         # 다음 생일. 2월 29일생은 평년 add_years가 2/28을 주는데 age_on은 그날을 아직 생일 전으로 본다 → 최소 하루 뒤
         boundary = min(max((add_years(birth, age + 1) - start).days, int(t) + 1), total)
-        per_day = rates[band] / DAYS_PER_MONTH
+        per_day = rates[band] / DAYS_PER_MONTH if age >= TOOTH_TREATMENT_MIN_AGE else 0
         t_next = t + (rng.exponential(1 / per_day) if per_day > 0 else float("inf"))
         if t_next >= boundary:
             t = float(boundary)

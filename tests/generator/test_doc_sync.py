@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from generator import master, verify
+from generator import chart, documents, llm_jobs, master, verify
 from shared import llm
 from generator.master import VISIT_MIX
 
@@ -57,10 +57,11 @@ def test_target_table_matches_code(name):
 
 
 def test_named_constants_exist():
-    """문서가 `master.X`·`verify.X`로 가리키는 이름은 코드에 실제로 있어야 한다"""
+    """문서가 `master.X`·`verify.X`·`llm_jobs.X`·`documents.X`·`chart.X`로 가리키는 이름은 코드에 실제로 있어야 한다"""
     text = _doc()
-    missing = [f"{mod}.{name}" for mod, name in re.findall(r"`(master|verify)\.(\w+)`", text)
-               if name not in PENDING and not hasattr({"master": master, "verify": verify}[mod], name)]
+    modules = {"master": master, "verify": verify, "llm_jobs": llm_jobs, "documents": documents, "chart": chart}
+    missing = [f"{mod}.{name}" for mod, name in re.findall(r"`(master|verify|llm_jobs|documents|chart)\.(\w+)`", text)
+               if name not in PENDING and not hasattr(modules[mod], name)]
     assert not missing, missing
 
 
@@ -171,8 +172,8 @@ def test_call_purpose_table_matches_code():
 
 
 def test_call_counterpart_and_noise_lines_match_code():
-    counterpart = _pairs(_line("**상대**").split(":", 1)[1])
-    assert {_COUNTERPART_LABEL[k]: v / 100 for k, v in counterpart.items()} == pytest.approx(master.CALL_COUNTERPART_SHARE)
+    names = re.match(r"\*\*상대\*\*: ([^(]+)\(", _line("**상대**")).group(1).split("/")
+    assert tuple(_COUNTERPART_LABEL[n.strip()] for n in names) == master.CALL_COUNTERPARTS  # 비율은 정하지 않음
     noise = _pairs(_line("**노이즈**").split(":", 1)[1])
     assert {_NOISE_LABEL[k]: v / 100 for k, v in noise.items()} == pytest.approx(master.CALL_NOISE_SHARE)
     assert re.search(r"노이즈\*\*\((\d+)%\)", _line("**노이즈**")).group(1) == str(round(sum(master.CALL_NOISE_SHARE.values()) * 100))
