@@ -29,7 +29,7 @@ tags:
 ## 1. 원칙
 
 1. **정답은 앱 DB 밖**(`CLAUDE.md` 절대 규칙). 평가 스크립트만 `truth.sqlite`를 `ATTACH`해 조인
-2. **튜닝 셋 ≠ 보고 셋.** 모든 평가셋은 dev/test로 나눔. 튜닝·`make gate`·CI는 `--split dev`만. **test는 데모 직전 1회**, `truth_eval_runs`에 이력 기록. 골드로 재는 지표(모델 vs 골드)도 같다 — dev는 test 판정 풀 통화를 뺀 전사(비풀 + dev 풀), test는 **test 판정 풀만**(역확률 가중). dev 골드는 희귀 카테고리가 test로 빠져 실제보다 적으므로 역확률 가중(§2.2)을 주 수치로, 비가중을 보조로 병기한다. 튜닝 중 본 통화가 보고 수치에 섞이지 않게
+2. **튜닝 셋 ≠ 보고 셋.** 모든 평가셋은 dev/test로 나눔. 튜닝·`make gate`·CI는 `--split dev`만. **test는 데모 직전 조건마다 1회**, 실행 이력(`reports/eval_runs.jsonl`)에 기록 — 같은 조건의 test를 다시 돌리려면 `--force`(§7). 골드로 재는 지표(모델 vs 골드)도 같다 — dev는 test 판정 풀 통화를 뺀 전사(비풀 + dev 풀), test는 **test 판정 풀만**(역확률 가중). dev 골드는 희귀 카테고리가 test로 빠져 실제보다 적으므로 역확률 가중(§2.2)을 주 수치로, 비가중을 보조로 병기한다. 튜닝 중 본 통화가 보고 수치에 섞이지 않게
 3. **절대값보다 조건 간 차이.** 합성 데이터라 절대 수치는 높게 나옴. README의 주 지표는 "리랭커 on/off", "프롬프트 v1→v2" 같은 차이
 4. **분수 병기.** 모수가 작아(RAG dev 20·6·5·4문항, 분류 dev 판정 풀의 절반 — 카테고리별로는 몇 건) 1문항이 5~25%p를 움직임. 퍼센트만 쓰지 않음
 5. **폴백 건 제외.** `ax_llm_calls.fallback_used`면 활성 모델 결과가 실제로는 폴백 모델 출력 → 블라인드·정확도 집계에서 제외
@@ -125,14 +125,16 @@ tags:
 
 | 지표 | 모수 | 정의 |
 |---|---|---|
-| Hit@5 · MRR · Top-1 | 문서 검색형 **40**(매뉴얼 18 + 공지 10 + 사례 12; dev 20 / test 20) | 정답 청크 top-5 포함 / 순위 역수 / 1위 |
+| Hit@5 · MRR · Top-1 | 문서 검색형 **40**(매뉴얼 18 + 공지 10 + 사례 12; dev 20 / test 20) | 정답 청크 top-5 포함 / 첫 정답 순위 역수(5위 밖이면 0 — MRR@5) / 1위 |
 | 최신성 | 공지형 10 | Top-1이 최신 버전 (옛 버전이 top-5에 같이 있어도 됨) |
 | 인용 정확도 | 문서 검색형 40 | 답변 `cited_ids`에 정답 문서(`answer_doc_ids`)의 청크가 하나 이상 **and** `cited_ids` ⊆ `retrieved_ids`(이번 질문의 검색 결과 합집합 — 검색 안 한 청크 인용은 실패). 공지형은 최신 버전 청크를 인용해야 통과(옛 버전을 같이 인용해도 됨). `refuse`·인용 없음은 실패. 로그만으로 계산(LLM 채점 없음), LLM 답변이 필요해 `--retrieval-only` 대상 아님 |
 | 차트 Hit@5 · MRR | 차트형 **10**(dev 5 / test 5) — 문서 검색형 40과 따로 보고(정답 여럿 허용이라 채점이 다르고, `make gate` 기준 모수를 바꾸지 않으려고) | 정답 차트 중 하나라도 top-5 / 첫 정답 순위 역수 |
 | 도구 선택 정확도 | 데이터형 12 | §3.2 규칙 통과 비율 |
 | 환각 억제율 | 거절형 8 | 마지막 호출이 `refuse`인 비율 |
 
-**`--retrieval-only`**: LLM 호출 없이 `retrieved_ids`만으로 Hit@5·MRR·Top-1·최신성 계산 — 리랭커 on/off, 하이브리드 vs 벡터만 비교는 전부 이 모드($0).
+**검색 지표의 순위**: Hit@5·MRR·Top-1·최신성(차트 Hit@5·MRR 포함)은 eval.py가 **질문 원문으로 검색기를 직접 한 번** 호출한 결과로 센다 — 챗은 검색어를 바꿔 여러 번 검색해 순위가 하나로 정해지지 않고, 이렇게 해야 `--retrieval-only`와 같은 정의가 된다. 순위는 정답 출처의 버킷 목록 안에서(문서 → `manual_results`, 통화·스레드·차트 → `case_results` — 앱 설계 §3). 청크가 정답인지는 청크 id에서 끝 순번을 뗀 출처 id가 `answer_doc_ids`에 있는지로 본다. 인용 정확도·도구 선택·환각 억제는 eval.py가 부른 챗의 반환값(도구 호출·`retrieved_ids`·답변·`cited_ids` — 앱이 `ax_search_logs`에 쓰는 행과 같은 내용, 형식은 `evaluation/rag.py`)으로 센다.
+
+**`--retrieval-only`**: LLM 호출 없이 검색 지표만 계산 — 리랭커 on/off, 하이브리드 vs 벡터만 비교는 전부 이 모드($0).
 
 **조건 비교 표기**: 같은 문항에 두 조건을 적용한 paired 비교 → 분수(`14/20 → 17/20`) + 유의성 한 줄.
 구제/손실 문항 목록과 원인(예: "옛 공지 배제는 리랭커가 구제")을 자동 출력 — **숫자보다 이 분석이 설득력의 본체.**
@@ -160,7 +162,7 @@ tags:
 | `truth_rag_qa` | 사람(생성 후, `make data`가 `rag_qa.json`을 적재) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split, answer_sql` — 출처 id 형식·칸 뜻은 `ground_truth/schema.sql`. `answer_sql`은 데이터형 답·차트형 정답 집합을 재계산하는 쿼리(재생성 시 `make verify`가 확인) |
 | `truth_doc_meta` | 생성기(9단계 문서 계획) | `doc_id → kind(core/old_version/similar/external), is_distractor, pair_doc_id, supersedes_doc_id, planted_facts[]`(심은 사실 — 사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
 | `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`, `documents_core`, `documents_distractor`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
-| `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
+| (실행 이력) | eval.py | `truth.sqlite`가 아니라 `reports/eval_runs.jsonl`(커밋) — `make data`가 `truth.sqlite`를 다시 만들어도 남게. 한 줄 = `split, section, condition, prompt_version, started_at, report_path` |
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |
 | `truth_claim_qa` | 사람(슬롯 ⑤ 착수 시, 조건부) | ⑤-3 청구 기준 질문과 정답 절(상세 사유 → 절은 생성 규칙에서, 질문 규칙은 §5). `truth_rag_qa`와 같은 형식, ③ 평가에는 쓰지 않음 |
@@ -174,16 +176,20 @@ tags:
 ## 7. `eval.py`
 
 ```
-eval.py --split dev|test [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-  → reports/eval_<split>_<condition>_<ts>.md  (+ truth_eval_runs 1행)
+eval.py --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
+eval.py --split test --section classification|retrieval|chat [--prompt-version v2] [--condition reranker=off] [--force]
+        [--reports-dir 경로]   # 기본 reports/
+  → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json(make gate가 읽음)  (+ reports/eval_runs.jsonl 1줄)
 ```
 - 분류: §2.2 표 + 3종 정확도 + 버전 비교(교집합) + 블라인드 쌍별 승률·위치 편향
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 사람 채점 두 묶음(칩 켜진 / 안 켜진) 집계
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
+- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류는 `--prompt-version` 하나, RAG는 검색·챗 중 하나와 조건 하나). 이력에 같은 묶음(분류·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). dev는 묶음 제한 없이 전부
+- **`--condition`**: 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다. 구제/손실 목록은 dev만)
 - **건별 덤프는 `--split dev`에서만**: 개선 루프용 오류 목록(틀린 통화 id·전사)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
-- **few-shot 예시 제외**: 예시는 dev 판정에서만 고르고(개선 루프 — [[치과 AX - 기능 정의]] §4 ②), 프롬프트 파일 머리말의 예시 `call_uid`를 dev 집계에서 뺀다
+- **few-shot 예시 제외**: 예시는 dev 판정에서만 고르고(개선 루프 — [[치과 AX - 기능 정의]] §4 ②), 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`)의 예시 `call_uid`를 dev 집계에서 뺀다
 
 `make gate`는 이 스크립트의 `--split dev` 출력을 읽음. 기준은 [[치과 AX - 기능 정의]] §6.
 

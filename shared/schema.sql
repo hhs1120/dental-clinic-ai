@@ -166,7 +166,8 @@ CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
 -- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.
--- 나머지는 해당 기능 구현 때 추가
+-- 분류·판정·투표·LLM 로그는 앱이 쓰고 evaluation/eval.py가 읽는다 — 지금은 그 칸만(앱 설계 §1·§2), 나머지 칸·테이블은 해당 기능
+-- 구현 때 추가. 검색 로그(ax_search_logs)는 eval.py가 읽지 않는다 — 챗 채점은 앱 chat()의 반환값(evaluation/rag.py)
 
 -- 라벨·노이즈·카테고리 컬럼을 두지 않는다 (정답 누출 — truth_call_labels에만)
 CREATE TABLE ax_calls (
@@ -204,4 +205,55 @@ CREATE TABLE ax_documents (
     effective_date TEXT,
     path           TEXT NOT NULL,
     body           TEXT NOT NULL
+);
+
+-- ── 앱이 쓰는 ax_* (앱 설계 §1·§2). eval.py가 읽는 칸 ─────────────────
+-- labels JSON = 9항목 {primary_purpose, counterpart, urgency, emergency, complaint, price_inquiry, wants_appt,
+-- appt_confirmed, has_todo}(enum은 generator/master.py CALL_*), 플래그는 0/1
+
+-- LLM 게이트웨이 호출 1건 = 1행. fallback_used면 평가 집계에서 제외 (평가 설계 §1 원칙 5)
+CREATE TABLE ax_llm_calls (
+    id            INTEGER PRIMARY KEY,
+    task          TEXT NOT NULL,
+    model_alias   TEXT NOT NULL,
+    model_actual  TEXT NOT NULL,
+    prompt_version TEXT,
+    fallback_used INTEGER NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL,
+    is_eval       INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE ax_call_classifications (
+    id             INTEGER PRIMARY KEY,
+    call_id        INTEGER NOT NULL REFERENCES ax_calls(id),
+    model_alias    TEXT NOT NULL,
+    model_actual   TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('ok', 'failed')),
+    labels         TEXT,
+    summary        TEXT,
+    todo           TEXT,
+    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
+    UNIQUE (call_id, model_alias, prompt_version)
+);
+
+-- 사람 판정. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
+CREATE TABLE ax_judgments (
+    id        INTEGER PRIMARY KEY,
+    call_id   INTEGER NOT NULL UNIQUE REFERENCES ax_calls(id),
+    labels    TEXT NOT NULL,
+    judged_by TEXT NOT NULL,
+    judged_at TEXT NOT NULL
+);
+
+-- 블라인드 투표 (평가 설계 §2.4). 좌·우 = 화면 배치
+CREATE TABLE ax_blind_votes (
+    id                       INTEGER PRIMARY KEY,
+    left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),
+    right_classification_id  INTEGER NOT NULL REFERENCES ax_call_classifications(id),
+    choice                   TEXT NOT NULL CHECK (choice IN ('left', 'right', 'tie', 'both_wrong')),
+    voted_by                 TEXT NOT NULL,
+    voted_at                 TEXT NOT NULL,
+    UNIQUE (left_classification_id, right_classification_id)
 );
