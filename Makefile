@@ -10,7 +10,7 @@ llm-import:
 	uv run python -m generator.llm_jobs import
 
 llm-fill-api:
-	$(if $(TASK),,$(error TASK=transcript 또는 TASK=chart))
+	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
 	uv run python -m generator.llm_jobs fill-api --task $(TASK)
 
 verify:

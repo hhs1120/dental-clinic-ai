@@ -314,3 +314,17 @@ def test_instructions_include_forbidden_topics():
     """API도 Claude Code와 같은 금지 토픽을 본다"""
     got = llm_jobs.instructions({"field": "t", "forbidden_patterns": ["턱관절"], "length": [1, 2]})
     assert got == {"must_mention": [], "avoid_words": [], "avoid_patterns": ["턱관절"], "length_chars": [1, 2]}
+
+
+
+@pytest.mark.parametrize("body, problem", [
+    ("# 문서\n## 가\n90일 기준\n## 나\n소견", None),
+    ("# 문서\n### 가\n90일 기준\n## 나\n소견", "절 ## 가 0개"),
+    ("# 문서\n## 가 기준\n90일\n## 나\n소견", "절 ## 가 0개"),
+    ("# 문서\n## 가\n90일\n## 가\n## 나\n소견", "절 ## 가 2개"),
+    ("90일 기준\n## 가\n설명\n## 나\n소견", "밖에 있는 말: 90일"),
+])
+def test_section_problems(body, problem):
+    """청구 기준 절 — 소제목이 정확히 한 번, 기준 말은 그 절 안 (verify check_claim_sections와 같은 로직)"""
+    got = llm_jobs.section_problems(body, [["## 가", ["90일"]], ["## 나", []]])
+    assert (got == []) if problem is None else any(problem in p for p in got)

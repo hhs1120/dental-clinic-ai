@@ -222,3 +222,22 @@ def test_daily_usd_limit_matches_doc():
     doc = (ROOT / "docs" / "치과 AX - 기능 정의.md").read_text(encoding="utf-8")
     runtime, generator = re.search(r"하드리밋 런타임 \$(\d+)/일, 생성기 \$(\d+)/일", doc).groups()
     assert llm.load_config()["daily_usd_limit"] == {"generator": int(generator), "runtime": int(runtime)}
+
+
+# §4.2 문서 표 종류 → 목록 표(generator/doc_catalog.py)의 (kind, type). type None = 종류 안의 모든 type
+_DOC_ROW = {"직원 매뉴얼": ("core", "manual"), "FAQ": ("core", "faq"), "보험 안내": ("core", "insurance_guide"),
+            "청구 기준": ("core", "claim_standard"), "원내 공지": ("core", "notice"), "공지 옛 버전": ("old_version", None),
+            "치과 상식": ("core", "education"), "유사 주제 무답": ("similar", None), "타 병원·일반": ("external", None)}
+
+
+def test_rag_document_rows_match_catalog():
+    """§4.2 문서 표의 종류별 수 = 목록 표의 그 종류 문서 수"""
+    from generator.doc_catalog import CATALOG
+    text = _doc()
+    table = text[text.index("### 4.2"):].split("| 종류 | 수 | 생성 |")[1].split("\n\n")[0]
+    rows = {r[0]: int(r[1]) for r in ([c.strip() for c in line.strip("|").split("|")]
+                                      for line in table.strip().splitlines()[1:])}
+    assert rows.keys() == _DOC_ROW.keys()
+    for label, (kind, type_) in _DOC_ROW.items():
+        n = sum(1 for d in CATALOG if d.kind == kind and (type_ is None or d.type == type_))
+        assert rows[label] == n, f"{label}: 문서 {rows[label]} ≠ 목록 {n}"

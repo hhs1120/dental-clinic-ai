@@ -1,5 +1,5 @@
 """생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체. 단계는 가상 데이터 생성 설계 §5.1.
-LLM 단계(7·9b)는 캐시만 읽는다 — 빈 건이 있으면 끝까지 돌아 작업을 내보내고 DB를 바꾸지 않은 채 LLMMissing(generator/llm_jobs.py)."""
+LLM 단계(7·9·9b)는 캐시만 읽는다 — 빈 건이 있으면 끝까지 돌아 작업을 내보내고 DB를 바꾸지 않은 채 LLMMissing(generator/llm_jobs.py)."""
 import json
 import os
 import sqlite3
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import yaml
 
-from generator import (alerts, calls, chart, clinic, demand, messages, patients, pre_window, records, schedule,
-                       transcripts)
+from generator import (alerts, calls, chart, clinic, demand, documents, messages, patients, pre_window, records,
+                       schedule, transcripts)
 from generator.llm_jobs import LLMContext
 from generator.paths import ROOT, output_paths
 from generator.seeding import stage_faker, stage_rng
@@ -49,6 +49,8 @@ STAGES: list = [
     ("call_pools", calls.stage_pools),
     ("call_transcripts", transcripts.stage),
     ("messages", messages.stage),
+    ("doc_plan", documents.stage_plan),
+    ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
 ]
 
@@ -94,6 +96,7 @@ def generate(app_path: Path, truth_path: Path, config_path: Path, fake_llm: bool
             ("range_start", run.range_start.isoformat()), ("range_end", run.range_end.isoformat()),
             ("call_slots", str(cfg["calls_with_transcript"])), ("eval_pool", str(cfg["eval_pool_size"])),
             ("blind_pool", str(cfg["blind_pool_size"])),
+            ("documents_core", str(cfg["documents"]["core"])), ("documents_distractor", str(cfg["documents"]["distractor"])),
         ])
         for name, stage in STAGES:
             stage(run, stage_rng(run.seed, name), stage_faker(run.seed, name))

@@ -56,6 +56,8 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
         "call_slots": str(CFG["calls_with_transcript"]),
         "eval_pool": str(CFG["eval_pool_size"]),
         "blind_pool": str(CFG["blind_pool_size"]),
+        "documents_core": str(CFG["documents"]["core"]),
+        "documents_distractor": str(CFG["documents"]["distractor"]),
     }
 
 

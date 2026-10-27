@@ -105,3 +105,13 @@ def test_stage_exports_misses_then_applies_cache(conn, tmp_path):
     assert row[0] == 1 and row[1] == good["transcript"] and row[2] == transcripts.duration_sec(good["transcript"])
     assert conn.execute("SELECT count(*) FROM ax_calls WHERE has_transcript = 0").fetchone()[0] == 3
     assert "scenario" not in (paths["llm_cache"] / "transcript.jsonl").read_text(encoding="utf-8")
+
+
+
+def test_price_and_insurance_calls_get_master_price(conn):
+    """가격·보험 문의는 주제 시술의 비용·급여를 입력에 — RAG 문서와 같은 master 값"""
+    p = transcripts.payload(_row(conn, "c-0002"))  # 가격 문의, 주제 미백
+    assert p["facts"]["topic_price"] == {"procedure": "미백", "total": "300,000원", "insured": False}
+    assert transcripts.topic_price("스케일링") == {"procedure": "스케일링", "total": "60,000원", "insured": True,
+                                                 "patient_pays": "18,000원", "insured_age": "19세 이상"}
+    assert "topic_price" not in transcripts.payload(_row(conn, "c-0001"))["facts"]  # 수납 문의

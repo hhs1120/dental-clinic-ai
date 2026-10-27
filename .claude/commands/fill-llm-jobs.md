@@ -1,6 +1,6 @@
 ---
 description: LLM 작업(generator/llm/jobs/)을 Claude Code 보조 에이전트로 채우고 들여온다 (가상 데이터 생성 설계 §5.1)
-argument-hint: "[작업 이름(transcript·chart) — 없으면 전부] [최대 조각 수 — 시험용]"
+argument-hint: "[작업 이름(transcript·document·chart) — 없으면 전부] [최대 조각 수 — 시험용]"
 ---
 
 `make data`가 내보낸 LLM 작업을 채운다. 인자: $ARGUMENTS

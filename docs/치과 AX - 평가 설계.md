@@ -108,7 +108,7 @@ tags:
 
 청구 기준 문서([[치과 AX - 가상 데이터 생성 설계]] §4.2)는 말뭉치에 있지만 이 70개의 질문 대상은 아니다 — 청구 기준 질문은 슬롯 ⑤ 평가셋(§5)으로 따로. 다만 보험 안내와 내용이 겹치므로(예: 스케일링 연 1회 급여), 질문을 쓸 때 같은 답이 청구 기준 절에도 있으면 그 절을 `answer_doc_ids`에 함께 넣는다 — Hit@5·MRR·인용 정확도 모두 이 절의 청크를 정답으로 인정하고, 아래 dev/test 문서 단위 격리도 이 절에 적용한다.
 
-**dev 35 / test 35**: 유형 비율 동일. **정답 문서 단위로 격리**(차트형은 차트 기록 단위) — 같은 공지·매뉴얼을 dev와 test가 공유하면 누출. 공지형은 공지마다 옛 버전이 있어야 최신성 채점이 된다(옛 버전 구성은 가상 데이터 생성 설계 §4.2).
+**dev 35 / test 35**: 유형 비율 동일. **정답 문서 단위로 격리**(차트형은 차트 기록 단위) — 같은 공지·매뉴얼을 dev와 test가 공유하면 누출. 같은 사실을 담은 핵심 문서(공지와 FAQ·매뉴얼 — `truth_doc_meta.planted_facts`의 같은 묶음 키 `same`)는 함께 `answer_doc_ids`에 넣고 같은 split에 둔다. 최신성은 공지 대 그 옛 공지로만 판정한다. 공지형은 공지마다 옛 버전이 있어야 최신성 채점이 된다(옛 버전 구성은 가상 데이터 생성 설계 §4.2).
 
 ### 3.2 채점 규칙
 
@@ -155,8 +155,8 @@ tags:
 |---|---|---|
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
-| `truth_doc_meta` | 생성기 | `doc_id → is_distractor, planted_qa_ids[], supersedes_doc_id` |
-| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
+| `truth_doc_meta` | 생성기(9단계 문서 계획) | `doc_id → kind(core/old_version/similar/external), is_distractor, pair_doc_id, supersedes_doc_id, planted_facts[]`(심은 사실 — 사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
+| `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`, `documents_core`, `documents_distractor`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |
