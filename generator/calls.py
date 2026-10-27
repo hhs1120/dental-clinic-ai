@@ -330,6 +330,8 @@ def stage_labels(run, rng, fake) -> None:
             urgency = "urgent" if rng.random() < PAIN_URGENT_SHARE else "normal"
         else:
             urgency = _weighted(rng, CALL_URGENCY_WEIGHTS)
+        if urgency == "urgent" and s["appointment"] is not None and s["appointment"]["at"][:10] != s["t"][:10]:
+            urgency = "normal"  # 오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지는 않는다 — 추첨 뒤 덮어써 난수 흐름은 그대로
         s.update(flags=flags, urgency=urgency, accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []))
         s["fact"] = _used_fact(rng, led, s)
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])

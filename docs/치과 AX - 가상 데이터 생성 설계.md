@@ -208,7 +208,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 **상대**: 환자 / 보호자 / 처음 연락 / 보험사 / 업체 / 기타 (`master.CALL_COUNTERPARTS` — 비율은 정하지 않고 아래 생성 방식에서 나온다)
 
 **enum 키**: 목적 `book / reschedule / confirm / cancel / recall / treatment_q / insurance_q / price_q / billing_q / document_req / emergency / complaint / other / unknown` · 상대 `patient / guardian / new_caller / insurer / vendor / other` · 급함 `urgent / normal / low`
-**급함**: `emergency` → 전부 `urgent` / 노이즈 '급함 애매한 통증' → 50% `urgent` / 나머지 `normal` 85 · `low` 15
+**급함**: `emergency` → 전부 `urgent` / 노이즈 '급함 애매한 통증' → 50% `urgent` / 나머지 `normal` 85 · `low` 15. 예약 잡기·변경 통화는 예약이 그날이 아니면 `urgent`가 아니다(오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지 않는다 — 추첨 뒤 `normal`로)
 **플래그**: 주 목적이 함의하면 항상 true(`emergency`→emergency, `complaint`→complaint, `price_q`→price_inquiry, `book`→wants_appt) + 복수 주제 통화는 부 주제 플래그 1개. `appt_confirmed`는 `book`·`reschedule`의 70%. `has_todo`는 `confirm`·`recall` 30%, 나머지 80%
 **노이즈**(25%): 주제 2개 섞임 10 / 말 끊김·되묻기 8 / 급함 애매한 통증 4 / 보호자가 정보 헷갈림 3
 **방향**: outbound ~20%, **리콜에만 두지 않음** — 리콜·안내 8%p 전부 + 예약 확인 4%p + 수납 문의 3%p + 서류 요청 2%p + 치료 문의(경과 확인) 3%p. outbound의 절반은 복합 주제("리콜 안내 + 예약 희망")로 — 단일 구조면 흐름만으로 식별됨. 이 복합 주제는 노이즈 '주제 2개 섞임'과 별개 — outbound 복합은 `noise_type`이 없고, 노이즈 '주제 2개 섞임'은 inbound에만 둔다(방향만으로 맞히지 않게)
@@ -235,7 +235,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - **난수**: 라벨·환자 고르기·풀은 이름이 다른 난수로 나눈다
 
 **7단계 구현 결정**: 절차 4~8. 채우기 흐름은 §5.1
-- **입력**: 병원 이름(`master.CLINIC_NAME`)·방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외, 치아 `00`은 비움). 가격·보험 문의(부 주제 포함)는 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값)을 더한다
+- **입력**: 병원 이름(`master.CLINIC_NAME`)·방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외, 치아 `00`은 비움). 리콜 통화(부 주제 포함)는 정기 검진 주기(`master.RECALL_CYCLE_MONTHS`)를, 가격·보험 문의(부 주제 포함)는 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값)을 더한다
 - **꼭 넣을 사실**(검증 (a)): 예약 날짜(예약류, 변경은 원래 날짜도)·주제 시술(`topic_procedure` — 이름 또는 별칭). 날짜는 `11월 24일` 꼴
 - **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
 - **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실만 남긴다

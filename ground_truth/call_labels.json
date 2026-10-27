@@ -5318,7 +5318,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -7357,7 +7357,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -10007,7 +10007,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -10234,7 +10234,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -16512,7 +16512,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -23535,7 +23535,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -31223,7 +31223,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -35386,7 +35386,7 @@
    "book"
   ],
   "counterpart": "new_caller",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -36160,7 +36160,7 @@
    "book"
   ],
   "counterpart": "guardian",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -36491,7 +36491,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -36974,7 +36974,7 @@
    "book"
   ],
   "counterpart": "new_caller",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -38163,7 +38163,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -39306,7 +39306,7 @@
    "book"
   ],
   "counterpart": "guardian",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -42137,7 +42137,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,
@@ -42551,7 +42551,7 @@
    "book"
   ],
   "counterpart": "patient",
-  "urgency": "urgent",
+  "urgency": "normal",
   "emergency": 0,
   "complaint": 0,
   "price_inquiry": 0,

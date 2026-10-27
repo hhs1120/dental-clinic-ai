@@ -8,7 +8,7 @@ from datetime import date
 from generator import llm_jobs
 from generator.llm_jobs import Task
 from generator.master import (AGE_BANDS, CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, CLINIC_NAME, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH,
-                              PROCEDURES, SCALING_MIN_AGE, TRANSCRIPT_CHARS_PER_SEC)
+                              PROCEDURES, RECALL_CYCLE_MONTHS, SCALING_MIN_AGE, TRANSCRIPT_CHARS_PER_SEC)
 
 SPEAKERS = ["환자:", "직원:"]
 SCHEMA = {
@@ -63,6 +63,8 @@ def payload(row: dict) -> dict:
     facts = _strip(fact)
     if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get("topic_procedure"):  # 부 주제 포함
         facts["topic_price"] = topic_price(fact["topic_procedure"])
+    if "recall" in json.loads(row["accepted_purposes"]):
+        facts["recall_months"] = RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
     return {
         "clinic": CLINIC_NAME,
         "direction": row["direction"],

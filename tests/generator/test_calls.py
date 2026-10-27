@@ -89,6 +89,13 @@ def test_price_subtopic_has_topic_procedure(db):
             assert f["topic_procedure"] == f["appointment"]["procedure"]
 
 
+def test_booking_calls_not_urgent_for_later_visit(db):
+    """급함 urgent = 오늘 봐야 함 — 예약·변경 통화의 예약이 그날이 아니면 urgent가 아니다(애매한 통증 노이즈도)"""
+    rows = db.execute("SELECT c.started_at, l.used_fact FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+                      " WHERE l.primary_purpose IN ('book', 'reschedule') AND l.urgency = 'urgent'").fetchall()
+    assert all(json.loads(f)["appointment"]["date"] == t[:10] for t, f in rows)
+
+
 def test_new_child_booking_is_guardian(db):
     """처음 등록하는 소아의 예약 잡기는 기존 환자인 보호자가 건다 — 처음 연락이 아니라 보호자"""
     rows = db.execute("SELECT l.counterpart FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
