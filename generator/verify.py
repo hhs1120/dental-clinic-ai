@@ -693,9 +693,9 @@ def check_chart_special(conn, ctx):
 
 
 def check_chart_text(conn, ctx):
-    """차트 본문: 환자 이름·정답 어휘(CHART_FORBIDDEN_WORDS) 없음, 치아 단위 시술은 'NN번', 시술 이름이나 별칭 있음,
+    """차트 본문: 환자 이름·정답 어휘(CHART_FORBIDDEN_WORDS) 없음, 치아 단위 시술은 'NN번', 시술 표준 이름 있음(별칭 아님),
     그 내원에서 발견한 주의사항(visit 출처) 이름 있음(§2.2)"""
-    names = {r["code"]: [r["name"], *json.loads(r["aliases"])] for r in _rows(conn, "SELECT code, name, aliases FROM emr_procedures")}
+    names = {r["code"]: r["name"] for r in _rows(conn, "SELECT code, name FROM emr_procedures")}
     discovered = defaultdict(list)
     for r in _rows(conn, "SELECT t.id, ty.label FROM emr_patient_alerts al JOIN emr_alert_types ty ON ty.code = al.code"
                          " JOIN emr_treatments t ON t.appointment_id = al.appointment_id WHERE al.source = 'visit'"):
@@ -708,7 +708,7 @@ def check_chart_text(conn, ctx):
         why = ("환자 이름" if r["patient_name"] in note
                else "정답 어휘" if any(w in note for w in CHART_FORBIDDEN_WORDS)
                else "치아 번호 없음" if r["tooth_no"] != FULL_MOUTH and f"{r['tooth_no']}번" not in note
-               else "시술 이름 없음" if not any(n in note for n in names[r["procedure_code"]])
+               else "시술 이름 없음" if names[r["procedure_code"]] not in note
                else "발견한 주의사항 없음" if not all(label in note for label in discovered[r["id"]]) else None)
         if why:
             bad.append({"id": r["id"], "reason": why, "note": note[:60]})
@@ -717,12 +717,11 @@ def check_chart_text(conn, ctx):
 
 def check_chart_narrative_facts(conn, ctx):
     """서술 줄 본문에 꼭 넣을 사실(9b 건별 검증과 같은 기준 — chart.narrative_must_include)이 있음"""
-    names = llm_jobs.procedure_names(conn)
     bad = []
     for r in _rows(conn, "SELECT n.treatment_id, n.note, c.facts FROM emr_chart_notes n"
                          " JOIN truth.truth_chart_notes c USING (treatment_id) WHERE c.kind = 'narrative'"
                          " ORDER BY n.treatment_id"):
-        missing = [alts[0] for alts in chart.narrative_must_include(json.loads(r["facts"]), names)
+        missing = [alts[0] for alts in chart.narrative_must_include(json.loads(r["facts"]))
                    if not any(llm_jobs.contains(r["note"], a) for a in alts)]
         if missing:
             bad.append({"treatment_id": r["treatment_id"], "missing": missing})

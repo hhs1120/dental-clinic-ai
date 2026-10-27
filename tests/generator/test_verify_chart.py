@@ -140,6 +140,8 @@ BREAKS = {
                               "check_chart_text"),
     "note_without_tooth": ("UPDATE emr_chart_notes SET note = '레진 충전을 했습니다.' WHERE treatment_id = 3",
                            "check_chart_text"),
+    "note_with_alias_only": ("UPDATE emr_chart_notes SET note = '26번 치아 신경 치료를 진행했습니다. 마취가 잘 안 됨'"
+                             " WHERE treatment_id = 1", "check_chart_text"),  # 별칭(신경 치료)만 — 차트는 표준 이름
     "note_without_procedure": ("UPDATE emr_chart_notes SET note = '16번 치아를 치료했습니다.' WHERE treatment_id = 3",
                                "check_chart_text"),
     "note_without_discovered_alert": ("UPDATE emr_chart_notes SET note = '26번 치아 신경치료를 진행했습니다.'"

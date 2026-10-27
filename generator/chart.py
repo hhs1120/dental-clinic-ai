@@ -332,7 +332,7 @@ NARRATIVE_SCHEMA = {
     "additionalProperties": False,
 }
 # 가짜 모드(테스트)는 채우지 않는다 — 초안이 그대로 남는다
-NARRATIVE_TASK = Task(name="chart", prompt="gen_chart/v1", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
+NARRATIVE_TASK = Task(name="chart", prompt="gen_chart", schema=NARRATIVE_SCHEMA, store=("note",), fake=False)
 
 
 def _period(days: int) -> str:
@@ -357,10 +357,10 @@ def _requirement_words(req: dict) -> list[str]:
     return []
 
 
-def narrative_must_include(f: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(별칭)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
+def narrative_must_include(f: dict) -> list[list[str]]:
+    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
-    out.append(names.get(f["procedure"], [f["procedure"]]))
+    out.append([f["procedure"]])
     if f["findings"]:
         out.append([f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
@@ -381,14 +381,13 @@ def narrative_payload(f: dict, draft: str) -> dict:
     return {"facts": facts, "draft": draft}
 
 
-def narrative_checks(f: dict, names: dict, patient_name: str) -> dict:
-    return {"field": "note", "must_include": narrative_must_include(f, names),
+def narrative_checks(f: dict, patient_name: str) -> dict:
+    return {"field": "note", "must_include": narrative_must_include(f),
             "forbidden_words": [*CHART_FORBIDDEN_WORDS, patient_name], "forbidden_patterns": llm_jobs.forbidden_patterns()}
 
 
 def stage_narratives(run, rng, fake) -> None:
     ctx = run.state["llm"]
-    names = llm_jobs.procedure_names(run.conn)
     rows = run.conn.execute(
         "SELECT n.treatment_id, n.note, c.facts, p.name FROM emr_chart_notes n"
         " JOIN truth.truth_chart_notes c USING (treatment_id) JOIN emr_treatments t ON t.id = n.treatment_id"
@@ -396,6 +395,6 @@ def stage_narratives(run, rng, fake) -> None:
     for treatment_id, draft, facts, patient_name in rows:
         f = json.loads(facts)
         out = ctx.resolve(NARRATIVE_TASK, str(treatment_id), narrative_payload(f, draft),
-                          narrative_checks(f, names, patient_name))
+                          narrative_checks(f, patient_name))
         if out is not None:
             run.conn.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (out["note"], treatment_id))

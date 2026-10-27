@@ -173,22 +173,22 @@ FACTS = {"alerts": [{"label": "고혈압", "action": "혈압 측정 후 진행"}
 
 
 def test_narrative_must_include_facts():
-    names = {"잇몸치료": ["잇몸치료", "치주치료"], "신경치료": ["신경치료"]}
-    got = chart.narrative_must_include(FACTS, names)
-    assert got == [["잇몸치료", "치주치료"], ["6mm"], ["고혈압"], ["마취가 잘 안 됨"], ["14일"], ["2회"]]
+    """시술은 표준 이름만 — 진료 기록이라 별칭(검색·전사용)은 인정하지 않는다"""
+    got = chart.narrative_must_include(FACTS)
+    assert got == [["잇몸치료"], ["6mm"], ["고혈압"], ["마취가 잘 안 됨"], ["14일"], ["2회"]]
     tooth = {**FACTS, "tooth": "26", "procedure": "신경치료", "findings": None, "alerts": [], "discovered": [],
              "requirement": {"key": "R01", "evidence": True, "prev_days": 200, "reason": "2차 우식"}, "plan": None}
-    assert chart.narrative_must_include(tooth, names) == [["26번"], ["신경치료"], ["7개월"]]
+    assert chart.narrative_must_include(tooth) == [["26번"], ["신경치료"], ["7개월"]]
     other = {**tooth, "requirement": {"key": "R06", "evidence": True, "other_clinic": True, "edentulous_months": 5}}
-    assert chart.narrative_must_include(other, names)[-1] == ["5개월"]
+    assert chart.narrative_must_include(other)[-1] == ["5개월"]
     sealant = {**tooth, "requirement": {"key": "R04", "evidence": True, "surface": "깊은 소와열구가 있고 우식이 없는 교합면"}}
-    assert chart.narrative_must_include(sealant, names)[-1] == ["소와열구"]
+    assert chart.narrative_must_include(sealant)[-1] == ["소와열구"]
     impacted = {**tooth, "requirement": {"key": "R05", "evidence": True, "impaction": "부분 매복", "bone_removal": True}}
-    assert chart.narrative_must_include(impacted, names)[-1] == ["부분 매복"]
+    assert chart.narrative_must_include(impacted)[-1] == ["부분 매복"]
 
 
 def test_narrative_checks_forbid_answer_words_and_patient_name():
-    c = chart.narrative_checks(FACTS, {"잇몸치료": ["잇몸치료"]}, "김철수")
+    c = chart.narrative_checks(FACTS, "김철수")
     assert c["field"] == "note" and "김철수" in c["forbidden_words"]
     assert set(CHART_FORBIDDEN_WORDS) <= set(c["forbidden_words"]) and c["forbidden_patterns"]
 

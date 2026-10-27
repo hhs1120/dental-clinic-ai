@@ -53,6 +53,8 @@ def test_master_staff_and_procedures(run):
     assert roles == Counter(dict(STAFF))
     assert run.conn.execute("SELECT count(*) FROM emr_procedures").fetchone()[0] == len(PROCEDURES)
     assert run.conn.execute("SELECT count(*) FROM emr_clinic").fetchone()[0] == 1
+    aliases = dict(run.conn.execute("SELECT name, aliases FROM emr_procedures"))
+    assert aliases == {p["name"]: p["aliases"] for p in PROCEDURES}
 
 
 # ── 2단계 환자 ──────────────────────────────────────────────

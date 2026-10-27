@@ -1,5 +1,7 @@
 """마스터 단일 원본이 문서(§1·§2.1)와 맞는지."""
-from generator.master import (AGE_BANDS, HYGIENE_SCALING_BANDS, PLANNED_WEIGHTS, PROCEDURES, SCALING_CODE,
+import json
+
+from generator.master import (AGE_BANDS, CALL_LABEL_WORDS, CHART_FORBIDDEN_WORDS, HYGIENE_SCALING_BANDS, PLANNED_WEIGHTS, PROCEDURES, SCALING_CODE,
                               daily_cap, open_slots)
 
 
@@ -8,6 +10,21 @@ def test_procedures():
     assert len(PROCEDURES) == 19 and len(set(codes)) == 19
     scaling = next(p for p in PROCEDURES if p["code"] == SCALING_CODE)
     assert scaling["name"] == "스케일링" and scaling["insured_limit"] == 1
+
+
+def test_procedure_aliases_do_not_cross():
+    """꼭 넣을 시술 검사는 글자 포함으로 본다 — 별칭이 다른 시술의 이름·별칭에 들어 있으면 그 시술의 별칭이기도 해야
+    한다(임플란트 1·2차처럼 함께 부르는 말만). 라벨 어휘와 겹치는 별칭은 검증에서 걸린다"""
+    words = {p["name"]: [p["name"], *json.loads(p["aliases"])] for p in PROCEDURES}
+    known = {("상담", "교정 상담")}  # 원래 있던 이름 겹침 — 상담 주제 통화는 드묾
+    for name, ws in words.items():
+        for a in ws:
+            assert not any(w in a or a in w for w in (*CALL_LABEL_WORDS, *CHART_FORBIDDEN_WORDS)), (name, a)
+            for other, other_ws in words.items():
+                if other != name and (name, other) not in known and any(a in w for w in other_ws):
+                    assert a in other_ws, (name, a, other)
+    assert "아말감" in words["아말감/GI"] and "임플란트" in words["임플란트 2차"]
+    assert words["단순발치"] == ["단순발치", "단순 발치"]  # '이 뽑' 같은 조각은 '아이 뽑'에도 맞는다
 
 
 def test_open_slots_match_doc():

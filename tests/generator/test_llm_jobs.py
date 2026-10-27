@@ -22,7 +22,7 @@ def paths(tmp_path, monkeypatch):
 
 
 TOY = Task(name="toy", prompt="toy/v1", schema=SCHEMA, store=("text",))
-RULES = {"must_mention": ["사과"], "avoid_words": ["배"], "avoid_patterns": []}  # CHECKS에서 뽑아 입력에 넣는 지시
+RULES = {"must_mention": [["사과", "능금"]], "avoid_words": ["배"], "avoid_patterns": []}  # CHECKS에서 뽑아 입력에 넣는 지시
 
 
 def _export(paths, items=("a", "b"), simplify=None, payload=lambda i: {"item": i}):
@@ -45,7 +45,7 @@ def test_miss_exports_self_contained_jobs(paths):
     outs, missing = _export(paths)
     assert outs == {"a": None, "b": None} and missing == {"toy": 2}
     job = _jobs(paths)[0]
-    assert job["item"] == "a" and job["attempt"] == 1 and job["prompt_version"] == "toy/v1"
+    assert job["item"] == "a" and job["attempt"] == 1 and job["prompt_version"] == f"toy/v1@{job['prompt_hash'][:8]}"
     assert job["system"] == "과일 이야기를 써라" and json.loads(job["user"]) == {"item": "a"} | RULES
     assert job["schema"] == SCHEMA and job["checks"] == CHECKS and len(job["key"]) == 64
 
@@ -195,7 +195,7 @@ def test_fill_api_writes_results_for_import(paths):
     sleeps = []
     llm_jobs.fill_api(paths, "toy", gateway, sleep=sleeps.append)
     alias, task, version, reqs = gateway.submitted
-    assert (alias, task, version) == ("gen", "toy", "toy/v1") and len(reqs) == 3
+    assert (alias, task, version) == ("gen", "toy", f"toy/v1@{_jobs(paths)[0]['prompt_hash'][:8]}") and len(reqs) == 3
     assert reqs[0]["system"] == "과일 이야기를 써라" and reqs[0]["schema"] == SCHEMA
     assert reqs[0]["messages"] == [{"role": "user", "content": llm_jobs.user_message({"item": "a"} | RULES)}]
     assert len(sleeps) == 1 and not (paths["llm_jobs"] / "toy.batch.json").exists()
@@ -249,6 +249,42 @@ def test_split_and_fill_skip_already_imported(paths):
     gateway = StubBatchGateway(lambda reqs: {})
     llm_jobs.fill_api(paths, "toy", gateway, sleep=lambda s: None)
     assert [r["custom_id"] for r in gateway.submitted[3]] == [_jobs(paths)[1]["key"]]
+
+
+def test_fill_api_limit_spreads_sample(paths):
+    """시험 채우기 — 남은 작업에서 limit건을 같은 간격으로 뽑는다(앞쪽에 몰리지 않게). 나머지는 다음에 그대로"""
+    _export(paths, items=tuple("abcdef"))
+    gateway = StubBatchGateway(lambda reqs: {})
+    llm_jobs.fill_api(paths, "toy", gateway, sleep=lambda s: None, limit=3)
+    keys = [j["key"] for j in _jobs(paths)]
+    assert [r["custom_id"] for r in gateway.submitted[3]] == [keys[0], keys[2], keys[4]]
+
+
+def test_fill_api_limit_must_be_positive(paths):
+    with pytest.raises(SystemExit):
+        llm_jobs.main(["fill-api", "--task", "toy", "--limit", "0"])
+
+
+def test_prompt_version_tells_revisions_apart(paths):
+    """생성기 프롬프트는 파일 하나를 고쳐 쓴다 — 호출 기록·캐시에서 수정 전후를 가르도록 버전에 내용 해시"""
+    _export(paths, items=("a",))
+    before = _jobs(paths)[0]["prompt_version"]
+    (paths["llm_jobs"] / "toy.jsonl").unlink()
+    (llm_jobs.PROMPTS / "toy" / "v1.md").write_text("과일 이야기를 길게 써라", encoding="utf-8")
+    _export(paths, items=("a",))
+    after = _jobs(paths)[0]["prompt_version"]
+    assert before.startswith("toy/v1@") and after.startswith("toy/v1@") and before != after
+
+
+def test_cache_misses_when_rendered_instructions_change(paths, monkeypatch):
+    """입력 해시는 모델이 받는 사용자 메시지 전부 — instructions()가 바뀌면 같은 입력·검증 기준이어도 다시 낸다"""
+    _export(paths, items=("a",))
+    _result(paths, "toy.jsonl", [{"key": _jobs(paths)[0]["key"], "output": {"text": "사과"}, "source": "x"}])
+    llm_jobs.import_results(paths)
+    assert _export(paths, items=("a",))[0]["a"] == {"text": "사과"}
+    original = llm_jobs.instructions
+    monkeypatch.setattr(llm_jobs, "instructions", lambda checks: original(checks) | {"hint": "새 지시"})
+    assert _export(paths, items=("a",))[0]["a"] is None
 
 
 def test_fill_api_nothing_to_do(paths, capsys):
@@ -314,6 +350,12 @@ def test_instructions_include_forbidden_topics():
     """API도 Claude Code와 같은 금지 토픽을 본다"""
     got = llm_jobs.instructions({"field": "t", "forbidden_patterns": ["턱관절"], "length": [1, 2]})
     assert got == {"must_mention": [], "avoid_words": [], "avoid_patterns": ["턱관절"], "length_chars": [1, 2]}
+
+
+def test_instructions_show_alternatives():
+    """꼭 넣을 말에 별칭이 있으면 후보 목록 그대로 — 쓰는 쪽이 별칭을 알아야 쓴다. 하나뿐이면 문자열"""
+    got = llm_jobs.instructions({"must_include": [["교정 월 체크", "교정 체크"], ["11월 24일"]]})
+    assert got["must_mention"] == [["교정 월 체크", "교정 체크"], "11월 24일"]
 
 
 

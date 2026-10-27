@@ -94,7 +94,7 @@ def test_regenerate_replaces_existing_db(tmp_path, no_stages):
 
 def test_llm_miss_exports_jobs_and_keeps_db(tmp_path, monkeypatch):
     """캐시에 없는 건이 있으면 끝까지 돌아 작업을 쓰고, 기존 DB를 바꾸지 않은 채 멈춘다 (§5.1 'LLM 단계 채우기')"""
-    task = llm_jobs.Task("toy", "gen_transcript/v1", {"type": "object", "properties": {"t": {"type": "string"}},
+    task = llm_jobs.Task("toy", "gen_transcript", {"type": "object", "properties": {"t": {"type": "string"}},
                                                       "required": ["t"]}, store=("t",))
     seen = []
 

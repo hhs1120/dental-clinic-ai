@@ -44,7 +44,7 @@ BREAKS = {
     "heading_twice": (D + "body = body || char(10) || '## 내역설명 기재' WHERE id = 5", ["check_claim_sections"]),
     "heading_level3": (D + "body = replace(body, '## 내역설명 기재', '### 내역설명 기재') WHERE id = 5",
                        ["check_claim_sections"]),
-    "external_names_clinic": (D + "body = body || ' AX치과 기준' WHERE id = 6", ["check_doc_external_clean"]),
+    "external_names_clinic": (D + "body = body || ' 클로드치과 기준' WHERE id = 6", ["check_doc_external_clean"]),
     "path_has_key": (D + "path = 'docs/manual/sim-booking-basics.md' WHERE id = 2", ["check_doc_key_leak"]),
     "path_wrong_number": (D + "path = 'docs/manual/009.md' WHERE id = 2", ["check_doc_key_leak"]),
     "latest_without_old": (M + "kind = 'core', is_distractor = 0, pair_doc_id = NULL WHERE doc_id = 4",
