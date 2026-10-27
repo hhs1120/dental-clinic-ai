@@ -1,0 +1,2285 @@
+[
+ {
+  "doc_id": 1,
+  "doc_key": "sim-implant-stock",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 29,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   5
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 2,
+  "doc_key": "old-parking",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 40,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.parking",
+    "text": "무료 주차는 1시간이다",
+    "words": [
+     "1시간"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-parking.effective",
+    "text": "6월 2일부터 시행한다",
+    "words": [
+     "6월 2일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 3,
+  "doc_key": "sim-denture-care",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 66,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   46
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 4,
+  "doc_key": "claim-외과임플란트",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "claim.R05.heading",
+    "text": "절 '발치 난이도 산정 근거'",
+    "words": [
+     "## 발치 난이도 산정 근거"
+    ],
+    "reason": "R05",
+    "same": null
+   },
+   {
+    "id": "claim.R06.heading",
+    "text": "절 '임플란트 급여 대상 부위'",
+    "words": [
+     "## 임플란트 급여 대상 부위"
+    ],
+    "reason": "R06",
+    "same": null
+   },
+   {
+    "id": "claim.R05",
+    "text": "사랑니 발치 난이도는 매복 정도와 골삭제 여부로 산정하고 그 근거를 적는다",
+    "words": [
+     "골삭제"
+    ],
+    "reason": "R05",
+    "same": null
+   },
+   {
+    "id": "claim.R06",
+    "text": "임플란트 급여는 65세 이상이고 대상 부위가 무치악 부위여야 한다",
+    "words": [
+     "65세",
+     "무치악"
+    ],
+    "reason": "R06",
+    "same": "implant.age"
+   }
+  ]
+ },
+ {
+  "doc_id": 5,
+  "doc_key": "manual-inventory",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "stock.day",
+    "text": "재고 점검은 매주 월요일 오전에 하고 기준 수량 아래면 발주한다",
+    "words": [
+     "월요일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "stock.expiry",
+    "text": "마취제는 유효기간이 3개월 남은 것부터 먼저 쓴다",
+    "words": [
+     "유효기간"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 6,
+  "doc_key": "old-seollal",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 7,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.seollal",
+    "text": "1월 27일부터 1월 30일까지 휴진한다",
+    "words": [
+     "1월 27일",
+     "1월 30일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-seollal.effective",
+    "text": "1월 13일부터 시행한다",
+    "words": [
+     "1월 13일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 7,
+  "doc_key": "notice-seollal",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 6,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "seollal.days",
+    "text": "2월 16일부터 2월 18일까지 휴진한다",
+    "words": [
+     "2월 16일",
+     "2월 18일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-seollal.effective",
+    "text": "2월 2일부터 시행한다",
+    "words": [
+     "2월 2일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 8,
+  "doc_key": "old-chuseok",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 41,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.chuseok",
+    "text": "10월 5일부터 10월 9일까지 휴진한다",
+    "words": [
+     "10월 5일",
+     "10월 9일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-chuseok.effective",
+    "text": "9월 22일부터 시행한다",
+    "words": [
+     "9월 22일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 9,
+  "doc_key": "manual-estimate",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "estimate.valid",
+    "text": "상담실장이 견적서를 출력해 주며 견적 유효기간은 1개월이다",
+    "words": [
+     "유효기간은 1개월"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 10,
+  "doc_key": "faq-root-canal",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "endo.temp",
+    "text": "치료 사이에 임시로 막아 둔 재료가 빠지면 바로 연락한다",
+    "words": [
+     "임시로 막아 둔"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 11,
+  "doc_key": "notice-implant-warranty",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 56,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.warranty",
+    "text": "임플란트 보증 기간은 5년이다",
+    "words": [
+     "5년"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-implant-warranty.effective",
+    "text": "7월 1일부터 시행한다",
+    "words": [
+     "7월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 12,
+  "doc_key": "old-wifi",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 31,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.wifi",
+    "text": "대기실 와이파이 이름은 AX-WAITING이다",
+    "words": [
+     "AX-WAITING"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-wifi.effective",
+    "text": "4월 7일부터 시행한다",
+    "words": [
+     "4월 7일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 13,
+  "doc_key": "sim-directions",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 15,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   51
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 14,
+  "doc_key": "old-installment",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 62,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.install",
+    "text": "100만 원 이상 결제는 2개월 무이자 할부가 된다",
+    "words": [
+     "100만 원",
+     "2개월"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-installment.effective",
+    "text": "5월 2일부터 시행한다",
+    "words": [
+     "5월 2일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 15,
+  "doc_key": "faq-parking",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "parking.free",
+    "text": "건물 지하 주차장을 진료 당일 2시간 무료로 쓸 수 있다",
+    "words": [
+     "2시간"
+    ],
+    "reason": null,
+    "same": "parking"
+   }
+  ]
+ },
+ {
+  "doc_id": 16,
+  "doc_key": "claim-예방",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "claim.R04.heading",
+    "text": "절 '실란트 대상 치아'",
+    "words": [
+     "## 실란트 대상 치아"
+    ],
+    "reason": "R04",
+    "same": null
+   },
+   {
+    "id": "claim.E01.heading",
+    "text": "절 '스케일링 연간 산정 횟수'",
+    "words": [
+     "## 스케일링 연간 산정 횟수"
+    ],
+    "reason": "E01",
+    "same": null
+   },
+   {
+    "id": "claim.R04",
+    "text": "실란트는 만 12세 이하의 우식 없는 소와열구 치아가 대상이다",
+    "words": [
+     "12세",
+     "소와열구"
+    ],
+    "reason": "R04",
+    "same": "sealant.age"
+   },
+   {
+    "id": "claim.E01",
+    "text": "급여 스케일링은 19세 이상 연 1회 산정하며 타 기관 이력도 횟수에 들어간다",
+    "words": [
+     "19세",
+     "연 1회"
+    ],
+    "reason": "E01",
+    "same": "scaling.age"
+   }
+  ]
+ },
+ {
+  "doc_id": 17,
+  "doc_key": "faq-scaling",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "faq.scaling",
+    "text": "19세 이상은 해마다 1회 건강보험이 적용된다",
+    "words": [
+     "19세"
+    ],
+    "reason": null,
+    "same": "scaling.age"
+   }
+  ]
+ },
+ {
+  "doc_id": 18,
+  "doc_key": "notice-hours",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 77,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.sat",
+    "text": "토요일 진료는 오후 1시 30분까지다",
+    "words": [
+     "오후 1시 30분까지"
+    ],
+    "reason": null,
+    "same": "hours.sat"
+   },
+   {
+    "id": "notice-hours.effective",
+    "text": "12월 30일부터 시행한다",
+    "words": [
+     "12월 30일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 19,
+  "doc_key": "manual-happy-call",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "happy.when",
+    "text": "진료 뒤 며칠 안에 전화하고, 발치·임플란트 수술 환자는 빠뜨리지 않는다",
+    "words": [
+     "며칠 안에"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "happy.memo",
+    "text": "통화 내용은 차트 메모에 남긴다",
+    "words": [
+     "차트 메모"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 20,
+  "doc_key": "notice-whitening",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 63,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.white",
+    "text": "미백 비용은 300,000원이다",
+    "words": [
+     "300,000원"
+    ],
+    "reason": null,
+    "same": "whitening.fee"
+   },
+   {
+    "id": "notice-whitening.effective",
+    "text": "12월 30일부터 시행한다",
+    "words": [
+     "12월 30일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 21,
+  "doc_key": "ins-implant",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.implant.age",
+    "text": "만 65세 이상이면 급여가 적용된다",
+    "words": [
+     "65세"
+    ],
+    "reason": null,
+    "same": "implant.age"
+   },
+   {
+    "id": "ins.implant.share",
+    "text": "본인부담률은 30%다",
+    "words": [
+     "30%"
+    ],
+    "reason": null,
+    "same": "share"
+   }
+  ]
+ },
+ {
+  "doc_id": 22,
+  "doc_key": "manual-sterilization",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "steril.pack",
+    "text": "멸균 포장한 기구는 30일 안에 사용하고 지나면 다시 멸균한다",
+    "words": [
+     "30일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "steril.check",
+    "text": "멸균기는 매주 월요일 첫 가동 때 생물학적 표지자로 점검한다",
+    "words": [
+     "생물학적 표지자"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 23,
+  "doc_key": "manual-xray",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "xray.order",
+    "text": "파노라마는 원장 지시가 있을 때만 찍는다",
+    "words": [
+     "원장 지시"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "xray.pregnant",
+    "text": "촬영 전 가임기 여성은 임신 여부를 먼저 확인한다",
+    "words": [
+     "임신 여부"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 24,
+  "doc_key": "ins-share",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.share",
+    "text": "급여 진료의 본인부담률은 30%다",
+    "words": [
+     "30%"
+    ],
+    "reason": null,
+    "same": "share"
+   }
+  ]
+ },
+ {
+  "doc_id": 25,
+  "doc_key": "old-noshow",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 75,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.noshow",
+    "text": "부도 2회 누적 시 1개월간 전화 예약만 받는다",
+    "words": [
+     "2회",
+     "1개월"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-noshow.effective",
+    "text": "3월 4일부터 시행한다",
+    "words": [
+     "3월 4일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 26,
+  "doc_key": "ins-perio",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.perio",
+    "text": "잇몸치료는 급여이고 치석제거 후 90일 안에 이어서 받는 경우가 많다",
+    "words": [
+     "90일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 27,
+  "doc_key": "sim-booking-basics",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 67,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   54,
+   72,
+   80,
+   87
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 28,
+  "doc_key": "manual-payment-refund",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "refund.approve",
+    "text": "환불은 원장 승인 후 처리하고 카드 결제 취소는 결제한 카드로만 한다",
+    "words": [
+     "원장 승인"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "refund.cash",
+    "text": "현금으로 낸 진료비는 계좌로 돌려준다",
+    "words": [
+     "계좌로"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 29,
+  "doc_key": "manual-implant-parts",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "parts.record",
+    "text": "부품 규격은 차트의 식립 기록(제조사·직경·길이)에서 확인한다",
+    "words": [
+     "식립 기록"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "parts.weeks",
+    "text": "단종 부품은 대리점 재고 확인 후 주문하며 입고까지 2주가 걸린다",
+    "words": [
+     "2주"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 30,
+  "doc_key": "edu-implant",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 31,
+  "doc_key": "notice-wifi",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 12,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.wifi",
+    "text": "대기실 와이파이 이름은 AXDENTAL-GUEST다",
+    "words": [
+     "AXDENTAL-GUEST"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-wifi.effective",
+    "text": "4월 6일부터 시행한다",
+    "words": [
+     "4월 6일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 32,
+  "doc_key": "manual-identity-check",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "identity.id",
+    "text": "건강보험으로 진료하려면 접수 때 신분증이나 모바일 건강보험증으로 본인을 확인한다",
+    "words": [
+     "모바일 건강보험증"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 33,
+  "doc_key": "ext-noshow",
+  "kind": "external",
+  "is_distractor": 1,
+  "pair_doc_id": 67,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ext.noshow",
+    "text": "부도 2회 누적 시 6개월간 예약을 받지 않는다",
+    "words": [
+     "2회",
+     "6개월"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 34,
+  "doc_key": "notice-sterile-log",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 70,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.sterile",
+    "text": "멸균 기록지는 그날 진료 종료 전까지 마감한다",
+    "words": [
+     "진료 종료 전까지"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-sterile-log.effective",
+    "text": "8월 3일부터 시행한다",
+    "words": [
+     "8월 3일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 35,
+  "doc_key": "manual-unpaid",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "unpaid.message",
+    "text": "미수가 생기면 필요한 경우 다음 진료일에 미수 안내 문자를 보내고 다음 내원 때 정산한다",
+    "words": [
+     "미수 안내 문자",
+     "다음 내원 때 정산"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 36,
+  "doc_key": "notice-scaling-fee",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 45,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.scaling",
+    "text": "스케일링 본인부담은 18,000원이다",
+    "words": [
+     "18,000원"
+    ],
+    "reason": null,
+    "same": "scaling.pay"
+   },
+   {
+    "id": "notice-scaling-fee.effective",
+    "text": "1월 1일부터 시행한다",
+    "words": [
+     "1월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 37,
+  "doc_key": "old-reminder",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 76,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.remind",
+    "text": "리마인드 문자는 예약 전날 오후 6시에 보낸다",
+    "words": [
+     "전날 오후 6시"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-reminder.effective",
+    "text": "4월 1일부터 시행한다",
+    "words": [
+     "4월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 38,
+  "doc_key": "sim-emergency-kit",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 81,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 39,
+  "doc_key": "manual-insurance-docs",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "docs.fee",
+    "text": "진료비 세부내역서는 무료, 진단서는 2만 원이다",
+    "words": [
+     "2만 원"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "docs.id",
+    "text": "대리 발급은 위임장과 신분증 사본이 필요하다",
+    "words": [
+     "위임장과 신분증 사본"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 40,
+  "doc_key": "notice-parking",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 2,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.parking",
+    "text": "무료 주차는 2시간이다",
+    "words": [
+     "2시간"
+    ],
+    "reason": null,
+    "same": "parking"
+   },
+   {
+    "id": "notice-parking.effective",
+    "text": "6월 1일부터 시행한다",
+    "words": [
+     "6월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 41,
+  "doc_key": "notice-chuseok",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 8,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "chuseok.days",
+    "text": "9월 24일부터 9월 26일까지 휴진한다",
+    "words": [
+     "9월 24일",
+     "9월 26일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-chuseok.effective",
+    "text": "9월 9일부터 시행한다",
+    "words": [
+     "9월 9일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 42,
+  "doc_key": "ins-uninsured",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.uninsured",
+    "text": "레진·인레이·크라운·미백은 비급여다",
+    "words": [
+     "레진",
+     "인레이",
+     "크라운",
+     "미백"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 43,
+  "doc_key": "sim-health-insurance",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 71,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   17,
+   21,
+   24,
+   26,
+   32,
+   61
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 44,
+  "doc_key": "faq-certificate",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "cert.where",
+    "text": "진료확인서는 접수대에서 신분증을 확인한 뒤 바로 발급한다",
+    "words": [
+     "바로 발급"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 45,
+  "doc_key": "old-scaling-fee",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 36,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.scaling",
+    "text": "스케일링 본인부담은 17,000원이다",
+    "words": [
+     "17,000원"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-scaling-fee.effective",
+    "text": "1월 1일부터 시행한다",
+    "words": [
+     "1월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 46,
+  "doc_key": "manual-lab-work",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "lab.pickup",
+    "text": "기공소 수거는 매일 오후 5시다",
+    "words": [
+     "오후 5시"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "lab.check",
+    "text": "돌아온 기공물은 장착 예약 전날까지 도착을 확인한다",
+    "words": [
+     "장착 예약 전날"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 47,
+  "doc_key": "edu-brushing",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 48,
+  "doc_key": "edu-whitening",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 49,
+  "doc_key": "edu-gum",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 50,
+  "doc_key": "edu-wisdom",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 51,
+  "doc_key": "faq-hours",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "hours.weekday",
+    "text": "평일 오전 9시 30분부터 오후 6시 30분까지 진료한다",
+    "words": [
+     "오전 9시 30분부터",
+     "오후 6시 30분까지"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "hours.sat",
+    "text": "토요일은 오후 1시 30분까지 진료하고, 평일 점심시간은 오후 1시부터 2시까지다",
+    "words": [
+     "오후 1시 30분까지",
+     "오후 1시부터"
+    ],
+    "reason": null,
+    "same": "hours.sat"
+   },
+   {
+    "id": "hours.closed",
+    "text": "목요일·일요일과 공휴일은 휴진한다",
+    "words": [
+     "목요일",
+     "일요일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 52,
+  "doc_key": "manual-daily-close",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "close.match",
+    "text": "진료 마감 후 카드 전표 합계와 현금 시재를 프로그램 수납과 맞춘다",
+    "words": [
+     "현금 시재"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "close.report",
+    "text": "금액이 맞지 않으면 차이 내역을 일계표 비고란에 적고 원장에게 보고한다",
+    "words": [
+     "비고란"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 53,
+  "doc_key": "manual-medical-waste",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "waste.sharps",
+    "text": "주삿바늘은 손상성 폐기물 전용 용기에 버리고 4분의 3이 차면 교체한다",
+    "words": [
+     "4분의 3"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "waste.pickup",
+    "text": "의료폐기물 수거는 매주 화요일이다",
+    "words": [
+     "화요일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 54,
+  "doc_key": "faq-booking",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "book.change",
+    "text": "예약 변경은 하루 전까지 전화로 알려 주면 된다",
+    "words": [
+     "하루 전"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 55,
+  "doc_key": "sim-endo-pain",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 10,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   58
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 56,
+  "doc_key": "old-implant-warranty",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 11,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.warranty",
+    "text": "임플란트 보증 기간은 3년이다",
+    "words": [
+     "3년"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-implant-warranty.effective",
+    "text": "7월 1일부터 시행한다",
+    "words": [
+     "7월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 57,
+  "doc_key": "claim-공통",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "claim.D01.heading",
+    "text": "절 '내역설명 기재'",
+    "words": [
+     "## 내역설명 기재"
+    ],
+    "reason": "D01",
+    "same": null
+   },
+   {
+    "id": "claim.D02.heading",
+    "text": "절 '방사선 등 증빙자료'",
+    "words": [
+     "## 방사선 등 증빙자료"
+    ],
+    "reason": "D02",
+    "same": null
+   },
+   {
+    "id": "claim.D03.heading",
+    "text": "절 '부위·산정 내역 기재'",
+    "words": [
+     "## 부위·산정 내역 기재"
+    ],
+    "reason": "D03",
+    "same": null
+   },
+   {
+    "id": "claim.C01.heading",
+    "text": "절 '상병과 시행 행위의 일치'",
+    "words": [
+     "## 상병과 시행 행위의 일치"
+    ],
+    "reason": "C01",
+    "same": null
+   },
+   {
+    "id": "claim.D01",
+    "text": "요건 근거가 필요한 시술은 내역설명란에 그 근거를 적는다",
+    "words": [
+     "내역설명란"
+    ],
+    "reason": "D01",
+    "same": null
+   },
+   {
+    "id": "claim.D02",
+    "text": "신경치료·발치·임플란트는 방사선 사진 등 증빙자료를 남긴다",
+    "words": [
+     "방사선 사진"
+    ],
+    "reason": "D02",
+    "same": null
+   },
+   {
+    "id": "claim.D03",
+    "text": "청구 내역에 치아 부위와 산정 내역을 빠짐없이 적는다",
+    "words": [
+     "치아 부위"
+    ],
+    "reason": "D03",
+    "same": null
+   },
+   {
+    "id": "claim.C01",
+    "text": "상병은 시행한 시술에 맞는 것으로 적는다",
+    "words": [
+     "시행한 시술"
+    ],
+    "reason": "C01",
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 58,
+  "doc_key": "manual-prescription",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "rx.outside",
+    "text": "처방은 원외 처방전으로 하고 항생제는 알레르기를 확인한 뒤 원장이 처방한다",
+    "words": [
+     "원외",
+     "알레르기"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 59,
+  "doc_key": "sim-insurer-call",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 39,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   44,
+   85
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 60,
+  "doc_key": "manual-prosthesis-recement",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "recement.free",
+    "text": "크라운이 장착 후 1년 안에 빠지면 무상으로 다시 붙인다",
+    "words": [
+     "1년 안에"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 61,
+  "doc_key": "ins-sealant",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.sealant",
+    "text": "만 12세 이하 우식 없는 어금니에 적용된다",
+    "words": [
+     "12세"
+    ],
+    "reason": null,
+    "same": "sealant.age"
+   }
+  ]
+ },
+ {
+  "doc_id": 62,
+  "doc_key": "notice-installment",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 14,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.install",
+    "text": "50만 원 이상 결제는 3개월 무이자 할부가 된다",
+    "words": [
+     "50만 원",
+     "3개월"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "notice-installment.effective",
+    "text": "5월 1일부터 시행한다",
+    "words": [
+     "5월 1일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 63,
+  "doc_key": "old-whitening",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 20,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.white",
+    "text": "미백 비용은 250,000원이다",
+    "words": [
+     "250,000원"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-whitening.effective",
+    "text": "1월 2일부터 시행한다",
+    "words": [
+     "1월 2일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 64,
+  "doc_key": "faq-child-first",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "child.sealant",
+    "text": "만 12세 이하는 실란트에 건강보험이 적용된다",
+    "words": [
+     "12세"
+    ],
+    "reason": null,
+    "same": "sealant.age"
+   }
+  ]
+ },
+ {
+  "doc_id": 65,
+  "doc_key": "ext-sterilization",
+  "kind": "external",
+  "is_distractor": 1,
+  "pair_doc_id": 22,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ext.steril",
+    "text": "멸균 포장 기구는 7일 안에 사용한다",
+    "words": [
+     "7일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 66,
+  "doc_key": "manual-denture-repair",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "denture.days",
+    "text": "틀니 수리는 기공소 의뢰 후 영업일 기준 3일이 걸린다",
+    "words": [
+     "영업일 기준 3일"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "denture.loaner",
+    "text": "수리 기간에는 임시 틀니를 빌려주지 않는다",
+    "words": [
+     "임시 틀니"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 67,
+  "doc_key": "manual-noshow",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "noshow.limit",
+    "text": "예약 부도가 3회 누적되면 3개월 동안 전화 예약만 받는다",
+    "words": [
+     "3회",
+     "3개월"
+    ],
+    "reason": null,
+    "same": "noshow"
+   },
+   {
+    "id": "noshow.call",
+    "text": "예약 시간이 지나도 오지 않으면 부도 안내 문자를 보낸다",
+    "words": [
+     "부도 안내 문자"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 68,
+  "doc_key": "manual-new-patient",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "new.form",
+    "text": "문진표와 개인정보 동의서를 받고 건강보험 자격을 조회한다",
+    "words": [
+     "문진표",
+     "건강보험 자격"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 69,
+  "doc_key": "manual-consent",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "consent.scan",
+    "text": "임플란트·사랑니 발치 전 동의서를 받고 서명본은 스캔해 차트에 첨부한다",
+    "words": [
+     "차트에 첨부"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 70,
+  "doc_key": "old-sterile-log",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 34,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.sterile",
+    "text": "멸균 기록지는 다음 날 오전 10시까지 마감한다",
+    "words": [
+     "다음 날 오전 10시"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-sterile-log.effective",
+    "text": "8월 4일부터 시행한다",
+    "words": [
+     "8월 4일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 71,
+  "doc_key": "ins-scaling",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ins.scaling.age",
+    "text": "19세 이상 연 1회 급여",
+    "words": [
+     "19세",
+     "연 1회"
+    ],
+    "reason": null,
+    "same": "scaling.age"
+   },
+   {
+    "id": "ins.scaling.pay",
+    "text": "본인부담은 18,000원이다",
+    "words": [
+     "18,000원"
+    ],
+    "reason": null,
+    "same": "scaling.pay"
+   }
+  ]
+ },
+ {
+  "doc_id": 72,
+  "doc_key": "manual-slot-length",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "slot.lengths",
+    "text": "예약 길이는 임플란트 1차 90분, 신경치료 60분, 스케일링 30분이다",
+    "words": [
+     "90분",
+     "60분"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 73,
+  "doc_key": "faq-implant-care",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "implant.care",
+    "text": "수술 후 24시간 동안 빨대 사용과 흡연을 피한다",
+    "words": [
+     "24시간"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "implant.cold",
+    "text": "수술 당일에는 냉찜질로 붓기를 줄인다",
+    "words": [
+     "냉찜질"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 74,
+  "doc_key": "sim-cleaning",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 22,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   53
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 75,
+  "doc_key": "notice-noshow",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 25,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.noshow",
+    "text": "부도 3회 누적 시 3개월간 전화 예약만 받는다",
+    "words": [
+     "3회",
+     "3개월"
+    ],
+    "reason": null,
+    "same": "noshow"
+   },
+   {
+    "id": "notice-noshow.effective",
+    "text": "3월 3일부터 시행한다",
+    "words": [
+     "3월 3일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 76,
+  "doc_key": "notice-reminder",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": 37,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "notice.remind",
+    "text": "리마인드 문자는 예약 직전 진료일 오전 9시 30분에 보낸다",
+    "words": [
+     "9시 30분"
+    ],
+    "reason": null,
+    "same": "reminder"
+   },
+   {
+    "id": "notice-reminder.effective",
+    "text": "12월 30일부터 시행한다",
+    "words": [
+     "12월 30일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 77,
+  "doc_key": "old-hours",
+  "kind": "old_version",
+  "is_distractor": 1,
+  "pair_doc_id": 18,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "old.sat",
+    "text": "토요일 진료는 오후 2시까지다",
+    "words": [
+     "오후 2시까지"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "old-hours.effective",
+    "text": "3월 4일부터 시행한다",
+    "words": [
+     "3월 4일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 78,
+  "doc_key": "ext-whitening",
+  "kind": "external",
+  "is_distractor": 1,
+  "pair_doc_id": 83,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ext.white",
+    "text": "미백은 350,000원이다",
+    "words": [
+     "350,000원"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 79,
+  "doc_key": "manual-privacy",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "privacy.check",
+    "text": "전화 문의는 생년월일과 등록된 전화번호로 본인을 확인한다",
+    "words": [
+     "생년월일",
+     "등록된 전화번호"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "privacy.family",
+    "text": "가족이 묻는 경우 보호자로 등록된 사람에게만 알려 준다",
+    "words": [
+     "보호자로 등록된"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 80,
+  "doc_key": "manual-reminder",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "remind.time",
+    "text": "리마인드 문자는 예약 직전 진료일 오전 9시 30분에 일괄 발송한다",
+    "words": [
+     "9시 30분"
+    ],
+    "reason": null,
+    "same": "reminder"
+   },
+   {
+    "id": "remind.confirm",
+    "text": "예약을 잡으면 바로 예약 확정 문자를 보낸다",
+    "words": [
+     "확정 문자"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 81,
+  "doc_key": "manual-emergency",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "emerg.kit",
+    "text": "응급 키트는 2번 진료실 수납장에 두고 매월 첫 진료일에 점검한다",
+    "words": [
+     "2번 진료실",
+     "첫 진료일"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 82,
+  "doc_key": "manual-child-guardian",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "child.guardian",
+    "text": "만 14세 미만은 보호자가 함께 오고 보호자 동의서를 받는다",
+    "words": [
+     "14세"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 83,
+  "doc_key": "faq-whitening",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "white.fee",
+    "text": "미백은 300,000원이고 보험이 적용되지 않는다",
+    "words": [
+     "300,000원"
+    ],
+    "reason": null,
+    "same": "whitening.fee"
+   },
+   {
+    "id": "white.last",
+    "text": "미백 효과는 보통 1~2년 유지된다",
+    "words": [
+     "1~2년"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 84,
+  "doc_key": "claim-보존보철",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "claim.R01.heading",
+    "text": "절 '같은 부위 재시행 간격'",
+    "words": [
+     "## 같은 부위 재시행 간격"
+    ],
+    "reason": "R01",
+    "same": null
+   },
+   {
+    "id": "claim.R01",
+    "text": "같은 치아에 같은 치료를 다시 할 때는 이전 치료 시점과 다시 하는 사유를 적는다",
+    "words": [
+     "다시 하는 사유"
+    ],
+    "reason": "R01",
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 85,
+  "doc_key": "manual-record-copy",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "copy.ready",
+    "text": "본인 신청서와 신분증을 받고 다음 진료일에 준비해 준비 완료 문자를 보낸다",
+    "words": [
+     "준비 완료 문자"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "copy.proxy",
+    "text": "가족이 대신 신청하면 가족관계증명서가 필요하다",
+    "words": [
+     "가족관계증명서"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 86,
+  "doc_key": "sim-whitening-after",
+  "kind": "similar",
+  "is_distractor": 1,
+  "pair_doc_id": 83,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [
+   20
+  ],
+  "planted_facts": []
+ },
+ {
+  "doc_id": 87,
+  "doc_key": "manual-waitlist",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "wait.order",
+    "text": "취소가 생기면 대기 명단 순서대로 전화하고 2시간 안에 답이 없으면 다음 사람에게 연락한다",
+    "words": [
+     "대기 명단",
+     "2시간"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 88,
+  "doc_key": "ext-hours",
+  "kind": "external",
+  "is_distractor": 1,
+  "pair_doc_id": 51,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ext.hours",
+    "text": "평일 오후 7시까지, 토요일 오후 3시까지 진료한다",
+    "words": [
+     "오후 7시까지",
+     "오후 3시까지"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 89,
+  "doc_key": "ext-insurance-claim",
+  "kind": "external",
+  "is_distractor": 1,
+  "pair_doc_id": 39,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "ext.claim",
+    "text": "진단서 발급 비용은 1만 원이다",
+    "words": [
+     "1만 원"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 90,
+  "doc_key": "faq-payment",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "pay.methods",
+    "text": "카드·현금·계좌이체로 결제할 수 있다",
+    "words": [
+     "계좌이체"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 91,
+  "doc_key": "claim-치주",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "claim.R02.heading",
+    "text": "절 '치석제거 뒤 치주치료 연결'",
+    "words": [
+     "## 치석제거 뒤 치주치료 연결"
+    ],
+    "reason": "R02",
+    "same": null
+   },
+   {
+    "id": "claim.R03.heading",
+    "text": "절 '치주치료 산정 소견'",
+    "words": [
+     "## 치주치료 산정 소견"
+    ],
+    "reason": "R03",
+    "same": null
+   },
+   {
+    "id": "claim.R02",
+    "text": "치석제거 후 90일 안에 이어지는 치주치료는 재평가 소견과 연결 사실을 적는다",
+    "words": [
+     "90일"
+    ],
+    "reason": "R02",
+    "same": null
+   },
+   {
+    "id": "claim.R03",
+    "text": "치주치료는 치주낭 깊이와 출혈 같은 치주 소견을 적는다",
+    "words": [
+     "치주낭 깊이"
+    ],
+    "reason": "R03",
+    "same": null
+   }
+  ]
+ }
+]
