@@ -187,6 +187,14 @@ def contains(text: str, word: str) -> bool:
     return re.search(r"(?<!\d)" + re.escape(word), text) is not None
 
 
+def has_word(text: str, word: str) -> bool:
+    """금지 어휘 검사 — contains, 띄어쓰기가 있는 말은 띄어쓰기를 무시('예약 변경' 금지가 '예약변경'도 잡는다).
+    한 낱말은 그대로 — 공백을 지우면 '요건'이 '필요 건수'에 맞는다"""
+    if " " in word:
+        return contains(text.replace(" ", ""), word.replace(" ", ""))
+    return contains(text, word)
+
+
 def spoken(text: str, speakers: list[str] | None) -> str:
     """화자 표시·공백을 뺀 발화"""
     lines = text.splitlines()
@@ -231,7 +239,7 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
     text = output[checks["field"]]
     out = [f"꼭 넣을 사실 없음: {' / '.join(alts)}" for alts in checks.get("must_include", [])
            if not any(contains(text, a) for a in alts)]
-    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if contains(text, w)]
+    out += [f"금지 어휘: {w}" for w in checks.get("forbidden_words", []) if has_word(text, w)]
     out += [f"금지 토픽: {p}" for p in checks.get("forbidden_patterns", []) if re.search(p, text)]
     speakers = checks.get("speakers")
     if speakers:

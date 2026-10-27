@@ -394,10 +394,11 @@ class Sim:
             [(a.id, a.patient.id, a.staff_id, a.start.strftime(fmt), a.duration, a.type, a.code, a.status,
               a.rescheduled_from, a.booked_via, a.confirmed, a.created.strftime(fmt),
               a.cancelled.strftime(fmt) if a.cancelled else None) for a in self.appts])
-        # 예약 id → 에피소드 번호(처음 나온 순). DB에는 두지 않는다(회차 추적 없음) — 5단계 치아 유지에만
+        # 예약 id → 에피소드 번호(처음 나온 순) — 5단계 치아 유지, 5b R01. 앱 DB에는 두지 않는다(회차 추적 없음)
         numbers: dict[int, int] = {}
         self.run.state["episode"] = {a.id: numbers.setdefault(id(a.episode), len(numbers))
                                      for a in self.appts if a.episode is not None}
+        conn.executemany("INSERT INTO truth.truth_appointment_courses VALUES (?, ?)", self.run.state["episode"].items())
         self.run.state["course_left"] = {a.id: a.left for a in self.appts if a.left}
 
 

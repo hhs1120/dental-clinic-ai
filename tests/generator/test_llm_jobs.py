@@ -346,6 +346,14 @@ def test_non_object_output_not_stored(paths):
     assert "라벨" not in (paths["llm_cache"] / "toy.jsonl").read_text(encoding="utf-8")
 
 
+def test_forbidden_words_ignore_spaces():
+    """금지 어휘는 띄어쓰기를 무시 — '예약 변경' 금지가 '예약변경'도 잡는다(verify 라벨 어휘 경고와 같은 기준)"""
+    checks = {"field": "text", "forbidden_words": ["예약 변경"]}
+    assert llm_jobs.problems(SCHEMA, checks, {"text": "예약변경 하려고요"})
+    assert llm_jobs.has_word("예약변경", "예약 변경") and not llm_jobs.has_word("13회", "3회")
+    assert not llm_jobs.has_word("필요 건수", "요건")  # 띄어쓰기 없는 말은 낱말 경계를 넘어 맞추지 않는다
+
+
 def test_forbidden_words_ignore_longer_numbers():
     """금지 어휘도 꼭 넣을 말처럼 앞에 숫자가 붙으면 다른 말 — '3회' 금지가 '13회'에 걸리지 않게"""
     checks = {"field": "text", "forbidden_words": ["3회"]}

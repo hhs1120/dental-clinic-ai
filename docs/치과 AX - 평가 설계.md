@@ -162,6 +162,7 @@ tags:
 | `truth_claims` | 생성기(슬롯 ⑤ 착수 시, 조건부) | 청구 심사 결과 정답. 컬럼은 `ground_truth/schema.sql`, 생성 규칙은 가상 데이터 생성 설계 §2.4 |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`). 서술·특이 여부는 앱 DB에 두지 않는다(생성 설계 §4.3) |
 | `truth_claim_qa` | 사람(슬롯 ⑤ 착수 시, 조건부) | ⑤-3 청구 기준 질문과 정답 절(상세 사유 → 절은 생성 규칙에서, 질문 규칙은 §5). `truth_rag_qa`와 같은 형식, ③ 평가에는 쓰지 않음 |
+| `truth_appointment_courses` | 생성기(4단계) | 예약 → 코스(수요 에피소드). 앱 DB에는 없음(회차 추적 없음) — 5b R01(다른 코스의 재시행)과 verify가 읽는다 |
 | `truth_claim_errors` | 생성기(정형 5b단계) | 청구 기록에 심은 오류(전 기간)·종류 — 상병 착오·임상 요건형 오류를 5b단계가 채운다. 키 `treatment_id`, 진료 1건당 최대 1개. ⑤-2·⑤-3 정답, verify 제외 목록(목록도 검사 — 가상 데이터 생성 설계 §5.3). 컬럼은 `ground_truth/schema.sql` |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.

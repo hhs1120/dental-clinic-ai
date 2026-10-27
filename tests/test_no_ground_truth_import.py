@@ -1,5 +1,6 @@
 """정답 격리: 앱 코드는 ground_truth·generator를 참조하지 않는다 (평가 설계 §1).
 .py만이 아니라 설정·SQL·노트북 등 모든 텍스트 파일을 본다 — 경로·테이블 이름으로 정답에 닿는 것도 막는다."""
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,14 +13,15 @@ SKIP_DIRS = {"node_modules", ".next", "dist", "build", "__pycache__", ".venv"}
 
 def offenders(root: Path, words: tuple) -> list[str]:
     out = []
-    for p in root.rglob("*"):
-        if not p.is_file() or SKIP_DIRS & set(p.relative_to(root).parts):
-            continue
-        try:
-            text = p.read_text(encoding="utf-8")
-        except UnicodeDecodeError:  # 이미지 등 바이너리
-            continue
-        out += [f"{p.relative_to(root)}: {w}" for w in words if w in text]
+    for folder, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]  # node_modules 등은 들어가지 않는다
+        for name in files:
+            p = Path(folder) / name
+            try:
+                text = p.read_text(encoding="utf-8")
+            except UnicodeDecodeError:  # 이미지 등 바이너리
+                continue
+            out += [f"{p.relative_to(root)}: {w}" for w in words if w in text]
     return out
 
 

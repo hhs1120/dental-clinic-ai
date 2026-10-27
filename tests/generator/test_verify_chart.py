@@ -120,6 +120,13 @@ BREAKS = {
                                        " json('{\"key\": \"R01\", \"evidence\": false, \"prev_days\": 30, \"reason\": null}'))"
                                        " WHERE treatment_id = 3; UPDATE emr_chart_notes SET note = note || ' 충전물 파절'"
                                        " WHERE treatment_id = 3", "check_chart_evidence_words"),
+    # 장부에 같은 치아·같은 시술이 있는데 '타 기관' 이력 — 1번 환자의 10/06 신경치료 26번을 같은 코스의 3번 줄로 다시
+    "r01_other_clinic_with_ledger": ("INSERT INTO truth.truth_appointment_courses VALUES (1, 9), (4, 9);"
+                                     " UPDATE emr_treatments SET patient_id = 1, tooth_no = '26', procedure_code = 'U0008'"
+                                     " WHERE id = 3; UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.requirement',"
+                                     " json('{\"key\": \"R01\", \"evidence\": true, \"other_clinic\": true,"
+                                     " \"prev_months\": 5, \"reason\": \"2차 우식\"}')) WHERE treatment_id = 3",
+                                     "check_requirement_facts"),
     "chart_missing": ("DELETE FROM emr_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "chart_truth_missing": ("DELETE FROM truth.truth_chart_notes WHERE treatment_id = 1", "check_chart_note_per_treatment"),
     "dx_unknown": ("UPDATE emr_chart_notes SET dx_code = 'D99' WHERE treatment_id = 1", "check_foreign_keys"),

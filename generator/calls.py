@@ -275,7 +275,7 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
     if s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]:  # 부 주제 가격 문의도 무엇의 가격인지
-        if a is not None:
+        if a is not None and fact["appointment"]["procedure"] in PRICED:  # 0원(상담 등)이면 아래 후보에서
             fact["topic_procedure"] = fact["appointment"]["procedure"]
             return fact
         if s["about"] is not None:

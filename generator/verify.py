@@ -554,37 +554,23 @@ def _chart_lines(conn, ctx) -> list[dict]:
     """진료마다 차트·차트 정답·청구·오류를 붙인 행. window = 창 안, cut = 확정 월 조정 사유(master 사유 dict)"""
     rows = _rows(conn, "SELECT t.id, t.appointment_id, t.patient_id, t.procedure_code, t.tooth_no, t.performed_at,"
                        " n.dx_code, n.note, pt.name AS patient_name,"
-                       " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy, tc.facts,"
+                       " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy, tc.facts, co.course_id,"
                        " c.id AS claim_id, c.claim_month, c.status, c.adjust_code, c.adjust_note,"
                        " e.kind AS error, e.requirement AS error_requirement"
                        " FROM emr_treatments t JOIN emr_patients pt ON pt.id = t.patient_id"
                        " LEFT JOIN emr_chart_notes n ON n.treatment_id = t.id"
                        " LEFT JOIN truth.truth_chart_notes tc ON tc.treatment_id = t.id"
+                       " LEFT JOIN truth.truth_appointment_courses co ON co.appointment_id = t.appointment_id"
                        " LEFT JOIN emr_claims c ON c.treatment_id = t.id"
                        " LEFT JOIN truth.truth_claim_errors e ON e.treatment_id = t.id"
                        " ORDER BY t.patient_id, datetime(t.performed_at), t.id")
-    course = _courses(conn)
     for r in rows:
-        r["course"] = course[r["appointment_id"]]
+        r["course"] = r["course_id"] if r["course_id"] is not None else ("appt", r["appointment_id"])  # 창 이전 내원
         r["day"] = _dt(r["performed_at"]).date()
         r["window"] = r["day"] >= ctx.range_start
         r["bucket"] = _month_bucket(ctx, r["claim_month"]) if r["claim_id"] else None
         r["cut"] = REASON_BY_TEXT.get((r["adjust_code"], r["adjust_note"])) if r["bucket"] == "settled" else None
     return rows
-
-
-def _courses(conn) -> dict[int, int]:
-    """예약 → 코스 첫 예약 id. 데스크 예약은 같은 환자 completed 예약의 종료 시각(scheduled_at + duration_min)에 잡힌
-    다음 회차, 변경 새 예약은 원래 예약과 같은 코스"""
-    appts = _rows(conn, "SELECT id, patient_id, booked_via, rescheduled_from_id, created_at,"
-                        " strftime('%Y-%m-%d %H:%M:%S', scheduled_at, '+' || duration_min || ' minutes') AS ends_at,"
-                        " status FROM emr_appointments ORDER BY created_at, id")
-    by_end = {(a["patient_id"], a["ends_at"]): a["id"] for a in appts if a["status"] == "completed"}
-    course = {}
-    for a in appts:
-        prev = a["rescheduled_from_id"] or (by_end.get((a["patient_id"], a["created_at"])) if a["booked_via"] == "desk" else None)
-        course[a["id"]] = course[prev] if prev else a["id"]
-    return course
 
 
 def _other_course(history: list, r) -> date | None:
@@ -674,7 +660,7 @@ def check_chart_requirement(conn, ctx):
 
 def check_requirement_facts(conn, ctx):
     """요건 사실이 장부와 모순되지 않음 — 장부에 근거 사건이 있으면 그 날짜에서 계산한 값(other_clinic 아님),
-    없으면 '타 기관' 이력(other_clinic). R01 = 다른 코스의 같은 치아·같은 시술 이전 진료, R02 = 직전 PERIO_LINK_DAYS일 안
+    없으면 '타 기관' 이력(other_clinic — R01은 같은 코스의 이전 진료도 없어야). R01 = 다른 코스의 같은 치아·같은 시술 이전 진료, R02 = 직전 PERIO_LINK_DAYS일 안
     치석제거, R06 = 같은 치아 발치(근거 있는 줄만)"""
     bad = []
     last, scaled, extracted = defaultdict(lambda: defaultdict(list)), defaultdict(list), defaultdict(dict)
@@ -690,7 +676,9 @@ def check_requirement_facts(conn, ctx):
             }.get(f["key"], (None, None))
             if isinstance(ledger, date):
                 ledger = (day - ledger).days
-            if field and not (f["key"] == "R06" and not f["evidence"]):
+            if f["key"] == "R01" and f.get("other_clinic") and last[pid][(r["tooth_no"], r["procedure_code"])]:
+                bad.append({"id": r["id"], "requirement": f, "problem": "장부에 같은 치아·시술이 있는데 타 기관 이력"})
+            elif field and not (f["key"] == "R06" and not f["evidence"]):
                 ok = (not f.get("other_clinic") and f.get(field) == ledger) if ledger is not None else bool(f.get("other_clinic"))
                 if not ok:
                     bad.append({"id": r["id"], "requirement": f, "ledger_days": ledger})
@@ -754,7 +742,7 @@ def check_chart_evidence_words(conn, ctx):
     bad = []
     for r in _rows(conn, "SELECT n.treatment_id, n.note, c.facts FROM emr_chart_notes n"
                          " JOIN truth.truth_chart_notes c USING (treatment_id) WHERE c.kind = 'narrative'"):
-        hits = [w for w in chart.evidence_forbidden(json.loads(r["facts"])) if w in r["note"]]
+        hits = [w for w in chart.evidence_forbidden(json.loads(r["facts"])) if llm_jobs.has_word(r["note"], w)]
         if hits:
             bad.append({"treatment_id": r["treatment_id"], "words": hits})
     return bad
@@ -1055,10 +1043,9 @@ TRANSCRIPT_LABEL_WORD_MAX = 0.2  # 라벨 어휘가 그대로 나오는 전사 �
 
 
 def check_transcript_label_words(conn, ctx):
-    """라벨 어휘(master.CALL_LABEL_WORDS)가 그대로 나오는 전사 < 20% (경고). 띄어쓰기는 무시('예약변경'도 잡음)"""
+    """라벨 어휘(master.CALL_LABEL_WORDS)가 그대로 나오는 전사 < 20% (경고). 채우기 검증과 같은 llm_jobs.has_word('예약변경'도 잡음)"""
     rows = _transcripts(conn)
-    words = [w.replace(" ", "") for w in CALL_LABEL_WORDS]
-    hit = [r["id"] for r in rows if any(w in r["transcript"].replace(" ", "") for w in words)]
+    hit = [r["id"] for r in rows if any(llm_jobs.has_word(r["transcript"], w) for w in CALL_LABEL_WORDS)]
     share = len(hit) / len(rows) if rows else 0.0
     return [{"share": round(share, 3), "ids": hit[:EXAMPLES]}] if share >= TRANSCRIPT_LABEL_WORD_MAX else []
 

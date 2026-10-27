@@ -151,33 +151,37 @@ def test_plan_remaining_is_course_visits_left(db):
     assert got[1] and got[2]  # 코스 첫 회차는 2회 이상 남는다
 
 
-def test_course_roots_follow_desk_and_reschedule_links():
-    """같은 코스 = 직전 내원 종료 시각에 데스크에서 잡은 다음 회차, 변경 새 예약은 원래 예약을 잇는다(DB에 보이는 연결만)"""
-    conn = sqlite3.connect(":memory:")
-    conn.execute("CREATE TABLE emr_appointments (id, patient_id, scheduled_at, duration_min, status, rescheduled_from_id,"
-                 " booked_via, created_at)")
-    conn.executemany("INSERT INTO emr_appointments VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
-        (1, 7, "2026-03-02 10:00:00", 60, "completed", None, "phone", "2026-02-20 09:40:00"),
-        (2, 7, "2026-03-12 10:00:00", 60, "cancelled", None, "desk", "2026-03-02 11:00:00"),  # 1 종료 시각
-        (3, 7, "2026-03-13 10:00:00", 60, "completed", 2, "phone", "2026-03-10 14:00:00"),  # 2의 변경
-        (4, 7, "2026-06-01 10:00:00", 60, "completed", None, "phone", "2026-05-20 10:00:00"),  # 새 수요
-    ])
-    assert chart.course_roots(conn) == {1: 1, 2: 1, 3: 1, 4: 4}
+def test_courses_recorded_in_truth(db):
+    """코스(4단계 에피소드)는 정답 DB에 — 노쇼 뒤 전화 재예약도 같은 코스. 앱 DB에는 두지 않는다"""
+    conn, _, _ = db
+    episode = RUN["run"].state["episode"]
+    assert dict(conn.execute("SELECT appointment_id, course_id FROM truth.truth_appointment_courses")) == episode
 
 
 def test_retreatment_is_across_courses(db):
     """R01(같은 부위 재시행)의 장부 이력은 다른 코스의 같은 치아·시술 — 코스 안 반복(신경치료 2회차)은 재시행이 아니다"""
     conn, _, _ = db
-    roots = chart.course_roots(conn)
+    episode = RUN["run"].state["episode"]
     checked = 0
     for aid, pid, tooth, code, at in conn.execute(
             "SELECT t.appointment_id, t.patient_id, t.tooth_no, t.procedure_code, t.performed_at FROM emr_treatments t"
             " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id WHERE n.requirement = 'R01'"):
         prior = [r[0] for r in conn.execute("SELECT appointment_id FROM emr_treatments WHERE patient_id = ? AND tooth_no = ?"
                                             " AND procedure_code = ? AND performed_at < ?", (pid, tooth, code, at))]
-        assert not prior or any(roots[p] != roots[aid] for p in prior), aid
+        assert not prior or any(episode.get(p, ("pre", p)) != episode.get(aid) for p in prior), aid
         checked += 1
     assert checked
+
+
+def test_no_evidence_lines_get_neutral_cc(db):
+    """근거 없는 요건 줄의 C.C는 근거로 읽히지 않는 문장(chart.CC_NO_EVIDENCE)"""
+    conn, _, _ = db
+    seen = set()
+    for key, facts in conn.execute("SELECT requirement, facts FROM truth.truth_chart_notes WHERE evidence_present = 0"):
+        if key in chart.CC_NO_EVIDENCE:
+            assert json.loads(facts)["cc"] in chart.CC_NO_EVIDENCE[key], key
+            seen.add(key)
+    assert {"R01", "R04"} <= seen
 
 
 def test_draft_sentences(db):

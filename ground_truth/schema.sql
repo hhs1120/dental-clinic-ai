@@ -32,6 +32,13 @@ CREATE TABLE truth_gen_meta (
 -- 차트 정답 (5b단계, 평가 설계 §6). kind = template/narrative, 특이 = 청구 오류 줄 ∪ 임상 요건형 시술 줄,
 -- requirement = 요건 사유 키(master.ADJUST_REASONS, 요건 줄만), evidence_present = 차트에 요건 근거가 있음(요건 줄만),
 -- facts = 5b가 정한 사실(JSON) — 9b 서술의 입력이자 건별 검증 기준
+-- 예약 → 코스(4단계 수요 에피소드). 앱 DB에는 두지 않는다(회차 추적 없음) — 5b R01(다른 코스의 재시행)과 verify가 읽는다.
+-- 창 이전 내원처럼 에피소드가 없는 예약은 행이 없다
+CREATE TABLE truth_appointment_courses (
+    appointment_id INTEGER PRIMARY KEY,
+    course_id      INTEGER NOT NULL
+);
+
 CREATE TABLE truth_chart_notes (
     treatment_id     INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
     kind             TEXT NOT NULL CHECK (kind IN ('template', 'narrative')),

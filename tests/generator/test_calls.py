@@ -84,8 +84,8 @@ def test_price_subtopic_has_topic_procedure(db):
     assert rows
     for purpose, fact in rows:
         f = json.loads(fact)
-        assert f.get("topic_procedure"), (purpose, f)
-        if "appointment" in f:
+        assert f.get("topic_procedure") in calls.PRICED, (purpose, f)  # 0원 시술(상담 등)의 가격은 묻지 않는다
+        if "appointment" in f and f["appointment"]["procedure"] in calls.PRICED:
             assert f["topic_procedure"] == f["appointment"]["procedure"]
 
 

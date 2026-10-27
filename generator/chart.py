@@ -48,8 +48,9 @@ CC = {CODE[n]: cc for n, cc in {
 }.items()}
 
 
-# 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게(임플란트의 '빠진 자리'는 무치악 근거)
-CC_NO_EVIDENCE = {"R06": ("임플란트 치료 받으러 왔어요",)}
+# 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
+CC_NO_EVIDENCE = {"R01": ("예전에 치료한 이가 신경 쓰여요",), "R03": ("잇몸 상태 확인하러 왔어요",),
+                  "R04": ("아이 치아 관리 받으러 왔어요",), "R06": ("임플란트 치료 받으러 왔어요",)}
 # 요건 근거를 드러내는 말 (§4.3) — 근거가 있으면 그 말을 꼭 넣고(R01은 사유마다 하나), 없으면 모두 금지
 EVIDENCE_WORDS = {"R01": ("파절", "2차 우식"), "R02": ("재평가",), "R04": ("소와열구",), "R05": ("매복", "골삭제"),
                   "R06": ("무치악",)}
@@ -80,21 +81,6 @@ def _lines(run) -> list[dict]:
         r["bucket"] = _bucket(run.today, r["claim_month"]) if r["claimed"] else None
         r["cut"] = REASON_KEY.get((r["adjust_code"], r["adjust_note"])) if r["bucket"] == "settled" else None
     return rows
-
-
-def course_roots(conn) -> dict[int, int]:
-    """예약 → 그 코스의 첫 예약. DB에 보이는 연결만 — 데스크 예약은 같은 환자의 직전 내원 종료 시각에 잡은 코스 다음 회차,
-    변경 새 예약은 원래 예약을 잇는다(노쇼 뒤 전화 재예약은 새 코스로 본다). verify도 같은 기준으로 따로 계산한다"""
-    roots, ended = {}, {}
-    for aid, pid, start, minutes, status, origin, via, created in conn.execute(
-            "SELECT id, patient_id, scheduled_at, duration_min, status, rescheduled_from_id, booked_via, created_at"
-            " FROM emr_appointments ORDER BY created_at, id"):
-        parent = origin if origin is not None else ended.get((pid, created)) if via == "desk" else None
-        roots[aid] = roots[parent] if parent is not None else aid
-        if status == "completed":
-            end = datetime.fromisoformat(start) + timedelta(minutes=minutes)
-            ended[(pid, end.strftime("%Y-%m-%d %H:%M:%S"))] = aid
-    return roots
 
 
 def _prior_course(r, treated: dict) -> date | None:
@@ -193,13 +179,13 @@ def stage_facts(run, rng, fake) -> None:
     fact_seed = int(fact_rng.integers(1 << 62))
     course_left = run.state["course_left"]
     alerts = _alerts(run)
-    roots = course_roots(run.conn)
+    episode = run.state["episode"]  # 예약 → 코스. 창 이전 내원은 없음 — 예약마다 따로
     treated = defaultdict(lambda: defaultdict(list))  # 환자 → (치아, 시술) → [(진료일, 코스)]
     extracted = defaultdict(dict)  # 환자 → 치아 → 발치일
     scaled = defaultdict(list)
     lines, errors = [], []
     for r in _lines(run):
-        r["root"] = roots[r["appointment_id"]]
+        r["root"] = episode.get(r["appointment_id"], ("pre", r["appointment_id"]))
         key = _requirement(r, treated, scaled)
         error = None
         if r["window"] and r["claimed"]:
