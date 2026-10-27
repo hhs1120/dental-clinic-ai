@@ -175,11 +175,15 @@ class LLMContext:
 # ── 검증 ────────────────────────────────────────────────────
 
 @lru_cache
-def forbidden_patterns() -> list[str]:
-    """금지 토픽 정규식 (config generator.yaml의 forbidden_topics 파일) — 생성물 전부에 검사"""
+def forbidden_topics() -> list[dict]:
+    """금지 토픽 [{topic, patterns}] (config generator.yaml의 forbidden_topics 파일) — 거절형 상식 질문의 주제"""
     cfg = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
-    topics = json.loads((ROOT / cfg["forbidden_topics"]).read_text(encoding="utf-8"))
-    return [p for t in topics for p in t["patterns"]]
+    return json.loads((ROOT / cfg["forbidden_topics"]).read_text(encoding="utf-8"))
+
+
+def forbidden_patterns() -> list[str]:
+    """금지 토픽 정규식 — 생성물 전부에 검사"""
+    return [p for t in forbidden_topics() for p in t["patterns"]]
 
 
 def contains(text: str, word: str) -> bool:

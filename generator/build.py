@@ -72,9 +72,10 @@ def new_run(conn: sqlite3.Connection, cfg: dict) -> Run:
 
 
 def generate(app_path: Path, truth_path: Path, config_path: Path, fake_llm: bool = False,
-             llm_paths: dict | None = None) -> Run:
+             llm_paths: dict | None = None, rag_qa_path: Path | None = None) -> Run:
     """임시 파일에 전부 쓴 뒤 교체 — 단계 실행 중에 실패하면 기존 DB는 그대로. 단계 상태(run.state)를 보려고 Run을 돌려준다.
-    fake_llm: LLM 단계를 가짜 게이트웨이로(테스트). llm_paths: 캐시·작업 폴더(기본 generator/paths.py)"""
+    fake_llm: LLM 단계를 가짜 게이트웨이로(테스트). llm_paths: 캐시·작업 폴더(기본 generator/paths.py).
+    rag_qa_path: 사람이 쓴 RAG 질문 JSON — 있으면 truth_rag_qa에 적재(make data만 준다. 테스트 생성은 문서·전사가 달라 넣지 않음)"""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     tmp_app, tmp_truth = (p.with_name(p.name + ".tmp") for p in (app_path, truth_path))
     for p in (tmp_app, tmp_truth):
@@ -100,6 +101,8 @@ def generate(app_path: Path, truth_path: Path, config_path: Path, fake_llm: bool
         ])
         for name, stage in STAGES:
             stage(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
+        if rag_qa_path and rag_qa_path.exists():
+            insert_rag_qa(conn, json.loads(rag_qa_path.read_text(encoding="utf-8")), schema="truth")
         missing, exhausted = run.state["llm"].finish(), dict(run.state["llm"].exhausted)
         if not missing and not exhausted:
             conn.commit()
@@ -113,6 +116,18 @@ def generate(app_path: Path, truth_path: Path, config_path: Path, fake_llm: bool
     os.replace(tmp_truth, truth_path)
     write_truth_json(truth_path)
     return run
+
+
+RAG_QA_JSON_COLS = ("answer_doc_ids", "expected_tools", "expected_args")
+
+
+def insert_rag_qa(conn: sqlite3.Connection, qa: list[dict], schema: str = "main") -> None:
+    """rag_qa.json 행 → truth_rag_qa. 목록·객체 칸은 JSON 문자열"""
+    cols = ("id", "type", "question", "answer_text", "answer_doc_ids", "answer_chunk_hint", "expected_tools",
+            "expected_args", "expect_refusal", "split", "answer_sql")
+    conn.executemany(f"INSERT INTO {schema}.truth_rag_qa ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                     [tuple(json.dumps(q[c], ensure_ascii=False) if c in RAG_QA_JSON_COLS else
+                            int(q[c]) if c == "expect_refusal" else q.get(c) for c in cols) for q in qa])
 
 
 # 정답 JSON (평가 설계 §6 — git diff·리뷰용, truth.sqlite 옆). 파일 → (테이블, 정렬 키, JSON 문자열 컬럼)

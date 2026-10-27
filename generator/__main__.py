@@ -22,7 +22,7 @@ def main() -> None:
     paths = output_paths()
     try:
         generate(args.db or paths["app"], args.truth or paths["truth"], ROOT / "config" / "generator.yaml",
-                 fake_llm=args.fake_llm)
+                 fake_llm=args.fake_llm, rag_qa_path=None if args.fake_llm else paths["rag_qa"])
     except LLMMissing as e:
         print(f"LLM 캐시에 없는 건: {e} — DB는 그대로입니다.")
         if e.missing:

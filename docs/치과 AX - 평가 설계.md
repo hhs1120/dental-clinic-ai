@@ -102,8 +102,8 @@ tags:
 | 거절형 | 8 | "원장님 자택 주소?", "○○ 직원 연봉?" (행정 비공개 6) + 생성 시 금지한 상식 2 | 없음 | 마지막 호출이 `refuse`인지 |
 
 **작성 시점·방식** (문서·전사 생성 **후**)
-- 매뉴얼·공지·사례형: 생성된 문서·전사를 보고 질문과 정답 청크를 지정. 질문 핵심 어휘가 정답 문단에 그대로 있으면 바꿔 씀(어휘 일치 비율 < 30%, verify 경고)
-- 데이터형: 생성된 DB에서 **답이 2건 이상인 질문**을 고름. 선행 심기 안 함. "잔액 있는 환자"는 그 예약일 개원 전 잔액 > 0으로 센다(앱 설계 §3 `has_unpaid_balance`). 재생성 시 12문항 재확인(10분)
+- 매뉴얼·공지·사례형: 생성된 문서·전사를 보고 질문과 정답 청크를 지정. 질문은 현장 직원이 쓰는 말로 쓰고(시술명·보험·예약 같은 용어는 그대로) 정답 문장을 베끼지 않는다 — 정답 문단과 연속 4어절이 같거나 정답 값이 질문에 있으면 바꿔 씀(verify 경고)
+- 데이터형: 생성된 DB에서 **답이 2건 이상인 질문**을 고름. 선행 심기 안 함. "잔액 있는 환자"는 그 예약일 개원 전 잔액 > 0으로 센다(앱 설계 §3 `has_unpaid_balance`). 재생성 시 `make verify`가 `answer_sql`로 다시 계산해 확인
 - 차트형: 환자 이름 없이 케이스 내용으로 묻는다(현장 인터뷰 — "이름을 몰라도 찾고 싶다"). 같은 템플릿 문장이 많아 정답 하나를 찍을 수 없으므로 조건에 맞는 차트를 전부 정답으로 둔다. 정답이 많으면 Hit@5가 거저 통과하므로 **정답 집합이 1~5건이 되도록 조건을 좁힌다**(5b 사실의 요건·간격·부위를 조합). 차트 하나는 한 split의 질문에만 정답으로 들어간다(dev/test 정답 집합이 겹치면 누출)
 - 거절형 상식 2개: **`make data` 전**에 금지 토픽으로 지정(`forbidden_topics.json`) → 생성 지시 + 정규식 검사로 코퍼스에 없음을 보장(데이터에 자연스럽게 나오지 않는 주제로 고름)
 - 복합 조건·시간 계산 질문 포함 ("10월 이후 바뀐 비용 중 환자 부담이 늘어난 건?")
@@ -115,7 +115,7 @@ tags:
 ### 3.2 채점 규칙
 
 - **`expected_tools[]`**: 순서 있는 목록. "그 환자 7월에 뭐가 삭감됐나?" = `[query_patient, query_claims]` 2단 호출이 정상 경로. **감점은 목록 밖 도구 호출만**(무차별 호출 방지)
-- **`expected_args`**: 자유 텍스트 `query` 제외, **반환값에서 답을 못 얻는 키만 필수**, 부분집합 일치. 예: "오늘 취소 몇 건" → `query_schedule`은 `by_status`를 돌려주므로 `status` 필터는 필수 아님, 날짜 범위만 필수. 로그의 `args`는 Pydantic 정규화 후 기록(키 순서·타입 차이로 거짓 음성 방지)
+- **`expected_args`**: 자유 텍스트 `query` 제외, **반환값에서 답을 못 얻는 키만 필수**, 부분집합 일치. 예: "오늘 취소 몇 건" → `query_schedule`은 `by_status`를 돌려주므로 `status` 필터는 필수 아님, 날짜 범위만 필수. 로그의 `args`는 Pydantic 정규화 후 기록(키 순서·타입 차이로 거짓 음성 방지). 날짜 범위(`date_from`·`date_to`)는 정답 범위를 포함하면 일치로 본다 — '이번 주'를 월요일부터 잡든 오늘부터 잡든 같은 답이면 통과하고, 넓게 잡아 답이 달라지면 숫자 일치가 걸러낸다
 - 숫자 일치: 정답 숫자가 답변 텍스트에 존재(단위 정규화 후)
 - 거절 판정: **마지막 도구 호출이 `refuse`**면 통과(먼저 검색해 보고 거절하는 정상 경로 허용). 거절형이 아닌 질문에서 `refuse`를 부르면 그 문항 실패 — 과잉 거절은 다른 유형 정답률에 반영
 - 도구 호출 상한 6회/질문 초과 = 실패
@@ -157,7 +157,7 @@ tags:
 | 테이블 | 채우는 쪽 | 내용 |
 |---|---|---|
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
-| `truth_rag_qa` | 사람(생성 후) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split` |
+| `truth_rag_qa` | 사람(생성 후, `make data`가 `rag_qa.json`을 적재) | `id, type, question, answer_text, answer_doc_ids[], answer_chunk_hint, expected_tools[], expected_args json, expect_refusal, split, answer_sql` — 출처 id 형식·칸 뜻은 `ground_truth/schema.sql`. `answer_sql`은 데이터형 답·차트형 정답 집합을 재계산하는 쿼리(재생성 시 `make verify`가 확인) |
 | `truth_doc_meta` | 생성기(9단계 문서 계획) | `doc_id → kind(core/old_version/similar/external), is_distractor, pair_doc_id, supersedes_doc_id, planted_facts[]`(심은 사실 — 사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
 | `truth_gen_meta` | 생성기 | `key → value`: `seed`, `range_start`, `range_end`, `call_slots`, `eval_pool`, `blind_pool`, `documents_core`, `documents_distractor`. verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_eval_runs` | eval.py | `split, condition, started_at, report_path` — 실행 이력 |
