@@ -226,6 +226,7 @@ tags:
 ## 9. 다음 액션
 
 - [ ] 준비 4 — Claude Code 세팅. CLAUDE.md·테스트 구조·서브에이전트 완료, 남은 것: 훅
+- [ ] 프론트 착수 시 — `create-next-app` 기본 ESLint(`eslint-config-next`)에 TypeScript strict·Prettier를 켜고 `make lint`·`make fmt`에 프론트 검사를 넣는다(규칙은 `CLAUDE.md` 코드 컨벤션)
 - [ ] 준비 5 — 와이어프레임 4개(판정·검색·준비표·가상 EMR 뷰어) + 그 기준으로 [[치과 AX - 앱 설계]] §9 프론트 추가: 페이지·라우트 목록, 페이지별 사용 API, 데이터 가져오기 방식(배치 진행률은 `ax_jobs` 폴링), 공통 레이아웃(작업자 선택), 판정 키 매핑표(목적 14개 → 2자리, 나머지 항목 → 1자리 — enum은 [[치과 AX - 가상 데이터 생성 설계]] §4.1)
 - [ ] 평가 설계 반영 — ② 오류 유형 태그 집계(아래 앱 설계 반영의 판정 오류 유형 컬럼과 같이 정하고 `eval.py` 리포트에 추가 — ①·② 앱 착수 전)
 - [ ] 앱 설계 반영 — 가상 EMR 뷰어(라우트·API), 판정 오류 유형 컬럼(`export-human` 키 포함), ④ 제안 출력에 `action`, **생성기 출력과 앱 DB의 경계**(지금은 `data/app.sqlite` 한 파일에 생성기가 `emr_*`·`ax_calls`·`ax_documents`를 쓰고 앱이 판정 등 `ax_*`를 같은 파일에 써서 재생성하면 사람 작업이 덮어써짐 — `export-human`/`import-human`으로 버틸지, 앱 DB를 따로 두고 생성 DB를 읽기 전용으로 붙일지 결정. 같은 파일이면 앱이 판정을 쓴 뒤 verify `check_eval_pool`(판정 상태 pending/none 요구)이 실패하므로 함께 정리. eval.py가 읽는 앱 테이블 DDL이 지금 `shared/schema.sql`에 있어 결정에 따라 위치도 옮긴다)

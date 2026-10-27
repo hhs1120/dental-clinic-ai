@@ -31,7 +31,17 @@
 ## 명령
 - `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 착수 때 `backend` 그룹 추가
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
+- `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — ruff, 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음)
+
+## 코드 컨벤션
+- Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)
+- 표준에 없는 이 프로젝트 관례:
+  - 주석·독스트링은 한국어로, 규칙의 근거 문서 절을 가리킨다(예: `평가 설계 §3.2`). 모듈 첫 독스트링에 하는 일과 원본 문서
+  - 값은 직접 쓰지 않고 `generator/master.py`·`config`·스키마의 이름으로 읽는다(위 절대 규칙)
+  - verify 검사는 `check_*(conn, ctx) → 위반 행 목록`, 독스트링 첫 줄이 출력되는 규칙 설명
+  - DB는 sqlite3에 SQL 그대로(ORM 없음)
+- Next.js(frontend 착수 때 켠다): ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`
 
 ## 현재 단계
 진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.
