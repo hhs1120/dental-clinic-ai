@@ -71,6 +71,19 @@ def test_verify_load_ctx_reads_generated_meta(tmp_path, no_stages):
     assert ctx.range_end == CFG["range"]["end"]
 
 
+def test_rag_qa_loaded_when_given(tmp_path, no_stages):
+    """rag_qa_path를 주면 truth_rag_qa에 적재, 안 주면(테스트 생성) 빈 테이블"""
+    from tests.generator.test_verify_rag_qa import QA
+    qa = tmp_path / "rag_qa.json"
+    qa.write_text(json.dumps(QA, ensure_ascii=False), encoding="utf-8")
+    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    generate(app, truth, CONFIG, rag_qa_path=qa)
+    rows = sqlite3.connect(truth).execute("SELECT id, answer_doc_ids FROM truth_rag_qa ORDER BY id").fetchall()
+    assert [(i, json.loads(ids)) for i, ids in rows] == sorted((q["id"], q["answer_doc_ids"]) for q in QA)
+    _generate(tmp_path)
+    assert sqlite3.connect(truth).execute("SELECT count(*) FROM truth_rag_qa").fetchone()[0] == 0
+
+
 def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
     app, truth = _generate(tmp_path)
     app_tables = {r[0] for r in sqlite3.connect(app).execute("SELECT name FROM sqlite_master WHERE type = 'table'")}

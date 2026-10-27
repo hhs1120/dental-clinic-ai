@@ -11,7 +11,7 @@ tags:
   - 앱
 ---
 
-> **앱이 데이터를 어떻게 읽고 쓰나.** backend 코드가 읽는 문서 — 테이블·도구 시그니처·고정 쿼리·기술 선택. 앱 `ax_*` 테이블은 목적과 핵심 제약만 적는다 — DDL(컬럼)은 앱 착수 시 `shared/schema.sql`에 쓰고 그쪽이 원본. 무엇을 만드나(화면·API·완료 기준)는 [[치과 AX - 기능 정의]], 뭘 측정하나는 [[치과 AX - 평가 설계]].
+> **앱이 데이터를 어떻게 읽고 쓰나.** backend 코드가 읽는 문서 — 테이블·도구 시그니처·고정 쿼리·기술 선택. 앱 `ax_*` 테이블은 목적과 핵심 제약만 적는다 — DDL(컬럼)은 `shared/schema.sql`이 원본이고, 앱 착수 시 그곳에 쓴다(eval.py가 읽는 칸은 먼저 정해 둠 — §1). 무엇을 만드나(화면·API·완료 기준)는 [[치과 AX - 기능 정의]], 뭘 측정하나는 [[치과 AX - 평가 설계]].
 > **앱이 읽는 입력**: `emr_*`(미니 EMR, 읽기 전용)와 생성기가 적재한 `ax_calls`·`ax_documents`. 컬럼은 `shared/schema.sql`, 의미는 [[치과 AX - 가상 데이터 생성 설계]] §2·§3. 앱은 생성 규칙(분포·추첨·정답)에 의존하지 않는다 — 그건 정답 힌트다.
 
 ## 1. 통화 분류·판정
@@ -19,6 +19,8 @@ tags:
 `ax_calls` 정의는 [[치과 AX - 가상 데이터 생성 설계]] §3.
 
 **분류기 입력 = `transcript` + `direction`만** (환자·번호·시각은 정답 힌트. 함수 시그니처 `classify(transcript, direction)`로 강제).
+
+eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/schema.sql`에 먼저 정해 두었다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(db_path)`로 내준다.
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
@@ -47,7 +49,7 @@ tags:
 |---|---|---|
 | `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?=5` | 청크 목록 |
 | `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`) |
-| `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?`(`has_unpaid_balance` = 그 예약일 개원 전 잔액 > 0 — 정의 원본. `is_new_patient` = 창 안에서 처음 등록한 환자 — 생성 설계 §2.2) | 예약 목록 + `{count, by_status, by_type}` |
+| `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?`(`has_unpaid_balance` = 그 예약일 개원 전 잔액 > 0 — 정의 원본. `is_new_patient` = 창 안에서 처음 등록한 환자 — 생성 설계 §2.2) | 예약 목록 + `{count, by_status, by_type}`. `count`는 조건에 맞는 행 전체(`status`를 주지 않으면 취소·변경 포함). `by_status`는 변경으로 대체된 원래 예약(새 예약의 `rescheduled_from_id`가 가리키는 `cancelled`)을 취소와 따로 `rescheduled`로 센다 — 예약 변경은 취소가 아니다 |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
 

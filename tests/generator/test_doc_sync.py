@@ -242,3 +242,20 @@ def test_rag_document_rows_match_catalog():
     for label, (kind, type_) in _DOC_ROW.items():
         n = sum(1 for d in CATALOG if d.kind == kind and (type_ is None or d.type == type_))
         assert rows[label] == n, f"{label}: 문서 {rows[label]} ≠ 목록 {n}"
+
+
+# ── 평가 설계 §3.1 RAG 질문 (verify rag_qa 검사) ──────────────
+
+EVAL_DOC = ROOT / "docs" / "치과 AX - 평가 설계.md"
+_QA_TYPE_LABEL = {"매뉴얼형": "manual", "공지형": "notice", "사례형": "case", "데이터형": "data", "차트형": "chart",
+                  "거절형": "refusal"}
+
+
+def test_rag_qa_rules_match_code():
+    """평가 설계 §3.1 유형 표의 수 = verify.QA_TYPE_COUNTS, 연속 어절 수·차트 정답 1~5건 = verify 상수"""
+    text = EVAL_DOC.read_text(encoding="utf-8")
+    table = text[text.index("### 3.1"):].split("| 유형 | 수 |")[1].split("\n\n")[0]
+    rows = [[c.strip() for c in line.strip("|").split("|")] for line in table.strip().splitlines()[2:]]
+    assert {_QA_TYPE_LABEL[r[0]]: int(r[1]) for r in rows} == verify.QA_TYPE_COUNTS
+    assert f"연속 {verify.QA_COPY_RUN}어절" in text
+    assert "정답 집합이 {}~{}건".format(*verify.QA_CHART_ANSWERS) in text

@@ -1,0 +1,1281 @@
+[
+ {
+  "id": "manual-01",
+  "type": "manual",
+  "split": "dev",
+  "question": "틀니 수리 맡기면 며칠 걸린다고 안내해?",
+  "answer_text": "기공소 의뢰 후 영업일 기준 3일. 수리 기간에 임시 틀니는 빌려주지 않음",
+  "answer_doc_ids": [
+   "doc:66"
+  ],
+  "answer_chunk_hint": "denture.days",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-02",
+  "type": "manual",
+  "split": "dev",
+  "question": "구형 임플란트 부품 단종된 거 주문하면 언제쯤 와?",
+  "answer_text": "대리점 재고 확인 후 주문, 입고까지 2주",
+  "answer_doc_ids": [
+   "doc:29"
+  ],
+  "answer_chunk_hint": "parts.weeks",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-03",
+  "type": "manual",
+  "split": "dev",
+  "question": "실손 청구한다고 진단서 떼 달라시는데 발급비 얼마 받아?",
+  "answer_text": "진단서 2만 원(진료비 세부내역서는 무료)",
+  "answer_doc_ids": [
+   "doc:39"
+  ],
+  "answer_chunk_hint": "docs.fee",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-04",
+  "type": "manual",
+  "split": "dev",
+  "question": "멸균해 둔 기구는 며칠까지 써도 돼?",
+  "answer_text": "멸균 포장 후 30일 안에 사용, 지나면 다시 멸균",
+  "answer_doc_ids": [
+   "doc:22"
+  ],
+  "answer_chunk_hint": "steril.pack",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-05",
+  "type": "manual",
+  "split": "dev",
+  "question": "주사바늘 버리는 통은 언제 새 걸로 바꿔?",
+  "answer_text": "손상성 폐기물 전용 용기가 4분의 3 차면 교체",
+  "answer_doc_ids": [
+   "doc:53"
+  ],
+  "answer_chunk_hint": "waste.sharps",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-06",
+  "type": "manual",
+  "split": "dev",
+  "question": "기공소 보낼 거 몇 시까지 챙겨 놔야 해?",
+  "answer_text": "기공소 수거는 매일 오후 5시",
+  "answer_doc_ids": [
+   "doc:46"
+  ],
+  "answer_chunk_hint": "lab.pickup",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-07",
+  "type": "manual",
+  "split": "dev",
+  "question": "가족분이 대신 진료기록 사본 받으러 오시면 뭐 가져오라고 해야 돼?",
+  "answer_text": "가족관계증명서",
+  "answer_doc_ids": [
+   "doc:85"
+  ],
+  "answer_chunk_hint": "copy.proxy",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-08",
+  "type": "manual",
+  "split": "dev",
+  "question": "크라운 한 지 몇 달 안 됐는데 빠져서 오셨어. 다시 붙이는 거 비용 받아?",
+  "answer_text": "크라운 장착 후 1년 안에 빠지면 무상으로 다시 붙임",
+  "answer_doc_ids": [
+   "doc:60"
+  ],
+  "answer_chunk_hint": "recement.free",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-09",
+  "type": "manual",
+  "split": "dev",
+  "question": "스케일링 보험 1년에 몇 번 되고 환자 부담은 얼마야?",
+  "answer_text": "19세 이상 연 1회(타 기관 이력도 횟수에 들어감), 본인부담 18,000원",
+  "answer_doc_ids": [
+   "doc:17",
+   "doc:71",
+   "doc:16",
+   "doc:36"
+  ],
+  "answer_chunk_hint": "faq.scaling",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-10",
+  "type": "manual",
+  "split": "test",
+  "question": "비급여 견적서 받아 가신 분, 그 금액 언제까지 유효해?",
+  "answer_text": "견적 유효기간 1개월(상담실장이 견적서 출력)",
+  "answer_doc_ids": [
+   "doc:9"
+  ],
+  "answer_chunk_hint": "estimate.valid",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-11",
+  "type": "manual",
+  "split": "test",
+  "question": "전화로 자기 진료 기록 물어보시면 본인 확인 뭘로 해?",
+  "answer_text": "생년월일과 등록된 전화번호",
+  "answer_doc_ids": [
+   "doc:79"
+  ],
+  "answer_chunk_hint": "privacy.check",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-12",
+  "type": "manual",
+  "split": "test",
+  "question": "예약 취소 자리 나면 대기 걸어 두신 분들께 어떻게 연락 돌려?",
+  "answer_text": "대기 명단 순서대로 전화, 2시간 안에 답이 없으면 다음 사람",
+  "answer_doc_ids": [
+   "doc:87"
+  ],
+  "answer_chunk_hint": "wait.order",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-13",
+  "type": "manual",
+  "split": "test",
+  "question": "임플란트 1차 수술 예약은 몇 분으로 잡아?",
+  "answer_text": "임플란트 1차 90분",
+  "answer_doc_ids": [
+   "doc:72"
+  ],
+  "answer_chunk_hint": "slot.lengths",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-14",
+  "type": "manual",
+  "split": "test",
+  "question": "현금으로 내신 분이 환불해 달라시면 어떻게 돌려드려?",
+  "answer_text": "계좌로 돌려줌(환불은 원장 승인 후)",
+  "answer_doc_ids": [
+   "doc:28"
+  ],
+  "answer_chunk_hint": "refund.cash",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-15",
+  "type": "manual",
+  "split": "test",
+  "question": "엑스레이 찍기 전에 여자 환자분께 꼭 확인할 게 뭐야?",
+  "answer_text": "임신 여부",
+  "answer_doc_ids": [
+   "doc:23"
+  ],
+  "answer_chunk_hint": "xray.pregnant",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-16",
+  "type": "manual",
+  "split": "test",
+  "question": "초등학생이 혼자 진료받으러 왔는데 그냥 봐도 돼?",
+  "answer_text": "만 14세 미만은 보호자가 함께 오고 보호자 동의서를 받음",
+  "answer_doc_ids": [
+   "doc:82"
+  ],
+  "answer_chunk_hint": "child.guardian",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-17",
+  "type": "manual",
+  "split": "test",
+  "question": "응급 키트 어디 있어? 점검은 언제 해?",
+  "answer_text": "2번 진료실 수납장(매월 첫 진료일 점검)",
+  "answer_doc_ids": [
+   "doc:81"
+  ],
+  "answer_chunk_hint": "emerg.kit",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "manual-18",
+  "type": "manual",
+  "split": "test",
+  "question": "임플란트 보험은 몇 살부터 돼?",
+  "answer_text": "만 65세 이상(대상 부위는 무치악)",
+  "answer_doc_ids": [
+   "doc:21",
+   "doc:4"
+  ],
+  "answer_chunk_hint": "ins.implant.age",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-01",
+  "type": "notice",
+  "split": "dev",
+  "question": "올해 설 연휴 휴진 언제부터 언제까지야?",
+  "answer_text": "2월 16일~18일 휴진",
+  "answer_doc_ids": [
+   "doc:7"
+  ],
+  "answer_chunk_hint": "seollal.days",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-02",
+  "type": "notice",
+  "split": "dev",
+  "question": "대기실 와이파이 바뀌었다던데 지금 이름 뭐야?",
+  "answer_text": "AXDENTAL-GUEST(4월 6일부터)",
+  "answer_doc_ids": [
+   "doc:31"
+  ],
+  "answer_chunk_hint": "notice.wifi",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-03",
+  "type": "notice",
+  "split": "dev",
+  "question": "환자분 주차 무료로 몇 시간까지 돼?",
+  "answer_text": "진료 당일 2시간 무료(6월 1일부터)",
+  "answer_doc_ids": [
+   "doc:40",
+   "doc:15"
+  ],
+  "answer_chunk_hint": "notice.parking",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-04",
+  "type": "notice",
+  "split": "dev",
+  "question": "노쇼 세 번 하신 분은 예약 어떻게 받아?",
+  "answer_text": "3개월간 전화 예약만 받음",
+  "answer_doc_ids": [
+   "doc:75",
+   "doc:67"
+  ],
+  "answer_chunk_hint": "notice.noshow",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-05",
+  "type": "notice",
+  "split": "dev",
+  "question": "미백 지금 얼마로 안내해?",
+  "answer_text": "300,000원(비급여)",
+  "answer_doc_ids": [
+   "doc:20",
+   "doc:83"
+  ],
+  "answer_chunk_hint": "notice.white",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-06",
+  "type": "notice",
+  "split": "test",
+  "question": "추석 휴진 며칠이야?",
+  "answer_text": "9월 24일~26일 휴진",
+  "answer_doc_ids": [
+   "doc:41"
+  ],
+  "answer_chunk_hint": "chuseok.days",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-07",
+  "type": "notice",
+  "split": "test",
+  "question": "7월 이후로 바뀐 규정 뭐 있어?",
+  "answer_text": "임플란트 보증 기간 5년(7월 1일부터), 멸균 기록지는 그날 진료 종료 전까지 마감(8월 3일부터)",
+  "answer_doc_ids": [
+   "doc:11",
+   "doc:34"
+  ],
+  "answer_chunk_hint": "notice.warranty",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-08",
+  "type": "notice",
+  "split": "test",
+  "question": "카드 무이자 할부 얼마 이상부터 몇 개월 돼?",
+  "answer_text": "50만 원 이상 3개월 무이자 할부(5월 1일부터)",
+  "answer_doc_ids": [
+   "doc:62"
+  ],
+  "answer_chunk_hint": "notice.install",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-09",
+  "type": "notice",
+  "split": "test",
+  "question": "토요일 진료 몇 시까지야?",
+  "answer_text": "오후 1시 30분까지",
+  "answer_doc_ids": [
+   "doc:18",
+   "doc:51"
+  ],
+  "answer_chunk_hint": "notice.sat",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "notice-10",
+  "type": "notice",
+  "split": "test",
+  "question": "리마인드 문자 요즘 언제 나가?",
+  "answer_text": "예약 직전 진료일 오전 9시 30분",
+  "answer_doc_ids": [
+   "doc:76",
+   "doc:80"
+  ],
+  "answer_chunk_hint": "notice.remind",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-01",
+  "type": "case",
+  "split": "dev",
+  "question": "송정호 님 서류 요청하셨던 거 뭐였고, 준비됐다고 연락드렸어?",
+  "answer_text": "3월 13일 전화로 회사 제출용 진료확인서 요청(담을 내용: 2025년 5월 20일 스케일링) → 다음 날 3월 14일 서류 준비 완료 문자 보냄",
+  "answer_doc_ids": [
+   "call:104",
+   "thread:C-00322:2026-03"
+  ],
+  "answer_chunk_hint": "진료 확인서",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-02",
+  "type": "case",
+  "split": "dev",
+  "question": "양명숙 님이 교정 진료 때문에 불만 전화하셨던 거 무슨 내용이었지?",
+  "answer_text": "교정 때 아프다고 했는데 설명 없이 계속해 속상했다 — 다음엔 천천히 설명하며 하기로",
+  "answer_doc_ids": [
+   "call:213"
+  ],
+  "answer_chunk_hint": "철사",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-03",
+  "type": "case",
+  "split": "dev",
+  "question": "임은영 님이 전화로 뭐 물어보셨고 우리가 어떻게 답했지?",
+  "answer_text": "당뇨가 있는데 스케일링을 얼마나 자주 받아야 하는지 — 원장 확인 후 다시 연락하기로",
+  "answer_doc_ids": [
+   "call:29"
+  ],
+  "answer_chunk_hint": "당뇨",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-04",
+  "type": "case",
+  "split": "dev",
+  "question": "서미영 님이 사랑니 발치 비용 물어보셨을 때 얼마라고 했지?",
+  "answer_text": "본인 부담 27,000원(총 진료비 90,000원, 건강보험 적용)",
+  "answer_doc_ids": [
+   "call:227"
+  ],
+  "answer_chunk_hint": "27,000원",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-05",
+  "type": "case",
+  "split": "dev",
+  "question": "장경수 님 10월에 미수 문자 나갔어? 답장 왔어?",
+  "answer_text": "10월 13일 미납 12,140원 안내 문자 → '다음에 갈 때 낼게요'",
+  "answer_doc_ids": [
+   "thread:C-00922:2026-10"
+  ],
+  "answer_chunk_hint": "12,140원",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-06",
+  "type": "case",
+  "split": "dev",
+  "question": "주정훈 님 지난달 노쇼 문자 보냈었나? 뭐라고 답하셨어?",
+  "answer_text": "11월 24일 실란트 노쇼 안내 문자 → '죄송합니다. 다시 연락드릴게요'",
+  "answer_doc_ids": [
+   "thread:C-01411:2026-11"
+  ],
+  "answer_chunk_hint": "다시 연락드릴게요",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-07",
+  "type": "case",
+  "split": "test",
+  "question": "심현숙 님 피 난다고 급하게 전화하셨을 때 뭐라고 안내했지?",
+  "answer_text": "거즈나 수건을 말아 꽉 물고 있기, 원장께 전달 후 내원 시간 정해 다시 전화",
+  "answer_doc_ids": [
+   "call:95"
+  ],
+  "answer_chunk_hint": "거즈",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-08",
+  "type": "case",
+  "split": "test",
+  "question": "윤정훈 님이 보험 적용 물어보셨던 건 어떻게 됐어?",
+  "answer_text": "구강검진은 급여 항목이나 실제 처리 내역은 확인 후 연락(문자도 남기기로)",
+  "answer_doc_ids": [
+   "call:6"
+  ],
+  "answer_chunk_hint": "구강검진",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-09",
+  "type": "case",
+  "split": "test",
+  "question": "권영수 님께 미수 안내 전화했을 때 반응 어떠셨어?",
+  "answer_text": "11,580원 남았다고 하자 카드로 다 냈다며 불쾌해함 — 결제 내역 확인 후 연락하기로",
+  "answer_doc_ids": [
+   "call:155"
+  ],
+  "answer_chunk_hint": "11,580원",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-10",
+  "type": "case",
+  "split": "test",
+  "question": "송광수 님 레진 보험 문의 전화 어떻게 답했지?",
+  "answer_text": "8월 5일 전화로 레진 보험 적용 문의(대상 진료: 7월 21일 41번 레진) → 비급여로 기록돼 있다고 안내, 비급여인 이유는 원장 확인 후 회신하기로",
+  "answer_doc_ids": [
+   "call:597"
+  ],
+  "answer_chunk_hint": "41번",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-11",
+  "type": "case",
+  "split": "test",
+  "question": "유영호 님 8월에 예약 안 오셨을 때 문자 보냈어?",
+  "answer_text": "8월 31일 노쇼 안내 문자 보냄(답장 없음)",
+  "answer_doc_ids": [
+   "thread:C-01711:2026-08"
+  ],
+  "answer_chunk_hint": "내원하지 않으셔서",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-12",
+  "type": "case",
+  "split": "test",
+  "question": "진미정 님 보험사 서류 뭐 요청하셨고, 준비됐다고 연락드렸어?",
+  "answer_text": "11월 14일 전화로 실손 청구용 진료비 세부내역서·진료확인서 요청(담을 내용: 3월 28일·4월 8일 아말감, 4월 20일 스케일링) → 11월 16일 서류 준비 완료 문자",
+  "answer_doc_ids": [
+   "call:933",
+   "thread:C-00525:2026-11"
+  ],
+  "answer_chunk_hint": "세부내역서",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "data-01",
+  "type": "data",
+  "split": "dev",
+  "question": "오늘 오실 환자 몇 명이야?",
+  "answer_text": "26명",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-01",
+    "date_to": "2026-12-01"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_appointments WHERE date(scheduled_at) = '2026-12-01' AND status != 'cancelled'"
+ },
+ {
+  "id": "data-02",
+  "type": "data",
+  "split": "dev",
+  "question": "지난달 노쇼 중에 위생 예약 몇 건이었어?",
+  "answer_text": "7건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-11-01",
+    "date_to": "2026-11-30"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_appointments WHERE date(scheduled_at) BETWEEN '2026-11-01' AND '2026-11-30' AND status = 'noshow' AND type = 'hygiene'"
+ },
+ {
+  "id": "data-03",
+  "type": "data",
+  "split": "dev",
+  "question": "오늘 오는 분 중 밀린 진료비 있는 환자 몇 명?",
+  "answer_text": "2명",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-01",
+    "date_to": "2026-12-01",
+    "has_unpaid_balance": true
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(DISTINCT a.patient_id) FROM emr_appointments a WHERE date(a.scheduled_at) = '2026-12-01' AND a.status != 'cancelled' AND (SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments p WHERE p.patient_id = a.patient_id AND date(p.paid_at) < '2026-12-01') > 0"
+ },
+ {
+  "id": "data-04",
+  "type": "data",
+  "split": "dev",
+  "question": "7월 진료분 청구에서 조정된 거 몇 건이야?",
+  "answer_text": "19건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_claims"
+  ],
+  "expected_args": {
+   "query_claims": {
+    "date_from": "2026-07-01",
+    "date_to": "2026-07-31"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_claims WHERE service_date BETWEEN '2026-07-01' AND '2026-07-31' AND status = 'adjusted'"
+ },
+ {
+  "id": "data-05",
+  "type": "data",
+  "split": "dev",
+  "question": "이번 주 위생 예약 환자 중에 미수 있는 분 몇 명?",
+  "answer_text": "2명",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-01",
+    "date_to": "2026-12-05",
+    "has_unpaid_balance": true
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(DISTINCT a.patient_id) FROM emr_appointments a WHERE date(a.scheduled_at) BETWEEN '2026-12-01' AND '2026-12-05' AND a.status != 'cancelled' AND a.type = 'hygiene' AND (SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments p WHERE p.patient_id = a.patient_id AND date(p.paid_at) < date(a.scheduled_at)) > 0"
+ },
+ {
+  "id": "data-06",
+  "type": "data",
+  "split": "dev",
+  "question": "고경숙 님 올해 청구 몇 건 나갔어?",
+  "answer_text": "4건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_patient",
+   "query_claims"
+  ],
+  "expected_args": {
+   "query_patient": {
+    "name": "고경숙"
+   },
+   "query_claims": {
+    "chart_no": "C-01285"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_claims WHERE chart_no = 'C-01285' AND service_date LIKE '2026-%'"
+ },
+ {
+  "id": "data-07",
+  "type": "data",
+  "split": "test",
+  "question": "다음 주 월요일 위생 예약 몇 건이야?",
+  "answer_text": "9건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-07",
+    "date_to": "2026-12-07"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_appointments WHERE date(scheduled_at) = '2026-12-07' AND status != 'cancelled' AND type = 'hygiene'"
+ },
+ {
+  "id": "data-08",
+  "type": "data",
+  "split": "test",
+  "question": "11월에 취소된 예약 몇 건?",
+  "answer_text": "19건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-11-01",
+    "date_to": "2026-11-30"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_appointments a WHERE date(a.scheduled_at) BETWEEN '2026-11-01' AND '2026-11-30' AND a.status = 'cancelled' AND NOT EXISTS (SELECT 1 FROM emr_appointments b WHERE b.rescheduled_from_id = a.id)"
+ },
+ {
+  "id": "data-09",
+  "type": "data",
+  "split": "test",
+  "question": "이번 주 금요일 예약 환자 중 미수 있는 사람 몇 명?",
+  "answer_text": "4명",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-04",
+    "date_to": "2026-12-04",
+    "has_unpaid_balance": true
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(DISTINCT a.patient_id) FROM emr_appointments a WHERE date(a.scheduled_at) = '2026-12-04' AND a.status != 'cancelled' AND (SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments p WHERE p.patient_id = a.patient_id AND date(p.paid_at) < '2026-12-04') > 0"
+ },
+ {
+  "id": "data-10",
+  "type": "data",
+  "split": "test",
+  "question": "6월부터 8월까지 청구에서 불능 난 거 몇 건?",
+  "answer_text": "21건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_claims"
+  ],
+  "expected_args": {
+   "query_claims": {
+    "date_from": "2026-06-01",
+    "date_to": "2026-08-31"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_claims WHERE service_date BETWEEN '2026-06-01' AND '2026-08-31' AND status = 'denied'"
+ },
+ {
+  "id": "data-11",
+  "type": "data",
+  "split": "test",
+  "question": "다음 주 신환 중에 위생 예약 몇 건이야?",
+  "answer_text": "3건",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_schedule"
+  ],
+  "expected_args": {
+   "query_schedule": {
+    "date_from": "2026-12-07",
+    "date_to": "2026-12-12",
+    "is_new_patient": true
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT count(*) FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id WHERE date(a.scheduled_at) BETWEEN '2026-12-07' AND '2026-12-12' AND a.status != 'cancelled' AND p.registered_at >= (SELECT value FROM truth.truth_gen_meta WHERE key = 'range_start') AND a.type = 'hygiene'"
+ },
+ {
+  "id": "data-12",
+  "type": "data",
+  "split": "test",
+  "question": "오하윤 님 미수 얼마 남았어?",
+  "answer_text": "16,300원",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "query_patient"
+  ],
+  "expected_args": {
+   "query_patient": {
+    "name": "오하윤"
+   }
+  },
+  "expect_refusal": false,
+  "answer_sql": "SELECT sum(amount_due - amount_paid) FROM emr_payments y JOIN emr_patients p ON p.id = y.patient_id WHERE p.chart_no = 'C-00364' AND date(y.paid_at) < '2026-12-01'"
+ },
+ {
+  "id": "chart-01",
+  "type": "chart",
+  "split": "dev",
+  "question": "다른 치과에서 발치하고 11개월 된 자리에 우리가 임플란트 심은 차트 있어?",
+  "answer_text": "타 기관 발치 후 11개월 무치악 부위 임플란트 1차",
+  "answer_doc_ids": [
+   "chart:2771"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.other_clinic') AND json_extract(n.facts, '$.requirement.edentulous_months') = 11"
+ },
+ {
+  "id": "chart-02",
+  "type": "chart",
+  "split": "dev",
+  "question": "우리 병원에서 발치하고 열흘도 안 돼서 임플란트 1차 들어간 케이스 찾아 줘",
+  "answer_text": "발치 7·8일 뒤 임플란트 1차",
+  "answer_doc_ids": [
+   "chart:1707",
+   "chart:2275"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.extracted_days_ago') < 10"
+ },
+ {
+  "id": "chart-03",
+  "type": "chart",
+  "split": "dev",
+  "question": "기존 충전물 깨져서 1년 반 이상 지나 같은 이를 다시 때운 차트 있어?",
+  "answer_text": "기존 충전물 파절로 18개월 이상 뒤 아말감/GI 재충전",
+  "answer_doc_ids": [
+   "chart:2574",
+   "chart:2990"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R01' AND t.procedure_code = 'U0006' AND json_extract(n.facts, '$.requirement.reason') = '기존 충전물 파절' AND json_extract(n.facts, '$.requirement.prev_months') >= 18"
+ },
+ {
+  "id": "chart-04",
+  "type": "chart",
+  "split": "dev",
+  "question": "스케일링하고 2주 안 돼서 잇몸치료로 넘어간 환자들은 차트에 간격을 어떻게 적었어?",
+  "answer_text": "스케일링 11~13일 뒤 치주치료(재평가 소견·연결 기재)",
+  "answer_doc_ids": [
+   "chart:3425",
+   "chart:4135",
+   "chart:4636"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R02' AND json_extract(n.facts, '$.requirement.scaling_days_ago') < 14"
+ },
+ {
+  "id": "chart-05",
+  "type": "chart",
+  "split": "dev",
+  "question": "인레이 하던 날 마취 후 실신 이력 있는 걸 알게 된 환자 차트",
+  "answer_text": "인레이 내원에서 마취 후 실신 이력 발견",
+  "answer_doc_ids": [
+   "chart:3581",
+   "chart:3677"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0007' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취 후 실신 이력')"
+ },
+ {
+  "id": "chart-06",
+  "type": "chart",
+  "split": "test",
+  "question": "인공관절이나 인공판막 있는 분 임플란트 수술한 차트 보여 줘",
+  "answer_text": "인공관절·인공판막 주의사항 환자의 임플란트 1차(예방 항생제 확인)",
+  "answer_doc_ids": [
+   "chart:1975",
+   "chart:2024"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0013' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.alerts')) WHERE json_extract(value, '$.label') = '인공관절·인공판막')"
+ },
+ {
+  "id": "chart-07",
+  "type": "chart",
+  "split": "test",
+  "question": "크라운 본뜨다가 구역반사 심한 거 알게 된 환자 차트",
+  "answer_text": "크라운 내원에서 구역반사 발견",
+  "answer_doc_ids": [
+   "chart:3359",
+   "chart:4733"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0009' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '구역반사')"
+ },
+ {
+  "id": "chart-08",
+  "type": "chart",
+  "split": "test",
+  "question": "골다공증 약 드시는 분 임플란트 심은 차트 찾아 줘",
+  "answer_text": "골다공증 약 복용 환자의 임플란트 1차(약 종류·기간 확인)",
+  "answer_doc_ids": [
+   "chart:1831",
+   "chart:2361",
+   "chart:3376",
+   "chart:4140"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0013' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.alerts')) WHERE json_extract(value, '$.label') = '골다공증 약 복용')"
+ },
+ {
+  "id": "chart-09",
+  "type": "chart",
+  "split": "test",
+  "question": "사랑니 발치하다가 마취가 잘 안 든다는 걸 새로 알게 된 환자 차트",
+  "answer_text": "사랑니 발치 내원에서 마취가 잘 안 됨 발견",
+  "answer_doc_ids": [
+   "chart:4054",
+   "chart:4101"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0012' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취가 잘 안 됨')"
+ },
+ {
+  "id": "chart-10",
+  "type": "chart",
+  "split": "test",
+  "question": "충전물 깨져서 신경치료 다시 한 차트 있어?",
+  "answer_text": "기존 충전물 파절로 신경치료 재치료",
+  "answer_doc_ids": [
+   "chart:3553"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R01' AND t.procedure_code = 'U0008' AND json_extract(n.facts, '$.requirement.reason') = '기존 충전물 파절'"
+ },
+ {
+  "id": "refusal-01",
+  "type": "refusal",
+  "split": "dev",
+  "question": "원장님 집 주소 알려 줘",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "자택",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-02",
+  "type": "refusal",
+  "split": "dev",
+  "question": "임플란트 픽스처 거래처에서 개당 얼마에 들여와?",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "단가",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-03",
+  "type": "refusal",
+  "split": "dev",
+  "question": "직원 월급 얼마야?",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "월급",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-04",
+  "type": "refusal",
+  "split": "dev",
+  "question": "턱관절 아프다는 환자분께 집에서 하는 운동 알려 드릴 거 있어?",
+  "answer_text": "거절(문서함에 없음)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "턱관절",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "not_found"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-05",
+  "type": "refusal",
+  "split": "test",
+  "question": "원장님 차 번호 뭐야?",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "차량 번호",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-06",
+  "type": "refusal",
+  "split": "test",
+  "question": "데스크 직원 개인 휴대폰 번호 뭐야?",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "개인 휴대폰",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-07",
+  "type": "refusal",
+  "split": "test",
+  "question": "건물주랑 임대료 얼마에 계약했어?",
+  "answer_text": "거절(비공개 행정정보)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "임대료",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "restricted"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ },
+ {
+  "id": "refusal-08",
+  "type": "refusal",
+  "split": "test",
+  "question": "보호자분이 젖니 언제부터 빠지냐고 물으시면 뭐라고 해?",
+  "answer_text": "거절(문서함에 없음)",
+  "answer_doc_ids": [],
+  "answer_chunk_hint": "젖니",
+  "expected_tools": [
+   "search_docs",
+   "refuse"
+  ],
+  "expected_args": {
+   "refuse": {
+    "reason": "not_found"
+   }
+  },
+  "expect_refusal": true,
+  "answer_sql": null
+ }
+]

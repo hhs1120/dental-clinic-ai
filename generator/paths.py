@@ -13,4 +13,5 @@ def output_paths() -> dict[str, Path]:
         "llm_jobs": ROOT / "generator" / "llm" / "jobs",        # 일회용 — make data가 쓰는 빈 건 작업
         "llm_results": ROOT / "generator" / "llm" / "results",  # 일회용 — 채운 결과, make llm-import가 지움
         "truth": ROOT / "ground_truth" / "truth.sqlite",
+        "rag_qa": ROOT / "ground_truth" / "rag_qa.json",  # 사람이 쓴 RAG 질문(평가 설계 §3.1) — make data가 truth_rag_qa로 적재
     }
