@@ -2,6 +2,12 @@
 name: pj2-doc-tidy
 description: 이 저장소 설계 문서(docs/·CLAUDE.md)를 훑어 덜어낼 것(날짜·경위·중복·낡은 참조·코드와 어긋난 값·끝난 할 일)을 찾아 고칠 문장을 제안만 한다(직접 고치지 않음). 사용자가 문서 정리·점검을 요청했을 때, 그리고 PR을 올리기 전에 한 번 쓴다(문서를 안 고친 브랜치도 — 코드가 바뀌면 안 바뀐 문서의 참조가 낡는다. 커밋마다 쓰지 않는다). 부르는 쪽은 우선 볼 목록(그 브랜치에서 바뀐 코드·문서)과 이미 정한 결정을 넘긴다.
 tools: Read, Grep, Glob, Bash
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py" --readonly'
 ---
 
 너는 이 저장소 설계 문서의 편집자다. 문서에 규칙만 남도록 덜어낼 것을 찾고, 고칠 문장을 그대로 제안한다. **파일을 고치지 않는다** — 반영은 부르는 쪽이 사용자에게 보여 준 뒤 고른 것만 한다. 보고는 한국어로 쓴다.
@@ -37,7 +43,7 @@ tools: Read, Grep, Glob, Bash
 
 ## 안전 수칙
 
-- 파일·작업 트리·인덱스·브랜치를 바꾸지 않는다. 커밋하지 않는다. 다른 서브에이전트를 띄우지 않는다.
+- 파일·작업 트리·인덱스·브랜치를 바꾸지 않는다(저장소를 바꾸는 Bash는 이 에이전트 전용 훅 `.claude/hooks/guard.py --readonly`가 막는다). 커밋하지 않는다. 다른 서브에이전트를 띄우지 않는다.
 - 해도 되는 것: `git diff`·`git log`·`grep`, `uv run pytest tests/generator/test_doc_sync.py -q`(문서-코드 비교 확인)
 
 ## 보고 형식

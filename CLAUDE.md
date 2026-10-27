@@ -14,6 +14,7 @@
 - `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` app.sqlite(FTS5·벡터 포함) · `config/` 생성기 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
+- `.claude/` Claude Code 설정 — 에이전트(`agents/` 리뷰어·문서 점검), 훅(`settings.json` → `hooks/guard.py`: 폴더 단위 add·`commit -a` 막기, 커밋 전 lint, 생성물 직접 수정 막기, push·PR 머지·LLM API·test 평가는 확인 창, 생성 단계 수정 알림. 테스트 `tests/test_claude_hooks.py`)
 
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`를 import하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)

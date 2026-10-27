@@ -1,0 +1,65 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show)",
+      "Bash(git show *)",
+      "Bash(git rev-parse)",
+      "Bash(git rev-parse *)",
+      "Bash(git merge-base)",
+      "Bash(git merge-base *)",
+      "Bash(make test)",
+      "Bash(make test *)",
+      "Bash(make lint)",
+      "Bash(make lint *)",
+      "Bash(make verify)",
+      "Bash(make verify *)",
+      "Bash(uv run pytest)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run python -m generator.verify)",
+      "Bash(uv run python -m generator.verify *)",
+      "Bash(uv run ruff format --check)",
+      "Bash(uv run ruff format --check *)",
+      "Bash(gh pr view)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr checks)",
+      "Bash(gh pr checks *)",
+      "Bash(gh repo view)",
+      "Bash(gh repo view *)",
+      "Bash(git branch)",
+      "Bash(git branch -a)",
+      "Bash(git branch --list *)",
+      "Bash(uv run ruff check)",
+      "Bash(uv run ruff check .)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
