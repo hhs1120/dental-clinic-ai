@@ -70,7 +70,7 @@ def test_distractor_pairs():
         assert pair.kind == "core", d.key
         if d.kind == "similar":
             assert d.type == pair.type and not d.facts and d.skip, d.key
-            assert d.skip not in (d.topic, pair.topic), d.key  # 자기 주제를 금지하지 않게
+            assert d.skip != d.topic, d.key  # 자기 주제를 금지하지 않게
         elif d.kind == "external":
             assert d.type == "external" and d.facts, d.key
         else:
@@ -90,11 +90,53 @@ def test_notice_versions():
 
 
 def test_holiday_notices_match_config():
-    for key in ("notice-chuseok", "notice-seollal"):
-        days = [w for f in BY_KEY[key].facts for w in f.words]
-        for w in days:
+    """휴진 공지(옛 버전 포함)의 휴진 날짜는 config 공휴일 — 창 이전 내원이 걸치는 2025년도"""
+    for key in ("notice-chuseok", "notice-seollal", "old-chuseok", "old-seollal"):
+        d0 = BY_KEY[key]
+        year = int(d0.effective[:4])
+        for w in (w for f in d0.facts if not f.id.endswith(".effective") for w in f.words):
             m, d = (int(x) for x in w.replace("월", "").replace("일", "").split())
-            assert date(2026, m, d).isoformat() in HOLIDAYS, (key, w)
+            assert date(year, m, d).isoformat() in HOLIDAYS, (key, w)
+
+
+def test_notice_effective_is_open_day_and_planted():
+    """공지 시행일은 진료일(목·일·공휴일 아님 — 수가처럼 1월 1일 시행은 예외)이고 'N월 M일'로 꼭 넣을 말"""
+    for d in CATALOG:
+        if d.type != "notice":
+            continue
+        day = date.fromisoformat(d.effective)
+        if d.effective[5:] != "01-01":
+            assert day.weekday() not in HOURS["closed_weekdays"] and d.effective not in HOLIDAYS, d.key
+        assert f"{day.month}월 {day.day}일" in [w for f in d.facts for w in f.words], d.key
+
+
+def test_same_groups():
+    """같은 사실 묶음(Fact.same)은 서로 다른 핵심 문서 2개 이상이 같은 말을 담는다"""
+    groups = {}
+    for d in CATALOG:
+        for f in d.facts:
+            if f.same:
+                assert d.kind == "core", (d.key, f.id)
+                groups.setdefault(f.same, []).append((d.key, f))
+    for name, members in groups.items():
+        assert len({k for k, _ in members}) >= 2, name
+
+
+def test_words_not_in_title_or_topic():
+    """꼭 넣을 말이 제목·주제에 이미 있으면 '# 제목'만으로 검사가 통과한다"""
+    for d in CATALOG:
+        for f in d.facts:
+            if not f.id.endswith((".heading", ".effective")):
+                assert not [w for w in f.words if w in d.title or w in d.topic], (d.key, f.id)
+
+
+def test_similar_avoid_targets_core_and_drafts_clean():
+    from generator import documents
+    for d in CATALOG:
+        if d.kind == "similar":
+            assert all(BY_KEY[k].kind == "core" and k != d.pair for k in d.avoid), d.key
+            draft = documents.draft(d)
+            assert not [w for w in documents.checks(d)["forbidden_words"] if w in draft], d.key
 
 
 def test_claim_standard_covers_every_reason_once():

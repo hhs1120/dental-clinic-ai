@@ -33,6 +33,7 @@ BREAKS = {
     "fact_missing": (D + "body = '예약 부도가 쌓이면 제한합니다.' WHERE id = 1", ["check_doc_planted_facts"]),
     "fact_digit_prefix": (D + "body = '부도 13회면 13개월' WHERE id = 1", ["check_doc_planted_facts"]),
     "similar_has_pair_fact": (D + "body = '부도 3회면 3개월간 막습니다.' WHERE id = 2", ["check_doc_similar_clean"]),
+    "similar_has_avoid_fact": (D + "body = '미백은 300,000원입니다.' WHERE id = 2", ["check_doc_similar_clean"]),
     "old_after_range_start": (D + "effective_date = '2026-10-02' WHERE id = 4", ["check_notice_versions"]),
     "old_not_before_new": (D + "effective_date = '2026-09-01' WHERE id = 4", ["check_notice_versions"]),
     "new_after_today": (D + "effective_date = '2026-12-02' WHERE id = 3", ["check_notice_versions"]),

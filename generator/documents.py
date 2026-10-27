@@ -12,7 +12,9 @@ from generator.doc_catalog import BY_KEY, CATALOG, CLAIM_HEADINGS, Doc
 from generator.llm_jobs import Task
 from generator.master import CLINIC_NAME
 
-DOC_LENGTH_CHARS = {"notice": (150, 1500), "default": (400, 3000)}  # 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧다
+# 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧고, 청구 기준은 절 수에 비례(기준을 지어내 길이를 채우지 않게)
+DOC_LENGTH_CHARS = {"notice": (150, 1500), "default": (400, 3000)}
+CLAIM_CHARS_PER_SECTION = 120
 SCHEMA = {
     "type": "object",
     "properties": {"body": {"type": "string", "description": "마크다운 문서 본문 (첫 줄 '# 제목')"}},
@@ -31,7 +33,13 @@ def path(d: Doc, doc_id: int) -> str:
 
 
 def length(d: Doc) -> list[int]:
+    if d.type == "claim_standard":
+        return [CLAIM_CHARS_PER_SECTION * len(d.sections), DOC_LENGTH_CHARS["default"][1]]
     return list(DOC_LENGTH_CHARS.get(d.type, DOC_LENGTH_CHARS["default"]))
+
+
+def _words(d: Doc) -> list[str]:
+    return [w for f in d.facts for w in f.words]
 
 
 def _rules(d: Doc, reason: str) -> list[str]:
@@ -63,8 +71,8 @@ def payload(d: Doc) -> dict:
     if d.kind == "similar":
         p["skip_topic"] = d.skip
     old = next((o for o in CATALOG if o.kind == "old_version" and o.pair == d.key), None)
-    if old is not None:  # 최신 공지 — "기존 ○○에서"를 지어내지 않게 옛 버전 값을 준다
-        p["previous"] = {"effective_date": old.effective, "facts": [f.text for f in old.facts]}
+    if old is not None and not d.recurring:  # 최신 공지 — "기존 ○○에서"를 지어내지 않게 옛 버전 값(휴진처럼 해마다 내는 공지는 뺌)
+            p["previous"] = {"effective_date": old.effective, "facts": [f.text for f in old.facts]}
     if d.kind == "external":
         p["source"] = "다른 치과·일반 자료"
     else:
@@ -74,12 +82,16 @@ def payload(d: Doc) -> dict:
 
 def checks(d: Doc) -> dict:
     forbidden = []
-    if d.kind == "similar":
-        forbidden = [w for f in BY_KEY[d.pair].facts for w in f.words]
+    if d.kind == "similar":  # 짝과 주제가 겹치는 핵심 문서(avoid)의 사실 말 금지
+        forbidden = [w for k in (d.pair, *d.avoid) for w in _words(BY_KEY[k])]
     elif d.kind == "external":
         forbidden = [CLINIC_NAME]
-    return {"field": "body", "must_include": [[w] for f in d.facts for w in f.words], "forbidden_words": forbidden,
-            "forbidden_patterns": llm_jobs.forbidden_patterns(), "length": length(d)}
+    c = {"field": "body", "must_include": [[w] for w in _words(d)], "forbidden_words": forbidden,
+         "forbidden_patterns": llm_jobs.forbidden_patterns(), "length": length(d)}
+    if d.type == "claim_standard":  # 사유마다 소제목 한 번, 그 기준 말은 그 절 안 (verify check_claim_sections와 같은 기준)
+        c["sections"] = [[f"## {CLAIM_HEADINGS[r]}", [w for f in d.facts if f.reason == r and not f.id.endswith(".heading")
+                                                         for w in f.words]] for r in d.sections]
+    return c
 
 
 def stage_plan(run, rng, fake) -> None:
@@ -88,12 +100,12 @@ def stage_plan(run, rng, fake) -> None:
     docs, meta = [], []
     for d in CATALOG:
         docs.append((ids[d.key], d.type, d.title, version(d), d.effective, path(d, ids[d.key]), draft(d)))
-        facts = [{"id": f.id, "text": f.text, "words": list(f.words), "reason": f.reason} for f in d.facts]
-        meta.append((ids[d.key], d.key, d.kind, int(d.kind != "core"), ids.get(d.pair),
-                     ids.get(old_of.get(d.key)), json.dumps(facts, ensure_ascii=False)))
+        facts = [{"id": f.id, "text": f.text, "words": list(f.words), "reason": f.reason, "same": f.same} for f in d.facts]
+        meta.append((ids[d.key], d.key, d.kind, int(d.kind != "core"), ids.get(d.pair), ids.get(old_of.get(d.key)),
+                     json.dumps(sorted(ids[k] for k in d.avoid)), json.dumps(facts, ensure_ascii=False)))
     run.conn.executemany("INSERT INTO ax_documents (id, type, title, version, effective_date, path, body)"
                          " VALUES (?, ?, ?, ?, ?, ?, ?)", docs)
-    run.conn.executemany("INSERT INTO truth.truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?)", meta)
+    run.conn.executemany("INSERT INTO truth.truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?, ?)", meta)
 
 
 def stage_bodies(run, rng, fake) -> None:

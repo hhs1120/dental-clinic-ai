@@ -125,13 +125,14 @@ DOCS = [
     (5, "claim_standard", "공통 청구 기준", "1", None, "docs/claim_standard/005.md", _CLAIM_BODY),
     (6, "external", "다른 치과 부도 규정", "1", None, "docs/external/006.md", "부도 2회면 6개월간 예약을 받지 않습니다."),
 ]
-DOC_META = [  # (doc_key, kind, pair_doc_id, supersedes_doc_id, planted_facts)
-    ("manual-noshow", "core", None, None, [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")]),
-    ("sim-booking-basics", "similar", 1, None, []),
-    ("notice-whitening", "core", None, 4, [_fact("notice.white", "미백 300,000원", "300,000원")]),
-    ("old-whitening", "old_version", 3, None, [_fact("old.white", "미백 250,000원", "250,000원")]),
-    ("claim-all", "core", None, None, [_fact(f"claim.{r}.heading", h, f"## {h}", reason=r) for r, h in CLAIM_HEADINGS.items()]),
-    ("ext-noshow", "external", 1, None, [_fact("ext.noshow", "부도 2회 → 6개월", "2회", "6개월")]),
+DOC_META = [  # (doc_key, kind, pair_doc_id, supersedes_doc_id, avoid_doc_ids, planted_facts) — 2는 3(미백 공지)의 사실도 피함
+    ("manual-noshow", "core", None, None, [], [_fact("noshow.limit", "부도 3회 → 3개월 전화 예약만", "3회", "3개월")]),
+    ("sim-booking-basics", "similar", 1, None, [3], []),
+    ("notice-whitening", "core", None, 4, [], [_fact("notice.white", "미백 300,000원", "300,000원")]),
+    ("old-whitening", "old_version", 3, None, [], [_fact("old.white", "미백 250,000원", "250,000원")]),
+    ("claim-all", "core", None, None, [],
+     [_fact(f"claim.{r}.heading", h, f"## {h}", reason=r) for r, h in CLAIM_HEADINGS.items()]),
+    ("ext-noshow", "external", 1, None, [], [_fact("ext.noshow", "부도 2회 → 6개월", "2회", "6개월")]),
 ]
 
 
@@ -149,9 +150,9 @@ def make_db(tmp_path) -> sqlite3.Connection:
     conn.executemany("INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS])
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA + TRUTH_SEED)
-    truth.executemany("INSERT INTO truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      [(d[0], key, kind, int(kind != "core"), pair, sup, json.dumps(facts, ensure_ascii=False))
-                       for d, (key, kind, pair, sup, facts) in zip(DOCS, DOC_META)])
+    truth.executemany("INSERT INTO truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                      [(d[0], key, kind, int(kind != "core"), pair, sup, json.dumps(avoid), json.dumps(facts, ensure_ascii=False))
+                       for d, (key, kind, pair, sup, avoid, facts) in zip(DOCS, DOC_META)])
     truth.commit()
     truth.close()
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))

@@ -194,9 +194,34 @@ def spoken(text: str, speakers: list[str] | None) -> str:
     return re.sub(r"\s", "", "".join(lines))
 
 
+def md_sections(body: str) -> list[tuple[str, str]]:
+    """마크다운 본문의 '## ' 절 → (소제목 줄, 절 본문). '### '은 절이 아니다"""
+    out = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            out.append([line.strip(), ""])
+        elif out:
+            out[-1][1] += line + "\n"
+    return [tuple(x) for x in out]
+
+
+def section_problems(body: str, sections: list) -> list[str]:
+    """sections = [[소제목 줄, [그 절 안에 있어야 할 말, ...]], ...] — 소제목이 정확히 한 번, 말은 그 절 안"""
+    found = md_sections(body)
+    out = []
+    for heading, words in sections:
+        hits = [text for head, text in found if head == heading]
+        if len(hits) != 1:
+            out.append(f"절 {heading} {len(hits)}개")
+        elif missing := [w for w in words if not contains(hits[0], w)]:
+            out.append(f"절 {heading} 밖에 있는 말: {', '.join(missing)}")
+    return out
+
+
 def problems(schema: dict, checks: dict, output) -> list[str]:
     """건별 검증 (§4.1 절차 6) — 빈 목록이면 통과. checks: field(검사할 출력 필드), must_include([[대안, ...], ...]),
-    forbidden_words, forbidden_patterns(정규식), speakers(줄 머리 — 모두 한 번 이상), length([최소, 최대] 발화 글자 수)"""
+    forbidden_words, forbidden_patterns(정규식), speakers(줄 머리 — 모두 한 번 이상), length([최소, 최대] 발화 글자 수),
+    sections(마크다운 절 — section_problems)"""
     if not isinstance(output, dict):
         return ["출력이 JSON 객체가 아님"]
     empty = [k for k in schema.get("required", []) if not isinstance(output.get(k), str) or not output[k].strip()]
@@ -219,7 +244,7 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
         n = len(spoken(text, speakers))
         if not lo <= n <= hi:
             out.append(f"길이 {n}자 — {lo}~{hi}자 밖")
-    return out
+    return out + section_problems(text, checks.get("sections", []))
 
 
 # ── 들여오기·검사·나누기 ─────────────────────────────────────

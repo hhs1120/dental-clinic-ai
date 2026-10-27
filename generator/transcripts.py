@@ -7,7 +7,8 @@ from datetime import date
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
-from generator.master import CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, FULL_MOUTH, TRANSCRIPT_CHARS_PER_SEC
+from generator.master import (AGE_BANDS, CALL_DURATION_SEC, CALL_FLAGS, CALL_LABEL_WORDS, CONDITIONAL_INSURED_MIN_AGE, FULL_MOUTH,
+                              PROCEDURES, SCALING_MIN_AGE, TRANSCRIPT_CHARS_PER_SEC)
 
 SPEAKERS = ["환자:", "직원:"]
 SCHEMA = {
@@ -39,21 +40,42 @@ def _strip(obj):
     return obj
 
 
+PRICE_PURPOSES = ("price_q", "insurance_q")  # 주제 시술의 비용·급여(master)를 입력에 넣는 목적 — RAG 문서와 같은 값
+_PROC = {p["name"]: p for p in PROCEDURES}
+_CHILD_MAX = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
+_AGE_RULE = {"age19plus": f"{SCALING_MIN_AGE}세 이상", "senior": f"{CONDITIONAL_INSURED_MIN_AGE}세 이상",
+             "child": f"만 {_CHILD_MAX}세 이하"}
+
+
+def topic_price(name: str) -> dict:
+    """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천)"""
+    p = _PROC[name]
+    out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": p["is_insured"] != "no"}
+    if out["insured"]:
+        out["patient_pays"] = f"{round(p['fee_total'] * p['patient_share_rate']):,}원"
+        if p["age_group"] in _AGE_RULE:
+            out["insured_age"] = _AGE_RULE[p["age_group"]]
+    return out
+
+
 def payload(row: dict) -> dict:
     fact = json.loads(row["used_fact"])
+    facts = _strip(fact)
+    if row["primary_purpose"] in PRICE_PURPOSES and fact.get("topic_procedure"):
+        facts["topic_price"] = topic_price(fact["topic_procedure"])
     return {
         "direction": row["direction"],
         "call_date": fact["call_date"],
         "labels": {"primary_purpose": row["primary_purpose"], "accepted_purposes": json.loads(row["accepted_purposes"]),
                    "counterpart": row["counterpart"], "urgency": row["urgency"],
                    "flags": {f: bool(row[f]) for f in CALL_FLAGS}, "noise_type": row["noise_type"]},
-        "facts": _strip(fact),
+        "facts": facts,
     }
 
 
 def simplify(p: dict) -> dict:
     """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)만"""
-    keep = ("call_date", "appointment", "topic_procedure")
+    keep = ("call_date", "appointment", "topic_procedure", "topic_price")
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
 
 

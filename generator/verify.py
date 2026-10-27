@@ -742,10 +742,11 @@ def check_chart_note_columns(conn, ctx):
 # ── RAG 문서 (9단계, §4.2) ──────────────────────────────────
 
 def _docs(conn) -> list[dict]:
-    rows = _rows(conn, "SELECT d.*, m.doc_key, m.kind, m.is_distractor, m.pair_doc_id, m.supersedes_doc_id, m.planted_facts"
-                       " FROM ax_documents d JOIN truth.truth_doc_meta m ON m.doc_id = d.id ORDER BY d.id")
+    rows = _rows(conn, "SELECT d.*, m.doc_key, m.kind, m.is_distractor, m.pair_doc_id, m.supersedes_doc_id,"
+                       " m.avoid_doc_ids, m.planted_facts FROM ax_documents d JOIN truth.truth_doc_meta m ON m.doc_id = d.id"
+                       " ORDER BY d.id")
     for r in rows:
-        r["facts"] = json.loads(r["planted_facts"])
+        r["facts"], r["avoid"] = json.loads(r["planted_facts"]), json.loads(r["avoid_doc_ids"])
     return rows
 
 
@@ -775,14 +776,15 @@ def check_doc_planted_facts(conn, ctx):
 
 
 def check_doc_similar_clean(conn, ctx):
-    """비슷한 주제 문서에 짝 문서의 심은 사실이 없음 (방해 문서에 정답 텍스트 없음)"""
+    """비슷한 주제 문서에 짝 문서·avoid 문서의 심은 사실이 없음 (방해 문서에 정답 텍스트 없음)"""
     docs = {r["id"]: r for r in _docs(conn)}
     bad = []
     for r in docs.values():
         if r["kind"] != "similar":
             continue
         pair = docs.get(r["pair_doc_id"])
-        hit = [w for f in (pair["facts"] if pair else []) for w in f["words"] if llm_jobs.contains(r["body"], w)]
+        hit = [w for d in ([pair] if pair else []) + [docs[i] for i in r["avoid"] if i in docs]
+               for f in d["facts"] for w in f["words"] if llm_jobs.contains(r["body"], w)]
         if pair is None or hit:
             bad.append({"id": r["id"], "key": r["doc_key"], "pair_words": hit or "짝 없음"})
     return bad
@@ -826,24 +828,13 @@ def check_notice_versions(conn, ctx):
     return bad
 
 
-def _sections(body: str) -> list[tuple[str, str]]:
-    """본문의 '## ' 절 → (소제목 줄, 절 본문)"""
-    out = []
-    for line in body.splitlines():
-        if line.startswith("## "):
-            out.append([line.strip(), ""])
-        elif out:
-            out[-1][1] += line + "\n"
-    return [tuple(x) for x in out]
-
-
 def check_claim_sections(conn, ctx):
     """청구 기준 문서에 master.ADJUST_REASONS 상세 사유마다 절(본문의 '## 소제목')이 정확히 1개, 그 사유의 기준 말이 그 절 안에"""
     found, bad = Counter(), []
     for r in _docs(conn):
         if r["type"] != "claim_standard":
             continue
-        sections = _sections(r["body"])
+        sections = llm_jobs.md_sections(r["body"])
         for f in r["facts"]:
             heading = next((w for w in f["words"] if w.startswith("## ")), None)
             if f.get("reason") and heading:
