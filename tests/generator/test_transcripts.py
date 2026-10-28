@@ -39,9 +39,11 @@ def _row(conn, uid):
 
 
 def test_payload_names_the_caller(conn):
-    """건(발신이면 받은) 사람 이름 — 보호자 통화의 환자는 아이라, 말하는 사람 이름이 따로 없으면 모델이 지어낸다"""
+    """건(발신이면 받은) 사람 이름과, 환자 기록(이름·번호)이 있으면 성별 — 보호자 통화의 환자는 아이라, 말하는 사람이
+    따로 없으면 모델이 이름·'엄마/아빠'를 지어낸다"""
     assert transcripts.payload(_row(conn, "c-0004"))["facts"]["caller"] == {
-        "name": "김철수"
+        "name": "김철수",
+        "sex": "M",
     }  # 보호자
     assert transcripts.payload(_row(conn, "c-0002"))["facts"]["caller"] == {
         "name": "박민수"

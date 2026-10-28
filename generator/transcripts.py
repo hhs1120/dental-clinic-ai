@@ -46,8 +46,12 @@ INTERNAL_KEYS = (
 
 def rows(conn) -> list[dict]:
     cur = conn.execute(
-        "SELECT c.id, c.call_uid, c.direction, c.caller_name, l.* FROM ax_calls c"
-        " JOIN truth.truth_call_labels l USING (call_uid)"
+        "SELECT c.id, c.call_uid, c.direction, c.caller_name,"
+        # 말하는 사람의 성별 — 환자 본인이거나 그 보호자(같은 이름)일 때만. 환자 측이 아닌 상대는 기록이 없다
+        " coalesce((SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name),"
+        " (SELECT g.sex FROM emr_patients p JOIN emr_patients g ON g.id = p.guardian_patient_id"
+        " WHERE p.id = c.patient_id AND g.name = c.caller_name)) AS caller_sex,"
+        " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
         " WHERE c.source = 'generated' ORDER BY c.id"
     )
     cols = [d[0] for d in cur.description]
@@ -106,9 +110,10 @@ def payload(row: dict) -> dict:
             (fact.get("patient") or {}).get("age"),
             bool(fact.get("scaling_used_this_year")),
         )
-    facts["caller"] = {
-        "name": row["caller_name"]
-    }  # 말하는 사람(보호자·보험사 직원 등) — 이름을 지어내지 않게
+    # 말하는 사람(보호자·보험사 직원 등) — 이름을 지어내지 않게. 환자 기록이 있으면 성별도('엄마/아빠'가 어긋나지 않게)
+    facts["caller"] = {"name": row["caller_name"]} | (
+        {"sex": row["caller_sex"]} if row["caller_sex"] else {}
+    )
     if "recall_q" in json.loads(row["accepted_purposes"]):
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다

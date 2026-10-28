@@ -265,7 +265,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - **난수**: 라벨·환자 고르기·풀은 이름이 다른 난수로 나눈다
 
 **7단계 구현 결정**: 절차 4~8. 채우기 흐름은 §5.1
-- **입력**: 병원 이름(`master.CLINIC_NAME`)·방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외, 치아 `00`은 비움). 말하는 사람 이름(`caller` — `ax_calls.caller_name`)을 늘 더하고, 리콜 문의는 정기 검진 주기(`master.RECALL_CYCLE_MONTHS`)를, 가격·보험 문의(부 주제 포함)는 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값, 그해 급여 스케일링을 이미 받았으면 스케일링은 비급여)을 더한다
+- **입력**: 병원 이름(`master.CLINIC_NAME`)·방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외, 치아 `00`은 비움). 말하는 사람(`caller` — `ax_calls.caller_name`, 환자 본인이나 그 보호자면 성별)을 늘 더하고, 리콜 문의는 정기 검진 주기(`master.RECALL_CYCLE_MONTHS`)를, 가격·보험 문의(부 주제 포함)는 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값, 그해 급여 스케일링을 이미 받았으면 스케일링은 비급여)을 더한다
 - **꼭 넣을 사실**(검증 (a)): 예약 날짜(예약류, 변경은 원래 날짜도)·주제 시술(`topic_procedure` — 이름 또는 별칭)·`already_paid`면 그 내원일. 날짜는 `11월 24일` 꼴
 - **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
 - **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실(통화 날짜·예약·주제 시술과 그 가격 `topic_price`)과 ⑧-1 근거(`already_paid`)·리콜 주기(`recall_months`)·받은 리콜 문자(`recall_text`)·말하는 사람(`caller`)만 남긴다
