@@ -337,6 +337,12 @@ _DOC_ROW = {
 }
 
 
+def test_prep_sheet_days_match_feature_doc():
+    """준비표 날짜 탭 '최근 N일 + 오늘' — 기능 정의 ④의 숫자 = verify.PREP_SHEET_DAYS(잔액 있음 리포트의 범위)"""
+    doc = (ROOT / "docs" / "치과 AX - 기능 정의.md").read_text(encoding="utf-8")
+    assert re.findall(r"최근 (\d+)일 \+ 오늘", doc) == [str(verify.PREP_SHEET_DAYS)]
+
+
 def test_rag_document_rows_match_catalog():
     """§4.2 문서 표의 종류별 수 = 목록 표의 그 종류 문서 수"""
     from generator.doc_catalog import CATALOG

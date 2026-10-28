@@ -157,7 +157,7 @@ tags:
 **⑦ 아침 브리핑**: 본문 숫자 전부 입력에 존재(④ 후검증 재사용)
 
 **⑧ 재무 대조**
-- ⑧-1: 원인 정확도(top-1 = `truth_recon_mismatches` 원인)를 규칙 기준선(금액·날짜·승인번호 규칙만으로 원인을 고르는 방식 — 정의는 ⑧ 착수 시, test 전에 고정)과 나란히. 두 묶음 — 규칙으로 되는 원인(분할결제·취소 후 재승인·수수료 차이·입금 지연) / 애매한 원인(진료 외 매출·입력 누락·날짜 밀림·금액 오입력·결제수단 오입력). 묶음은 고정이고 test는 이 두 묶음으로만 보고한다. 같은 불일치에서 규칙 기준선과 짝 비교(§3.3처럼) — 구제(규칙 틀림·에이전트 맞음)·손실(규칙 맞음·에이전트 틀림) 건수, 건별 목록은 dev에서만(§7). `--split dev` 출력에는 원인별 표도 낸다(튜닝용 진단). 에이전트의 `unknown`은 오답으로 세고 기권률을 따로 적는다. 탐지 재현율은 테스트. 조사 단계 수 평균. split은 달 기준(평가 달 `master.recon_months` 중 마지막 `master.RECON_TEST_COUNT`달이 test)
+- ⑧-1: 원인 정확도(top-1 = `truth_recon_mismatches` 원인)를 규칙 기준선(금액·날짜·승인번호 규칙만으로 원인을 고르는 방식 — 정의는 ⑧ 착수 시, test 전에 고정)과 나란히. 두 묶음 — 규칙으로 되는 원인(분할결제·취소 후 재승인·수수료 차이·입금 지연) / 애매한 원인(진료 외 매출·입력 누락·날짜 밀림·금액 오입력·결제수단 오입력). 묶음은 고정이고 test는 이 두 묶음으로만 보고한다. 같은 불일치에서 규칙 기준선과 짝 비교(§3.3처럼) — 구제(규칙 틀림·에이전트 맞음)·손실(규칙 맞음·에이전트 틀림) 건수, 건별 목록은 dev에서만(§7). `--split dev` 출력에는 원인별 표도 낸다(튜닝용 진단). 에이전트의 `unknown`은 오답으로 세고 기권률을 따로 적는다. 탐지 재현율은 테스트. 조사 단계 수 평균. split은 [[치과 AX - 가상 데이터 생성 설계]] §2.7 평가 달
 - ⑧-2: 매칭 정확도(출금마다 고른 증빙 집합 = 정답 집합, "증빙 없음"도 정답에 포함)와 계정 과목 정확도를 규칙 기준선(금액·날짜만으로 맞추기)과 나란히. split은 ⑧-1과 같은 달
 
 **⑨ 후속 관리**: 칩 목록·점수는 회귀 테스트. 다른 치과 추정의 정밀도·재현율(정답 = `truth_patient_churn`의 이탈 + 병행). 문자 초안을 넣으면 후검증 통과율
@@ -169,12 +169,12 @@ tags:
 | `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
 | `truth_rag_qa` | 사람(생성 후, `make data`가 `rag_qa.json`을 적재) | 질문·정답 출처(통화는 `call_uid`)·기대 도구·인자·split·정답 재계산 쿼리 — 칸·출처 id 형식은 `ground_truth/schema.sql` |
 | `truth_doc_meta` | 생성기(9단계 문서 계획) | 문서별 방해 여부·종류·짝·대체한 옛 버전·심은 사실(사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
-| `truth_gen_meta` | 생성기 | `key → value` — 시드·생성 기간·건수(키는 `ground_truth/schema.sql`). verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
+| `truth_gen_meta` | 생성기 | `key → value` — 시드·생성 기간·건수(키는 `generator/build.py`). verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
 | `truth_chart_notes` | 생성기(5b단계) | `treatment_id → kind(template/narrative), is_special, requirement, evidence_present, is_decoy, facts`(컬럼은 `ground_truth/schema.sql`) |
 | `truth_claim_qa` | 사람(슬롯 ⑤ 착수 시, 조건부) | ⑤-3 청구 기준 질문과 정답 절(상세 사유 → 절은 생성 규칙에서, 질문 규칙은 §5). `truth_rag_qa`와 같은 형식, ③ 평가에는 쓰지 않음 |
 | `truth_appointment_courses` | 생성기(4단계) | 예약 → 코스(수요 에피소드). 앱은 `plan_item_id`로 계획 항목만 본다 — 코스 연결은 5b R01(다른 코스의 재시행)과 verify가 읽는다 |
 | `truth_claim_errors` | 생성기(정형 5b단계) | 청구 기록에 심은 오류(전 기간)·종류 — 상병 착오·임상 요건형 오류·추가 처치 누락(추가 처치의 시술·치아 포함). 키 `treatment_id`, 진료 1건당 최대 1개. ⑤-2·⑤-3 정답(검사는 가상 데이터 생성 설계 §5.3 '차트'). 컬럼은 `ground_truth/schema.sql` |
-| `truth_patient_churn` | 생성기(4단계) | 환자 → 종류(이탈 / 병행), 이탈일. ⑨ 다른 치과 추정 정답 |
+| `truth_patient_churn` | 생성기(4단계 이탈 · 5단계 병행) | 환자 → 종류(이탈 / 병행), 이탈일. ⑨ 다른 치과 추정 정답 |
 | `truth_ledger_errors` | 생성기(5단계) | 장부 실수 → 종류, 관련 수납 id(누락이면 없음), 실제 값(환자·예약·금액·일시·결제수단). ⑧-1 장부 쪽 원인의 근거 |
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |

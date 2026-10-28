@@ -1,9 +1,10 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
-검사는 영역별 파일(common·schedule·records·chart·documents·rag_qa·calls·messages)에, 목록(REQUIRED·WARNINGS·REPORTS)·
+검사는 영역별 파일(common·schedule·records·chart·documents·rag_qa·calls·messages·fin)에, 목록(REQUIRED·WARNINGS·REPORTS)·
 실행·결정성 해시는 여기에 둔다. 바깥에서는 verify.check_*처럼 이 패키지 이름으로 읽는다.
 
-구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·RAG 문서(9단계)·
+구현: 정형(emr_* — 예약·치료계획·이탈·진료·청구·수납·주의사항)·차트 사실·서술(5b·9b)·ax_calls·통화 슬롯(6단계)·전사(7단계)·
+문자(8단계)·재무(8b 수입·8c 지출)·RAG 문서(9단계)·
 RAG 질문(truth_rag_qa 있을 때) 필수 검사 + 분포·치아·통화 분포·전사·RAG 질문 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). 청크 검사는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix·정답 청크가 ax_chunks에 존재(app.sqlite를 붙였을 때 — --app),

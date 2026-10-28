@@ -80,7 +80,7 @@ PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
 # 다른 치과 이용 (§2.2, ⑨ 다른 치과 추정의 정답 — truth_patient_churn). 추정값 — 리포트로 확인
-CHURN_SHARE = 0.03  # 환자 중 이탈·병행 각각의 비율
+CHURN_SHARE = 0.03  # 구환 중 이탈 비율 (병행은 PARALLEL_SHARE)
 CHURN_MIN_DAYS = (
     120  # 이탈일은 TODAY − 이 일수 이전 (리콜 무응답·노쇼·재예약 없음 흔적이 쌓일 시간)
 )
@@ -92,7 +92,7 @@ RECALL_CYCLE_MONTHS = (
 RECALL_JITTER_DAYS = 30
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
-# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
+# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = 치료계획 항목 수만큼 treatment(§2.3), consult = 상담 1회
 _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {
@@ -101,13 +101,16 @@ EPISODE_MIX = {
     "adult": _EPISODE_ADULT,
     "senior": _EPISODE_ADULT,
 }
-COURSE_VISITS = (2, 4)  # 양 끝 포함
+COURSE_VISITS = (
+    2,
+    4,
+)  # 양 끝 포함 — 3단계 수요 추첨에서 Tn 여부(2회 이상)로만 쓰인다. 실제 회차는 치료계획 항목 수
 # 치아 번호가 영구치(PERMANENT_TEETH)뿐이라 영구치가 나기 전 나이에는 치료 수요가 없다 — 이 나이 미만은 위생(신환은 상담도)만
 TOOTH_TREATMENT_MIN_AGE = 6
 MIN_VISIT_AGE = 1  # 첫 등록(첫 내원) 나이 하한 — 젖니가 나기 전 영아는 등록하지 않는다
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
 
-# 치료계획 (§2.3·§2.6 (3)). 항목 순서 = 시술 이름 튜플(항목 수는 COURSE_VISITS 안). 추정값 — 리포트로 확인
+# 치료계획 (§2.3·§2.6 (3)). 항목 순서 = 시술 이름 튜플(항목 2~4개). 추정값 — 리포트로 확인
 # treatment: 코스 첫 내원의 예정 시술 → 항목(항목 1 = 그 내원) / consult: 상담 내원이 만드는 계획 후보(균등) /
 # hygiene: 치주 계획을 만드는 위생 내원의 항목. 연령에 따른 급여·치아 조건은 쓰는 쪽이 본다
 PLAN_TEMPLATES = {
@@ -804,9 +807,10 @@ MESSAGE_REPLIES = {
 }
 # 이미 냈다는 balance 답장 (§2.5 reply(in)) — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 답장(균등)
 MESSAGE_REPLIES_PAID = ("그날 다 냈는데요", "이미 계산했어요", "이체했는데 확인 부탁드려요")
-# 수납 문의 발신 중 장부 실수 미수(§2.4) 환자에게 거는 통화 수 — 전사에 이미 냈다는 말(already_paid, ⑧-1 근거)이 있게.
+# 수납 문의 발신 중 장부 실수 미수(§2.4) 환자에게 거는 통화 수(그 미수가 장부에 들어간 뒤 LEDGER_DEBT_CALL_DAYS일 안) — 전사에 이미 냈다는 말(already_paid, ⑧-1 근거)이 있게.
 # 균등 선택이면 장부 실수 환자가 적어 거의 안 걸린다
 LEDGER_DEBT_CALLS = 3
+LEDGER_DEBT_CALL_DAYS = 30
 # 진짜 미수의 balance 답장 중 MESSAGE_REPLIES_PAID에서 뽑는 비율(착각한 환자). 추정값 — 리포트로 확인
 PAID_REPLY_NOISE_RATE = 0.10
 
@@ -1126,4 +1130,6 @@ EXPENSE_AMOUNT_DIFF_RANGE = (0.01, 0.05)
 # 병원 카드 사용 중 증빙이 없는 비율 — 영수증을 잃기 쉬운 카드 사용에만(이체·자동이체는 증빙이 온다). 전체 출금의 약 5%
 EXPENSE_NO_DOC_RATE = 0.08
 # 기공소 외주 단가(원) — 기공 명세서 줄 = 창 안 인레이·크라운·브릿지 진료 1건 (§2.7). 가상 값
+# 자동이체 고지서·세금계산서는 출금 며칠 전에 온다 (양 끝 포함, §2.7)
+EXPENSE_DOC_LEAD_DAYS = (3, 10)
 LAB_FEES = {"인레이": 80_000, "크라운": 150_000, "브릿지": 400_000}

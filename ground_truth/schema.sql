@@ -2,7 +2,7 @@
 -- 정의: docs/치과 AX - 평가 설계.md §6. 생성 규칙: 가상 데이터 생성 설계 §2.4
 -- 테이블은 그 단계를 구현할 때 추가한다
 
--- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool·documents_core·documents_distractor). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
+-- 생성 설정 기록 (키 목록은 generator/build.py — 기간·통화·문서 건수·연동 실패일 수·장부 실수·불일치 건수). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
 -- (verify 테스트 DB는 config와 값이 다름).
 -- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
 CREATE TABLE truth_gen_meta (
@@ -21,7 +21,7 @@ CREATE TABLE truth_appointment_courses (
 );
 
 CREATE TABLE truth_chart_notes (
-    treatment_id     INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
+    treatment_id     INTEGER PRIMARY KEY,  -- source.sqlite emr_treatments.id
     kind             TEXT NOT NULL CHECK (kind IN ('template', 'narrative')),
     is_special       INTEGER NOT NULL,
     requirement      TEXT,
@@ -77,7 +77,7 @@ CREATE TABLE truth_expense_matches (
     outflow_id    INTEGER NOT NULL,
     document_ids  TEXT NOT NULL,
     account       TEXT NOT NULL,  -- master.ACCOUNTS
-    split         TEXT CHECK (split IN ('dev', 'test')),  -- 평가 달(master.RECON_MONTHS) 밖은 NULL
+    split         TEXT CHECK (split IN ('dev', 'test')),  -- 평가 달(master.recon_months) 밖은 NULL
     PRIMARY KEY (outflow_table, outflow_id)
 );
 
@@ -85,7 +85,7 @@ CREATE TABLE truth_expense_matches (
 -- accepted_purposes = [주 목적, 부 주제 목적](JSON), noise_type NULL = 노이즈 없음,
 -- used_fact = 통화 시점 사실(JSON — 예약류는 appointment_id), split = 판정 풀 dev/test, 나머지 silver
 CREATE TABLE truth_call_labels (
-    call_uid          TEXT PRIMARY KEY,  -- app.sqlite ax_calls.call_uid
+    call_uid          TEXT PRIMARY KEY,  -- source.sqlite ax_calls.call_uid
     primary_purpose   TEXT NOT NULL,
     accepted_purposes TEXT NOT NULL,
     counterpart       TEXT NOT NULL,
@@ -107,7 +107,7 @@ CREATE TABLE truth_call_labels (
 -- planted_facts = 심은 사실 JSON [{id, text, words[], reason, same}] — words는 본문에 그대로 있는 말,
 -- 청구 기준 절은 reason(master.ADJUST_REASONS 키)과 소제목('## …'), same = 같은 사실 묶음 키(문서끼리 같은 사실)
 CREATE TABLE truth_doc_meta (
-    doc_id            INTEGER PRIMARY KEY,  -- app.sqlite ax_documents.id
+    doc_id            INTEGER PRIMARY KEY,  -- source.sqlite ax_documents.id
     doc_key           TEXT NOT NULL UNIQUE,  -- generator/doc_catalog.py
     kind              TEXT NOT NULL CHECK (kind IN ('core', 'old_version', 'similar', 'external')),
     is_distractor     INTEGER NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE truth_doc_meta (
 -- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.call_uid>' /
 -- 'thread:<chart_no>:<YYYY-MM>' / 'chart:<emr_treatments.id>' (청크 id에서 끝 순번을 뗀 것 — 앱 설계 §3).
 -- answer_chunk_hint = 정답 문단을 가리키는 심은 사실 id(truth_doc_meta.planted_facts.id) 또는 본문 구절, 거절형은 답이 있다면 나올 말.
--- answer_sql = 정답 재계산 쿼리(app.sqlite + truth ATTACH) — 데이터형은 답 숫자 한 칸, 차트형은 treatment_id 목록
+-- answer_sql = 정답 재계산 쿼리(source.sqlite + truth ATTACH) — 데이터형은 답 숫자 한 칸, 차트형은 treatment_id 목록
 CREATE TABLE truth_rag_qa (
     id                TEXT PRIMARY KEY,
     type              TEXT NOT NULL CHECK (type IN ('manual', 'notice', 'case', 'data', 'chart', 'refusal')),

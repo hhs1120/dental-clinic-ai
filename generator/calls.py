@@ -33,6 +33,7 @@ from generator.master import (
     HAS_TODO_SHARE,
     HOURS,
     IMPLIED_FLAG,
+    LEDGER_DEBT_CALL_DAYS,
     LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
     PAIN_URGENT_SHARE,
@@ -391,7 +392,7 @@ def stage_slots(run, rng, fake) -> None:
 
 def _ledger_debt_calls(led, slots: list, days: list, rng) -> None:
     """수납 문의 발신 LEDGER_DEBT_CALLS건을 장부 실수 미수 환자에게 다시 배정 — 서로 다른 환자, 통화일은 그 미수가 장부에
-    들어간 뒤 30일 안의 진료일(그 시각 잔액 > 0). 다른 슬롯은 그대로 (§4.1 환자 고르기)"""
+    들어간 뒤 LEDGER_DEBT_CALL_DAYS일 안의 진료일(그 시각 잔액 > 0). 다른 슬롯은 그대로 (§4.1 환자 고르기)"""
     rule = CALL_PATIENT_RULES[("billing_q", "outbound")]
     billing = [s for s in slots if s["purpose"] == "billing_q" and s["direction"] == "outbound"]
     patients = sorted(led.ledger_debt)
@@ -402,7 +403,7 @@ def _ledger_debt_calls(led, slots: list, days: list, rng) -> None:
         pid = patients[k]
         entered = led.ledger_debt[pid][0][0]
         start = datetime.strptime(entered, FMT).date()
-        options = [d for d in days if start < d <= start + timedelta(days=30)]
+        options = [d for d in days if start < d <= start + timedelta(days=LEDGER_DEBT_CALL_DAYS)]
         for d in [options[int(i)] for i in rng.permutation(len(options))]:
             t = (
                 datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))

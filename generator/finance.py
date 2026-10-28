@@ -19,6 +19,7 @@ from generator.master import (
     DEPOSIT_DELAY_DAYS,
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_DOC_LEAD_DAYS,
     EXPENSE_ITEMS,
     EXPENSE_NO_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
@@ -435,7 +436,7 @@ def stage_expenses(run, rng, fake) -> None:
     - 월말 이체: 납품마다 명세서(재료상은 품목, 기공소는 그달 창 안 기공 진료 1건 = 줄 1개, LAB_FEES) + 재료상은 월 세금계산서,
       그달 마지막 은행 영업일에 명세서 합계 이체
     - 병원 카드: 사용마다 1건(가맹점명 = card_name 표기), 증빙 1장 — 쇼핑몰 주문은 한 계정 과목의 품목만(품목으로 과목이 정해짐)
-    - 자동이체: 거래처마다 정한 날(은행 영업일로 미룸), 고지서·세금계산서는 3~10일 전
+    - 자동이체: 거래처마다 정한 날(은행 영업일로 미룸), 고지서·세금계산서는 EXPENSE_DOC_LEAD_DAYS일 전
     어긋남: 카드 사용 중 EXPENSE_NO_DOC_RATE는 증빙 없음, 증빙 있는 출금 중 EXPENSE_AMOUNT_DIFF_RATE는 출금액이 조금 많음"""
     conn, today, holidays = run.conn, run.today, run.holidays
     names = dict(conn.execute("SELECT id, name FROM emr_patients"))
@@ -602,7 +603,8 @@ def stage_expenses(run, rng, fake) -> None:
                     d += timedelta(days=1)
                 total = amount(v["amount"])
                 item = EXPENSE_ITEMS[v["kind"]][0][0] if v["kind"] != "utility" else v["name"]
-                issued = d - timedelta(days=int(rng.integers(3, 11)))
+                lo, hi = EXPENSE_DOC_LEAD_DAYS
+                issued = d - timedelta(days=int(rng.integers(lo, hi + 1)))
                 docs = [doc(v["docs"][0], v["name"], issued, total, summary=item, month=m)]
                 outflows.append(
                     {
