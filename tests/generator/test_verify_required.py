@@ -3,11 +3,12 @@
 import json
 import sqlite3
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from generator import verify
+from generator.master import REVIEW_NOTICE_DAYS
 from tests.generator.verify_db import CTX, ROOT, appt, make_db
 
 
@@ -633,6 +634,119 @@ def test_parallel_external(tmp_path):
     assert verify.check_parallel_external(conn, CTX) == []
     _churn(conn, 2, "parallel", None)
     assert verify.check_parallel_external(conn, CTX)
+
+
+# 수납 (§2.4): 시드 4번 수납 = 2번 환자 11/18 레진 현금 80,000(내원 종료 10:30), 다음 진료일 11/20(11/19 목 휴진)
+def _ledger(conn, kind, paid=None, paid_at=None, method=None, true_method="cash"):
+    conn.execute(
+        "UPDATE emr_payments SET amount_paid = coalesce(?, amount_paid), paid_at = coalesce(?, paid_at),"
+        " method = coalesce(?, method) WHERE id = 4",
+        (paid, paid_at, method),
+    )
+    conn.execute(
+        "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at, true_method)"
+        " VALUES (?, 4, 80000, '2026-11-18 10:30:00', ?)",
+        (kind, true_method),
+    )
+    return replace(CTX, ledger_errors={kind: 1})
+
+
+@pytest.mark.parametrize(
+    "kind, ok, bad",
+    [
+        ("entry_missing", {"paid": 0}, {"paid": 100}),
+        ("amount_typo", {"paid": 8000}, {"paid": 7000}),
+        ("date_shift", {"paid_at": "2026-11-20 15:00:00"}, {"paid_at": "2026-11-19 15:00:00"}),
+        ("date_shift", {"paid_at": "2026-11-20 15:00:00"}, {"paid_at": "2026-11-20 20:00:00"}),
+        ("method_wrong", {"method": "cash"}, {"method": "card"}),
+    ],
+)
+def test_ledger_error_shape(tmp_path, kind, ok, bad):
+    true_method = "card" if kind == "method_wrong" else "cash"
+    (tmp_path / "g").mkdir()
+    (tmp_path / "b").mkdir()
+    good = make_db(tmp_path / "g")
+    ctx = _ledger(good, kind, true_method=true_method, **ok)
+    assert verify.check_ledger_errors(good, ctx) == []
+    assert verify.check_ledger_errors(good, CTX)  # 건수가 메타와 다름
+    broken = make_db(tmp_path / "b")
+    assert verify.check_ledger_errors(
+        broken, _ledger(broken, kind, true_method=true_method, **bad)
+    )
+
+
+def test_ledger_error_unsettled(tmp_path):
+    """입력 누락으로 생긴 미수를 정산 행이 갚으면 잡힌다"""
+    conn = make_db(tmp_path)
+    _ledger(conn, "entry_missing", paid=0)
+    assert verify.check_ledger_error_unsettled(conn, CTX) == []
+    conn.execute(
+        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
+        " VALUES (2, 4, 'settlement', 0, 80000, '2026-11-25 10:00:00', 'cash')"
+    )
+    assert verify.check_ledger_error_unsettled(conn, CTX)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE emr_payments SET approval_no = '10000009' WHERE id = 4",  # 현금에 승인번호
+        "UPDATE emr_payments SET approval_no = '10000001' WHERE id = 2",  # 중복
+        "UPDATE emr_payments SET approval_no = NULL WHERE id = 3",  # 11/03 연동·수기 섞임
+        "UPDATE emr_payments SET approval_no = NULL WHERE id = 1",  # 실패일 1일 ≠ 메타 0
+    ],
+)
+def test_approval_no_break(tmp_path, sql):
+    conn = make_db(tmp_path)
+    conn.execute(sql)
+    assert verify.check_approval_no(conn, CTX)
+
+
+def test_link_failure_day_not_saturday(tmp_path):
+    """연동 실패일은 평일만 — 4번 수납을 11/28(토) 카드로 옮겨 승인번호 없이 두면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute(
+        "UPDATE emr_payments SET method = 'card', paid_at = '2026-11-28 10:30:00' WHERE id = 4"
+    )
+    assert any(
+        r.get("problem") == "연동 실패일이 토요일"
+        for r in verify.check_approval_no(conn, replace(CTX, link_failure_days=1))
+    )
+
+
+def test_link_failure_day_counted(tmp_path):
+    """11/03 카드 수납 둘 다 승인번호 없음 = 연동 실패일 1일 — 메타가 1이면 통과"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_payments SET approval_no = NULL WHERE id IN (2, 3)")
+    assert verify.check_approval_no(conn, replace(CTX, link_failure_days=1)) == []
+
+
+SETTLED = (  # 8월분(확정 월) — 제출 9/1, 통보 = 제출 + REVIEW_NOTICE_DAYS
+    "INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
+    " procedure_code, claim_amount, submitted_at, status, paid_amount, reviewed_at) VALUES"
+    " (3, 2, 'C-00002', '16', '2026-08', '2026-08-18', 'U0005', 1000, '2026-09-01 09:00:00', 'paid', 1000, ?)"
+)
+
+
+def test_reviewed_at(tmp_path, monkeypatch):
+    conn = make_db(tmp_path)
+    notice = (date(2026, 9, 1) + timedelta(days=REVIEW_NOTICE_DAYS)).isoformat()
+    conn.execute(SETTLED, (notice,))
+    assert verify.check_reviewed_at(conn, CTX) == []
+    conn.execute("UPDATE emr_claims SET reviewed_at = '2026-11-30' WHERE claim_month = '2026-08'")
+    assert verify.check_reviewed_at(conn, CTX)
+    conn.execute("UPDATE emr_claims SET reviewed_at = NULL WHERE claim_month = '2026-08'")
+    assert verify.check_reviewed_at(conn, CTX)  # 확정 월인데 통보일 없음
+
+
+def test_reviewed_at_on_submitted_month(tmp_path, monkeypatch):
+    """제출 월에 통보일이 있거나, 상수가 짧아 제출 월 결과가 이미 왔어야 하면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_claims SET reviewed_at = '2026-11-30' WHERE id = 1")
+    assert verify.check_reviewed_at(conn, CTX)
+    conn.execute("UPDATE emr_claims SET reviewed_at = NULL WHERE id = 1")
+    monkeypatch.setattr(verify.records, "REVIEW_NOTICE_DAYS", 20)
+    assert verify.check_reviewed_at(conn, CTX)
 
 
 # 체어·동시 진료 (§1 (3)·(4)): 시드 1번 예약 = 10/06 10:00~11:00 원장·체어 1, 2번 = 11/03 10:00~10:30 위생사 2·체어 2

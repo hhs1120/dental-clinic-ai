@@ -143,11 +143,13 @@ def test_unpaid_and_settlement(db):
 
 
 def test_visit_paid_at_is_end_of_visit(db):
+    """visit 수납 시각 = 내원 종료 — 장부 실수 날짜 밀림만 다음 진료일 (check_ledger_errors가 본다)"""
     conn, _, _ = db
     for r in _rows(
         conn,
         "SELECT p.paid_at, a.scheduled_at, a.duration_min FROM emr_payments p"
-        " JOIN emr_appointments a ON a.id = p.appointment_id WHERE p.kind = 'visit'",
+        " JOIN emr_appointments a ON a.id = p.appointment_id WHERE p.kind = 'visit' AND p.id NOT IN"
+        " (SELECT payment_id FROM truth.truth_ledger_errors WHERE kind = 'date_shift')",
     ):
         assert (
             datetime.fromisoformat(r["paid_at"]) - datetime.fromisoformat(r["scheduled_at"])

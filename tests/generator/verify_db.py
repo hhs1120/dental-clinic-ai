@@ -24,6 +24,8 @@ CTX = Ctx(
     blind_pool=1,
     documents_core=3,
     documents_distractor=3,
+    link_failure_days=0,
+    ledger_errors={},
 )
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
@@ -59,11 +61,12 @@ INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),
   (2, 2, 1, 'U0001', '00', '2026-11-03 10:00:00', 60000, 42000, 18000),
   (3, 4, 2, 'U0005', '16', '2026-11-18 10:00:00', 80000, 0, 80000);
-INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method) VALUES
-  (1, 1, 1, 'visit', 36000, 20000, '2026-10-06 11:00:00', 'card'),
-  (2, 1, 2, 'visit', 18000, 18000, '2026-11-03 10:30:00', 'card'),
-  (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
-  (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
+-- 카드 수납은 연동 단말기 승인번호(시드 창에는 연동 실패일·장부 실수 없음 — 메타 0)
+INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method, approval_no) VALUES
+  (1, 1, 1, 'visit', 36000, 20000, '2026-10-06 11:00:00', 'card', '10000001'),
+  (2, 1, 2, 'visit', 18000, 18000, '2026-11-03 10:30:00', 'card', '10000002'),
+  (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card', '10000003'),
+  (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash', NULL);
 INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES
   (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL, NULL),
   (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL);
@@ -118,7 +121,8 @@ INSERT INTO truth_call_labels VALUES
    'test');
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
-  ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1'), ('documents_core', '3'), ('documents_distractor', '3');
+  ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1'), ('documents_core', '3'), ('documents_distractor', '3'),
+  ('link_failure_days', '0'), ('ledger_errors', '{}');
 """
 
 

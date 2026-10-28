@@ -25,6 +25,7 @@ from generator import (
     transcripts,
 )
 from generator.llm_jobs import LLMContext
+from generator.master import LEDGER_ERROR_KINDS, LINK_FAILURE_DAYS, RECON_MISMATCH_COUNTS
 from generator.paths import ROOT, output_paths
 from generator.seeding import stage_faker, stage_rng
 
@@ -134,6 +135,11 @@ def generate(
                 ("blind_pool", str(cfg["blind_pool_size"])),
                 ("documents_core", str(cfg["documents"]["core"])),
                 ("documents_distractor", str(cfg["documents"]["distractor"])),
+                ("link_failure_days", str(LINK_FAILURE_DAYS)),
+                (
+                    "ledger_errors",
+                    json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
+                ),
             ],
         )
         for name, stage in STAGES:

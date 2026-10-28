@@ -7,19 +7,26 @@
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from generator.master import (
     ADJUST_REASONS,
     ADJUST_TYPE_WEIGHTS,
     ADJUSTED_PAID_RANGE,
+    AMOUNT_TYPO_MIN,
     EXTRACTION_CODES,
     FULL_MOUTH,
+    HOURS,
     IMPLANT_CODE,
+    LINK_FAILURE_DAYS,
     PARALLEL_SHARE,
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURES,
+    RECON_MISMATCH_COUNTS,
+    RECON_MONTHS,
+    REVIEW_NOTICE_DAYS,
     REVIEW_OUTCOME_WEIGHTS,
+    SATURDAY,
     SCALING_CODE,
     SUBMITTED_MONTHS,
     TOOTH_CHOICES,
@@ -27,9 +34,11 @@ from generator.master import (
     adjust_group,
     age_on,
     insured_on,
+    open_slots,
 )
 
 PROCEDURE = {p["code"]: p for p in PROCEDURES}
+OPEN = time.fromisoformat(HOURS["open"])
 FMT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -206,45 +215,137 @@ def open_plan_items(items: list[dict], pid: int, t: str) -> list[dict]:
     ]
 
 
+def _next_open(run, d: date) -> date:
+    d += timedelta(days=1)
+    while not open_slots(d.weekday()) or d in run.holidays:
+        d += timedelta(days=1)
+    return d
+
+
+def _pick_ledger_errors(run, rng, visits: list[dict]) -> tuple[list[date], dict[int, str]]:
+    """연동 실패일(RECON_MONTHS 안 평일 진료일 중 LINK_FAILURE_DAYS일, 다음 진료일 < TODAY — 토요일은 반나절이라 카드
+    수납이 적어 결제수단 오입력이 몰리지 않게)과 장부 실수(내원 index → 종류).
+    실수 후보 = 평가 달·다음 진료일 < TODAY인 전액 수납(진료비 > 0) 중 손으로 입력한 것 — 현금·이체, 연동 실패일 카드.
+    결제수단 오입력은 연동 실패일 카드만, 날짜 밀림은 현금·이체만(밀린 날이 연동일이면 수기 카드가 섞인다), 금액 오입력은
+    AMOUNT_TYPO_MIN 이상. 좁은 종류부터 뽑는다. 건수는 RECON_MISMATCH_COUNTS (§2.4·§2.7)"""
+    ok_day = {
+        v["day"]
+        for v in visits
+        if v["day"].strftime("%Y-%m") in RECON_MONTHS and _next_open(run, v["day"]) < run.today
+    }
+    days = sorted(d for d in ok_day if d.weekday() != SATURDAY)
+    failure = sorted(
+        days[int(i)] for i in rng.choice(len(days), size=LINK_FAILURE_DAYS, replace=False)
+    )
+    base = [i for i, v in enumerate(visits) if v["day"] in ok_day and v["paid"] == v["due"] > 0]
+    card_fail = {i for i in base if visits[i]["method"] == "card" and visits[i]["day"] in failure}
+    hand = {i for i in base if visits[i]["method"] != "card"}
+    pools = {
+        "method_wrong": card_fail,
+        "amount_typo": {i for i in hand | card_fail if visits[i]["due"] >= AMOUNT_TYPO_MIN},
+        "date_shift": hand,
+        "entry_missing": hand | card_fail,
+    }
+    errors: dict[int, str] = {}
+    for kind in ("method_wrong", "amount_typo", "date_shift", "entry_missing"):
+        free = sorted(pools[kind] - set(errors))
+        n = RECON_MISMATCH_COUNTS[kind]
+        if len(free) < n:
+            raise ValueError(f"장부 실수 {kind} 후보 {len(free)}건 < {n}건")
+        for k in rng.choice(len(free), size=n, replace=False).tolist():
+            errors[free[k]] = kind
+    return failure, errors
+
+
 def stage_payments(run, rng, fake) -> None:
     """창 안 completed마다 visit 1행. 미수(amount_due > 0 중 config unpaid_rate)는 UNPAID_PAID_RANGE만 수납하고,
-    그중 config settle_next_visit은 다음 completed 내원 종료 시각에 settlement 행으로 정산, 나머지는 잔류"""
+    그중 config settle_next_visit은 다음 completed 내원 종료 시각에 settlement 행으로 정산, 나머지는 잔류.
+    연동 실패일·장부 실수는 자기 난수로(§2.4) — 실수 행은 전액 수납이라 정산 대상이 아니고, 실수로 생긴 미수는 남는다.
+    승인번호는 받은 금액이 있는 연동일 카드 수납마다 서로 다른 8자리. 정답은 truth_ledger_errors"""
     unpaid_rate, settle_rate = run.cfg["unpaid_rate"], run.cfg["settle_next_visit"]
-    owed: dict[int, int] = defaultdict(int)  # 환자 → 다음 내원 때 정산할 미수
-    rows = []
+    visits = []
     for appt_id, pid, start, duration, due in run.conn.execute(
         "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, t.patient_amount FROM emr_appointments a"
         " JOIN emr_treatments t ON t.appointment_id = a.id"
         " WHERE a.status = 'completed' AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at, a.id",
         (run.range_start.isoformat(),),
     ):
-        end = (datetime.fromisoformat(start) + timedelta(minutes=duration)).strftime(FMT)
+        end = datetime.fromisoformat(start) + timedelta(minutes=duration)
         paid, settle = due, False
         if due > 0 and rng.random() < unpaid_rate:
             paid = _floor10(due * rng.uniform(*UNPAID_PAID_RANGE))
             settle = rng.random() < settle_rate
-        rows.append(
-            (pid, appt_id, "visit", due, paid, end, _weighted(rng, PAYMENT_METHOD_WEIGHTS))
+        visits.append(
+            {
+                "appt": appt_id,
+                "pid": pid,
+                "end": end,
+                "day": end.date(),
+                "due": due,
+                "paid": paid,
+                "settle": settle,
+                "method": _weighted(rng, PAYMENT_METHOD_WEIGHTS),
+            }
         )
+    error_rng, approval_rng = rng.spawn(2)
+    failure, errors = _pick_ledger_errors(run, error_rng, visits)
+    run.state["link_failure_days"] = failure
+    owed: dict[int, int] = defaultdict(int)  # 환자 → 다음 내원 때 정산할 미수
+    rows, truth = [], []
+    for i, v in enumerate(visits):
+        pid, paid, paid_at, method = v["pid"], v["paid"], v["end"], v["method"]
+        kind = errors.get(i)
+        if kind == "entry_missing":
+            paid = 0
+        elif kind == "amount_typo":
+            paid = v["due"] // 100 * 10  # 0 하나 빠뜨림
+        elif kind == "date_shift":
+            nxt = _next_open(run, v["day"])
+            close = HOURS["saturday_close" if nxt.weekday() == SATURDAY else "weekday_close"]
+            span = (
+                datetime.combine(nxt, time.fromisoformat(close)) - datetime.combine(nxt, OPEN)
+            ).seconds // 60
+            paid_at = datetime.combine(nxt, OPEN) + timedelta(
+                minutes=int(error_rng.integers(span + 1))
+            )
+        elif kind == "method_wrong":
+            method = ("cash", "transfer")[int(error_rng.integers(2))]
+        if kind:
+            truth.append((kind, len(rows) + 1, v["due"], v["end"].strftime(FMT), v["method"]))
+        rows.append([pid, v["appt"], "visit", v["due"], paid, paid_at.strftime(FMT), method])
         if owed[pid]:
             rows.append(
-                (
+                [
                     pid,
-                    appt_id,
+                    v["appt"],
                     "settlement",
                     0,
                     owed[pid],
-                    end,
+                    v["end"].strftime(FMT),
                     _weighted(rng, PAYMENT_METHOD_WEIGHTS),
-                )
+                ]
             )
             owed[pid] = 0
-        if settle:
-            owed[pid] += due - paid
+        if v["settle"]:
+            owed[pid] += v["due"] - v["paid"]
+    failed = {d.isoformat() for d in failure}
+    used = set()
+    for r in rows:
+        r.append(None)
+        if r[6] == "card" and r[4] > 0 and r[5][:10] not in failed:
+            while (no := f"{int(approval_rng.integers(10**7, 10**8))}") in used:
+                pass
+            used.add(no)
+            r[7] = no
     run.conn.executemany(
-        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at,"
-        " method) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        rows,
+        "INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at,"
+        " method, approval_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(k, *r) for k, r in enumerate(rows, 1)],
+    )
+    run.conn.executemany(
+        "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at, true_method)"
+        " VALUES (?, ?, ?, ?, ?)",
+        truth,
     )
 
 
@@ -344,6 +445,13 @@ def stage_claims(run, rng, fake) -> None:
         else:
             result = review(rng, code, amount, repeat)
         submitted = None if result[0] == "pending" else _submitted_at(month)
+        reviewed = (
+            None  # 통보일 — 확정 월(창 이전 스케일링 포함)만, 제출일 + REVIEW_NOTICE_DAYS (§2.4)
+        )
+        if result[0] in ("paid", "adjusted", "denied"):
+            reviewed = (
+                date.fromisoformat(submitted[:10]) + timedelta(days=REVIEW_NOTICE_DAYS)
+            ).isoformat()
         rows.append(
             (
                 tid,
@@ -356,6 +464,7 @@ def stage_claims(run, rng, fake) -> None:
                 amount,
                 submitted,
                 *result,
+                reviewed,
             )
         )
     run.conn.executemany(
@@ -364,7 +473,7 @@ def stage_claims(run, rng, fake) -> None:
     )
     run.conn.executemany(
         "INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
-        " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note,"
+        " reviewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )

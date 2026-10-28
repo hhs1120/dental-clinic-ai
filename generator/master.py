@@ -160,6 +160,9 @@ SUBMITTED_MONTHS = 2
 
 # 재심 기한 = 확정 월 청구의 심사결과 통보일(emr_claims.reviewed_at) + 이 일수 (§2.4 통보일, ⑤-3 조정 목록)
 APPEAL_DAYS = 90
+# 심사결과 통보일 = 청구 제출일(익월 1일) + 이 일수 — 청구 월마다 하루. 제출 월(SUBMITTED_MONTHS)은 TODAY에 아직
+# 결과가 없고 그 앞 달은 있도록 (verify check_reviewed_at이 범위를 본다)
+REVIEW_NOTICE_DAYS = 70
 
 # 병행(§2.2): 확정 월 창 안 급여 스케일링 줄이 있는 환자 중 이 비율 — 그 줄이 타 기관 이력(연 1회 초과)으로 불능.
 # 우리 장부로는 오류가 아님. 추정값 — 리포트로 확인
@@ -801,6 +804,10 @@ PAID_REPLY_NOISE_RATE = 0.10
 # 재무 원본 fin_* (§2.7, 8b·8c단계 — ⑧). 카드사·거래처 이름은 전부 가상
 # 연동 실패일 수 — 그날은 카드 수납도 손으로 입력해 승인번호가 없다(§2.4). 장부 실수·불일치는 RECON_MONTHS에만
 LINK_FAILURE_DAYS = 3
+# 장부 실수 종류(truth_ledger_errors.kind) — 건수는 RECON_MISMATCH_COUNTS의 같은 이름. 금액 오입력은 0 하나 빠뜨림이라
+# 이 금액 이상 수납에서만 (§2.4)
+LEDGER_ERROR_KINDS = ("entry_missing", "amount_typo", "date_shift", "method_wrong")
+AMOUNT_TYPO_MIN = 10_000
 # ⑧-1·⑧-2 평가 달(claim_month와 같은 'YYYY-MM') — config today 2026-12-01의 직전 3개월. RECON_TEST_MONTH가 test, 나머지 dev
 RECON_MONTHS = ("2026-09", "2026-10", "2026-11")
 RECON_TEST_MONTH = "2026-11"

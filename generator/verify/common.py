@@ -42,6 +42,8 @@ class Ctx:
     blind_pool: int
     documents_core: int  # RAG 문서 수(핵심·방해) — truth_gen_meta에서
     documents_distractor: int
+    link_failure_days: int  # 연동 실패일 수·장부 실수 종류별 건수 — truth_gen_meta에서 (§2.4·§2.7)
+    ledger_errors: dict
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -63,6 +65,8 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         blind_pool=int(meta["blind_pool"]),
         documents_core=int(meta["documents_core"]),
         documents_distractor=int(meta["documents_distractor"]),
+        link_failure_days=int(meta["link_failure_days"]),
+        ledger_errors=json.loads(meta["ledger_errors"]),
         rag_qa=rag_qa,
     )
 

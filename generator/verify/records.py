@@ -6,11 +6,17 @@ from datetime import date, timedelta
 
 from generator.master import (
     ADJUST_REASONS,
+    AMOUNT_TYPO_MIN,
     CONDITIONAL_INSURED_MIN_AGE,
     EXTRACTION_CODES,
     FULL_MOUTH,
+    HOURS,
     IMPLANT_CODE,
+    LEDGER_ERROR_KINDS,
     MIN_VISIT_AGE,
+    RECON_MONTHS,
+    REVIEW_NOTICE_DAYS,
+    SATURDAY,
     SCALING_CODE,
     SCALING_MIN_AGE,
     SUBMITTED_MONTHS,
@@ -18,6 +24,7 @@ from generator.master import (
     TOOTH_TREATMENT_MIN_AGE,
     age_on,
     insured_on,
+    open_slots,
 )
 from generator.verify.common import CHILD_MAX_AGE, PROCEDURE, REASON_BY_TEXT, _dt, _end, _rows
 
@@ -102,6 +109,29 @@ def check_parallel_external(conn, ctx):
         }
         for pid in sorted(hit ^ parallel)
     ]
+
+
+def check_reviewed_at(conn, ctx):
+    """심사결과 통보일은 확정 월만 = 제출일 + master.REVIEW_NOTICE_DAYS(청구 월마다 하루), 제출 월·전월은 없음.
+    제출 월의 제출일 + REVIEW_NOTICE_DAYS는 TODAY 뒤(아직 결과가 올 때가 아님 — 상수 범위 확인)"""
+    bad = []
+    first_submitted = min(_submitted_months(ctx))
+    for r in _rows(
+        conn, "SELECT id, claim_month, status, submitted_at, reviewed_at FROM emr_claims"
+    ):
+        notice = (
+            (_dt(r["submitted_at"]).date() + timedelta(days=REVIEW_NOTICE_DAYS)).isoformat()
+            if r["submitted_at"]
+            else None
+        )
+        if r["claim_month"] < first_submitted and r["status"] in ("paid", "adjusted", "denied"):
+            if r["reviewed_at"] != notice or notice > ctx.today.isoformat():
+                bad.append(r)
+        elif r["reviewed_at"] is not None or (
+            r["status"] == "submitted" and notice <= ctx.today.isoformat()
+        ):
+            bad.append(r)
+    return bad
 
 
 # ── 시술·청구 ─────────────────────────────────────────────────
@@ -551,6 +581,126 @@ def check_payment_per_visit(conn, ctx):
         conn,
         "SELECT id, amount_due FROM emr_payments WHERE kind = 'settlement' AND amount_due != 0",
     )
+
+
+def _close(d: date) -> str:
+    return HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+
+
+def _next_open_day(d: date, holidays) -> date:
+    d += timedelta(days=1)
+    while not open_slots(d.weekday()) or d in holidays:
+        d += timedelta(days=1)
+    return d
+
+
+def check_approval_no(conn, ctx):
+    """승인번호 = 연동 단말기 카드 수납(받은 금액 > 0)에만, 서로 다름. 연동 실패일 = 받은 카드 수납에 승인번호가
+    하나도 없는 날 — 그날은 전부 없음, master.RECON_MONTHS 안 평일, 날 수 = 메타 link_failure_days (§2.4·§2.7)"""
+    bad, days = [], defaultdict(set)
+    seen = defaultdict(int)
+    for r in _rows(conn, "SELECT id, method, amount_paid, paid_at, approval_no FROM emr_payments"):
+        if r["approval_no"] is not None:
+            seen[r["approval_no"]] += 1
+        if r["method"] == "card" and r["amount_paid"] > 0:
+            days[r["paid_at"][:10]].add(r["approval_no"] is not None)
+        elif r["approval_no"] is not None:
+            bad.append({**r, "problem": "카드 수납이 아니거나 받은 금액 0인데 승인번호"})
+    bad += [{"approval_no": k, "problem": "승인번호 중복"} for k, n in seen.items() if n > 1]
+    failed = sorted(d for d, flags in days.items() if flags == {False})
+    bad += [
+        {"day": d, "problem": "같은 날 연동·수기 카드 수납이 섞임"}
+        for d, f in days.items()
+        if len(f) > 1
+    ]
+    bad += [
+        {"day": d, "problem": "연동 실패일이 평가 달 밖"}
+        for d in failed
+        if d[:7] not in RECON_MONTHS
+    ]
+    bad += [
+        {"day": d, "problem": "연동 실패일이 토요일"}
+        for d in failed
+        if date.fromisoformat(d).weekday() == SATURDAY
+    ]
+    if len(failed) != ctx.link_failure_days:
+        bad.append({"failed_days": failed, "expected": ctx.link_failure_days})
+    return bad
+
+
+def check_ledger_errors(conn, ctx):
+    """장부 실수(truth_ledger_errors)는 창 안 visit 수납, 실제 일시 = 내원 종료·master.RECON_MONTHS 안·다음 진료일 < TODAY,
+    실제 금액 = 진료비(전액 수납). 입력 누락 = 받은 금액 0 / 금액 오입력 = 0 하나 빠뜨림(master.AMOUNT_TYPO_MIN 이상) /
+    날짜 밀림 = 다음 진료일 영업시간에 입력 / 결제수단 오입력 = 실제 카드가 연동 실패일에 다른 수단으로.
+    종류별 건수 = 메타 ledger_errors, 수납 1행에 실수 1개 (§2.4)"""
+    bad, counts, seen = [], defaultdict(int), set()
+    linked = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT date(paid_at) FROM emr_payments WHERE approval_no IS NOT NULL"
+        )
+    }
+    for r in _rows(
+        conn,
+        "SELECT e.*, p.kind AS pay_kind, p.amount_due, p.amount_paid, p.paid_at, p.method, p.approval_no,"
+        " a.scheduled_at, a.duration_min FROM truth.truth_ledger_errors e"
+        " JOIN emr_payments p ON p.id = e.payment_id JOIN emr_appointments a ON a.id = p.appointment_id",
+    ):
+        counts[r["kind"]] += 1
+        true_day = _dt(r["true_paid_at"]).date()
+        nxt = _next_open_day(true_day, ctx.holidays)
+        shifted = _dt(r["paid_at"])
+        ok = {
+            "entry_missing": r["amount_paid"] == 0 and r["paid_at"] == r["true_paid_at"],
+            "amount_typo": r["true_amount"] >= AMOUNT_TYPO_MIN
+            and r["amount_paid"] == r["true_amount"] // 100 * 10
+            and r["paid_at"] == r["true_paid_at"],
+            "date_shift": r["amount_paid"] == r["true_amount"]
+            and shifted.date() == nxt
+            and HOURS["open"] <= shifted.strftime("%H:%M") <= _close(nxt),
+            "method_wrong": r["amount_paid"] == r["true_amount"]
+            and r["true_method"] == "card"
+            and r["method"] != "card"
+            and true_day.isoformat() not in linked,
+        }[r["kind"]]
+        if (
+            not ok
+            or r["pay_kind"] != "visit"
+            or r["payment_id"] in seen
+            or r["true_paid_at"] != _end(r)
+            or r["true_amount"] != r["amount_due"]
+            or r["true_amount"] <= 0
+            or true_day.strftime("%Y-%m") not in RECON_MONTHS
+            or nxt >= ctx.today
+            or (r["kind"] != "method_wrong" and r["true_method"] != r["method"])
+        ):
+            bad.append(r)
+        seen.add(r["payment_id"])
+    want = {k: ctx.ledger_errors.get(k, 0) for k in LEDGER_ERROR_KINDS}
+    if dict(counts) | {k: counts.get(k, 0) for k in want} != want:
+        bad.append({"counts": dict(counts), "expected": want})
+    return bad
+
+
+def check_ledger_error_unsettled(conn, ctx):
+    """입력 누락·금액 오입력으로 생긴 미수는 정산되지 않음 — 그 환자의 TODAY 잔액 ≥ 실수로 생긴 미수 합 (§2.4)"""
+    owed = dict(
+        conn.execute(
+            "SELECT p.patient_id, sum(e.true_amount - p.amount_paid) FROM truth.truth_ledger_errors e"
+            " JOIN emr_payments p ON p.id = e.payment_id"
+            " WHERE e.kind IN ('entry_missing', 'amount_typo') GROUP BY p.patient_id"
+        )
+    )
+    balance = dict(
+        conn.execute(
+            "SELECT patient_id, sum(amount_due - amount_paid) FROM emr_payments GROUP BY patient_id"
+        )
+    )
+    return [
+        {"patient_id": pid, "error_debt": d, "balance": balance.get(pid, 0)}
+        for pid, d in sorted(owed.items())
+        if balance.get(pid, 0) < d
+    ]
 
 
 # ── 리포트 ───────────────────────────────────────────────────
