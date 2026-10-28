@@ -35,12 +35,18 @@ from generator.master import (
     REQUIREMENT_CUT_ERROR_SHARE,
     REQUIREMENT_ERROR_RATE,
     RETREATMENT_REQUIREMENT,
+    SAME_DAY_EXTRA,
+    SAME_DAY_EXTRA_RATE,
     SCALING_CODE,
     SUBMITTED_MONTHS,
+    TOOTH_CHOICES,
+    age_on,
+    insured_on,
 )
 from generator.records import open_plan_items
 
 NAME = {p["code"]: p["name"] for p in PROCEDURES}
+PROCEDURE_BY_CODE = {p["code"]: p for p in PROCEDURES}
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 REASON_KEY = {(r["category"], r["note"]): key for key, r in ADJUST_REASONS.items()}
@@ -261,10 +267,35 @@ def _plan(r, plan_items: list) -> dict | None:
     return None
 
 
+def _extra(rng, r, teeth: set, birth: date) -> tuple[str, str] | None:
+    """추가 처치 누락의 (시술, 치아) — SAME_DAY_EXTRA 중 그날 나이에 급여이고 장부에 없는 치아 후보가 있는 시술 균등,
+    치아는 후보 중 균등 (§4.3). 후보가 없으면 None"""
+    age = age_on(birth, r["day"])
+    options = {
+        code: [t for t in TOOTH_CHOICES[code] if t not in teeth]
+        for code in sorted(SAME_DAY_EXTRA)
+        if insured_on(PROCEDURE_BY_CODE[code], age)
+    }
+    codes = [c for c, ts in options.items() if ts]
+    if not codes:
+        return None
+    code = codes[int(rng.integers(len(codes)))]
+    return code, options[code][int(rng.integers(len(options[code])))]
+
+
 def stage_facts(run, rng, fake) -> None:
     """난수를 나눈다 — 확정 월 오류(심사 결과 따라감) / 제출 월·전월 오류(⑤-2 정답) / 상병·사실(진료마다 따로 시드 —
     조건에 따라 뽑는 횟수가 달라도 다른 줄이 밀리지 않게). 심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 그대로"""
-    settled_rng, open_rng, fact_rng = rng.spawn(3)
+    settled_rng, open_rng, fact_rng, extra_rng = rng.spawn(
+        4
+    )  # 앞 셋은 추가 처치 누락을 넣기 전과 같다
+    birth = {
+        pid: date.fromisoformat(b)
+        for pid, b in run.conn.execute("SELECT id, birth_date FROM emr_patients")
+    }
+    ledger_teeth = defaultdict(set)  # 환자 → 장부 진료에 나온 치아 (추가 처치 치아는 여기 없는 것)
+    for pid, tooth in run.conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
+        ledger_teeth[pid].add(tooth)
     fact_seed = int(fact_rng.integers(1 << 62))
     plan_items = run.state["plan_items"]
     perio_plans = {
@@ -295,6 +326,17 @@ def stage_facts(run, rng, fake) -> None:
                     error = "requirement"
                 elif open_rng.random() < DIAGNOSIS_ERROR_RATE:
                     error = "diagnosis"
+        extra = None
+        if (
+            error is None
+            and r["window"]
+            and r["claimed"]
+            and r["bucket"] != "settled"
+            and extra_rng.random() < SAME_DAY_EXTRA_RATE
+        ):
+            extra = _extra(extra_rng, r, ledger_teeth[r["patient_id"]], birth[r["patient_id"]])
+            if extra:
+                error = "omitted_extra"
         rng = np.random.default_rng([fact_seed, r["id"]])
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
         dx = (
@@ -338,6 +380,7 @@ def stage_facts(run, rng, fake) -> None:
                 ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]
             ],
             "plan": _plan(r, plan_items),
+            "extra": extra and {"procedure": NAME[extra[0]], "tooth": extra[1]},
         }
         lines.append(
             {
@@ -352,7 +395,9 @@ def stage_facts(run, rng, fake) -> None:
             }
         )
         if error:
-            errors.append((r["id"], error, key if error == "requirement" else None))
+            errors.append(
+                (r["id"], error, key if error == "requirement" else None, *(extra or (None, None)))
+            )
         if r["tooth"] != FULL_MOUTH:
             treated[r["patient_id"]][(r["tooth"], r["code"])].append((r["day"], r["root"]))
         if r["code"] in EXTRACTION_CODES:
@@ -360,7 +405,8 @@ def stage_facts(run, rng, fake) -> None:
         if r["code"] == SCALING_CODE:
             scaled[r["patient_id"]].append(r["day"])
     run.conn.executemany(
-        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (?, ?, ?)",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement, extra_procedure_code,"
+        " extra_tooth_no) VALUES (?, ?, ?, ?, ?)",
         sorted(errors),
     )
     run.state["chart"] = sorted(lines, key=lambda x: x["id"])
@@ -462,6 +508,8 @@ def draft_note(f) -> str:
     elif req and req["key"] == "R06" and req.get("other_clinic"):
         out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위입니다.")
     out.append(f"{_site(f)}{f['procedure']} 시행했습니다.")
+    if f.get("extra"):
+        out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행했습니다.")
     out += _alert_sentences(f)
     plan = f["plan"]
     if plan and "items" in plan:
@@ -545,9 +593,12 @@ def evidence_forbidden(f: dict) -> list[str]:
 
 
 def narrative_must_include(f: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
+    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·추가 처치의 치아·시술·치주낭 'Nmm'·주의사항·
+    발견한 주의사항·요건 수치·다음 계획"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
     out.append([f["procedure"]])
+    if f.get("extra"):
+        out += [[f"{f['extra']['tooth']}번"], [f["extra"]["procedure"]]]
     if f["findings"]:
         out.append([f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]

@@ -19,12 +19,15 @@ from generator.master import (
     PROCEDURE_DIAGNOSES,
     RECALL_CYCLE_MONTHS,
     RETREATMENT_REQUIREMENT,
+    SAME_DAY_EXTRA,
     SCALING_CODE,
+    TOOTH_CHOICES,
     add_years,
     age_band,
     age_on,
+    insured_on,
 )
-from generator.verify.common import CHILD_MAX_AGE, REASON_BY_TEXT, _dt, _end, _rows
+from generator.verify.common import CHILD_MAX_AGE, PROCEDURE, REASON_BY_TEXT, _dt, _end, _rows
 from generator.verify.records import _open_items_at, _plan_items, _submitted_months
 
 CHART_DECOY_RANGE = (1.0, 2.0)  # 디코이 / 특이 케이스 (§4.3 — 목표는 master.CHART_DECOY_RATIO)
@@ -168,7 +171,7 @@ def _chart_lines(conn, ctx) -> list[dict]:
         " n.dx_code, n.note, pt.name AS patient_name,"
         " tc.kind, tc.is_special, tc.requirement, tc.evidence_present, tc.is_decoy, tc.facts, co.course_id,"
         " c.id AS claim_id, c.claim_month, c.status, c.adjust_code, c.adjust_note,"
-        " e.kind AS error, e.requirement AS error_requirement"
+        " e.kind AS error, e.requirement AS error_requirement, e.extra_procedure_code, e.extra_tooth_no"
         " FROM emr_treatments t JOIN emr_patients pt ON pt.id = t.patient_id"
         " LEFT JOIN emr_chart_notes n ON n.treatment_id = t.id"
         " LEFT JOIN truth.truth_chart_notes tc ON tc.treatment_id = t.id"
@@ -284,6 +287,41 @@ def check_claim_errors(conn, ctx):
                     "reason": why,
                 }
             )
+    return bad
+
+
+def check_omitted_extra(conn, ctx):
+    """추가 처치 누락(omitted_extra)은 결과가 없는 달(제출 월·전월)의 창 안 급여 청구 줄에만. 추가 처치는
+    master.SAME_DAY_EXTRA 시술·그 시술의 치아 후보·그날 나이에 급여, 치아는 그 환자 장부의 어떤 진료에도 없는 치아.
+    차트 사실 extra = 그 처치(시술 이름·치아), 다른 줄은 extra 없음 (§4.3)"""
+    birth = dict(conn.execute("SELECT id, birth_date FROM emr_patients"))
+    teeth = defaultdict(set)
+    for pid, tooth in conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
+        teeth[pid].add(tooth)
+    bad = []
+    for r in _chart_lines(conn, ctx):
+        extra = (json.loads(r["facts"]) if r["facts"] else {}).get("extra")
+        if r["error"] != "omitted_extra":
+            if extra is not None:
+                bad.append({"id": r["id"], "problem": "추가 처치 누락이 아닌데 차트 사실에 extra"})
+            continue
+        code, tooth = r["extra_procedure_code"], r["extra_tooth_no"]
+        age = age_on(date.fromisoformat(birth[r["patient_id"]]), r["day"])
+        why = (
+            "결과가 없는 달의 창 안 급여 청구 줄이 아님"
+            if not (r["window"] and r["claim_id"] and r["bucket"] in ("submitted", "pending"))
+            else "추가 처치 시술·치아 후보·급여 조건 밖"
+            if code not in SAME_DAY_EXTRA
+            or tooth not in TOOTH_CHOICES[code]
+            or not insured_on(PROCEDURE[code], age)
+            else "추가 처치 치아가 장부의 다른 진료에 나옴"
+            if tooth in teeth[r["patient_id"]]
+            else "차트 사실 extra ≠ 정답"
+            if extra != {"procedure": PROCEDURE[code]["name"], "tooth": tooth}
+            else None
+        )
+        if why:
+            bad.append({"id": r["id"], "extra": [code, tooth], "problem": why})
     return bad
 
 

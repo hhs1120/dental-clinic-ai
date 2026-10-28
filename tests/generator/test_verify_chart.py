@@ -684,3 +684,51 @@ def test_narrative_facts_required(tmp_path):
     assert verify.check_chart_narrative_facts(conn, CTX) == [
         {"treatment_id": 3, "missing": ["16번"]}
     ]
+
+
+# 추가 처치 누락(§4.3): 시드 2번 진료(1번 환자 11/03 스케일링, 11월분 pending 청구)에 같은 날 36번 아말감/GI를 차트에만.
+# 1번 환자 장부의 치아는 26번(신경치료)뿐
+EXTRA = '{"extra": {"procedure": "아말감/GI", "tooth": "36"}}'
+
+
+def _omitted(conn, code="U0006", tooth="36", tid=2, facts=EXTRA):
+    conn.execute(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, extra_procedure_code, extra_tooth_no)"
+        " VALUES (?, 'omitted_extra', ?, ?)",
+        (tid, code, tooth),
+    )
+    conn.execute(
+        "UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = ?", (facts, tid)
+    )
+
+
+def test_omitted_extra_valid(tmp_path):
+    conn = make_db(tmp_path)
+    _omitted(conn)
+    assert verify.check_omitted_extra(conn, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"tooth": "26", "facts": EXTRA.replace("36", "26")},  # 장부에 있는 치아
+        {
+            "code": "U0004",
+            "tooth": "36",
+            "facts": EXTRA.replace("아말감/GI", "실란트"),
+        },  # 성인 실란트는 비급여
+        {"code": "U0005", "facts": EXTRA.replace("아말감/GI", "레진")},  # 추가 처치 시술 아님
+        {"facts": EXTRA.replace("36", "37")},  # 차트 사실 ≠ 정답
+        {"tid": 3, "facts": EXTRA},  # 비급여 레진 줄(청구 없음)
+    ],
+)
+def test_omitted_extra_break(tmp_path, kwargs):
+    conn = make_db(tmp_path)
+    _omitted(conn, **kwargs)
+    assert verify.check_omitted_extra(conn, CTX)
+
+
+def test_extra_fact_without_error(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = 2", (EXTRA,))
+    assert verify.check_omitted_extra(conn, CTX)
