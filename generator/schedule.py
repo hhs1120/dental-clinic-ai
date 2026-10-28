@@ -1,10 +1,12 @@
 """4단계 예약 시뮬레이션 — range_start부터 TODAY 전날까지 하루씩 진행 (가상 데이터 생성 설계 §2.6 (3)).
 예약·상태·시각만 정한다(진료·수납·청구는 5단계). 신환은 여기서 등록한다.
 
-하루 순서: 1. 그날 예약 처리(상태 추첨, 코스 다음 회차 데스크 예약) 2. 전화 예약(기한이 된 수요·재예약·신환)
+하루 순서: 1. 그날 예약 처리(상태 추첨, 치료계획, 코스 다음 회차 데스크 예약) 2. 전화 예약(기한이 된 수요·재예약·신환)
 3. 변경 4. 리마인드. 휴진일은 아무 일도 없다.
 - 신환 수 = 그날 잡힌 기존 환자 예약(전화·데스크, 변경 제외) B × s/(1−s), s = NEW_PATIENT_SHARE (확률적 반올림)
 - lapse(첫 리콜 무응답)는 구환 첫 리콜만(3단계). 내원하면 다음 리콜이 다시 생긴다
+- 치료계획(§2.3): Tn 첫 내원·상담·치주 위생(PERIO_PLAN_RATE)이 계획을 만들고, 코스는 항목 순서대로 예약한다.
+  그만둠(PLAN_DROP_RATE)은 계획을 받아들일 때 한 번 — 몇 번째 항목 뒤에 멈출지 함께 뽑는다. 치아는 5단계가 정한다
 """
 
 from dataclasses import dataclass, field
@@ -15,7 +17,6 @@ from generator.master import (
     CHAIRS,
     CHECKUP_CODE,
     COURSE_INTERVAL_DAYS,
-    COURSE_VISITS,
     DOCTOR_CONCURRENCY,
     EPISODE_MIX,
     FAMILY_SIZE,
@@ -25,6 +26,10 @@ from generator.master import (
     MAX_LEAD_DAYS,
     MIN_VISIT_AGE,
     NEW_PATIENT_SHARE,
+    PERIO_PLAN_RATE,
+    PLAN_DROP_RATE,
+    PLAN_TEMPLATES,
+    PLAN_UNBOOKED_RATE,
     PLANNED_WEIGHTS,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
@@ -48,6 +53,7 @@ ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
 # 담당 1명이 동시에 맡는 예약 수 (§1 (4)). 상담은 제약 없음
 CONCURRENCY = {"treatment": DOCTOR_CONCURRENCY, "hygiene": 1}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
+NAME = {p["code"]: p["name"] for p in PROCEDURES}
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 
 
@@ -62,9 +68,28 @@ DAY_MINUTES = (
 
 
 @dataclass
+class PlanItem:
+    id: int
+    seq: int
+    code: str
+
+
+@dataclass
+class Plan:
+    id: int
+    patient_id: int
+    created: datetime  # 만든 내원의 종료 시각
+    appointment_id: int
+    items: list
+
+
+@dataclass
 class Episode:
     visit_type: str
-    remaining: int
+    course: bool = False  # Tn — 첫 내원이 계획을 만든다
+    plan: Plan | None = None
+    done: int = 0  # 이 코스에서 마친 항목 수
+    stop_after: int = 0  # 이만큼 마치면 끝(그만둠이면 항목 수보다 적다)
     call_on: date | None = (
         None  # 예약이 없을 때 전화할 날 (노쇼·당일 취소 뒤 재예약, 데스크 예약 실패)
     )
@@ -108,7 +133,7 @@ class Appt:
     episode: Episode | None = (
         None  # 이 예약이 속한 수요 — 5단계가 코스 안에서 같은 치아를 유지하려고 (창 이전 내원은 None)
     )
-    left: int | None = None  # 내원을 마친 시점의 코스 남은 횟수 — 5b 다음 계획 (completed만)
+    plan_item: int | None = None  # 이행하는 치료계획 항목 id
 
 
 class Sim:
@@ -129,6 +154,8 @@ class Sim:
         self.by_day: dict[date, list[Appt]] = {}
         self.day_count: dict[date, int] = {}
         self.patients: list[Patient] = []
+        self.plans: list[Plan] = []
+        self.item_count = 0
         for p in run.state["patients"]:
             self.patients.append(
                 Patient(
@@ -303,6 +330,9 @@ class Sim:
             rescheduled_from,
             episode=patient.ep,
         )
+        ep = patient.ep
+        if ep is not None and ep.plan is not None:
+            a.plan_item = ep.plan.items[ep.done].id
         if rescheduled_from is None and self.rng.random() < self.cfg["reschedule_rate"]:
             # 변경일 = created 다음 날 ~ 예약 전날 중 진료일. 없으면 변경 없음
             days, d = [], created.date() + timedelta(days=1)
@@ -331,6 +361,8 @@ class Sim:
         재예약(missed)은 그날의 code_key가 놓친 예약과 같으면 같은 시술"""
 
         def code_for(d: date) -> str:
+            if patient.ep is not None and patient.ep.plan is not None:
+                return patient.ep.plan.items[patient.ep.done].code  # 코스는 다음 항목 그대로
             if missed is not None and self.code_key(patient, d) == self.code_key(
                 patient, missed.start.date()
             ):
@@ -386,29 +418,89 @@ class Sim:
             if a.code == SCALING_CODE and age_on(p.birth, d) >= SCALING_MIN_AGE:
                 p.scaling_years.add(d.year)
             p.recall_due = recall_due(self.rng, p.last_hygiene or d)
-            p.ep.remaining -= 1
-            a.left = p.ep.remaining
-            if p.ep.remaining == 0:
+            if not self.after_visit(p, a):
                 p.ep = None
                 continue
             # 코스 다음 회차: 그 자리에서 데스크 예약 (created_at = 내원 종료 시각). 가능일이 없으면 내일 전화
             interval = int(self.rng.integers(COURSE_INTERVAL_DAYS[0], COURSE_INTERVAL_DAYS[1] + 1))
-            found = self.find_booking(p, a.type, d + timedelta(days=interval))
+            found = self.find_booking(p, "treatment", d + timedelta(days=interval))
             if found is None:
                 p.ep.call_on = d + timedelta(days=1)
                 continue
-            self.book(p, a.type, *found, a.start + timedelta(minutes=a.duration), "desk")
+            self.book(p, "treatment", *found, a.start + timedelta(minutes=a.duration), "desk")
             desk += 1
         return desk
+
+    def new_plan(self, p: Patient, a: Appt, names: tuple) -> Plan:
+        plan = Plan(len(self.plans) + 1, p.id, a.start + timedelta(minutes=a.duration), a.id, [])
+        for seq, name in enumerate(names, 1):
+            self.item_count += 1
+            plan.items.append(PlanItem(self.item_count, seq, CODE[name]))
+        self.plans.append(plan)
+        return plan
+
+    def plan_names(self, p: Patient, a: Appt) -> tuple | None:
+        """completed 내원이 만드는 계획의 항목 시술 — Tn 첫 내원은 그 시술의 템플릿, 상담은 연령 구간 치료 시술로만
+        된 후보 중 균등(없으면 그 구간 치료 가중으로 첫 시술을 뽑아 템플릿), 성인·노인 스케일링은 PERIO_PLAN_RATE로 치주.
+        치아 치료를 못 하는 나이(TOOTH_TREATMENT_MIN_AGE 미만)는 계획 없음"""
+        on = a.start.date()
+        if age_on(p.birth, on) < TOOTH_TREATMENT_MIN_AGE:
+            return None
+        band = age_band(age_on(p.birth, on))
+        if a.type == "treatment":
+            return PLAN_TEMPLATES["treatment"][NAME[a.code]] if p.ep.course else None
+        if a.type == "consult":
+            pool = PLANNED_WEIGHTS["treatment"][band]
+            fits = [
+                t for t in PLAN_TEMPLATES["consult"][NAME[a.code]] if all(n in pool for n in t)
+            ]
+            if fits:
+                return fits[int(self.rng.integers(len(fits)))]
+            return PLAN_TEMPLATES["treatment"][self.weighted(pool)]
+        if (
+            a.code == SCALING_CODE
+            and band in HYGIENE_SCALING_BANDS
+            and self.rng.random() < PERIO_PLAN_RATE
+        ):
+            return PLAN_TEMPLATES["hygiene"]
+        return None
+
+    def accept(self, ep: Episode) -> None:
+        """계획을 받아들일 때 그만둠을 한 번 뽑는다 — 그만두면 1 ~ 항목 수 − 1번째 항목 뒤에서 멈춘다"""
+        n = len(ep.plan.items)
+        ep.stop_after = n
+        if n > 1 and self.rng.random() < PLAN_DROP_RATE:
+            ep.stop_after = int(self.rng.integers(1, n))
+
+    def after_visit(self, p: Patient, a: Appt) -> bool:
+        """completed 내원 뒤 치료계획 — 코스 다음 항목을 예약해야 하면 True (p.ep가 그 코스)"""
+        ep = p.ep
+        if ep.plan is not None:
+            ep.done += 1
+            return ep.done < ep.stop_after
+        names = self.plan_names(p, a)
+        if names is None:
+            return False
+        plan = self.new_plan(p, a, names)
+        if a.type == "treatment":  # Tn 첫 내원 = 항목 1
+            a.plan_item = plan.items[0].id
+            ep.plan, ep.done = plan, 1
+            self.accept(ep)
+            return ep.done < ep.stop_after
+        if self.rng.random() < PLAN_UNBOOKED_RATE:
+            return False
+        p.ep = Episode("treatment", course=True, plan=plan)
+        self.accept(p.ep)
+        return True
 
     def due_demand(self, p: Patient, d: date) -> tuple[str, Episode] | None:
         """기한이 된 수요 중 가장 이른 것 (같으면 치료 먼저) — 예약이 잡혀야 시작하므로 여기서는 보기만"""
         arrival = p.queue[0] if p.queue and p.queue[0].day <= d else None
         recall = p.recall_due if p.recall_due is not None and p.recall_due <= d else None
         if arrival is not None and (recall is None or arrival.day <= recall):
-            return "arrival", Episode(arrival.visit_type, arrival.visits)
+            return "arrival", Episode(arrival.visit_type, course=arrival.visits > 1)
         if recall is not None:
-            return "recall", Episode("hygiene", 1)
+            return "recall", Episode("hygiene")
         return None
 
     def phone_calls(self, d: date) -> int:
@@ -460,16 +552,12 @@ class Sim:
             visit_type = self.weighted(VISIT_MIX)
             if visit_type == "treatment" and age_on(c["birth_date"], d) < TOOTH_TREATMENT_MIN_AGE:
                 visit_type = "hygiene"  # 영구치가 나기 전 — 치아 단위 치료 대신 검진
-            visits = 1
+            course = False
             if visit_type == "treatment":
                 mix = EPISODE_MIX[c["band"]]
-                visits = (
-                    1
-                    if self.weighted({"T1": mix["T1"], "Tn": mix["Tn"]}) == "T1"
-                    else int(self.rng.integers(COURSE_VISITS[0], COURSE_VISITS[1] + 1))
-                )
+                course = self.weighted({"T1": mix["T1"], "Tn": mix["Tn"]}) == "Tn"
             pid = len(self.patients) + 1
-            p = Patient(pid, c["birth_date"], [], None, None, Episode(visit_type, visits))
+            p = Patient(pid, c["birth_date"], [], None, None, Episode(visit_type, course=course))
             if self.phone_book(p, visit_type, d) is None:
                 return  # 빈자리가 없으면 그날 신환은 더 받지 않는다(후보는 버림)
             self.patients.append(p)
@@ -567,7 +655,7 @@ class Sim:
         conn.executemany(
             "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
             " planned_procedure_code, status, rescheduled_from_id, booked_via, confirmed, created_at, cancelled_at,"
-            " chair_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " chair_no, plan_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     a.id,
@@ -584,6 +672,7 @@ class Sim:
                     a.created.strftime(fmt),
                     a.cancelled.strftime(fmt) if a.cancelled else None,
                     a.chair,
+                    a.plan_item,
                 )
                 for a in self.appts
             ],
@@ -599,7 +688,7 @@ class Sim:
             "INSERT INTO truth.truth_appointment_courses VALUES (?, ?)",
             self.run.state["episode"].items(),
         )
-        self.run.state["course_left"] = {a.id: a.left for a in self.appts if a.left}
+        self.run.state["plans"] = self.plans  # 계획 테이블은 5단계가 치아를 정해 적재
 
 
 def stage(run, rng, fake) -> None:

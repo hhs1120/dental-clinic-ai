@@ -1,5 +1,6 @@
 """verify 필수 검사(emr_* · ax_calls)가 위반을 실제로 잡는지 — 정상 DB를 한 곳씩 깨뜨린다."""
 
+import json
 import sqlite3
 from dataclasses import replace
 from datetime import date
@@ -492,6 +493,96 @@ def test_patient_twice_same_day(tmp_path):
     conn = make_db(tmp_path)
     appt(conn, "2026-10-06 15:00:00", type="hygiene", patient=1)
     assert verify.check_patient_same_day(conn, CTX)
+
+
+# 치료계획 (§2.3): 시드 계획 1 = 1번 예약(10/06 신경치료)이 만듦, 항목 1 완료(1번 예약)·2 열림(5번 예약)·3 크라운 열림
+@pytest.mark.parametrize(
+    "sql, check",
+    [
+        ("UPDATE emr_treatment_plans SET created_at = '2026-10-06 10:00:00'", "check_plan_origin"),
+        ("UPDATE emr_treatment_plans SET created_appointment_id = 7", "check_plan_origin"),  # 노쇼
+        ("UPDATE emr_appointments SET plan_item_id = NULL WHERE id = 1", "check_plan_origin"),
+        (
+            "UPDATE emr_appointments SET plan_item_id = 3 WHERE id = 5",
+            "check_plan_item_appointments",
+        ),
+        (
+            "UPDATE emr_appointments SET plan_item_id = 2 WHERE id = 2",
+            "check_plan_item_appointments",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET tooth_no = '27' WHERE id = 1",
+            "check_plan_item_appointments",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET status = 'open' WHERE id = 1",
+            "check_plan_item_status",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET status = 'done' WHERE id = 3",
+            "check_plan_item_status",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET status = 'replaced' WHERE id = 3",
+            "check_plan_item_status",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET tooth_no = '00' WHERE id = 3",
+            "check_plan_item_values",
+        ),
+        (
+            "UPDATE emr_treatment_plan_items SET est_fee = 120000 WHERE id = 2",
+            "check_plan_item_values",
+        ),
+        ("UPDATE emr_treatment_plan_items SET seq = 4 WHERE id = 3", "check_plan_item_values"),
+    ],
+)
+def test_plan_break(tmp_path, sql, check):
+    conn = make_db(tmp_path)
+    conn.execute(sql)
+    assert getattr(verify, check)(conn, CTX)
+
+
+def test_plan_item_replaced_by_other_treatment(tmp_path):
+    """열린 항목 치아에 계획 밖 진료가 들어가면 그 항목은 대체됨 — 열림으로 두면 잡히고, 대체됨이면 통과"""
+    conn = make_db(tmp_path)
+    appt(conn, "2026-11-10 10:00:00", patient=1)
+    aid = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+    conn.execute(
+        "INSERT INTO emr_treatments (appointment_id, patient_id, procedure_code, tooth_no, performed_at,"
+        " fee_total, insured_amount, patient_amount) VALUES (?, 1, 'U0008', '26', '2026-11-10 10:00:00',"
+        " 120000, 84000, 36000)",
+        (aid,),
+    )
+    conn.execute(
+        "UPDATE emr_appointments SET planned_procedure_code = 'U0008' WHERE id = ?", (aid,)
+    )
+    assert verify.check_plan_item_status(conn, CTX)
+    conn.execute(
+        "UPDATE emr_treatment_plan_items SET status = 'replaced' WHERE id IN (2, 3)"
+    )  # 둘 다 26번
+    conn.execute(
+        "UPDATE emr_appointments SET plan_item_id = NULL, status = 'scheduled' WHERE id = 5"
+    )
+    assert verify.check_plan_item_status(conn, CTX) == []
+
+
+def test_call_fact_open_plan_items(tmp_path):
+    """통화 사실의 열린 치료계획 항목은 통화 시각 기준 — 크라운을 빼면 잡힌다"""
+    conn = make_db(tmp_path)
+    truth = sqlite3.connect(tmp_path / "truth.sqlite")
+    fact = json.loads(
+        truth.execute(
+            "SELECT used_fact FROM truth_call_labels WHERE call_uid = 'c-0001'"
+        ).fetchone()[0]
+    )
+    fact["open_plan_items"] = fact["open_plan_items"][:1]
+    truth.execute(
+        "UPDATE truth_call_labels SET used_fact = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(fact, ensure_ascii=False),),
+    )
+    truth.commit()
+    assert verify.check_call_facts_as_of(conn, CTX)
 
 
 # 체어·동시 진료 (§1 (3)·(4)): 시드 1번 예약 = 10/06 10:00~11:00 원장·체어 1, 2번 = 11/03 10:00~10:30 위생사 2·체어 2

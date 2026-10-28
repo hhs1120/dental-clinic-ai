@@ -41,14 +41,20 @@ INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, appoi
   (2, 2, 'CHILD_COOP', 'intake', '2025-01-01', NULL, '2031-03-01'),
   (3, 1, 'ANES_FAIL', 'visit', '2026-10-06', 1, NULL);
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
-                              planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at, chair_no) VALUES
-  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL, 1),
-  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL, 2),
-  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00', 1),
-  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL, 1),
-  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 1),
-  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 2),
-  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL, NULL);
+                              planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at, chair_no, plan_item_id) VALUES
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL, 1, 1),
+  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL, 2, NULL),
+  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00', 1, NULL),
+  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL, 1, NULL),
+  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 1, 2),
+  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 2, NULL),
+  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL, NULL, NULL);
+-- 치료계획: 1번 예약(신경치료 코스 첫 내원)이 만든 계획 — 항목 1 완료, 항목 2는 5번 예약(12/01), 항목 3 크라운 열림
+INSERT INTO emr_treatment_plans VALUES (1, 1, '2026-10-06 11:00:00', 1);
+INSERT INTO emr_treatment_plan_items VALUES
+  (1, 1, 1, 'U0008', '26', 36000, 'done'),
+  (2, 1, 2, 'U0008', '26', 36000, 'open'),
+  (3, 1, 3, 'U0009', '26', 550000, 'open');
 INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),
   (2, 2, 1, 'U0001', '00', '2026-11-03 10:00:00', 60000, 42000, 18000),
@@ -99,13 +105,13 @@ INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evid
   (3, 'narrative', 0, NULL, NULL, 1, '{"alerts": [], "cc": "이에 까만 점이 생겼어요", "discovered": [], "findings": null, "plan": null, "procedure": "레진", "requirement": null, "tooth": "16"}');
 INSERT INTO truth_call_labels VALUES
   ('c-0003', 'book', '["book"]', 'patient', 'normal', 0, 0, 0, 1, 1, 0, NULL,
-   '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"]}',
+   '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"], "open_plan_items": []}',
    'dev'),
   ('c-0001', 'billing_q', '["billing_q", "complaint"]', 'patient', 'normal', 0, 1, 0, 0, 0, 1, NULL,
-   '{"call_date": "2026-10-20", "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [{"date": "2026-10-06", "procedure": "신경치료", "tooth": "26"}], "balance": 16000, "next_appointment": {"appointment_id": 2, "date": "2026-11-03", "time": "10:00", "procedure": "스케일링"}, "family": ["김하늘"], "alerts": ["고혈압", "마취가 잘 안 됨"]}',
+   '{"call_date": "2026-10-20", "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [{"date": "2026-10-06", "procedure": "신경치료", "tooth": "26"}], "balance": 16000, "next_appointment": {"appointment_id": 2, "date": "2026-11-03", "time": "10:00", "procedure": "스케일링"}, "family": ["김하늘"], "alerts": ["고혈압", "마취가 잘 안 됨"], "open_plan_items": [{"procedure": "신경치료", "tooth": "26"}, {"procedure": "크라운", "tooth": "26"}]}',
    'silver'),
   ('c-0004', 'reschedule', '["reschedule"]', 'guardian', 'low', 0, 0, 0, 0, 1, 1, 'guardian_confused',
-   '{"call_date": "2026-11-14", "appointment_id": 4, "appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진", "from_date": "2026-11-17", "from_time": "10:00"}, "patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 4, "date": "2026-11-18", "time": "10:00", "procedure": "레진"}, "family": ["김철수"], "alerts": ["협조 어려운 소아"]}',
+   '{"call_date": "2026-11-14", "appointment_id": 4, "appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진", "from_date": "2026-11-17", "from_time": "10:00"}, "patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 4, "date": "2026-11-18", "time": "10:00", "procedure": "레진"}, "family": ["김철수"], "alerts": ["협조 어려운 소아"], "open_plan_items": []}',
    'silver'),
   ('c-0002', 'price_q', '["price_q", "book"]', 'new_caller', 'normal', 0, 0, 1, 1, 0, 1, 'two_topics',
    '{"call_date": "2026-11-27", "topic_procedure": "미백"}',

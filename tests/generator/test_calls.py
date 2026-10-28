@@ -137,7 +137,7 @@ def test_booking_calls_not_urgent_for_later_visit(db):
 
 
 def test_price_topic_is_not_a_past_visit(db):
-    """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약 시술이거나 지난 진료에 없는 시술.
+    """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약·열린 치료계획 항목 시술이거나 지난 진료에 없는 시술.
     지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
     checked = 0
     for (fact,) in db.execute(
@@ -146,7 +146,9 @@ def test_price_topic_is_not_a_past_visit(db):
         f = json.loads(fact)
         if "patient" not in f:
             continue
-        upcoming = {x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x}
+        upcoming = {
+            x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x
+        } | {i["procedure"] for i in f["open_plan_items"]}
         assert f["topic_procedure"] in upcoming or f["topic_procedure"] not in {
             v["procedure"] for v in f["recent_visits"]
         }, f

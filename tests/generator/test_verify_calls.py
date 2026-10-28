@@ -350,6 +350,10 @@ def test_confirm_call_on_reminder_day_after_message(tmp_path):
         },
         family=["김하늘"],
         alerts=["고혈압", "마취가 잘 안 됨"],
+        open_plan_items=[
+            {"procedure": "신경치료", "tooth": "26"},
+            {"procedure": "크라운", "tooth": "26"},
+        ],
         appointment={"date": "2026-11-03", "time": "10:00", "procedure": "스케일링"},
     )
     # 순서가 바뀌므로(11/02 < 10/20 아님) 행 순서 검사는 보지 않는다

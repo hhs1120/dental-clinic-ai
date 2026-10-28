@@ -173,19 +173,27 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
     ]  # 심사 결과는 바뀜
 
 
-def test_plan_remaining_is_course_visits_left(db):
-    """다음 계획의 남은 내원 = 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획) — 다음 예약이 잡혔는지·나중에
-    바뀌었는지와 무관 (§4.3)"""
+def test_plan_is_open_items_at_visit_end(db):
+    """다음 계획 = 그 내원을 마친 시각에 열린 치료계획 항목(§2.3·§4.3 (5)) — 코스 첫 내원은 남은 항목이 있고,
+    치주 계획을 만든 위생 내원은 잇몸치료 항목과 깊은 치주낭"""
     conn, _, _ = db
-    left = RUN["run"].state["course_left"]
+    plans = RUN["run"].state["plans"]
+    perio = {plan.appointment_id for plan in plans}
     got = Counter()
-    for tid, appt_id, facts in conn.execute(
-        "SELECT t.id, t.appointment_id, n.facts FROM emr_treatments t JOIN truth.truth_chart_notes n ON n.treatment_id = t.id"
+    for code, appt_id, facts in conn.execute(
+        "SELECT t.procedure_code, t.appointment_id, n.facts FROM emr_treatments t"
+        " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id WHERE n.kind = 'narrative'"
     ):
-        plan = json.loads(facts)["plan"] or {}
-        assert plan.get("remaining", 0) == left.get(appt_id, 0), (tid, plan)
-        got[plan.get("remaining", 0)] += 1
-    assert got[1] and got[2]  # 코스 첫 회차는 2회 이상 남는다
+        f = json.loads(facts)
+        if f["plan"] and "items" in f["plan"]:
+            got["items"] += 1
+        if code in chart.HYGIENE_CODES and appt_id in perio:
+            assert "잇몸치료" in [i["procedure"] for i in f["plan"]["items"]], (
+                f
+            )  # 앞선 계획의 열린 항목도 함께
+            assert f["findings"]["pocket_mm"] >= 4, f
+            got["perio"] += 1
+    assert got["items"] and got["perio"]
 
 
 def test_courses_recorded_in_truth(db):
@@ -250,7 +258,7 @@ FACTS = {
     "cc": "잇몸이 내려간 것 같아요",
     "discovered": ["마취가 잘 안 됨"],
     "findings": {"bleeding": True, "calculus": "많음", "mobility": 0, "pocket_mm": 6},
-    "plan": {"remaining": 2},
+    "plan": {"items": [{"procedure": "잇몸치료", "tooth": None}]},
     "procedure": "잇몸치료",
     "tooth": None,
     "requirement": {"key": "R02", "evidence": True, "scaling_days_ago": 14, "linked": True},
@@ -267,7 +275,7 @@ def test_narrative_must_include_facts():
         ["마취가 잘 안 됨"],
         ["14일"],
         ["재평가"],
-        ["2회"],
+        ["잇몸치료"],
     ]  # 근거 말
     tooth = {
         **FACTS,

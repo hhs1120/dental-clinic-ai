@@ -46,7 +46,6 @@ from generator.master import (
     CHART_REQUIREMENT,
     CLINIC_NAME,
     CONDITIONAL_INSURED_MIN_AGE,
-    COURSE_VISITS,
     DOCTOR_CONCURRENCY,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
@@ -63,11 +62,13 @@ from generator.master import (
     PREGNANCY_LEFT_DAYS,
     PROCEDURE_DIAGNOSES,
     PROCEDURES,
+    RECALL_CYCLE_MONTHS,
     RETREATMENT_REQUIREMENT,
     SCALING_CODE,
     SCALING_MIN_AGE,
     SUBMITTED_MONTHS,
     SUBTOPIC_PURPOSE,
+    TOOTH_CHOICES,
     TOOTH_TREATMENT_MIN_AGE,
     URGENCIES,
     VISIT_MIX,
@@ -485,6 +486,152 @@ def check_performed_at(conn, ctx):
         " FROM emr_treatments t JOIN emr_appointments a ON a.id = t.appointment_id"
         " WHERE datetime(t.performed_at) IS NOT datetime(a.scheduled_at)",
     )
+
+
+# ── 치료계획 ────────────────────────────────────────────────
+
+
+def _end(a: dict) -> str:
+    """예약 종료 시각 — 계획을 만든 시각(내원 종료)"""
+    return (_dt(a["scheduled_at"]) + timedelta(minutes=a["duration_min"])).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
+def _plan_est_fee(code: str, birth: str, on: str) -> int:
+    """예상 금액 = 계획을 만든 날 나이의 본인부담 (check_treatment_amounts와 같은 계산)"""
+    p = PROCEDURE[code]
+    insured = insured_on(p, age_on(date.fromisoformat(birth), _dt(on).date()))
+    return p["fee_total"] - (
+        round(p["fee_total"] * (1 - p["patient_share_rate"])) if insured else 0
+    )
+
+
+def _plan_items(conn) -> list[dict]:
+    """계획 항목 + 계획(환자·만든 시각) + 닫힌 시각 — 완료(그 항목의 completed 예약 시작) 또는 대체(다른 계획 밖 진료가
+    그 치아에 처음 들어간 시각, 치아 단위만). 둘 다 없으면 None. 생성기와 따로 계산 (생성 설계 §2.3)"""
+    items = _rows(
+        conn,
+        "SELECT i.id, i.plan_id, i.seq, i.procedure_code, i.tooth_no, i.est_fee, i.status,"
+        " p.patient_id, p.created_at FROM emr_treatment_plan_items i"
+        " JOIN emr_treatment_plans p ON p.id = i.plan_id ORDER BY p.created_at, p.id, i.seq",
+    )
+    done = dict(
+        conn.execute(
+            "SELECT plan_item_id, min(scheduled_at) FROM emr_appointments"
+            " WHERE status = 'completed' AND plan_item_id IS NOT NULL GROUP BY plan_item_id"
+        ).fetchall()
+    )
+    treated = defaultdict(list)  # (환자, 치아) → [(시각, 계획 id 또는 None)]
+    for pid, tooth, at, plan in conn.execute(
+        "SELECT t.patient_id, t.tooth_no, t.performed_at, i.plan_id FROM emr_treatments t"
+        " JOIN emr_appointments a ON a.id = t.appointment_id"
+        " LEFT JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id"
+        " WHERE t.tooth_no != ? ORDER BY t.performed_at",
+        (FULL_MOUTH,),
+    ):
+        treated[(pid, tooth)].append((at, plan))
+    for r in items:
+        r["done_at"] = done.get(r["id"])
+        r["replaced_at"] = next(
+            (
+                at
+                for at, plan in treated[(r["patient_id"], r["tooth_no"])]
+                if at > r["created_at"] and plan != r["plan_id"]
+            ),
+            None,
+        )
+        r["closed_at"] = r["done_at"] or r["replaced_at"]
+    return items
+
+
+def _open_items_at(items: list[dict], pid: int, t: str) -> list[dict]:
+    """시각 t에 열린 항목(만든 시각 ≤ t, t 전에 닫히지 않음) — 차트 다음 계획·통화 사실이 보는 값"""
+    return [
+        {"procedure": PROCEDURE[r["procedure_code"]]["name"], "tooth": r["tooth_no"]}
+        for r in items
+        if r["patient_id"] == pid
+        and r["created_at"] <= t
+        and (r["closed_at"] is None or r["closed_at"] >= t)
+    ]
+
+
+def check_plan_origin(conn, ctx):
+    """계획은 completed 진료·상담·위생 내원이 만든다 — 같은 환자, created_at = 그 내원 종료 시각.
+    진료 내원이 만든 계획은 코스 첫 내원이라 그 예약이 항목 1"""
+    bad = []
+    for r in _rows(
+        conn,
+        "SELECT p.id, p.patient_id, p.created_at, a.patient_id AS appt_patient, a.status, a.type,"
+        " a.scheduled_at, a.duration_min, a.plan_item_id, i.plan_id AS item_plan, i.seq AS item_seq"
+        " FROM emr_treatment_plans p JOIN emr_appointments a ON a.id = p.created_appointment_id"
+        " LEFT JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id",
+    ):
+        if (
+            r["status"] != "completed"
+            or r["appt_patient"] != r["patient_id"]
+            or r["created_at"] != _end(r)
+            or (r["type"] == "treatment" and (r["item_plan"], r["item_seq"]) != (r["id"], 1))
+        ):
+            bad.append(r)
+    return bad
+
+
+def check_plan_item_appointments(conn, ctx):
+    """예약 시술·치아 = 계획 항목: plan_item_id가 있는 예약은 진료(treatment)·같은 환자·예정 시술 = 항목 시술,
+    completed면 진료 기록 치아 = 항목 치아. 위생·상담 예약은 plan_item_id 없음"""
+    return _rows(
+        conn,
+        "SELECT a.id, a.type, a.planned_procedure_code, i.procedure_code, i.tooth_no, t.tooth_no AS treated"
+        " FROM emr_appointments a JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id"
+        " JOIN emr_treatment_plans p ON p.id = i.plan_id"
+        " LEFT JOIN emr_treatments t ON t.appointment_id = a.id"
+        " WHERE a.type != 'treatment' OR a.patient_id != p.patient_id"
+        " OR a.planned_procedure_code != i.procedure_code"
+        " OR (t.id IS NOT NULL AND t.tooth_no != i.tooth_no)",
+    )
+
+
+def check_plan_item_status(conn, ctx):
+    """완료 항목 ⇔ 그 항목의 completed 예약 있음. 대체됨 = 완료 전에 다른 진료가 그 치아에 들어감(치아 단위만),
+    열림은 그런 진료 없음. 완료 항목은 순서 앞부분(완료 뒤에 열린·대체된 항목만 옴)"""
+    bad, last_open = [], {}
+    for r in _plan_items(conn):
+        want = "done" if r["done_at"] else "replaced" if r["replaced_at"] else "open"
+        if r["status"] != want:
+            bad.append({"item_id": r["id"], "status": r["status"], "expected": want})
+        elif want == "done" and last_open.get(r["plan_id"], 0) > 0:
+            bad.append({"item_id": r["id"], "problem": "열린·대체된 항목 뒤의 완료 항목"})
+        if want != "done":
+            last_open[r["plan_id"]] = r["seq"]
+    return bad
+
+
+def check_plan_item_values(conn, ctx):
+    """항목 순서 1..n, 치아 = 치아 단위 시술은 그 시술 후보(master.TOOTH_CHOICES)·아니면 FULL_MOUTH,
+    예상 금액 = 계획을 만든 날 나이의 본인부담"""
+    bad, seqs = [], defaultdict(list)
+    for r in _rows(
+        conn,
+        "SELECT i.id, i.plan_id, i.seq, i.procedure_code, i.tooth_no, i.est_fee, p.created_at,"
+        " pt.birth_date FROM emr_treatment_plan_items i JOIN emr_treatment_plans p ON p.id = i.plan_id"
+        " JOIN emr_patients pt ON pt.id = p.patient_id",
+    ):
+        seqs[r["plan_id"]].append(r["seq"])
+        code = r["procedure_code"]
+        tooth_ok = (
+            r["tooth_no"] in TOOTH_CHOICES[code]
+            if PROCEDURE[code]["is_tooth_level"]
+            else r["tooth_no"] == FULL_MOUTH
+        )
+        if not tooth_ok or r["est_fee"] != _plan_est_fee(code, r["birth_date"], r["created_at"]):
+            bad.append(r)
+    bad += [
+        {"plan_id": k, "seqs": sorted(v)}
+        for k, v in seqs.items()
+        if sorted(v) != list(range(1, len(v) + 1))
+    ]
+    return bad
 
 
 def check_treatment_on_completed(conn, ctx):
@@ -1132,14 +1279,29 @@ def check_chart_text(conn, ctx):
 
 
 def check_chart_plan(conn, ctx):
-    """다음 계획의 코스 남은 횟수는 1 ~ COURSE_VISITS 최대 - 1"""
+    """서술 줄의 다음 계획 = 그 내원을 마친 시각에 열린 치료계획 항목(시술·치아, 전체 구강은 None — 생성 설계 §4.3 (5)).
+    열린 항목이 없으면 위생 내원은 정기 검진 주기, 그 밖은 없음"""
+    items = _plan_items(conn)
     bad = []
     for r in _rows(
-        conn, "SELECT treatment_id, facts FROM truth.truth_chart_notes WHERE kind = 'narrative'"
+        conn,
+        "SELECT c.treatment_id, c.facts, t.patient_id, t.procedure_code, a.scheduled_at, a.duration_min"
+        " FROM truth.truth_chart_notes c JOIN emr_treatments t ON t.id = c.treatment_id"
+        " JOIN emr_appointments a ON a.id = t.appointment_id WHERE c.kind = 'narrative'",
     ):
-        remaining = (json.loads(r["facts"]).get("plan") or {}).get("remaining")
-        if remaining is not None and not 1 <= remaining < COURSE_VISITS[1]:
-            bad.append({"treatment_id": r["treatment_id"], "remaining": remaining})
+        open_items = [
+            i | {"tooth": None if i["tooth"] == FULL_MOUTH else i["tooth"]}
+            for i in _open_items_at(items, r["patient_id"], _end(r))
+        ]
+        if open_items:
+            want = {"items": open_items}
+        elif r["procedure_code"] in chart.HYGIENE_CODES:
+            want = {"recall_months": RECALL_CYCLE_MONTHS}
+        else:
+            want = None
+        got = json.loads(r["facts"]).get("plan")
+        if got != want:
+            bad.append({"treatment_id": r["treatment_id"], "plan": got, "expected": want})
     return bad
 
 
@@ -2209,8 +2371,9 @@ def check_call_counterpart(conn, ctx):
     return bad
 
 
-def _facts_at(conn, pid: int, t: str, birth: str) -> dict:
-    """통화 시각 t 시점의 사실 — 생성기와 따로 계산 (§4.1 절차 2: created_at·performed_at·paid_at ≤ t)"""
+def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict]) -> dict:
+    """통화 시각 t 시점의 사실 — 생성기와 따로 계산 (§4.1 절차 2: created_at·performed_at·paid_at ≤ t).
+    items = _plan_items (열린 치료계획 항목)"""
     day = t[:10]
     visits = [
         {
@@ -2250,6 +2413,7 @@ def _facts_at(conn, pid: int, t: str, birth: str) -> dict:
         "balance": balance,
         "next": nxt[0] if nxt else None,
         "alerts": alerts,
+        "open_plan_items": _open_items_at(items, pid, t),
     }
 
 
@@ -2268,7 +2432,7 @@ def _appt_detail(a: dict, appts: dict) -> dict:
 
 def check_call_facts_as_of(conn, ctx):
     """used_fact는 통화 시점 사실: 통화 날짜, 예약류의 예약 상세, 환자(통화 환자와 같음 — 환자가 연결됐거나 보험사면
-    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항이 장부를 통화 시각까지만 읽은 값과 같음"""
+    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
     appts = {
         a["id"]: a
@@ -2278,6 +2442,7 @@ def check_call_facts_as_of(conn, ctx):
             " FROM emr_appointments",
         )
     }
+    items = _plan_items(conn)
     bad = []
     for r in _calls(conn):
         f, t = r["fact"], r["started_at"]
@@ -2299,7 +2464,7 @@ def check_call_facts_as_of(conn, ctx):
         if r["patient_id"] is not None and pid != r["patient_id"] or pid not in patients:
             bad.append({"call_uid": r["call_uid"], "problem": "사실의 환자 ≠ 통화 환자"})
             continue
-        want = _facts_at(conn, pid, t, patients[pid]["birth_date"])
+        want = _facts_at(conn, pid, t, patients[pid]["birth_date"], items)
         nxt = f.get("next_appointment")
         got = {
             "age": f["patient"]["age"],
@@ -2307,6 +2472,7 @@ def check_call_facts_as_of(conn, ctx):
             "balance": f["balance"],
             "next": nxt["appointment_id"] if nxt else None,
             "alerts": set(f["alerts"]),
+            "open_plan_items": f.get("open_plan_items"),
         }
         if f["patient"]["name"] != patients[pid]["name"]:
             got["name"] = f["patient"]["name"]
@@ -2676,6 +2842,26 @@ def report_alert_holder_share(conn, ctx):
     }
 
 
+def report_open_plans(conn, ctx):
+    """TODAY 개원 전 열린 치료계획 항목 — 항목 수·계획 수·환자 수, 그중 다음 예약이 없는 환자(⑨ 진료계획 미예약 규모)"""
+    t = f"{ctx.today.isoformat()} 00:00:00"
+    open_items = [r for r in _plan_items(conn) if r["closed_at"] is None]
+    booked = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT patient_id FROM emr_appointments WHERE scheduled_at > ? AND status = 'scheduled'",
+            (t,),
+        )
+    }
+    patients = {r["patient_id"] for r in open_items}
+    return {
+        "items": len(open_items),
+        "plans": len({r["plan_id"] for r in open_items}),
+        "patients": len(patients),
+        "patients_unbooked": len(patients - booked),
+    }
+
+
 def check_visit_mix(conn, ctx):
     """창 안 내원(completed) 유형 구성 master.VISIT_MIX ± VISIT_MIX_TOLERANCE — 창 이전 내원은 빼고"""
     counts = {
@@ -2782,6 +2968,10 @@ REQUIRED = [
     check_cancellation_kind,
     check_reschedule_pair,
     check_pre_window_visit,
+    check_plan_origin,
+    check_plan_item_appointments,
+    check_plan_item_status,
+    check_plan_item_values,
     check_treatment_on_completed,
     check_completed_one_treatment,
     check_performed_at,
@@ -2868,6 +3058,7 @@ REPORTS = [
     report_daily_fill,
     report_balance_holder_share,
     report_alert_holder_share,
+    report_open_plans,
     report_adjust_judgment,
     report_claim_errors,
     report_call_mix,

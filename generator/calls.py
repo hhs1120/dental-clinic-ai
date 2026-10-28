@@ -43,6 +43,7 @@ from generator.master import (
     age_on,
     open_slots,
 )
+from generator.records import open_plan_items
 
 FMT = "%Y-%m-%d %H:%M:%S"
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
@@ -96,7 +97,8 @@ def _in_hours(t: str) -> bool:
 class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
-    def __init__(self, conn):
+    def __init__(self, conn, plan_items: list):
+        self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
         self.patients = {
             r[0]: {
                 "id": r[0],
@@ -237,6 +239,7 @@ class Ledger:
                 for rec, ends, label in self.alerts[pid]
                 if rec <= day and (ends is None or day < ends)
             ],
+            "open_plan_items": open_plan_items(self.plan_items, pid, t),
         }
 
     def is_child(self, pid: int, day: str) -> bool:
@@ -287,7 +290,7 @@ def _side(led: Ledger, pid: int, day: str) -> str:
 
 
 def stage_slots(run, rng, fake) -> None:
-    led = Ledger(run.conn)
+    led = Ledger(run.conn, run.state["plan_items"])
     n = run.cfg["calls_with_transcript"]
     days = [run.range_start + timedelta(days=i) for i in range((run.today - run.range_start).days)]
     days = [d for d in days if is_open(d, run.holidays)]
@@ -418,7 +421,7 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             return fact
         if s["about"] is not None:
             nxt = fact["next_appointment"]
-            known = sorted(
+            known = _plan_topics(fact) or sorted(
                 {v["procedure"] for v in fact["recent_visits"]}
                 | ({nxt["procedure"]} if nxt else set())
             )
@@ -437,12 +440,19 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
     return fact
 
 
+def _plan_topics(fact: dict) -> list[str]:
+    """환자 측 주제 후보 1순위 — 열린 치료계획 항목의 시술(비용이 있는 것, §4.1 used_fact)"""
+    return sorted({i["procedure"] for i in fact["open_plan_items"]} & set(PRICED))
+
+
 def _upcoming(fact: dict) -> list[str]:
-    """가격 문의 주제 후보 — 앞으로 받을 시술: 다음 예약 시술, 없으면 그 나이의 치료 시술 중 지난 진료에 없는 것.
-    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    """가격 문의 주제 후보 — 앞으로 받을 시술: 다음 예약 시술, 없으면 열린 치료계획 항목, 없으면 그 나이의 치료 시술 중
+    지난 진료에 없는 것. 지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
     nxt = fact["next_appointment"]
     if nxt and nxt["procedure"] in PRICED:
         return [nxt["procedure"]]
+    if planned := _plan_topics(fact):
+        return planned
     done = {v["procedure"] for v in fact["recent_visits"]}
     band = age_band(fact["patient"]["age"])
     return [

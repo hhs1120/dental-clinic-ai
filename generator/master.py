@@ -141,6 +141,8 @@ PLAN_TEMPLATES = {
 # 열린 계획이 ⑨ 진료계획 미예약 칩에 맞는 규모가 되게 맞춘다. 추정값 — 리포트로 확인
 PLAN_DROP_RATE = 0.10
 PLAN_UNBOOKED_RATE = 0.30
+# 성인·노인 스케일링 내원 중 치주 계획(PLAN_TEMPLATES hygiene)을 만드는 비율. 추정값 — 리포트로 확인
+PERIO_PLAN_RATE = 0.10
 
 # 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
 NEW_PATIENT_SHARE = 0.12
@@ -170,7 +172,7 @@ REVIEW_OUTCOME_WEIGHTS = {
 # 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산,
 # 판정 분포 리포트(report_adjust_judgment)로 맞춘 값
 ADJUST_TYPE_WEIGHTS = {
-    "clinical": {"requirement": 78, "documentation": 15, "diagnosis": 7},
+    "clinical": {"requirement": 78, "documentation": 8, "diagnosis": 14},
     "other": {"requirement": 0, "documentation": 88, "diagnosis": 12},
 }
 # adjusted 지급액 = claim_amount × U(범위), 10원 단위 내림

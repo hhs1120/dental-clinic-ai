@@ -11,7 +11,7 @@
 
 import json
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import numpy as np
 
@@ -38,8 +38,10 @@ from generator.master import (
     SCALING_CODE,
     SUBMITTED_MONTHS,
 )
+from generator.records import open_plan_items
 
 NAME = {p["code"]: p["name"] for p in PROCEDURES}
+DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 REASON_KEY = {(r["category"], r["note"]): key for key, r in ADJUST_REASONS.items()}
 PERIO_CODE = CODE["잇몸치료"]
@@ -219,11 +221,12 @@ def _requirement_facts(
     return f
 
 
-def _findings(rng, r, requirement: dict | None) -> dict | None:
-    """소견 수치 — 위생·잇몸치료 내원만. 잇몸치료는 R03 근거가 없을 때만 치주낭 3mm 이하"""
+def _findings(rng, r, requirement: dict | None, perio_plan: bool) -> dict | None:
+    """소견 수치 — 위생·잇몸치료 내원만. 잇몸치료는 R03 근거가 없을 때만 치주낭 3mm 이하.
+    치주 계획을 만든 위생 내원(perio_plan)은 계획과 맞게 잇몸치료처럼 깊은 치주낭·출혈"""
     if r["code"] not in HYGIENE_CODES and r["code"] != PERIO_CODE:
         return None
-    perio = r["code"] == PERIO_CODE
+    perio = r["code"] == PERIO_CODE or perio_plan
     shallow = perio and requirement and requirement["key"] == "R03" and not requirement["evidence"]
     return {
         "pocket_mm": int(rng.integers(2, 4)) if shallow or not perio else int(rng.integers(4, 7)),
@@ -242,11 +245,17 @@ def _alerts(run) -> dict:
     return by_patient
 
 
-def _plan(r, course_left: dict) -> dict | None:
-    """다음 계획 — 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획), 위생 내원은 다음 정기 검진"""
-    remaining = course_left.get(r["appointment_id"])
-    if remaining:
-        return {"remaining": remaining}
+def _plan(r, plan_items: list) -> dict | None:
+    """다음 계획 — 그 내원을 마친 시각에 열린 치료계획 항목(§2.3 — 다음 예약이 잡혔는지·나중에 바뀌었는지와 무관),
+    없으면 위생 내원은 다음 정기 검진"""
+    end = datetime.fromisoformat(r["performed_at"]) + timedelta(minutes=DURATION[r["code"]])
+    items = open_plan_items(plan_items, r["patient_id"], end.strftime("%Y-%m-%d %H:%M:%S"))
+    if items:
+        return {
+            "items": [
+                i | {"tooth": None if i["tooth"] == FULL_MOUTH else i["tooth"]} for i in items
+            ]
+        }
     if r["code"] in HYGIENE_CODES:
         return {"recall_months": RECALL_CYCLE_MONTHS}
     return None
@@ -257,7 +266,10 @@ def stage_facts(run, rng, fake) -> None:
     조건에 따라 뽑는 횟수가 달라도 다른 줄이 밀리지 않게). 심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 그대로"""
     settled_rng, open_rng, fact_rng = rng.spawn(3)
     fact_seed = int(fact_rng.integers(1 << 62))
-    course_left = run.state["course_left"]
+    plan_items = run.state["plan_items"]
+    perio_plans = {
+        plan.appointment_id for plan in run.state["plans"]
+    }  # 위생 내원이 만든 계획은 치주 계획
     alerts = _alerts(run)
     episode = run.state["episode"]  # 예약 → 코스. 창 이전 내원은 없음 — 예약마다 따로
     treated = defaultdict(lambda: defaultdict(list))  # 환자 → (치아, 시술) → [(진료일, 코스)]
@@ -310,7 +322,12 @@ def stage_facts(run, rng, fake) -> None:
                 if requirement and not requirement["evidence"]
                 else CC[r["code"]],
             ),
-            "findings": _findings(rng, r, requirement),
+            "findings": _findings(
+                rng,
+                r,
+                requirement,
+                r["code"] in HYGIENE_CODES and r["appointment_id"] in perio_plans,
+            ),
             "requirement": requirement,
             "alerts": [
                 {"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]}
@@ -320,7 +337,7 @@ def stage_facts(run, rng, fake) -> None:
             "discovered": [
                 ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]
             ],
-            "plan": _plan(r, course_left),
+            "plan": _plan(r, plan_items),
         }
         lines.append(
             {
@@ -447,8 +464,10 @@ def draft_note(f) -> str:
     out.append(f"{_site(f)}{f['procedure']} 시행했습니다.")
     out += _alert_sentences(f)
     plan = f["plan"]
-    if plan and "remaining" in plan:
-        out.append(f"{plan['remaining']}회 더 내원할 예정입니다.")
+    if plan and "items" in plan:
+        out.append(
+            f"남은 치료는 {', '.join(_site(i) + i['procedure'] for i in plan['items'])}입니다."
+        )
     elif plan:
         out.append(f"{plan['recall_months']}개월 후 정기 검진을 안내했습니다.")
     return " ".join(out)
@@ -535,8 +554,9 @@ def narrative_must_include(f: dict) -> list[list[str]]:
     if f["requirement"]:
         out += [[w] for w in _requirement_words(f["requirement"])]
     plan = f["plan"]
-    if plan and "remaining" in plan:
-        out.append([f"{plan['remaining']}회"])
+    if plan and "items" in plan:
+        for i in plan["items"]:
+            out += ([[f"{i['tooth']}번"]] if i["tooth"] else []) + [[i["procedure"]]]
     elif plan:
         out.append([f"{plan['recall_months']}개월"])
     return out

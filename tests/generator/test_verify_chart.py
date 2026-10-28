@@ -205,8 +205,9 @@ def test_retreatment_is_requirement_line(tmp_path):
 # ── 위반 (잡아야 함) ────────────────────────────────────────
 
 BREAKS = {
-    "plan_remaining_too_many": (
-        "UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan', json('{\"remaining\": 9}'))"
+    "plan_not_open_item": (  # 2번 환자는 계획이 없다
+        "UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan',"
+        ' json(\'{"items": [{"procedure": "크라운", "tooth": "26"}]}\'))'
         " WHERE treatment_id = 3",
         "check_chart_plan",
     ),
