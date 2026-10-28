@@ -4,7 +4,7 @@
 import json
 import re
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from generator import llm_jobs, transcripts
 from generator.master import (
@@ -16,6 +16,7 @@ from generator.master import (
     CALL_NOISE_SHARE,
     CALL_OUTBOUND_SHARE,
     CALL_PAIN_PURPOSES,
+    CALL_PATIENT_RULES,
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
     EVAL_MIN_PER_SPLIT,
@@ -26,6 +27,7 @@ from generator.master import (
     SUBTOPIC_PURPOSE,
     URGENCIES,
     age_on,
+    close_time,
     open_slots,
 )
 from generator.verify.common import CHILD_MAX_AGE, EXAMPLES, PROCEDURE, _dt, _rows
@@ -144,6 +146,10 @@ def _label_problem(r) -> str | None:
         and r["fact"].get("appointment", {}).get("date") != r["started_at"][:10]
     ):
         return "예약·변경 통화가 urgent인데 예약이 그날이 아님"
+    if r["fact"].get("churned") and (
+        r["accepted"] != ["recall"] or r["wants_appt"] or r["price_inquiry"] or r["has_todo"]
+    ):
+        return "이탈 환자 리콜인데 부 주제·예약 원함·가격 문의·할 일이 있음(옮겼다는 통화)"
     if r["appt_confirmed"] and purpose not in ("book", "reschedule"):
         return "appt_confirmed는 book·reschedule만"
     if r["direction"] == "outbound" and purpose not in CALL_OUTBOUND_SHARE:
@@ -174,7 +180,7 @@ def check_call_slot_count(conn, ctx):
 
 
 def check_call_day(conn, ctx):
-    """통화는 range_start ~ TODAY 전날의 진료일, 개원 ~ 평일 마감 (§2.6 사건 시각)"""
+    """통화는 range_start ~ TODAY 전날의 진료일, 개원 ~ 그 요일 마감(토요일은 토요일 마감 — §2.6 사건 시각)"""
     bad = []
     for r in _rows(conn, "SELECT id, started_at FROM ax_calls WHERE source = 'generated'"):
         t = _dt(r["started_at"])
@@ -182,7 +188,7 @@ def check_call_day(conn, ctx):
             ctx.range_start <= t.date() < ctx.today
             and open_slots(t.weekday())
             and t.date() not in ctx.holidays
-            and OPEN_TIME <= t.time() < CLOSE_TIME
+            and OPEN_TIME <= t.time() < datetime.strptime(close_time(t.weekday()), "%H:%M").time()
         ):
             bad.append(r)
     return bad
@@ -550,6 +556,67 @@ def check_call_facts_as_of(conn, ctx):
         diff = sorted(k for k in got if got[k] != want.get(k))
         if diff:
             bad.append({"call_uid": r["call_uid"], "problem": f"통화 시점 장부와 다름: {diff}"})
+    return bad
+
+
+def check_churn_calls(conn, ctx):
+    """이탈 환자(이탈일 ≤ 통화일)의 통화는 리콜 발신뿐 — 치료 수요에 응하지 않고 다른 용건으로 연락하지 않는다 (§2.2·§4.1)"""
+    churn = dict(
+        conn.execute(
+            "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
+        )
+    )
+    bad = []
+    for r in _calls(conn):
+        pid = (r["fact"].get("patient") or {}).get("id")
+        if (
+            pid in churn
+            and churn[pid] <= r["started_at"][:10]
+            and (r["primary_purpose"], r["direction"]) != ("recall", "outbound")
+        ):
+            bad.append(
+                {"call_uid": r["call_uid"], "purpose": r["primary_purpose"], "patient": pid}
+            )
+    return bad
+
+
+def check_already_paid_calls(conn, ctx):
+    """수납 문의 발신 중 already_paid(장부 실수 미수 — 이미 냈다는 말)가 있는 통화는 서로 다른 환자로 메타 ledger_debt_calls건
+    이상 (⑧-1 통화 근거, §4.1 환자 고르기)"""
+    pids = {
+        r["fact"]["patient"]["id"]
+        for r in _calls(conn)
+        if (r["primary_purpose"], r["direction"]) == ("billing_q", "outbound")
+        and r["fact"].get("already_paid")
+    }
+    return (
+        []
+        if len(pids) >= ctx.ledger_debt_calls
+        else [{"patients": len(pids), "expected": ctx.ledger_debt_calls}]
+    )
+
+
+def check_followup_topic(conn, ctx):
+    """경과 확인(치료 문의 발신)의 주제 시술 = 규칙 창(master.CALL_PATIENT_RULES) 안의 가장 최근 진료 내원 시술"""
+    lo, hi = CALL_PATIENT_RULES[("treatment_q", "outbound")][1]
+    bad = []
+    for r in _calls(conn):
+        if (r["primary_purpose"], r["direction"]) != ("treatment_q", "outbound") or "price_q" in r[
+            "accepted"
+        ]:
+            continue  # 가격 문의가 섞이면 앞으로 받을 시술이 주제(가격 문의 규칙)
+        day = _dt(r["started_at"]).date()
+        row = conn.execute(
+            "SELECT planned_procedure_code FROM emr_appointments WHERE patient_id = ? AND type = 'treatment'"
+            " AND status = 'completed' AND date(scheduled_at) BETWEEN ? AND ? ORDER BY scheduled_at DESC, id DESC",
+            (
+                r["fact"]["patient"]["id"],
+                (day - timedelta(days=hi)).isoformat(),
+                (day - timedelta(days=lo)).isoformat(),
+            ),
+        ).fetchone()
+        if row is None or r["fact"].get("topic_procedure") != PROCEDURE[row[0]]["name"]:
+            bad.append({"call_uid": r["call_uid"], "topic": r["fact"].get("topic_procedure")})
     return bad
 
 

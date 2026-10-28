@@ -355,3 +355,36 @@ def test_lab_statement_lines(tmp_path):
         "UPDATE fin_expense_documents SET body = replace(body, '80,000원\n합계', '90,000원\n합계')"
     )
     assert verify.check_lab_statements(conn, CTX)
+
+
+def test_ledger_mismatch_points_to_true_money(tmp_path):
+    """장부 실수 불일치는 실제 돈의 행(4번 수납 11/18 현금 → 11/23 현금 입금)을 가리켜야 한다 — 카드 정산 입금을 가리키면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE emr_payments SET amount_paid = 0 WHERE id = 4")
+    conn.execute(
+        "INSERT INTO truth.truth_ledger_errors (id, kind, payment_id, true_amount, true_paid_at, true_method)"
+        " VALUES (1, 'entry_missing', 4, 80000, '2026-11-18 10:30:00', 'cash')"
+    )
+    _mismatch(conn, "2026-11-18", "entry_missing", [("fin_bank_transactions", 2)], [4], "test", 1)
+    found = verify.check_recon_mismatches(
+        conn, replace(CTX, recon_mismatches={"entry_missing": 1})
+    )
+    assert any("실제 돈의 행" in r.get("problem", "") for r in found)
+
+
+def test_card_side_mismatch_on_linked_day(tmp_path):
+    """진료 외 매출은 연동일에만 — 승인번호가 하나도 없는 11/18(현금만 받은 날)이면 잡힌다"""
+    conn = make_db(tmp_path)
+    ctx = _non_clinical(conn)
+    conn.execute("UPDATE truth.truth_recon_mismatches SET occurred_on = '2026-11-18'")
+    assert any("연동일" in r.get("problem", "") for r in verify.check_recon_mismatches(conn, ctx))
+
+
+def test_fee_mismatch_exact_rate(tmp_path):
+    """수수료 차이 = 합계 × (율 + FEE_MISMATCH_RATE_DIFF) — 10/06분 20,000 × 1.5% = 300, 310이면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE fin_card_deposits SET fee = 310, amount = 19690 WHERE id = 1")
+    _mismatch(conn, "2026-10-06", "fee_mismatch", [("fin_card_deposits", 1)], [], "test")
+    assert verify.check_card_deposits(conn, CTX)
+    conn.execute("UPDATE fin_card_deposits SET fee = 300, amount = 19700 WHERE id = 1")
+    assert verify.check_card_deposits(conn, CTX) == []

@@ -498,3 +498,52 @@ def test_label_tokens_in_stored_text(tmp_path):
         ("ax_calls", "two_topics"),
         ("emr_chart_notes", "R01"),
     }
+
+
+# 이탈·경과 확인 (§2.2·§4.1): 시드 c-0001 = 1번 환자 10/20 수납 문의 발신
+def test_churned_recall_labels(tmp_path):
+    """이탈 환자 리콜(churned)은 부 주제·예약 원함·가격 문의·할 일 없음"""
+    conn = make_db(tmp_path)
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall', accepted_purposes = '[\"recall\"]',"
+        " complaint = 0, has_todo = 0, noise_type = NULL,"
+        " used_fact = json_set(used_fact, '$.churned', json('true')) WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_call_label_values(conn, CTX) == []
+    conn.execute(
+        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["recall", "book"]\', wants_appt = 1'
+        " WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_call_label_values(conn, CTX)
+
+
+def test_churn_patient_calls(tmp_path):
+    """이탈일 뒤 이탈 환자의 통화는 리콜 발신뿐 — 수납 문의(10/20)는 잡히고, 리콜 발신이면 통과"""
+    conn = make_db(tmp_path)
+    conn.execute("INSERT INTO truth.truth_patient_churn VALUES (1, 'churn', '2026-10-10')")
+    assert verify.check_churn_calls(conn, CTX)
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall' WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_churn_calls(conn, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "started_at, ok", [("2026-10-08 15:00:00", True), ("2026-10-20 15:00:00", False)]
+)
+def test_followup_topic_is_recent_treatment(tmp_path, started_at, ok):
+    """경과 확인 발신의 주제 = 1~7일 전 진료(1번 환자 10/06 신경치료) — 10/20이면 창 안 진료가 없어 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE ax_calls SET started_at = ? WHERE call_uid = 'c-0001'", (started_at,))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'treatment_q',"
+        " used_fact = json_set(used_fact, '$.topic_procedure', '신경치료') WHERE call_uid = 'c-0001'"
+    )
+    assert (verify.check_followup_topic(conn, CTX) == []) == ok
+
+
+def test_already_paid_calls_lower_bound(tmp_path):
+    """메타 ledger_debt_calls만큼 already_paid 수납 문의 발신이 있어야 — 시드엔 없어 1이면 잡힌다"""
+    conn = make_db(tmp_path)
+    assert verify.check_already_paid_calls(conn, CTX) == []
+    assert verify.check_already_paid_calls(conn, replace(CTX, ledger_debt_calls=1))

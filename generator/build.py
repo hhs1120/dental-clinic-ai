@@ -26,7 +26,12 @@ from generator import (
     transcripts,
 )
 from generator.llm_jobs import LLMContext
-from generator.master import LEDGER_ERROR_KINDS, LINK_FAILURE_DAYS, RECON_MISMATCH_COUNTS
+from generator.master import (
+    LEDGER_DEBT_CALLS,
+    LEDGER_ERROR_KINDS,
+    LINK_FAILURE_DAYS,
+    RECON_MISMATCH_COUNTS,
+)
 from generator.paths import ROOT, output_paths
 from generator.seeding import stage_faker, stage_rng
 
@@ -144,6 +149,7 @@ def generate(
                     json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
                 ),
                 ("recon_mismatches", json.dumps(RECON_MISMATCH_COUNTS)),
+                ("ledger_debt_calls", str(LEDGER_DEBT_CALLS)),
             ],
         )
         for name, stage in STAGES:

@@ -115,8 +115,15 @@ def payload(row: dict) -> dict:
 
 
 def simplify(p: dict) -> dict:
-    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)만"""
-    keep = ("call_date", "appointment", "topic_procedure", "topic_price")
+    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)과 ⑧-1·⑨ 근거(이미 냈다·옮겼다)만"""
+    keep = (
+        "call_date",
+        "appointment",
+        "topic_procedure",
+        "topic_price",
+        "churned",
+        "already_paid",
+    )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
 
 

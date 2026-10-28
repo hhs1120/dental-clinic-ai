@@ -16,6 +16,7 @@ from generator.master import (
     MAX_SETTLE_DAYS,
     MIN_VISIT_AGE,
     REVIEW_NOTICE_DAYS,
+    SAME_TOOTH_PROCEDURES,
     SATURDAY,
     SCALING_CODE,
     SCALING_MIN_AGE,
@@ -416,8 +417,8 @@ def _plan_est_fee(code: str, birth: str, on: str) -> int:
 
 
 def _plan_items(conn) -> list[dict]:
-    """계획 항목 + 계획(환자·만든 시각) + 닫힌 시각 — 완료(그 항목의 completed 예약 시작) 또는 대체(다른 계획 밖 진료가
-    그 치아에 처음 들어간 시각, 치아 단위만). 둘 다 없으면 None. 생성기와 따로 계산 (생성 설계 §2.3)"""
+    """계획 항목 + 계획(환자·만든 시각) + 닫힌 시각 — 완료(그 항목의 completed 예약 시작) 또는 대체(그 계획 밖 진료가
+    그 치아에 — 전체 구강 항목은 같은 시술이 — 처음 들어간 시각). 둘 다 없으면 None. 생성기와 따로 계산 (생성 설계 §2.3)"""
     items = _rows(
         conn,
         "SELECT i.id, i.plan_id, i.seq, i.procedure_code, i.tooth_no, i.est_fee, i.status,"
@@ -430,21 +431,25 @@ def _plan_items(conn) -> list[dict]:
             " WHERE status = 'completed' AND plan_item_id IS NOT NULL GROUP BY plan_item_id"
         ).fetchall()
     )
-    treated = defaultdict(list)  # (환자, 치아) → [(시각, 계획 id 또는 None)]
-    for pid, tooth, at, plan in conn.execute(
-        "SELECT t.patient_id, t.tooth_no, t.performed_at, i.plan_id FROM emr_treatments t"
+    treated = defaultdict(
+        list
+    )  # (환자, 치아) 또는 (환자, '00', 시술) → [(시각, 계획 id 또는 None)]
+    for pid, tooth, code, at, plan in conn.execute(
+        "SELECT t.patient_id, t.tooth_no, t.procedure_code, t.performed_at, i.plan_id FROM emr_treatments t"
         " JOIN emr_appointments a ON a.id = t.appointment_id"
-        " LEFT JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id"
-        " WHERE t.tooth_no != ? ORDER BY t.performed_at",
-        (FULL_MOUTH,),
+        " LEFT JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id ORDER BY t.performed_at"
     ):
-        treated[(pid, tooth)].append((at, plan))
+        treated[(pid, tooth) if tooth != FULL_MOUTH else (pid, tooth, code)].append((at, plan))
     for r in items:
         r["done_at"] = done.get(r["id"])
         r["replaced_at"] = next(
             (
                 at
-                for at, plan in treated[(r["patient_id"], r["tooth_no"])]
+                for at, plan in treated[
+                    (r["patient_id"], r["tooth_no"])
+                    if r["tooth_no"] != FULL_MOUTH
+                    else (r["patient_id"], FULL_MOUTH, r["procedure_code"])
+                ]
                 if at > r["created_at"] and plan != r["plan_id"]
             ),
             None,
@@ -518,7 +523,7 @@ def check_plan_item_status(conn, ctx):
 def check_plan_item_values(conn, ctx):
     """항목 순서 1..n, 치아 = 치아 단위 시술은 그 시술 후보(master.TOOTH_CHOICES)·아니면 FULL_MOUTH,
     예상 금액 = 계획을 만든 날 나이의 본인부담"""
-    bad, seqs = [], defaultdict(list)
+    bad, seqs, items, prev_item = [], defaultdict(list), [], {}
     for r in _rows(
         conn,
         "SELECT i.id, i.plan_id, i.seq, i.procedure_code, i.tooth_no, i.est_fee, p.created_at,"
@@ -526,6 +531,7 @@ def check_plan_item_values(conn, ctx):
         " JOIN emr_patients pt ON pt.id = p.patient_id",
     ):
         seqs[r["plan_id"]].append(r["seq"])
+        items.append(r)
         code = r["procedure_code"]
         tooth_ok = (
             r["tooth_no"] in TOOTH_CHOICES[code]
@@ -539,6 +545,23 @@ def check_plan_item_values(conn, ctx):
         for k, v in seqs.items()
         if sorted(v) != list(range(1, len(v) + 1))
     ]
+    # 같은 시술이 이어지는 항목 — SAME_TOOTH_PROCEDURES만 같은 치아, 나머지는 다른 치아
+    for i in sorted(items, key=lambda r: (r["plan_id"], r["seq"])):
+        prev = prev_item.get(i["plan_id"])
+        if (
+            prev
+            and prev["procedure_code"] == i["procedure_code"]
+            and i["tooth_no"] != FULL_MOUTH
+            and (prev["tooth_no"] == i["tooth_no"])
+            != (i["procedure_code"] in SAME_TOOTH_PROCEDURES)
+        ):
+            bad.append(
+                {
+                    "item_id": i["id"],
+                    "problem": "같은 시술 반복의 치아(이어서 치료하는 시술만 같은 치아)",
+                }
+            )
+        prev_item[i["plan_id"]] = i
     return bad
 
 

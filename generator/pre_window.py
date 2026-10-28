@@ -14,9 +14,10 @@ from generator.master import (
     SCALING_CODE,
     age_band,
     age_on,
+    business_minutes,
     open_slots,
 )
-from generator.schedule import DAY_MINUTES, DURATION, OPEN, Sim
+from generator.schedule import DURATION, OPEN, Sim
 
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 
@@ -63,7 +64,7 @@ def stage(run, rng, fake) -> None:
         days = [x for x in days if x >= registered[p["id"]] and _is_open(x, run.holidays)]
         booked = days[int(rng.integers(len(days)))] if days else registered[p["id"]]
         created = datetime.combine(booked, OPEN) + timedelta(
-            minutes=int(rng.integers(DAY_MINUTES))
+            minutes=int(rng.integers(business_minutes(booked.weekday())))
         )
         visits[p["id"]] = {"code": code, "start": start, "created": created}
     run.state["pre_window"] = visits

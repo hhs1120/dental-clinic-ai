@@ -45,6 +45,7 @@ class Ctx:
     link_failure_days: int  # 연동 실패일 수·장부 실수 종류별 건수 — truth_gen_meta에서 (§2.4·§2.7)
     ledger_errors: dict
     recon_mismatches: dict  # ⑧-1 불일치 원인별 건수 — truth_gen_meta에서
+    ledger_debt_calls: int  # 장부 실수 미수 환자에게 거는 수납 문의 발신 수 — truth_gen_meta에서
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -69,6 +70,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         link_failure_days=int(meta["link_failure_days"]),
         ledger_errors=json.loads(meta["ledger_errors"]),
         recon_mismatches=json.loads(meta["recon_mismatches"]),
+        ledger_debt_calls=int(meta["ledger_debt_calls"]),
         rag_qa=rag_qa,
     )
 

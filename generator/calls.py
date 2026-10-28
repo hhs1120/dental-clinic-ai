@@ -43,6 +43,8 @@ from generator.master import (
     SUBTOPIC_PURPOSE,
     age_band,
     age_on,
+    business_minutes,
+    close_time,
     open_slots,
 )
 from generator.records import open_plan_items
@@ -54,7 +56,15 @@ PRICED = sorted(p["name"] for p in PROCEDURES if p["fee_total"] > 0)  # 처음 �
 TOPIC_PURPOSES = ("price_q", "insurance_q", "treatment_q")
 OPEN = datetime.strptime(HOURS["open"], "%H:%M").time()
 CLOSE = datetime.strptime(HOURS["weekday_close"], "%H:%M").time()
-DAY_MINUTES = (datetime.combine(date.min, CLOSE) - datetime.combine(date.min, OPEN)).seconds // 60
+
+
+def any_minute(rng, d: date) -> datetime:
+    """그날 개원 ~ 그 요일 마감 사이 분 단위 시각 균등 — 통화·전화 예약 같은 사건 시각 (§2.6, 점심은 따지지 않음)"""
+    return datetime.combine(d, OPEN) + timedelta(
+        minutes=int(rng.integers(business_minutes(d.weekday())))
+    )
+
+
 MAX_DATE_TRIES = 1000
 
 
@@ -93,7 +103,8 @@ def next_open_day(d: date, holidays) -> date:
 
 
 def _in_hours(t: str) -> bool:
-    return OPEN <= datetime.strptime(t, FMT).time() < CLOSE
+    at = datetime.strptime(t, FMT)
+    return OPEN <= at.time() < datetime.strptime(close_time(at.weekday()), "%H:%M").time()
 
 
 class Ledger:
@@ -174,6 +185,30 @@ class Ledger:
         for p in self.patients.values():
             if p["family"] is not None:
                 self.family[p["family"]].append(p)
+
+    def gone(self, pid: int, t: str) -> bool:
+        """시각 t에 이미 이탈한 환자 (§2.2)"""
+        on = self.churn.get(pid)
+        return on is not None and on.isoformat() <= t[:10]
+
+    def recent_treatment(self, pid: int, t: str) -> str | None:
+        """경과 확인 규칙 창(CALL_PATIENT_RULES treatment_q outbound) 안의 가장 최근 completed 진료 내원 시술"""
+        lo, hi = CALL_PATIENT_RULES[("treatment_q", "outbound")][1]
+        d = date.fromisoformat(t[:10])
+        recent = [
+            a
+            for a in self.by_patient[pid]
+            if a["type"] == "treatment"
+            and a["status"] == "completed"
+            and (d - timedelta(days=hi)).isoformat()
+            <= a["at"][:10]
+            <= (d - timedelta(days=lo)).isoformat()
+        ]
+        return (
+            PROCEDURE_NAME[max(recent, key=lambda a: (a["at"], a["id"]))["code"]]
+            if recent
+            else None
+        )
 
     def completed_before(self, pid: int, day: str) -> list[dict]:
         return [
@@ -292,7 +327,9 @@ def _booking_events(led: Ledger, purpose: str, run, rng) -> list[tuple[dict, str
     for a in appts:
         if a["confirmed"]:
             day = prev_open_day(date.fromisoformat(a["at"][:10]), run.holidays)
-            t = datetime.combine(day, OPEN) + timedelta(minutes=int(rng.integers(1, DAY_MINUTES)))
+            t = datetime.combine(day, OPEN) + timedelta(
+                minutes=int(rng.integers(1, business_minutes(day.weekday())))
+            )
             out.append((a, t.strftime(FMT)))
     return out
 
@@ -348,9 +385,7 @@ def stage_slots(run, rng, fake) -> None:
             rule = CALL_PATIENT_RULES.get((purpose, direction), ("visited", None))
             for _ in range(MAX_DATE_TRIES):
                 d = days[int(rng.integers(len(days)))]
-                t = (
-                    datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
-                ).strftime(FMT)
+                t = any_minute(rng, d).strftime(FMT)
                 if who not in ("side", "insurer"):
                     about = None
                     break
@@ -359,6 +394,9 @@ def stage_slots(run, rng, fake) -> None:
                     for pid in led.patients
                     if led.matches(pid, rule, t)
                     and (who == "side" or led.patients[pid]["private"])
+                    and (
+                        (purpose, direction) == ("recall", "outbound") or not led.gone(pid, t)
+                    )  # 이탈 환자는 이탈일부터 리콜 발신만 (§2.2)
                 ]
                 if cands:
                     about = cands[int(rng.integers(len(cands)))]
@@ -405,10 +443,8 @@ def _ledger_debt_calls(led, slots: list, days: list, rng) -> None:
         start = datetime.strptime(entered, FMT).date()
         options = [d for d in days if start < d <= start + timedelta(days=LEDGER_DEBT_CALL_DAYS)]
         for d in [options[int(i)] for i in rng.permutation(len(options))]:
-            t = (
-                datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
-            ).strftime(FMT)
-            if led.matches(pid, rule, t):
+            t = any_minute(rng, d).strftime(FMT)
+            if led.matches(pid, rule, t) and not led.gone(pid, t):
                 s = billing[targets.pop()]
                 s.update(t=t, patient=pid, about=pid, counterpart=_side(led, pid, t[:10]))
                 break
@@ -471,6 +507,15 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             a is not None and fact["appointment"]["procedure"] in PRICED
         ):  # 0원(상담 등)이면 아래 후보에서
             fact["topic_procedure"] = fact["appointment"]["procedure"]
+            return fact
+        if (
+            (s["purpose"], s["direction"]) == ("treatment_q", "outbound")
+            and "price_q" not in s["accepted"]
+            and s["about"] is not None
+        ):
+            fact["topic_procedure"] = led.recent_treatment(
+                s["about"], s["t"]
+            )  # 경과 확인 = 며칠 전 진료
             return fact
         if s["about"] is not None:
             nxt = fact["next_appointment"]
@@ -563,6 +608,10 @@ def stage_labels(run, rng, fake) -> None:
             and s["appointment"]["at"][:10] != s["t"][:10]
         ):
             urgency = "normal"  # 오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지는 않는다 — 추첨 뒤 덮어써 난수 흐름은 그대로
+        if (purpose, s["direction"]) == ("recall", "outbound") and led.gone(s["about"], s["t"]):
+            # 이탈 환자 리콜 — 옮겼다고 말하는 통화라 부 주제·예약 원함·가격 문의·할 일 없음(추첨 뒤 덮어써 난수 흐름은 그대로)
+            sub = None
+            flags.update(wants_appt=0, price_inquiry=0, has_todo=0)
         s.update(
             flags=flags,
             urgency=urgency,

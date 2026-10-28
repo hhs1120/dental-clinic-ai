@@ -48,6 +48,7 @@ from generator.master import (
     add_years,
     age_band,
     age_on,
+    business_minutes,
     daily_cap,
     open_slots,
 )
@@ -66,9 +67,6 @@ def _t(hhmm: str) -> time:
 
 
 OPEN = _t(HOURS["open"])
-DAY_MINUTES = (
-    datetime.combine(date.min, _t(HOURS["weekday_close"])) - datetime.combine(date.min, OPEN)
-).seconds // 60
 
 
 @dataclass
@@ -298,7 +296,9 @@ class Sim:
 
     def any_minute(self, d: date) -> datetime:
         """그날 개원~평일 마감 사이 분 단위 시각 균등 추첨 — 통화·취소 시각. 점심·토요일 마감은 따지지 않는다"""
-        return datetime.combine(d, OPEN) + timedelta(minutes=int(self.rng.integers(DAY_MINUTES)))
+        return datetime.combine(d, OPEN) + timedelta(
+            minutes=int(self.rng.integers(business_minutes(d.weekday())))
+        )
 
     def gone(self, p: Patient, d: date) -> bool:
         """그날 이미 이탈한 환자"""

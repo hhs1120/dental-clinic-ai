@@ -11,7 +11,12 @@ import yaml
 
 from generator import build, llm_jobs, verify
 from generator.build import generate
-from generator.master import LEDGER_ERROR_KINDS, LINK_FAILURE_DAYS, RECON_MISMATCH_COUNTS
+from generator.master import (
+    LEDGER_DEBT_CALLS,
+    LEDGER_ERROR_KINDS,
+    LINK_FAILURE_DAYS,
+    RECON_MISMATCH_COUNTS,
+)
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -70,6 +75,7 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
         "link_failure_days": str(LINK_FAILURE_DAYS),
         "ledger_errors": json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
         "recon_mismatches": json.dumps(RECON_MISMATCH_COUNTS),
+        "ledger_debt_calls": str(LEDGER_DEBT_CALLS),
     }
 
 

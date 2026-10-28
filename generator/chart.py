@@ -293,11 +293,14 @@ def stage_facts(run, rng, fake) -> None:
         pid: date.fromisoformat(b)
         for pid, b in run.conn.execute("SELECT id, birth_date FROM emr_patients")
     }
-    ledger_teeth = defaultdict(set)  # 환자 → 장부 진료에 나온 치아 (추가 처치 치아는 여기 없는 것)
+    # 환자 → 장부 진료·치료계획 항목·이미 고른 추가 처치의 치아 (추가 처치 치아는 여기 없는 것 — "남은 치료"와 겹치지 않게)
+    ledger_teeth = defaultdict(set)
     for pid, tooth in run.conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
         ledger_teeth[pid].add(tooth)
     fact_seed = int(fact_rng.integers(1 << 62))
     plan_items = run.state["plan_items"]
+    for i in plan_items:
+        ledger_teeth[i["patient_id"]].add(i["tooth"])
     perio_plans = {
         plan.appointment_id for plan in run.state["plans"]
     }  # 위생 내원이 만든 계획은 치주 계획
@@ -337,6 +340,7 @@ def stage_facts(run, rng, fake) -> None:
             extra = _extra(extra_rng, r, ledger_teeth[r["patient_id"]], birth[r["patient_id"]])
             if extra:
                 error = "omitted_extra"
+                ledger_teeth[r["patient_id"]].add(extra[1])
         rng = np.random.default_rng([fact_seed, r["id"]])
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
         dx = (

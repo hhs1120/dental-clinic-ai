@@ -18,9 +18,11 @@ from generator.master import (
     EXPENSE_AMOUNT_DIFF_RATE,
     EXPENSE_ITEMS,
     EXPENSE_NO_DOC_RATE,
+    FEE_MISMATCH_RATE_DIFF,
     FULL_MOUTH,
     LAB_FEES,
     LEDGER_ERROR_KINDS,
+    MAX_SETTLE_DAYS,
     NHIS_MEMO,
     ORAL_CARE_PRICES,
     PROCEDURES,
@@ -82,6 +84,39 @@ def _ledger_numbers(conn) -> set:
         r[0]
         for r in conn.execute("SELECT approval_no FROM emr_payments WHERE approval_no IS NOT NULL")
     }
+
+
+def _ledger_fin(e, ledger, m, sales, bank, cash_by_day, fixed, ctx) -> bool:
+    """장부 실수 불일치의 금융 행이 실제 돈의 행인지 — 카드: 실제 시각·금액 승인 1건 / 이체: 실제 시각·금액 입금 1건 /
+    현금: 실제 날짜의 현금 입금(날짜 밀림이면 장부 날짜의 입금도, 결제수단 오입력이 장부에 현금이면 그날 현금 입금도).
+    틀리면 True"""
+    t, amount = e["true_paid_at"], e["true_amount"]
+    got_sales = [sales[i] for tb, i in m["fin"] if tb == "fin_card_sales" and i in sales]
+    got_bank = {i for tb, i in m["fin"] if tb == "fin_bank_transactions"}
+    day = date.fromisoformat(t[:10])
+    want_bank = set()
+    if e["true_method"] == "card":
+        if len(got_sales) != 1 or (got_sales[0]["approved_at"], got_sales[0]["amount"]) != (
+            t,
+            amount,
+        ):
+            return True
+    elif got_sales:
+        return True
+    if e["true_method"] == "transfer":
+        hits = [i for i in got_bank if (bank[i]["occurred_at"], bank[i]["amount"]) == (t, amount)]
+        if len(got_bank) != 1 or len(hits) != 1 or bank[hits[0]]["memo"] in fixed:
+            return True
+        return False
+    cash_days = []
+    if e["true_method"] == "cash":
+        cash_days.append(cash_deposit_day(day, ctx.holidays))
+        if e["kind"] == "date_shift":
+            cash_days.append(cash_deposit_day(_dt(ledger["paid_at"]).date(), ctx.holidays))
+    if e["kind"] == "method_wrong" and ledger["method"] == "cash":
+        cash_days.append(cash_deposit_day(day, ctx.holidays))
+    want_bank = {cash_by_day[d.isoformat()] for d in cash_days if d.isoformat() in cash_by_day}
+    return got_bank != want_bank
 
 
 def check_card_sales(conn, ctx):
@@ -158,6 +193,10 @@ def check_card_deposits(conn, ctx):
         if (
             d["sales_total"] != total
             or (d["fee"] == fee) == (d["id"] in fee_m)
+            or (
+                d["id"] in fee_m
+                and d["fee"] != int(total * (issuer_info["fee_rate"] + FEE_MISMATCH_RATE_DIFF))
+            )
             or d["amount"] != total - d["fee"]
             or (on == expected) == (d["id"] in delay_m)
             or (d["id"] in delay_m and not (lo <= on <= hi and bank_day(on, ctx.holidays)))
@@ -244,6 +283,20 @@ def check_recon_mismatches(conn, ctx):
     pays = {p["id"]: p for p in _rows(conn, "SELECT * FROM emr_payments")}
     errors = {e["id"]: e for e in _rows(conn, "SELECT * FROM truth.truth_ledger_errors")}
     ledger_nos = _ledger_numbers(conn)
+    linked_days = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT date(paid_at) FROM emr_payments WHERE approval_no IS NOT NULL"
+        )
+    }
+    bank = {
+        b["id"]: b
+        for b in _rows(conn, "SELECT * FROM fin_bank_transactions WHERE direction = 'in'")
+    }
+    cash_by_day = {
+        b["occurred_at"][:10]: i for i, b in bank.items() if b["memo"] == CASH_DEPOSIT_MEMO
+    }
+    fixed = set(CARD_ISSUERS) | {CASH_DEPOSIT_MEMO, NHIS_MEMO}
     linked = Counter(m["ledger_error_id"] for m in ms if m["ledger_error_id"] is not None)
     bad += [
         {"ledger_error_id": e, "problem": "장부 실수에 불일치가 1건이 아님"}
@@ -289,8 +342,23 @@ def check_recon_mismatches(conn, ctx):
                 or m["occurred_on"] != e["true_paid_at"][:10]
             ):
                 why = "장부 실수와 다름"
+            elif _ledger_fin(e, pays[e["payment_id"]], m, sales, bank, cash_by_day, fixed, ctx):
+                why = "장부 실수 불일치가 가리키는 금융 행이 실제 돈의 행이 아님"
         elif m["ledger_error_id"] is not None:
             why = "통장·카드 쪽 원인인데 장부 실수 연결"
+        elif (
+            add_bank_days(
+                date.fromisoformat(m["occurred_on"]),
+                MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1],
+                ctx.holidays,
+            )
+            >= ctx.today
+        ):
+            why = "정산(지연 포함)이 TODAY 전에 오지 않는 날"
+        elif m["cause"] in ("split_payment", "cancel_reapprove", "non_clinical_sale") and (
+            m["occurred_on"] not in linked_days
+        ):
+            why = "연동일이 아닌 날의 카드 쪽 불일치"
         elif m["cause"] == "split_payment":
             p = pays.get(m["payments"][0]) if len(m["payments"]) == 1 else None
             if (
@@ -485,7 +553,7 @@ def check_expense_matches(conn, ctx):
 
 
 def check_lab_statements(conn, ctx):
-    """기공소 명세서 줄 = 창 안 completed 인레이·크라운·브릿지 진료 1건(환자 이름·치아 — 브릿지는 치아 없음·보철 종류),
+    """기공소 명세서 줄 = 창 안·TODAY가 속한 달 전의 completed 인레이·크라운·브릿지 진료 1건(환자 이름·치아 — 브릿지는 치아 없음·보철 종류),
     줄 금액 = master.LAB_FEES, 명세서 금액 = 줄 합계 (§2.7)"""
     lab = {v["name"] for v in VENDORS if v["kind"] == "lab"}
     codes = {p["code"]: p["name"] for p in PROCEDURES if p["name"] in LAB_FEES}
@@ -494,8 +562,9 @@ def check_lab_statements(conn, ctx):
         for name, tooth, code in conn.execute(
             "SELECT p.name, t.tooth_no, t.procedure_code FROM emr_treatments t"
             " JOIN emr_patients p ON p.id = t.patient_id"
-            f" WHERE t.procedure_code IN ({', '.join('?' * len(codes))}) AND date(t.performed_at) >= ?",
-            (*codes, ctx.range_start.isoformat()),
+            f" WHERE t.procedure_code IN ({', '.join('?' * len(codes))}) AND date(t.performed_at) >= ?"
+            " AND date(t.performed_at) < ?",
+            (*codes, ctx.range_start.isoformat(), ctx.today.replace(day=1).isoformat()),
         )
     )
     got, bad = Counter(), []

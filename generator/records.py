@@ -26,6 +26,7 @@ from generator.master import (
     RECON_MISMATCH_COUNTS,
     REVIEW_NOTICE_DAYS,
     REVIEW_OUTCOME_WEIGHTS,
+    SAME_TOOTH_PROCEDURES,
     SATURDAY,
     SCALING_CODE,
     SUBMITTED_MONTHS,
@@ -74,8 +75,8 @@ def stage_treatments(run, rng, fake) -> None:
     치아 수명: 발치·임플란트 치아는 이후 자연치 시술 후보에서 빠지고, 임플란트 1차는 발치했거나 장부에 이력이 없는
     치아에만 한다(임플란트 치아에 다시 임플란트 없음).
     치료계획: 계획을 만든 내원에서 항목 치아를 모두 정한다 — 앞 항목 치아를 유지(그 시술의 후보에 있을 때, 앞 항목의
-    발치·임플란트를 친 상태로), 계획 항목 예약은 항목 치아 그대로. 새로 뽑는 치아는 열린 항목 치아를 피하고(피할 수
-    없으면 그대로), 다른 계획의 열린 항목 치아에 진료가 들어가면 그 항목은 대체됨. 항목마다 닫힌 시각(완료·대체)을
+    발치·임플란트를 친 상태로, 같은 시술 반복은 SAME_TOOTH_PROCEDURES만), 계획 항목 예약은 항목 치아 그대로. 새로 뽑는 치아는 열린 항목 치아를 피하고(피할 수
+    없으면 그대로), 다른 계획의 열린 항목 치아에(전체 구강 항목은 같은 시술이) 진료가 들어가면 그 항목은 대체됨. 항목마다 닫힌 시각(완료·대체)을
     state plan_items에 남긴다(5b 다음 계획·6단계 통화 사실). 후보가 바닥나면(사랑니 4개를 다 뽑은 뒤 또 사랑니 발치)
     생성이 실패한다"""
     birth = _birth(run.conn)
@@ -90,6 +91,9 @@ def stage_treatments(run, rng, fake) -> None:
     open_teeth: dict[int, dict] = defaultdict(
         lambda: defaultdict(set)
     )  # 환자 → 치아 → 열린 항목 id
+    open_full: dict[int, dict] = defaultdict(
+        lambda: defaultdict(set)
+    )  # 환자 → 시술 → 열린 전체 구강 항목
 
     def valid(code, pid, ext=frozenset(), imp=frozenset(), hist=frozenset()) -> tuple:
         choices = TOOTH_CHOICES[code]
@@ -107,7 +111,7 @@ def stage_treatments(run, rng, fake) -> None:
         return free[int(rng.integers(len(free)))]
 
     def plan_teeth(plan, pid, first: str | None) -> None:
-        prev, ext, imp, hist = first, set(), set(), set()
+        prev, prev_code, ext, imp, hist = first, None, set(), set(), set()
         for item in plan.items:
             p = PROCEDURE[item.code]
             if not p["is_tooth_level"]:
@@ -116,9 +120,14 @@ def stage_treatments(run, rng, fake) -> None:
                 tooth = first
             else:
                 choices = valid(item.code, pid, ext, imp, hist)
-                tooth = prev if prev in choices else pick(pid, choices)
+                # 다른 시술로 넘어가면 앞 치아, 같은 시술 반복은 이어서 치료하는 시술(SAME_TOOTH_PROCEDURES)만 같은 치아
+                keep = prev in choices and (
+                    item.code != prev_code or item.code in SAME_TOOTH_PROCEDURES
+                )
+                fresh = tuple(t for t in choices if t not in hist) or choices
+                tooth = prev if keep else pick(pid, fresh)
             if tooth != FULL_MOUTH:
-                prev = tooth
+                prev, prev_code = tooth, item.code
                 hist.add(tooth)
                 if item.code in EXTRACTION_CODES:
                     ext.add(tooth)
@@ -130,6 +139,8 @@ def stage_treatments(run, rng, fake) -> None:
                 status[item.id] = "open"
                 if item_tooth[item.id] != FULL_MOUTH:
                     open_teeth[pid][item_tooth[item.id]].add(item.id)
+                else:
+                    open_full[pid][item.code].add(item.id)
 
     rows, plan_rows, item_rows = [], [], []
     for appt_id, pid, start, code, item in run.conn.execute(
@@ -142,14 +153,15 @@ def stage_treatments(run, rng, fake) -> None:
             tooth = item_tooth[item]
         elif p["is_tooth_level"]:
             tooth = pick(pid, valid(code, pid))
-        if tooth != FULL_MOUTH:
-            for other in sorted(open_teeth[pid].get(tooth, ())):
-                if item is None or item_plan[other] != item_plan[item]:
-                    status[other], closed[other] = "replaced", start
-                    open_teeth[pid][tooth].discard(other)
+        # 다른 계획의 열린 항목 — 그 치아에(전체 구강은 같은 시술이) 진료가 들어가면 대체됨
+        opened = open_teeth[pid][tooth] if tooth != FULL_MOUTH else open_full[pid][code]
+        for other in sorted(opened):
+            if item is None or item_plan[other] != item_plan[item]:
+                status[other], closed[other] = "replaced", start
+                opened.discard(other)
         if item is not None:
             status[item], closed[item] = "done", start
-            open_teeth[pid].get(tooth, set()).discard(item)
+            opened.discard(item)
         if tooth != FULL_MOUTH:
             history[pid].add(tooth)
             if code in EXTRACTION_CODES:

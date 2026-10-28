@@ -163,8 +163,8 @@ def _replies_to(conn) -> list[dict]:
     )
 
 
-def check_churn_no_recall_reply(conn, ctx):
-    """이탈 환자는 이탈일부터 리콜 문자에 답장하지 않는다(⑨ 연락 무응답 흔적, §2.5)"""
+def check_churn_no_reply(conn, ctx):
+    """이탈 환자는 이탈일부터 어떤 문자에도 답장하지 않는다(⑨ 연락 무응답 흔적, §2.5)"""
     churn = dict(
         conn.execute(
             "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
@@ -172,10 +172,10 @@ def check_churn_no_recall_reply(conn, ctx):
     )
     return [
         r
-        for r in _replies_to(conn)
-        if r["out_trigger"] == "recall"
-        and r["patient_id"] in churn
-        and r["sent_at"][:10] >= churn[r["patient_id"]]
+        for r in _rows(
+            conn, "SELECT id, patient_id, sent_at FROM emr_messages WHERE direction = 'in'"
+        )
+        if r["patient_id"] in churn and r["sent_at"][:10] >= churn[r["patient_id"]]
     ]
 
 

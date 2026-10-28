@@ -2,7 +2,7 @@
 (가상 데이터 생성 설계 §2.2·§2.4·§4.3·§5.3 주의사항·차트)"""
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 
 from generator import chart, llm_jobs
@@ -292,12 +292,23 @@ def check_claim_errors(conn, ctx):
 
 def check_omitted_extra(conn, ctx):
     """추가 처치 누락(omitted_extra)은 결과가 없는 달(제출 월·전월)의 창 안 급여 청구 줄에만. 추가 처치는
-    master.SAME_DAY_EXTRA 시술·그 시술의 치아 후보·그날 나이에 급여, 치아는 그 환자 장부의 어떤 진료에도 없는 치아.
+    master.SAME_DAY_EXTRA 시술·그 시술의 치아 후보·그날 나이에 급여, 치아는 그 환자 장부의 진료·치료계획 항목·다른 추가 처치에
+    없는 치아.
     차트 사실 extra = 그 처치(시술 이름·치아), 다른 줄은 extra 없음 (§4.3)"""
     birth = dict(conn.execute("SELECT id, birth_date FROM emr_patients"))
     teeth = defaultdict(set)
-    for pid, tooth in conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
+    for pid, tooth in conn.execute(
+        "SELECT patient_id, tooth_no FROM emr_treatments UNION ALL SELECT p.patient_id, i.tooth_no"
+        " FROM emr_treatment_plan_items i JOIN emr_treatment_plans p ON p.id = i.plan_id"
+    ):
         teeth[pid].add(tooth)
+    extra_teeth = Counter(
+        (pid, tooth)
+        for pid, tooth in conn.execute(
+            "SELECT t.patient_id, e.extra_tooth_no FROM truth.truth_claim_errors e"
+            " JOIN emr_treatments t ON t.id = e.treatment_id WHERE e.kind = 'omitted_extra'"
+        )
+    )
     bad = []
     for r in _chart_lines(conn, ctx):
         extra = (json.loads(r["facts"]) if r["facts"] else {}).get("extra")
@@ -314,8 +325,8 @@ def check_omitted_extra(conn, ctx):
             if code not in SAME_DAY_EXTRA
             or tooth not in TOOTH_CHOICES[code]
             or not insured_on(PROCEDURE[code], age)
-            else "추가 처치 치아가 장부의 다른 진료에 나옴"
-            if tooth in teeth[r["patient_id"]]
+            else "추가 처치 치아가 장부의 진료·치료계획 항목·다른 추가 처치에 나옴"
+            if tooth in teeth[r["patient_id"]] or extra_teeth[(r["patient_id"], tooth)] > 1
             else "차트 사실 extra ≠ 정답"
             if extra != {"procedure": PROCEDURE[code]["name"], "tooth": tooth}
             else None

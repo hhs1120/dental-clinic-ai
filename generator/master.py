@@ -459,6 +459,16 @@ def open_slots(weekday: int) -> int:
 MAX_OPEN_SLOTS = max(open_slots(w) for w in range(7))  # 가장 긴 날의 슬롯 수
 
 
+def close_time(weekday: int) -> str:
+    """그 요일 마감 'HH:MM' — 토요일은 토요일 마감"""
+    return HOURS["saturday_close" if weekday == SATURDAY else "weekday_close"]
+
+
+def business_minutes(weekday: int) -> int:
+    """개원 ~ 그 요일 마감 분 — 통화·전화 예약·문자 같은 사건 시각을 뽑는 범위 (§2.6 사건 시각). 점심은 따지지 않는다"""
+    return _minutes(close_time(weekday)) - _minutes(HOURS["open"])
+
+
 def daily_cap(visits_per_day: int, weekday: int) -> int:
     """그 요일의 하루 비취소 예약 상한 — config visits_per_day(가장 긴 날 기준)를 슬롯 수에 비례해 내림 (§1)"""
     return visits_per_day * open_slots(weekday) // MAX_OPEN_SLOTS
@@ -623,6 +633,9 @@ CHART_DECOY_RATIO = 1.5
 SAME_DAY_EXTRA_RATE = 0.03
 # 추가 처치 시술 — 치아 단위 급여 시술, 발치 제외. 그 시술의 급여 조건(실란트는 소아)은 쓰는 쪽이 본다
 SAME_DAY_EXTRA = frozenset(_CODE_BY_NAME[n] for n in ("아말감/GI", "실란트"))
+# 계획에서 같은 시술이 이어질 때 같은 치아를 유지하는 시술(여러 회차로 한 치아를 치료) — 나머지(실란트·레진·아말감/GI 등)의
+# 같은 시술 반복은 다른 치아. 다른 시술로 넘어갈 때(신경치료 → 크라운, 발치 → 임플란트)는 늘 앞 치아 유지 (§2.3)
+SAME_TOOTH_PROCEDURES = frozenset(_CODE_BY_NAME[n] for n in ("신경치료", "크라운", "인레이"))
 CHART_FORBIDDEN_WORDS = (
     "청구 오류",
     "삭감",

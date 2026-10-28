@@ -4,14 +4,14 @@
 - 노쇼: 진료가 끝났을 시각 뒤 / 미수 안내: 미수가 생긴 내원의 다음 진료일 / 서류 준비: 환자가 건 서류 요청 통화(주 목적)의 다음 진료일
 - 리콜: 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한(마지막 completed 위생 내원 + RECALL_CYCLE)이 다음 달이면
   다가옴, 지난달이면 지남 — 기한마다 최대 2건(RECALL_TEMPLATES)
-- 답장: 이탈 환자(§2.2)는 이탈일부터 리콜에 답하지 않는다. 장부 실수(입력 누락·금액 오입력)로 생긴 미수의 안내 답장은
+- 답장: 이탈 환자(§2.2)는 이탈일부터 어떤 문자에도 답하지 않는다. 장부 실수(입력 누락·금액 오입력)로 생긴 미수의 안내 답장은
   이미 냈다는 문구(MESSAGE_REPLIES_PAID), 진짜 미수도 PAID_REPLY_NOISE_RATE만큼 그 문구(착각)
 """
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from generator.calls import DAY_MINUTES, FMT, OPEN, next_open_day, prev_open_day
+from generator.calls import FMT, OPEN, any_minute, next_open_day, prev_open_day
 from generator.master import (
     CLINIC_NAME,
     MESSAGE_CONFIRM_DELAY_MIN,
@@ -90,9 +90,7 @@ def stage(run, rng, fake) -> None:
             out.append((t, pid, trigger, appt, body))
 
     def next_open_minute(d: date) -> datetime:
-        return datetime.combine(next_open_day(d, run.holidays), OPEN) + timedelta(
-            minutes=int(rng.integers(DAY_MINUTES))
-        )
+        return any_minute(rng, next_open_day(d, run.holidays))
 
     for aid, pid, at, duration, code, status, confirmed, created, cancelled in conn.execute(
         "SELECT id, patient_id, scheduled_at, duration_min, planned_procedure_code, status, confirmed, created_at,"
@@ -158,8 +156,8 @@ def stage(run, rng, fake) -> None:
     for t, pid, trigger, appt, _ in out:
         if rng.random() < rates["reply_rate"]:
             reply = t + _minutes(rng, MESSAGE_DELAY_MIN)
-            if trigger == "recall" and pid in churn and reply.date() >= churn[pid]:
-                continue  # 이탈 — 리콜에 답하지 않는다
+            if pid in churn and reply.date() >= churn[pid]:
+                continue  # 이탈 — 이탈일부터 어떤 문자에도 답하지 않는다
             if reply.date() < run.today:
                 options = MESSAGE_REPLIES[trigger]
                 if trigger == "balance" and (

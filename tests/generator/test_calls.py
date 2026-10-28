@@ -87,12 +87,12 @@ def test_purpose_direction_noise_follow_quota(db):
         assert len(out) == calls.quota({"o": share, "i": 1 - share}, k)["o"], purpose
         # outbound 복합 주제(구조) — noise_type 없음
         multi = [r for r in out if len(json.loads(r["accepted_purposes"])) > 1]
-        assert (
-            len(multi)
-            == calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))[
-                "m"
-            ]
-        )
+        want = calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))[
+            "m"
+        ]
+        # 이탈 환자 리콜은 옮겼다는 통화라 부 주제를 덮어 지운다 — 그만큼만 모자랄 수 있다
+        churned = [r for r in out if json.loads(r["used_fact"]).get("churned")]
+        assert len(multi) <= want <= len(multi) + len(churned)
         assert all(r["noise_type"] != "two_topics" for r in out)
 
 

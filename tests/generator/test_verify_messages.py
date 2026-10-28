@@ -197,14 +197,14 @@ def test_recall_twice_a_month(recall_db):
     assert verify.check_recall_once_a_month(recall_db, CTX)
 
 
-def test_churn_recall_reply(recall_db):
-    """이탈 환자는 이탈일부터 리콜에 답장하지 않는다 — 이탈일 전 답장은 괜찮다"""
+def test_churn_reply(recall_db):
+    """이탈 환자는 이탈일부터 어떤 문자에도 답장하지 않는다 — 이탈일 전 답장은 괜찮다"""
     recall_db.execute(RECALL, ("2026-10-02 09:30:00", _body("after")))
     recall_db.execute(INS + "(2, 'in', '2026-10-02 09:40:00', '네', 'reply', NULL)")
     recall_db.execute("INSERT INTO truth.truth_patient_churn VALUES (2, 'churn', '2026-10-03')")
-    assert verify.check_churn_no_recall_reply(recall_db, CTX) == []
+    assert verify.check_churn_no_reply(recall_db, CTX) == []
     recall_db.execute("UPDATE truth.truth_patient_churn SET churned_on = '2026-10-01'")
-    assert verify.check_churn_no_recall_reply(recall_db, CTX)
+    assert verify.check_churn_no_reply(recall_db, CTX)
 
 
 def test_paid_reply_only_on_balance(tmp_path):

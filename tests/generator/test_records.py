@@ -15,6 +15,7 @@ from generator.master import (
     IMPLANT_CODE,
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURES,
+    SAME_TOOTH_PROCEDURES,
     SCALING_CODE,
     TOOTH_CHOICES,
     UNPAID_PAID_RANGE,
@@ -73,8 +74,9 @@ def test_treatment_is_planned_procedure(db):
 
 
 def test_course_keeps_tooth(db):
-    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있고 치아 수명 규칙상
-    쓸 수 있을 때: 발치·임플란트 치아는 자연치 시술 불가, 임플란트 1차는 발치했거나 이력 없는 치아만 (§2.1)"""
+    """코스(치료계획) 안의 다음 내원 치아 — 다른 시술로 넘어가거나 이어서 치료하는 시술(SAME_TOOTH_PROCEDURES)의 반복이면
+    앞 내원 치아(그 시술의 후보에 있고 치아 수명 규칙상 쓸 수 있을 때: 발치·임플란트 치아는 자연치 시술 불가, 임플란트 1차는
+    발치했거나 이력 없는 치아만), 그 밖의 같은 시술 반복(실란트·레진 등)은 다른 치아 (§2.1·§2.3)"""
     conn, _, run = db
     episode = run.state["episode"]  # 예약 id → 에피소드 번호 (4단계)
     rows = _rows(
@@ -102,16 +104,17 @@ def test_course_keeps_tooth(db):
     multi = [c for c in courses.values() if len(c) > 1]
     assert multi
     for course in multi:
-        first = course[0]["tooth_no"]
-        for r in course[1:]:
+        for prev, r in zip(course, course[1:], strict=False):
+            code, last = r["procedure_code"], prev["tooth_no"]
+            if code == prev["procedure_code"] and code not in SAME_TOOTH_PROCEDURES:
+                assert r["tooth_no"] != last, course
+                continue
             ext, imp, hist = r["before"]
-            usable = first not in imp and (
-                (first in ext or first not in hist)
-                if r["procedure_code"] == IMPLANT_CODE
-                else first not in ext
+            usable = last not in imp and (
+                (last in ext or last not in hist) if code == IMPLANT_CODE else last not in ext
             )
-            if first in TOOTH_CHOICES[r["procedure_code"]] and usable:
-                assert r["tooth_no"] == first, course
+            if last in TOOTH_CHOICES[code] and usable:
+                assert r["tooth_no"] == last, course
 
 
 def test_unpaid_and_settlement(db):
