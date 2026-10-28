@@ -776,7 +776,7 @@ EVAL_RARE_SHARE = 0.6
 EVAL_MIN_PER_SPLIT = 2
 
 
-# 문자 (§2.5, 8단계). 리마인드는 리마인드 날 개원 시각(HOURS["open"])에 일괄
+# 문자 (§2.5, 8단계). 리마인드는 리마인드 날, 리콜은 그달 첫 진료일 개원 시각(HOURS["open"])에 일괄
 MESSAGE_CONFIRM_DELAY_MIN = (1, 5)  # 예약 확정 문자 = 예약을 잡은 뒤 (양 끝 포함, 분)
 MESSAGE_DELAY_MIN = (1, 30)  # 노쇼 문자(진료가 끝났을 시각 뒤)·답장(out 뒤)
 # 트리거별 본문. date = '11월 3일(화)', 리마인드도 '내일'이라 쓰지 않는다(직전 진료일이 전날이 아닐 수 있음)
@@ -787,6 +787,12 @@ MESSAGE_TEMPLATES = {
     "balance": "[{clinic}] {name}님, {date} 진료비 중 {amount}원이 미납되어 안내드립니다.",
     "doc_ready": "[{clinic}] {name}님, 요청하신 서류가 준비되었습니다. 내원하실 때 받아 가세요.",
 }
+# 리콜 문자 (§2.5) — 기한(마지막 completed 위생 내원 + RECALL_CYCLE)이 다음 달인 환자에게 한 번(before, month = 기한 달),
+# 기한이 지난 다음 달에 한 번 더(after). 둘 다 그달 첫 진료일 개원 시각, 잡힌 예약이 없을 때만
+RECALL_TEMPLATES = {
+    "before": "[{clinic}] {name}님, {month}월에 정기 검진 시기가 다가와 안내드립니다. 예약은 전화로 연락 주세요.",
+    "after": "[{clinic}] {name}님, 정기 검진 시기가 지났습니다. 편하실 때 전화로 예약해 주세요.",
+}
 # 트리거별 답장 문구 (균등)
 MESSAGE_REPLIES = {
     "appt_confirm": ("네", "확인했습니다", "시간 변경 가능할까요?"),
@@ -794,6 +800,7 @@ MESSAGE_REPLIES = {
     "noshow": ("죄송합니다. 다시 연락드릴게요", "깜빡했어요"),
     "balance": ("다음에 갈 때 낼게요", "확인했습니다"),
     "doc_ready": ("감사합니다", "네, 들를게요"),
+    "recall": ("확인했습니다", "다음에 전화드릴게요", "요즘 바빠서요"),
 }
 # 이미 냈다는 balance 답장 (§2.5 reply(in)) — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 답장(균등)
 MESSAGE_REPLIES_PAID = ("그날 다 냈는데요", "이미 계산했어요", "이체했는데 확인 부탁드려요")

@@ -4,6 +4,7 @@ fixture 문자: 1 리마인드(2번 예약) / 2 답장 / 3 예약 확정(1번) /
 import pytest
 
 from generator import verify
+from generator.master import CLINIC_NAME, MESSAGE_REPLIES_PAID, RECALL_TEMPLATES
 from tests.generator.verify_db import CTX, make_db
 
 MESSAGE_CHECKS = [
@@ -123,3 +124,105 @@ def test_message_report_counts_by_trigger(tmp_path):
         "reply": 1,
     }
     assert verify.report_message_counts in verify.REPORTS
+
+
+# 리콜(§2.5): 2번 환자에게 창 이전 위생 내원을 주면 기한 = 그날 + 리콜 주기(12개월). 10월 첫 진료일 = 10/02(금 — 10/01 목
+# 휴진) 개원 09:30, 그때 2번 환자의 잡힌 예약은 없다(3번 예약은 10/30에 잡힘)
+def _pre_hygiene(conn, day):
+    conn.execute(
+        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, created_at, chair_no) VALUES"
+        " (2, 2, ?, 30, 'hygiene', 'U0002', 'completed', 'phone', '2025-01-02 10:00:00', 2)",
+        (f"{day} 10:00:00",),
+    )
+
+
+RECALL = INS + "(2, 'out', ?, ?, 'recall', NULL)"
+NAME = "김하늘"
+
+
+def _body(kind, month=None):
+    return RECALL_TEMPLATES[kind].format(clinic=CLINIC_NAME, name=NAME, month=month)
+
+
+@pytest.mark.parametrize(
+    "hygiene, body",
+    [("2025-11-10", _body("before", 11)), ("2025-09-10", _body("after"))],
+)  # 기한 11월 → 10월에 다가옴 / 기한 9월 → 10월에 지남
+def test_recall_valid(tmp_path, hygiene, body):
+    conn = make_db(tmp_path)
+    _pre_hygiene(conn, hygiene)
+    conn.execute(RECALL, ("2026-10-02 09:30:00", body))
+    assert verify.check_message_triggers(conn, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "hygiene, sent_at, body",
+    [
+        ("2025-11-10", "2026-10-02 09:30:00", _body("after")),  # 다가옴인데 지남 문구
+        ("2025-11-10", "2026-10-02 09:30:00", _body("before", 12)),  # 달이 틀림
+        ("2025-10-10", "2026-10-02 09:30:00", _body("before", 10)),  # 기한이 이번 달 — 보내지 않음
+        ("2025-11-10", "2026-10-05 09:30:00", _body("before", 11)),  # 첫 진료일 아님
+        ("2025-11-10", "2026-10-02 10:00:00", _body("before", 11)),  # 개원 시각 아님
+        (
+            "2025-10-10",
+            "2026-11-02 09:30:00",
+            _body("after"),
+        ),  # 11/02엔 3번 예약(11/17)이 잡혀 있음
+    ],
+)
+def test_recall_break(tmp_path, hygiene, sent_at, body):
+    conn = make_db(tmp_path)
+    _pre_hygiene(conn, hygiene)
+    conn.execute(RECALL, (sent_at, body))
+    assert verify.check_message_triggers(conn, CTX)
+
+
+def test_recall_without_hygiene(tmp_path):
+    conn = make_db(tmp_path)  # 2번 환자는 completed 위생 내원이 없다
+    conn.execute(RECALL, ("2026-10-02 09:30:00", _body("after")))
+    assert verify.check_message_triggers(conn, CTX)
+
+
+@pytest.fixture
+def recall_db(tmp_path):
+    conn = make_db(tmp_path)
+    _pre_hygiene(conn, "2025-09-10")
+    return conn
+
+
+def test_recall_twice_a_month(recall_db):
+    recall_db.execute(RECALL, ("2026-10-02 09:30:00", _body("after")))
+    recall_db.execute(RECALL, ("2026-10-02 09:30:00", _body("after")))
+    assert verify.check_recall_once_a_month(recall_db, CTX)
+
+
+def test_churn_recall_reply(recall_db):
+    """이탈 환자는 이탈일부터 리콜에 답장하지 않는다 — 이탈일 전 답장은 괜찮다"""
+    recall_db.execute(RECALL, ("2026-10-02 09:30:00", _body("after")))
+    recall_db.execute(INS + "(2, 'in', '2026-10-02 09:40:00', '네', 'reply', NULL)")
+    recall_db.execute("INSERT INTO truth.truth_patient_churn VALUES (2, 'churn', '2026-10-03')")
+    assert verify.check_churn_no_recall_reply(recall_db, CTX) == []
+    recall_db.execute("UPDATE truth.truth_patient_churn SET churned_on = '2026-10-01'")
+    assert verify.check_churn_no_recall_reply(recall_db, CTX)
+
+
+def test_paid_reply_only_on_balance(tmp_path):
+    """이미 냈다는 답장은 미수 안내(5번 문자, 1번 예약) 답장에만 — 리마인드(1번 문자) 답장(2번)을 그 문구로 바꾸면 잡힌다"""
+    conn = make_db(tmp_path)
+    paid = MESSAGE_REPLIES_PAID[0]
+    conn.execute(INS + "(1, 'in', '2026-10-07 10:10:00', ?, 'reply', 1)", (paid,))
+    assert verify.check_paid_replies(conn, CTX) == []
+    conn.execute(M + "body = ? WHERE id = 2", (paid,))
+    assert verify.check_paid_replies(conn, CTX)
+
+
+def test_ledger_error_balance_reply_is_paid(tmp_path):
+    """장부 실수 미수의 안내 답장은 이미 냈다는 문구 — 1번 수납을 입력 누락으로 두면 '다음에 갈 때 낼게요'는 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute(
+        "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at, true_method)"
+        " VALUES ('entry_missing', 1, 36000, '2026-10-06 11:00:00', 'card')"
+    )
+    conn.execute(INS + "(1, 'in', '2026-10-07 10:10:00', '다음에 갈 때 낼게요', 'reply', 1)")
+    assert verify.check_paid_replies(conn, CTX)

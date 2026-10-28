@@ -16,6 +16,7 @@ from generator.master import (
     MESSAGE_CONFIRM_DELAY_MIN,
     MESSAGE_DELAY_MIN,
     MESSAGE_REPLIES,
+    MESSAGE_REPLIES_PAID,
 )
 from generator.paths import ROOT
 
@@ -69,7 +70,12 @@ def test_reply_delay_and_phrases(db):
         " AND o.sent_at < i.sent_at) AS out_at FROM emr_messages i WHERE i.direction = 'in'"
     ).fetchall()
     assert replies
-    assert all(r["body"] in MESSAGE_REPLIES[r["trig"]] for r in replies)
+    assert all(
+        r["body"] in MESSAGE_REPLIES[r["trig"]]
+        or (r["trig"] == "balance" and r["body"] in MESSAGE_REPLIES_PAID)  # 이미 냈다는 답(§2.5)
+        for r in replies
+    )
+    assert {r["trig"] for r in replies} >= {"recall", "balance"}
     assert all(lo <= _minutes(r["out_at"], r["sent_at"]) <= hi for r in replies)
 
 

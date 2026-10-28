@@ -108,16 +108,16 @@ tags:
 | noshow | 노쇼 시 |
 | balance | 미수 발생 중 `config` `messages.balance` 비율 |
 | doc_ready | 서류 요청 **통화 이후** |
-| recall | 리콜 기한이 지났고 잡힌 예약이 없는 환자에게 월 1회. 이탈 환자(§2.2)는 답장하지 않는다(⑨ 연락 무응답 흔적) |
+| recall | 잡힌 예약이 없는 환자 전원에게(비율 없음) 리콜 기한 한 달 전에 한 번(다가옴), 기한이 지난 다음 달에 한 번(지남) — 문구는 `master.RECALL_TEMPLATES`. 이탈 환자(§2.2)는 이탈일부터 답장하지 않는다(⑨ 연락 무응답 흔적) |
 | reply(in) | out 중 `config` `messages.reply_rate` 비율, 고정 문구에서 추첨("네", "확인했습니다", "시간 변경 가능할까요?" 등) |
 
 문자는 전부 템플릿(LLM 없음). 색인 방식은 [[치과 AX - 앱 설계]] §3.
 
 **8단계 구현 결정**
 - **대상**: `patient_id` = 그 환자. 트리거별 발송 비율은 `config` `messages`. TODAY 전날까지만
-- **시각**(out은 트리거 뒤): appt_confirm = 예약 `created_at` 뒤 `master.MESSAGE_CONFIRM_DELAY_MIN` 안 / reminder = 리마인드 날(직전 진료일) 개원 시각에 일괄 / noshow = 예약 시각 + 그 예약 길이 뒤 `master.MESSAGE_DELAY_MIN` 안 / balance = 미수가 생긴 내원(`visit` 수납 `amount_paid < amount_due`)의 다음 진료일 임의 분 / doc_ready = 환자가 건(inbound) 서류 요청 통화(주 목적, 환자 연결)의 다음 진료일 임의 분
+- **시각**(out은 트리거 뒤): appt_confirm = 예약 `created_at` 뒤 `master.MESSAGE_CONFIRM_DELAY_MIN` 안 / reminder = 리마인드 날(직전 진료일) 개원 시각에 일괄 / noshow = 예약 시각 + 그 예약 길이 뒤 `master.MESSAGE_DELAY_MIN` 안 / balance = 미수가 생긴 내원(`visit` 수납 `amount_paid < amount_due`)의 다음 진료일 임의 분 / doc_ready = 환자가 건(inbound) 서류 요청 통화(주 목적, 환자 연결)의 다음 진료일 임의 분 / recall = 그달 첫 진료일 개원 시각에 일괄 — 기한(마지막 completed 위생 내원 + 리콜 주기, 리콜 통화와 같은 기준)이 다음 달이면 다가옴, 지난달이면 지남, 그 시각에 잡힌 예약이 없을 때만
 - **reply(in)**: out 문자마다 `config` `messages.reply_rate`로, 그 out 뒤 `master.MESSAGE_DELAY_MIN` 안. 같은 `related_appointment_id`. 문구는 트리거별 `master.MESSAGE_REPLIES`에서 균등 — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 balance 문자는 `master.MESSAGE_REPLIES_PAID`(이미 냈다는 답)에서, 진짜 미수의 balance 답장도 `master.PAID_REPLY_NOISE_RATE`만큼 그 문구에서(착각한 환자 — 이 답장만으로 장부 실수를 가리지 못하게)
-- **`related_appointment_id`**: appt_confirm·reminder·noshow = 그 예약, balance = 미수가 생긴 내원 예약, doc_ready = 없음
+- **`related_appointment_id`**: appt_confirm·reminder·noshow = 그 예약, balance = 미수가 생긴 내원 예약, doc_ready·recall = 없음
 - **본문**: 트리거별 템플릿 `master.MESSAGE_TEMPLATES`(병원 이름·환자 이름·예약 날짜·시각·시술·미수 금액). 날짜는 `11월 3일(화)`, 리마인드도 '내일'이라 쓰지 않는다
 
 ### 2.6 정형 생성 규칙 (2~5단계) — 정방향 시뮬레이션
@@ -378,7 +378,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 | 차트 | (9b단계) 서술 줄 본문에 꼭 넣을 사실(§4.3 '9b단계 구현 결정')이 있음; 진료 기록 1건당 `emr_chart_notes`·`truth_chart_notes` 정확히 1행; 요건 줄이 §4.3 규칙대로(요건 줄만 근거 여부 보유); 요건 사실이 장부와 일치(장부에 근거 사건이 있으면 그 날짜, 없으면 '타 기관'); `truth_chart_notes.is_special` ⇔ (청구 오류 줄 ∪ 요건 줄), 서술 ⇔ 특이 ∪ 디코이, 창 이전 내원은 템플릿만; 차트 상병이 허용 밖 ⇔ 상병 착오; `truth_claim_errors`는 창 안 급여 청구 줄에만·요건 오류 ⇔ 근거 없음·확정 월은 심사 결과와 일치(상병 사유 ⇔ 상병 착오, 요건 오류는 요건 사유로 깎인 줄만); 본문에 환자 이름·정답 어휘 없음, 치아 번호·시술 표준 이름·그 내원에서 발견한 주의사항 존재; 다음 계획의 남은 항목 = 그 내원 시점에 열린 계획 항목 |
 | 주의사항 | 문진은 대상 조건(기록일 나이·성별 — `master.ALERT_TYPES`) 충족; 출처가 정의와 같음; 기록일 ≥ 등록일, 문진 기록일 = 신환 첫 completed 내원일(내원 없으면 문진 없음) / 구환 창 이전 마지막 내원일; 끝나는 날은 임신(기록일 + `master.PREGNANCY_LEFT_DAYS` 안)·협조 어려운 소아(소아 구간을 벗어나는 생일)만; `visit` 출처는 같은 환자의 창 안 관련 시술 completed 내원과 연결되고 기록일 = 그 내원일; 환자당 ≤ `master.MAX_ALERTS_PER_PATIENT`개; (환자, 코드) 유일은 스키마 |
 | 통화 슬롯 | (7단계) 생성 통화는 전사 있음(`has_transcript` = 1); (6단계) 생성 통화 ↔ `truth_call_labels` 1:1; 건수 = `config` `calls_with_transcript`; 통화는 창 안 TODAY 전 진료일 영업시간, 길이는 `master.CALL_DURATION_SEC` 안; 행 순서 = 통화 시각순; 라벨 enum·함의 플래그·`accepted_purposes` = 주 목적 + 부 주제 1개(`master.CALL_SUBTOPICS` 안)·응급 → urgent·outbound 목적·inbound 복합 ⇔ 노이즈 '주제 2개 섞임'·노이즈 대상; 상대 ↔ 환자·발신자(통화일 소아·보호자 기록 ⇔ 보호자, 처음 연락 예약은 그날 등록한 소아 아닌 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측); `used_fact`의 최근 진료·잔액·다음 예약·주의사항이 통화 시각까지 읽은 장부와 같음; 판정 풀 크기·순번 1..P·앞 절반 dev·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
-| 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤; recall은 리콜 기한이 지나고 잡힌 예약이 없는 환자에게 월 1회, 이탈 환자 recall에 답장 없음; 이미 냈다는 답장은 장부 실수로 생긴 미수의 balance에만 |
+| 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤; recall은 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한이 다음 달(다가옴)·지난달(지남)인 환자에게, 본문은 그 종류의 문구(환자당 월 1회), 이탈 환자는 이탈일부터 recall에 답장 없음; 이미 냈다는 답장은 balance 답장에만, 장부 실수로 생긴 미수의 balance 답장은 전부 그 문구 |
 | 재무 | (8b·8c단계) ⑧-1: 불일치가 아닌 연동 카드 수납 ↔ 승인 1:1(승인번호·금액), 정산 입금 = 승인 합계 − 취소 − 수수료(수수료 차이 제외), 원인별 불일치 수 = `master.RECON_MISMATCH_COUNTS`, 불일치마다 정답 1개·관련 id 존재; ⑧-2: 출금마다 `truth_expense_matches` 1행, 증빙 합계 = 출금액(금액 차이 제외), 기공 명세서 줄 ↔ 창 안 기공 진료 1:1 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
