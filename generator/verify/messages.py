@@ -7,6 +7,7 @@ from generator.master import (
     CLINIC_NAME,
     HOURS,
     MESSAGE_REPLIES_PAID,
+    MESSAGE_REPLIES_PAID_METHOD,
     RECALL_CYCLE,
     RECALL_TEMPLATES,
     open_slots,
@@ -180,18 +181,25 @@ def check_churn_no_reply(conn, ctx):
 
 
 def check_paid_replies(conn, ctx):
-    """이미 냈다는 답장(master.MESSAGE_REPLIES_PAID)은 미수 안내 답장에만, 장부 실수(입력 누락·금액 오입력)로 생긴
-    미수의 안내 답장은 전부 그 문구 (§2.5 reply)"""
-    errors = {
-        r[0]
-        for r in conn.execute(
-            "SELECT p.appointment_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+    """이미 냈다는 답장(master.MESSAGE_REPLIES_PAID·MESSAGE_REPLIES_PAID_METHOD)은 미수 안내 답장에만, 장부 실수(입력 누락·
+    금액 오입력)로 생긴 미수의 안내 답장은 전부 그 문구, 결제수단을 말하면 그 내원의 실제 결제수단(장부 실수면 정답의 실제 값)
+    (§2.5 reply)"""
+    errors = dict(
+        conn.execute(
+            "SELECT p.appointment_id, e.true_method FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
             " WHERE e.kind IN ('entry_missing', 'amount_typo')"
         )
-    }
+    )
+    visit_method = dict(
+        conn.execute("SELECT appointment_id, method FROM emr_payments WHERE kind = 'visit'")
+    )
+    by_text = {text: m for m, text in MESSAGE_REPLIES_PAID_METHOD.items()}
     bad = []
     for r in _replies_to(conn):
-        paid = r["body"] in MESSAGE_REPLIES_PAID
+        paid = r["body"] in MESSAGE_REPLIES_PAID or r["body"] in by_text
+        said = by_text.get(r["body"])
+        if said and said != (errors.get(r["out_appt"]) or visit_method.get(r["out_appt"])):
+            bad.append({**r, "problem": "이미 냈다는 답장의 결제수단이 실제와 다름"})
         if paid and r["out_trigger"] != "balance":
             bad.append({**r, "problem": "미수 안내가 아닌 문자에 이미 냈다는 답장"})
         elif r["out_trigger"] == "balance" and r["out_appt"] in errors and not paid:

@@ -17,6 +17,7 @@ from generator.master import (
     MESSAGE_DELAY_MIN,
     MESSAGE_REPLIES,
     MESSAGE_REPLIES_PAID,
+    MESSAGE_REPLIES_PAID_METHOD,
 )
 from generator.paths import ROOT
 
@@ -72,7 +73,13 @@ def test_reply_delay_and_phrases(db):
     assert replies
     assert all(
         r["body"] in MESSAGE_REPLIES[r["trig"]]
-        or (r["trig"] == "balance" and r["body"] in MESSAGE_REPLIES_PAID)  # 이미 냈다는 답(§2.5)
+        or (
+            r["trig"] == "balance"
+            and (
+                r["body"] in MESSAGE_REPLIES_PAID
+                or r["body"] in MESSAGE_REPLIES_PAID_METHOD.values()
+            )
+        )  # 이미 냈다는 답(§2.5)
         for r in replies
     )
     assert {r["trig"] for r in replies} >= {"recall", "balance"}

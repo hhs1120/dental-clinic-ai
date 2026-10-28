@@ -4,7 +4,12 @@ fixture 문자: 1 리마인드(2번 예약) / 2 답장 / 3 예약 확정(1번) /
 import pytest
 
 from generator import verify
-from generator.master import CLINIC_NAME, MESSAGE_REPLIES_PAID, RECALL_TEMPLATES
+from generator.master import (
+    CLINIC_NAME,
+    MESSAGE_REPLIES_PAID,
+    MESSAGE_REPLIES_PAID_METHOD,
+    RECALL_TEMPLATES,
+)
 from tests.generator.verify_db import CTX, make_db
 
 MESSAGE_CHECKS = [
@@ -225,4 +230,19 @@ def test_ledger_error_balance_reply_is_paid(tmp_path):
         " VALUES ('entry_missing', 1, 36000, '2026-10-06 11:00:00', 'card')"
     )
     conn.execute(INS + "(1, 'in', '2026-10-07 10:10:00', '다음에 갈 때 낼게요', 'reply', 1)")
+    assert verify.check_paid_replies(conn, CTX)
+
+
+def test_paid_reply_method_matches(tmp_path):
+    """결제수단을 말하는 이미 냈다는 답장은 그 내원의 실제 수단 — 1번 내원은 카드라 이체 문구면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute(
+        INS + "(1, 'in', '2026-10-07 10:10:00', ?, 'reply', 1)",
+        (MESSAGE_REPLIES_PAID_METHOD["card"],),
+    )
+    assert verify.check_paid_replies(conn, CTX) == []
+    conn.execute(
+        "UPDATE emr_messages SET body = ? WHERE direction = 'in' AND related_appointment_id = 1 AND sent_at = '2026-10-07 10:10:00'",
+        (MESSAGE_REPLIES_PAID_METHOD["transfer"],),
+    )
     assert verify.check_paid_replies(conn, CTX)

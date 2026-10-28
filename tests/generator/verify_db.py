@@ -135,7 +135,7 @@ INSERT INTO truth_call_labels VALUES
    '{"call_date": "2026-11-27", "topic_procedure": "미백"}',
    'test');
 INSERT INTO truth_gen_meta VALUES
-  ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
+  ('seed', '20261201'), ('today', '2026-12-01'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
   ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1'), ('documents_core', '3'), ('documents_distractor', '3'),
   ('link_failure_days', '0'), ('ledger_errors', '{}'), ('recon_mismatches', '{}'), ('ledger_debt_calls', '0');
 """

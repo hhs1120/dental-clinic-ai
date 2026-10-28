@@ -1,6 +1,7 @@
 """평가 테스트용 작은 DB — 생성 스키마(shared/source_schema.sql)·앱 스키마(shared/app_schema.sql)·정답 스키마, 통화 6건·분류 두 버전·판정·투표·RAG 질문.
 
-통화(생성 5 + 붙여넣기 1): 1·2 dev 판정 풀(블라인드 풀) / 3 test 판정 풀 / 4·5 비풀(silver) / 6 붙여넣기(골드 없음).
+통화(생성 5 + 붙여넣기 1): 1·2 dev 판정 풀(블라인드 풀) / 3 test 판정 풀 / 4·5 비풀(silver) / 6 붙여넣기(p-0001 —
+앱 DB 통화라 source.sqlite ax_calls에 없고 골드 없음).
 골드 목적: 1·3·4·5 book, 2 complaint. 모집단(생성 전사) = book 4 · complaint 1
 분류 v1: 1 book ✓ · 2 book ✗ · 3 book ✓ · 4 book ✓ · 5 reschedule(폴백 — 집계 제외) · 6 book
 분류 v2: 1·3·4 book ✓ · 2 complaint ✓ · 5 failed
@@ -38,7 +39,7 @@ CALLS = [  # (id, call_uid, source, in_eval_pool, in_blind_pool, gold purpose, s
     (3, "c-0003", "generated", 1, 0, "book", "test"),
     (4, "c-0004", "generated", 0, 0, "book", "silver"),
     (5, "c-0005", "generated", 0, 0, "book", "silver"),
-    (6, "c-0006", "pasted", 0, 0, None, None),
+    (6, "p-0001", "pasted", 0, 0, None, None),  # 앱 DB 통화 — ax_calls에 넣지 않는다
 ]
 V1 = {1: "book", 2: "book", 3: "book", 4: "book", 5: "reschedule", 6: "book"}
 V2 = {1: "book", 2: "complaint", 3: "book", 4: "book"}
@@ -72,6 +73,8 @@ def make_db(tmp_path) -> sqlite3.Connection:
     src = sqlite3.connect(tmp_path / "source.sqlite")
     src.executescript(SOURCE_SCHEMA)
     for cid, uid, source, pool, blind, _purpose, _split in CALLS:
+        if source == "pasted":
+            continue
         src.execute(
             "INSERT INTO ax_calls (id, call_uid, source, direction, started_at, duration_sec, has_transcript, transcript,"
             " in_eval_pool, eval_sort_order, in_blind_pool) VALUES (?, ?, ?, 'inbound', '2026-11-02 10:00:00',"

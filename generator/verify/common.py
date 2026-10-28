@@ -57,7 +57,9 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
     holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
     meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta").fetchall())
     return Ctx(
-        today=cfg["today"],
+        today=date.fromisoformat(
+            meta["today"]
+        ),  # 그 DB를 만든 기준일(config를 바꿔도 옛 데이터는 옛 기준)
         holidays=frozenset(date.fromisoformat(d) for d in holidays),
         visits_per_day=cfg["visits_per_day"],
         range_start=date.fromisoformat(meta["range_start"]),

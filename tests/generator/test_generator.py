@@ -65,6 +65,7 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
     meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
     assert meta == {
         "seed": str(CFG["seed"]),
+        "today": CFG["today"].isoformat(),
         "range_start": CFG["range"]["start"].isoformat(),
         "range_end": CFG["range"]["end"].isoformat(),
         "call_slots": str(CFG["calls_with_transcript"]),

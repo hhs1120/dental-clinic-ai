@@ -82,6 +82,8 @@ def test_commit_blocked_when_lint_fails(monkeypatch):
         "data/app.sqlite",
         "ground_truth/call_labels.json",
         "ground_truth/doc_meta.json",
+        "generator/llm/jobs/transcript.jsonl",
+        "data/llm_calls_gen.jsonl",
     ],
 )
 def test_generated_files_blocked(path):
@@ -265,6 +267,10 @@ SCRATCH = "/private/tmp/claude-501/x/scratchpad"
         "sed --in-place s/a/b/ CLAUDE.md",
         "uv run pytest &>> out.log",
         "uv run python generator/__main__.py",
+        "uv run python -m generator.llm_jobs import",
+        "uv run python -m generator.llm_jobs split",
+        "uv run python -m generator --fake-llm",
+        f"uv run python -m generator --fake-llm --db {SCRATCH}/s.sqlite --truth data/t.sqlite",
     ],
 )
 def test_readonly_blocks_writes(command):
@@ -297,6 +303,10 @@ def test_readonly_blocks_writes(command):
         "git branch --list 'feat/*'",
         "git branch -vv",
         "git worktree list",
+        "cat generator/schedule.py | head",
+        "sed -n 1,20p generator/records.py",
+        "grep -n def generator/calls.py",
+        f"uv run python -m generator --fake-llm --db {SCRATCH}/s.sqlite --truth {SCRATCH}/t.sqlite",
     ],
 )
 def test_readonly_allows_reading(command):

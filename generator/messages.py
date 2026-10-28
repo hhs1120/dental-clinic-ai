@@ -5,7 +5,8 @@
 - 리콜: 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한(마지막 completed 위생 내원 + RECALL_CYCLE)이 다음 달이면
   다가옴, 지난달이면 지남 — 기한마다 최대 2건(RECALL_TEMPLATES)
 - 답장: 이탈 환자(§2.2)는 이탈일부터 어떤 문자에도 답하지 않는다. 장부 실수(입력 누락·금액 오입력)로 생긴 미수의 안내 답장은
-  이미 냈다는 문구(MESSAGE_REPLIES_PAID), 진짜 미수도 PAID_REPLY_NOISE_RATE만큼 그 문구(착각)
+  이미 냈다는 문구(MESSAGE_REPLIES_PAID + 실제 결제수단의 MESSAGE_REPLIES_PAID_METHOD), 진짜 미수도 PAID_REPLY_NOISE_RATE만큼
+  그 문구(착각)
 """
 
 from collections import defaultdict
@@ -18,6 +19,7 @@ from generator.master import (
     MESSAGE_DELAY_MIN,
     MESSAGE_REPLIES,
     MESSAGE_REPLIES_PAID,
+    MESSAGE_REPLIES_PAID_METHOD,
     MESSAGE_TEMPLATES,
     PAID_REPLY_NOISE_RATE,
     PROCEDURES,
@@ -145,13 +147,15 @@ def stage(run, rng, fake) -> None:
     ):
         send(next_open_minute(date.fromisoformat(started[:10])), pid, "doc_ready", None)
     churn = run.state["churn"]
-    ledger_debt = {
-        r[0]
-        for r in conn.execute(
-            "SELECT p.appointment_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+    ledger_debt = dict(  # 장부 실수 미수 내원 → 실제 결제수단
+        conn.execute(
+            "SELECT p.appointment_id, e.true_method FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
             " WHERE e.kind IN ('entry_missing', 'amount_typo')"
         )
-    }
+    )
+    visit_method = dict(
+        conn.execute("SELECT appointment_id, method FROM emr_payments WHERE kind = 'visit'")
+    )
     rows = [(t, pid, "out", trigger, appt, body) for t, pid, trigger, appt, body in out]
     for t, pid, trigger, appt, _ in out:
         if rng.random() < rates["reply_rate"]:
@@ -163,7 +167,8 @@ def stage(run, rng, fake) -> None:
                 if trigger == "balance" and (
                     appt in ledger_debt or rng.random() < PAID_REPLY_NOISE_RATE
                 ):
-                    options = MESSAGE_REPLIES_PAID
+                    method = ledger_debt.get(appt) or visit_method[appt]
+                    options = (*MESSAGE_REPLIES_PAID, MESSAGE_REPLIES_PAID_METHOD[method])
                 rows.append(
                     (reply, pid, "in", "reply", appt, options[int(rng.integers(len(options)))])
                 )

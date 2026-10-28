@@ -20,6 +20,7 @@ from generator.master import (
     RECALL_CYCLE_MONTHS,
     SCALING_MIN_AGE,
     TRANSCRIPT_CHARS_PER_SEC,
+    insured_on,
 )
 
 SPEAKERS = ["환자:", "직원:"]
@@ -76,10 +77,12 @@ _AGE_RULE = {
 }
 
 
-def topic_price(name: str) -> dict:
-    """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천)"""
+def topic_price(name: str, age: int | None = None) -> dict:
+    """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천). 환자 나이를 알면 그 나이에 급여인지
+    (master.insured_on — 적용 연령 밖이면 비급여 가격), 모르면(처음 연락) 급여 시술인지로"""
     p = _PROC[name]
-    out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": p["is_insured"] != "no"}
+    insured = insured_on(p, age) if age is not None else p["is_insured"] != "no"
+    out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": insured}
     if out["insured"]:
         out["patient_pays"] = f"{round(p['fee_total'] * p['patient_share_rate']):,}원"
         if p["age_group"] in _AGE_RULE:
@@ -93,7 +96,9 @@ def payload(row: dict) -> dict:
     if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get(
         "topic_procedure"
     ):  # 부 주제 포함
-        facts["topic_price"] = topic_price(fact["topic_procedure"])
+        facts["topic_price"] = topic_price(
+            fact["topic_procedure"], (fact.get("patient") or {}).get("age")
+        )
     if "recall" in json.loads(row["accepted_purposes"]):
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
@@ -121,6 +126,7 @@ def simplify(p: dict) -> dict:
         "appointment",
         "topic_procedure",
         "topic_price",
+        "recall_months",
         "churned",
         "already_paid",
     )
@@ -132,8 +138,12 @@ def korean_date(iso: str) -> str:
     return f"{d.month}월 {d.day}일"
 
 
+CHURN_WORDS = ("다른 치과", "다른 병원", "옮겼")  # 이탈 리콜 전사에 하나는 있어야 하는 말 (⑨ 근거)
+
+
 def must_include(fact: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)"""
+    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)·⑧-1·⑨ 근거(이미 냈다는 내원일,
+    다른 치과로 옮겼다는 말)"""
     out = []
     appt = fact.get("appointment")
     if appt:
@@ -142,6 +152,10 @@ def must_include(fact: dict, names: dict) -> list[list[str]]:
             out.append([korean_date(appt["from_date"])])
     if fact.get("topic_procedure"):
         out.append(names.get(fact["topic_procedure"], [fact["topic_procedure"]]))
+    if fact.get("already_paid"):
+        out.append([korean_date(fact["already_paid"]["date"])])
+    if fact.get("churned"):
+        out.append(list(CHURN_WORDS))
     return out
 
 

@@ -8,7 +8,7 @@ from collections import Counter
 
 import pytest
 
-from generator import build, chart, verify
+from generator import build, chart, llm_jobs, verify
 from generator.master import (
     CHART_DECOY_RATIO,
     CHART_FORBIDDEN_WORDS,
@@ -405,3 +405,39 @@ def test_narrative_stage_exports_then_applies_cache(tmp_path):
         conn.execute("SELECT note FROM emr_chart_notes WHERE treatment_id = 3").fetchone()[0]
         == note
     )
+
+
+def test_narrative_drafts_pass_their_checks(db):
+    """서술 줄의 초안(draft_note)은 그 줄의 9b 검증(꼭 넣을 사실·금지 어휘)을 그대로 통과한다 — 초안에서 빠진 사실이 있으면
+    LLM이 영영 통과 못 하는 건이 생긴다 (§4.3 '9b단계 구현 결정')"""
+    conn, _, _ = db
+    names = {
+        tid: name
+        for tid, name in conn.execute(
+            "SELECT t.id, p.name FROM emr_treatments t JOIN emr_patients p ON p.id = t.patient_id"
+        )
+    }
+    narratives = [
+        x
+        for x in RUN["run"].state["chart"]
+        if x["id"]
+        in {
+            r[0]
+            for r in conn.execute(
+                "SELECT treatment_id FROM truth.truth_chart_notes WHERE kind = 'narrative'"
+            )
+        }
+    ]
+    assert narratives
+    failed = {
+        x["id"]: problems
+        for x in narratives
+        if (
+            problems := llm_jobs.problems(
+                chart.NARRATIVE_SCHEMA,
+                chart.narrative_checks(x["facts"], names[x["id"]]),
+                {"note": chart.draft_note(x["facts"])},
+            )
+        )
+    }
+    assert failed == {}

@@ -23,12 +23,22 @@ def main() -> None:
         # 하나만 주면 나머지가 기본 경로로 떨어져 실제 DB를 덮어쓴다 (verify는 읽기 전용이라 허용)
         parser.error("--db와 --truth는 같이 준다")
     paths = output_paths()
+    if (
+        args.db is not None
+    ):  # 다른 곳에 생성할 때 LLM 작업·결과·비용 로그도 그 옆에 — 저장소 작업 폴더를 덮지 않게(캐시는 읽기만)
+        out = args.db.parent
+        paths |= {
+            "llm_jobs": out / "llm_jobs",
+            "llm_results": out / "llm_results",
+            "llm_log": out / "llm_calls_gen.jsonl",
+        }
     try:
         generate(
             args.db or paths["source"],
             args.truth or paths["truth"],
             ROOT / "config" / "generator.yaml",
             fake_llm=args.fake_llm,
+            llm_paths=paths,
             rag_qa_path=None if args.fake_llm else paths["rag_qa"],
         )
     except LLMMissing as e:

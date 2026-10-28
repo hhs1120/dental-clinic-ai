@@ -320,7 +320,10 @@ def _booking_events(led: Ledger, purpose: str, run, rng) -> list[tuple[dict, str
         return [
             (a, a["cancelled"])
             for a in appts
-            if a["status"] == "cancelled" and a["id"] not in origins and _in_hours(a["cancelled"])
+            if a["status"] == "cancelled"
+            and a["id"] not in origins
+            and _in_hours(a["cancelled"])
+            and not led.gone(a["patient"], a["cancelled"])  # 이탈 뒤 당일 취소는 연락 없이 (§2.2)
         ]
     # confirm: 리마인드 날 개원 뒤 임의 분 — 8단계가 리마인드 문자를 그 전에 보낸다
     out = []
@@ -618,6 +621,10 @@ def stage_labels(run, rng, fake) -> None:
             accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []),
         )
         s["fact"] = _used_fact(rng, led, s)
+        if s["fact"].get("already_paid"):
+            s["flags"]["has_todo"] = (
+                1  # 이미 냈다는 말 — 직원이 기록을 다시 확인할 일이 남는다(추첨 뒤 덮어씀)
+            )
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
     width = max(4, len(str(len(slots))))
     calls, labels = [], []

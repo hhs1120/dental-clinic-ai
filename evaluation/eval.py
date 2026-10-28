@@ -185,6 +185,15 @@ def run(
             )
         )
         fewshot = {v: fewshot_uids(prompts_dir / "classify" / f"{v}.md") for v in versions}
+        test_uids = {
+            r[0]
+            for r in conn.execute(
+                "SELECT call_uid FROM truth.truth_call_labels WHERE split = 'test'"
+            )
+        }
+        leaked = sorted(u for uids in fewshot.values() for u in uids if u in test_uids)
+        if leaked:  # test 통화를 프롬프트 예시로 쓰면 test 점수가 새는 셈 — 평가 설계 §2.1
+            raise EvalRefused(f"few-shot에 test 통화가 있음: {', '.join(leaked)}")
         result["classification"] = classification.evaluate(
             conn, split, versions, fewshot, dump=dev
         )

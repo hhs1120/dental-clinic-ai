@@ -49,7 +49,6 @@ AX_CALLS_COLUMNS = {
     "started_at",
     "duration_sec",
     "has_transcript",
-    "audio_path",
     "transcript",
     "in_eval_pool",
     "eval_sort_order",

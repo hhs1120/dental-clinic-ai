@@ -5,7 +5,7 @@ argument-hint: "[작업 이름(transcript·document·chart) — 없으면 전부
 
 `make data`가 내보낸 LLM 작업을 채운다. 인자: $ARGUMENTS
 
-1. `uv run python -m generator.llm_jobs split`으로 남은 작업(이미 캐시에 있는 건 제외)을 조각(`generator/llm/jobs/chunks/<작업>-NNN.jsonl`, 25건씩)으로 나눈다. 인자로 작업 이름을 받았으면 그 작업의 조각만, 최대 조각 수를 받았으면 그만큼만 처리한다.
+1. `uv run python -m generator.llm_jobs split`으로 남은 작업(이미 캐시에 있는 건 제외)을 조각(`generator/llm/jobs/chunks/<작업>-NNN.jsonl`, `llm_jobs.CHUNK_SIZE`건씩)으로 나눈다. 인자로 작업 이름을 받았으면 그 작업의 조각만, 최대 조각 수를 받았으면 그만큼만 처리한다.
 2. 조각마다 보조 에이전트(Agent 도구, general-purpose, 모델 `sonnet` — API 경로의 `gen` 별칭과 같은 계열) 하나에 아래 지시를 그대로 맡긴다. 한 번에 8개까지 동시에 띄우고, 끝나는 대로 다음 조각을 맡긴다.
 3. 모든 조각이 끝나면 `make llm-import`를 돌리고, 작업별 ok·failed·unknown·duplicate·bad 건수와 조각별 첫 검사 실패 수(고치기 전 — API 한 번 호출과 견줄 수치)를 사용자에게 보고한다. 실패가 있으면 다음 `make data`가 시도 번호를 올려 다시 내보낸다고 알린다. 결과 파일·캐시를 손으로 고치지 않는다.
 

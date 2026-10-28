@@ -136,6 +136,7 @@ def generate(
             "INSERT INTO truth.truth_gen_meta VALUES (?, ?)",
             [
                 ("seed", str(run.seed)),
+                ("today", run.today.isoformat()),
                 ("range_start", run.range_start.isoformat()),
                 ("range_end", run.range_end.isoformat()),
                 ("call_slots", str(cfg["calls_with_transcript"])),

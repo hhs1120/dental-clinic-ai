@@ -149,8 +149,7 @@ def test_docs_name_the_same_limits():
     docs = Path(__file__).resolve().parents[2] / "docs"
     eval_doc = (docs / "치과 AX - 평가 설계.md").read_text(encoding="utf-8")
     app_doc = (docs / "치과 AX - 앱 설계.md").read_text(encoding="utf-8")
-    assert (
-        f"도구 호출 상한 {metrics.MAX_TOOL_CALLS}회" in eval_doc
-        and f"호출 상한 {metrics.MAX_TOOL_CALLS}회" in app_doc
-    )
+    # 숫자는 앱 설계에만 남기고(비교), 평가 설계는 이름으로 가리킨다
+    assert f"호출 상한 {metrics.MAX_TOOL_CALLS}회" in app_doc
+    assert "`metrics.MAX_TOOL_CALLS`" in eval_doc
     assert f"MRR@{metrics.TOP_K}" in eval_doc and f"Hit@{metrics.TOP_K}" in eval_doc

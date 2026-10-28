@@ -252,7 +252,7 @@ CREATE INDEX ix_bank_tx_at      ON fin_bank_transactions(occurred_at);
 CREATE TABLE ax_calls (
     id               INTEGER PRIMARY KEY,
     call_uid         TEXT NOT NULL UNIQUE,  -- 'c-0481' 시드 셔플 순번
-    source           TEXT NOT NULL CHECK (source IN ('generated', 'pasted', 'sample_audio', 'uploaded')),
+    source           TEXT NOT NULL CHECK (source IN ('generated')),  -- 붙여넣은 통화는 앱 DB(앱 설계 §1)
     patient_id       INTEGER REFERENCES emr_patients(id),
     caller_phone     TEXT,
     caller_name      TEXT,
@@ -260,7 +260,6 @@ CREATE TABLE ax_calls (
     started_at       TEXT NOT NULL,
     duration_sec     INTEGER NOT NULL,
     has_transcript   INTEGER NOT NULL DEFAULT 0,
-    audio_path       TEXT,
     transcript       TEXT,
     in_eval_pool     INTEGER NOT NULL DEFAULT 0,
     eval_sort_order  INTEGER,
