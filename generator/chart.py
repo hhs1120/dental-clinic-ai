@@ -342,7 +342,10 @@ def stage_facts(run, rng, fake) -> None:
             extracted[r["patient_id"]][r["tooth"]] = r["day"]
         if r["code"] == SCALING_CODE:
             scaled[r["patient_id"]].append(r["day"])
-    run.conn.executemany("INSERT INTO truth.truth_claim_errors VALUES (?, ?, ?)", sorted(errors))
+    run.conn.executemany(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (?, ?, ?)",
+        sorted(errors),
+    )
     run.state["chart"] = sorted(lines, key=lambda x: x["id"])
 
 

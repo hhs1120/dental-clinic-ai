@@ -85,7 +85,28 @@ CREATE TABLE emr_appointments (
     booked_via             TEXT NOT NULL CHECK (booked_via IN ('phone', 'desk')),  -- 예약 경로. desk = 내원 종료 때 데스크에서 잡은 다음 회차
     confirmed              INTEGER NOT NULL DEFAULT 0,
     created_at             TEXT NOT NULL,
-    cancelled_at           TEXT
+    cancelled_at           TEXT,
+    chair_no               INTEGER,  -- 체어 번호(§1). 상담은 NULL
+    plan_item_id           INTEGER REFERENCES emr_treatment_plan_items(id)  -- 이 예약이 이행하는 치료계획 항목. 위생·리콜은 NULL
+);
+
+-- 치료계획(§2.3). 만든 날·만든 예약 + 항목. 완료 시각은 항목의 completed 예약에서 파생
+CREATE TABLE emr_treatment_plans (
+    id                     INTEGER PRIMARY KEY,
+    patient_id             INTEGER NOT NULL REFERENCES emr_patients(id),
+    created_at             TEXT NOT NULL,
+    created_appointment_id INTEGER NOT NULL REFERENCES emr_appointments(id)
+);
+
+CREATE TABLE emr_treatment_plan_items (
+    id             INTEGER PRIMARY KEY,
+    plan_id        INTEGER NOT NULL REFERENCES emr_treatment_plans(id),
+    seq            INTEGER NOT NULL,
+    procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
+    tooth_no       TEXT NOT NULL,  -- 치아 단위가 아닌 시술은 '00'
+    est_fee        INTEGER NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('open', 'done', 'replaced')),
+    UNIQUE (plan_id, seq)
 );
 
 CREATE TABLE emr_treatments (
@@ -108,7 +129,8 @@ CREATE TABLE emr_payments (
     amount_due     INTEGER NOT NULL,
     amount_paid    INTEGER NOT NULL,
     paid_at        TEXT NOT NULL,
-    method         TEXT NOT NULL CHECK (method IN ('card', 'cash', 'transfer'))
+    method         TEXT NOT NULL CHECK (method IN ('card', 'cash', 'transfer')),
+    approval_no    TEXT  -- 연동 단말기 카드 승인번호(§2.4). 손으로 입력한 수납은 NULL
 );
 
 CREATE TABLE emr_claims (
@@ -125,7 +147,8 @@ CREATE TABLE emr_claims (
     status         TEXT NOT NULL CHECK (status IN ('pending', 'submitted', 'paid', 'adjusted', 'denied')),
     paid_amount    INTEGER,
     adjust_code    TEXT,  -- 심평원 조정 사유 범주 문자(B·C·AK·M 등 — master.ADJUST_REASONS)
-    adjust_note    TEXT   -- 일반사유 서술(상세 사유 템플릿)
+    adjust_note    TEXT,  -- 일반사유 서술(상세 사유 템플릿)
+    reviewed_at    TEXT   -- 심사결과 통보일(확정 월만, §2.4). 재심 기한 = + master.APPEAL_DAYS
 );
 
 -- 차트 상병 정의 (§4.3). 가상 코드 — 시술별 허용 상병은 master.PROCEDURE_DIAGNOSES에만
@@ -150,19 +173,75 @@ CREATE TABLE emr_messages (
     sent_at                TEXT NOT NULL,
     body                   TEXT NOT NULL,
     "trigger"              TEXT NOT NULL CHECK ("trigger" IN ('appt_confirm', 'reminder', 'noshow',
-                               'balance', 'doc_ready', 'reply', 'other')),
+                               'balance', 'doc_ready', 'recall', 'reply', 'other')),
     related_appointment_id INTEGER REFERENCES emr_appointments(id)
 );
 
 CREATE INDEX ix_appt_sched_status  ON emr_appointments(scheduled_at, status);
 CREATE INDEX ix_appt_patient_sched ON emr_appointments(patient_id, scheduled_at);
 CREATE INDEX ix_appt_staff_sched   ON emr_appointments(staff_id, scheduled_at);
+CREATE INDEX ix_appt_chair_sched   ON emr_appointments(chair_no, scheduled_at);
+CREATE INDEX ix_plan_items_plan    ON emr_treatment_plan_items(plan_id);
 CREATE INDEX ix_treat_patient_proc ON emr_treatments(patient_id, procedure_code);
 CREATE INDEX ix_treat_appt         ON emr_treatments(appointment_id);
 CREATE INDEX ix_pay_patient        ON emr_payments(patient_id);
 CREATE UNIQUE INDEX ux_claims_match_key ON emr_claims(chart_no, service_date, procedure_code, tooth_no);
 CREATE INDEX ix_claims_month       ON emr_claims(claim_month);
 CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
+
+-- ── fin_* (§2.7) — 재무 원본: 금융기관 내역·회계 증빙 ───────────────────────
+
+-- 가맹점 카드 승인·취소. 취소 행은 cancel_of = 원승인번호, 금액은 음수 아님(취소 여부로 구분)
+CREATE TABLE fin_card_sales (
+    id          INTEGER PRIMARY KEY,
+    approved_at TEXT NOT NULL,
+    issuer      TEXT NOT NULL,  -- master.CARD_ISSUERS
+    amount      INTEGER NOT NULL,
+    approval_no TEXT NOT NULL,
+    cancel_of   TEXT  -- 취소면 원승인번호
+);
+
+-- 카드사 정산 입금. (카드사, 매출일)마다 1행
+CREATE TABLE fin_card_deposits (
+    id           INTEGER PRIMARY KEY,
+    deposited_on TEXT NOT NULL,
+    issuer       TEXT NOT NULL,
+    sales_date   TEXT NOT NULL,
+    sales_total  INTEGER NOT NULL,
+    fee          INTEGER NOT NULL,
+    amount       INTEGER NOT NULL,
+    UNIQUE (issuer, sales_date)
+);
+
+-- 병원 통장 입출금. 적요(memo)는 입금자명·거래처·종류
+CREATE TABLE fin_bank_transactions (
+    id          INTEGER PRIMARY KEY,
+    occurred_at TEXT NOT NULL,
+    direction   TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+    amount      INTEGER NOT NULL,
+    memo        TEXT NOT NULL
+);
+
+-- 병원 명의 카드 사용(⑧-2). merchant = 카드 내역에 찍힌 가맹점명
+CREATE TABLE fin_card_expenses (
+    id       INTEGER PRIMARY KEY,
+    used_at  TEXT NOT NULL,
+    merchant TEXT NOT NULL,
+    amount   INTEGER NOT NULL
+);
+
+-- 회계 증빙(⑧-2) — 코드 템플릿 본문
+CREATE TABLE fin_expense_documents (
+    id        INTEGER PRIMARY KEY,
+    kind      TEXT NOT NULL CHECK (kind IN ('statement', 'tax_invoice', 'order_email', 'receipt', 'bill')),
+    issuer    TEXT NOT NULL,
+    issued_on TEXT NOT NULL,
+    amount    INTEGER NOT NULL,
+    body      TEXT NOT NULL
+);
+
+CREATE INDEX ix_card_sales_at   ON fin_card_sales(approved_at);
+CREATE INDEX ix_bank_tx_at      ON fin_bank_transactions(occurred_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
 -- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.

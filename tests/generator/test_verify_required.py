@@ -1,4 +1,4 @@
-"""verify 필수 검사(emr_* · ax_calls · truth_claims)가 위반을 실제로 잡는지 — 정상 DB를 한 곳씩 깨뜨린다."""
+"""verify 필수 검사(emr_* · ax_calls)가 위반을 실제로 잡는지 — 정상 DB를 한 곳씩 깨뜨린다."""
 
 import sqlite3
 from dataclasses import replace
@@ -92,15 +92,15 @@ BREAKS = {
         "check_service_date",
     ),
     "uninsured_claimed": (
-        "INSERT INTO emr_claims VALUES (3, 3, 2, 'C-00002', '16', '2026-11', '2026-11-18', 'U0005', 0, NULL, 'pending', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 3, 2, 'C-00002', '16', '2026-11', '2026-11-18', 'U0005', 0, NULL, 'pending', NULL, NULL, NULL)",
         "check_uninsured_not_claimed",
     ),
     "scaling_twice": (
-        "INSERT INTO emr_claims VALUES (3, 2, 1, 'C-00001', '00', '2026-05', '2026-05-12', 'U0001', 42000, '2026-06-05 09:00:00', 'paid', 42000, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 2, 1, 'C-00001', '00', '2026-05', '2026-05-12', 'U0001', 42000, '2026-06-05 09:00:00', 'paid', 42000, NULL, NULL)",
         "check_scaling_limit",
     ),
     "scaling_minor": (
-        "INSERT INTO emr_claims VALUES (3, 3, 2, 'C-00002', '00', '2026-11', '2026-11-18', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 3, 2, 'C-00002', '00', '2026-11', '2026-11-18', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL)",
         "check_scaling_limit",
     ),
     "pending_with_submitted_at": (
@@ -109,27 +109,27 @@ BREAKS = {
     ),
     # 확정 월(9월 이전): 상태는 paid/adjusted/denied, 금액·사유 코드가 상태와 맞음
     "settled_still_submitted": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'submitted', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'submitted', NULL, NULL, NULL)",
         "check_settled_claims",
     ),
     "paid_amount_mismatch": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'paid', 80000, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'paid', 80000, NULL, NULL)",
         "check_settled_claims",
     ),
     "adjusted_without_code": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, NULL, NULL)",
         "check_settled_claims",
     ),
     "adjusted_without_note": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', NULL)",
         "check_settled_claims",
     ),
     "paid_with_note": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'paid', 84000, NULL, '재시행 간격 미충족')",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'paid', 84000, NULL, '재시행 간격 미충족')",
         "check_settled_claims",
     ),
     "denied_with_amount": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 84000, 'A01', NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 84000, 'A01', NULL)",
         "check_settled_claims",
     ),
     # 진료 금액: 수가대로, 급여면 본인부담률로 나눔, 비급여면 전액 본인부담
@@ -156,11 +156,11 @@ BREAKS = {
         "check_insured_claim_one_line",
     ),
     "two_claims_one_treatment": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '27', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-01 09:00:00', 'submitted', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '27', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-01 09:00:00', 'submitted', NULL, NULL, NULL)",
         "check_insured_claim_one_line",
     ),
     "claim_on_uninsured_treatment": (
-        "INSERT INTO emr_claims VALUES (3, 3, 2, 'C-00002', '16', '2026-11', '2026-11-18', 'U0005', 0, NULL, 'pending', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 3, 2, 'C-00002', '16', '2026-11', '2026-11-18', 'U0005', 0, NULL, 'pending', NULL, NULL, NULL)",
         "check_insured_claim_one_line",
     ),
     "claim_tooth_mismatch": (
@@ -212,19 +212,19 @@ BREAKS = {
     ),
     # 확정 월 조정 사유: master.ADJUST_REASONS의 상세 사유 하나와 범주 문자·서술이 일치하고 그 시술에 맞음
     "adjust_note_unknown": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', '알 수 없는 사유')",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'C', '알 수 없는 사유')",
         "check_adjust_reason",
     ),
     "adjust_code_note_mismatch": (
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'B', '동일 부위 재시행 간격 기준 미충족')",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'adjusted', 60000, 'B', '동일 부위 재시행 간격 기준 미충족')",
         "check_adjust_reason",
     ),
     "adjust_reason_wrong_procedure": (  # R02는 잇몸치료 사유
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 0, 'C', '치석제거 후 후속 치주치료 확인 불가')",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '26', '2026-08', '2026-08-06', 'U0008', 84000, '2026-09-01 09:00:00', 'denied', 0, 'C', '치석제거 후 후속 치주치료 확인 불가')",
         "check_adjust_reason",
     ),
     "external_reason_adjusted": (  # 외부 이력은 급여 스케일링 denied만
-        "INSERT INTO emr_claims VALUES (3, 2, 1, 'C-00001', '00', '2026-08', '2026-08-04', 'U0001', 42000, '2026-09-01 09:00:00', 'adjusted', 30000, 'C', '연 1회 산정 횟수 초과(타 기관 이력)')",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 2, 1, 'C-00001', '00', '2026-08', '2026-08-04', 'U0001', 42000, '2026-09-01 09:00:00', 'adjusted', 30000, 'C', '연 1회 산정 횟수 초과(타 기관 이력)')",
         "check_adjust_reason",
     ),
     # 수납: 창 안 completed마다 visit 1행, 창 이전 내원은 수납 없음, settlement는 amount_due 0
@@ -233,7 +233,7 @@ BREAKS = {
         "check_payment_per_visit",
     ),
     "two_visit_payments": (
-        "INSERT INTO emr_payments VALUES (5, 2, 4, 'visit', 0, 0, '2026-11-18 10:40:00', 'card')",
+        "INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method) VALUES (5, 2, 4, 'visit', 0, 0, '2026-11-18 10:40:00', 'card')",
         "check_payment_per_visit",
     ),
     "settlement_with_due": (
@@ -280,12 +280,6 @@ BREAKS = {
     "call_label_column": (
         "ALTER TABLE ax_calls ADD COLUMN primary_purpose TEXT",
         "check_ax_calls_columns",
-    ),
-    # truth_claims (심사결과 슬롯)
-    "extra_claim_review_in_ledger": (
-        "UPDATE truth.truth_claims SET service_date = '2026-11-03', procedure_code = 'U0001'"
-        " WHERE outcome = 'extra_in_claim_review'",
-        "check_extra_claim_review_not_in_ledger",
     ),
     # TODAY 구간 (가상 데이터 생성 설계 §5.3)
     "created_future": (
@@ -371,25 +365,8 @@ BREAKS = {
         "check_completed_one_treatment",
     ),
     "implant_under65_claimed": (  # 1번 환자는 1980년생 — 임플란트 1차는 65세 미만이면 비급여
-        "INSERT INTO emr_claims VALUES (3, 1, 1, 'C-00001', '36', '2026-11', '2026-11-03', 'U0013', 910000, NULL, 'pending', NULL, NULL, NULL)",
+        "INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES (3, 1, 1, 'C-00001', '36', '2026-11', '2026-11-03', 'U0013', 910000, NULL, 'pending', NULL, NULL, NULL)",
         "check_uninsured_not_claimed",
-    ),
-    # truth_claims ↔ 9~10월 emr_claims
-    "truth_claim_missing": (
-        "DELETE FROM truth.truth_claims WHERE claim_id = 1",
-        "check_truth_claims_match",
-    ),
-    "truth_amount_mismatch": (
-        "UPDATE truth.truth_claims SET claim_amount = 1 WHERE claim_id = 1",
-        "check_truth_claims_match",
-    ),
-    "truth_points_to_pending": (
-        "UPDATE truth.truth_claims SET claim_id = 2 WHERE claim_id = 1",
-        "check_truth_claims_match",
-    ),
-    "extra_claim_review_outside_months": (
-        "UPDATE truth.truth_claims SET service_date = '2026-08-06' WHERE outcome = 'extra_in_claim_review'",
-        "check_truth_claims_match",
     ),
     # 창 이전 내원 (scheduled_at < range_start): 환자당 completed 위생 1행, 등록일 < 내원일
     "pre_window_twice": (
@@ -517,6 +494,53 @@ def test_patient_twice_same_day(tmp_path):
     assert verify.check_patient_same_day(conn, CTX)
 
 
+# 체어·동시 진료 (§1 (3)·(4)): 시드 1번 예약 = 10/06 10:00~11:00 원장·체어 1, 2번 = 11/03 10:00~10:30 위생사 2·체어 2
+def test_chair_overlap(tmp_path):
+    conn = make_db(tmp_path)
+    appt(conn, "2026-10-06 10:30:00", chair=1)
+    assert verify.check_chair_overlap(conn, CTX)
+
+
+def test_chair_back_to_back_and_cancelled_allowed(tmp_path):
+    """끝나는 시각에 시작하는 예약, 취소된 예약, 창 이전 내원은 겹침이 아니다"""
+    conn = make_db(tmp_path)
+    appt(conn, "2026-10-06 11:00:00", chair=1)
+    appt(conn, "2026-10-06 10:30:00", chair=1, status="cancelled")
+    appt(conn, "2026-09-15 10:00:00", patient=1, chair=1)
+    appt(conn, "2026-09-15 10:00:00", chair=1)
+    assert verify.check_chair_overlap(conn, CTX) == []
+
+
+def test_hygienist_two_at_once(tmp_path):
+    conn = make_db(tmp_path)
+    appt(conn, "2026-11-03 10:00:00", type="hygiene")
+    assert verify.check_hygienist_concurrency(conn, CTX)
+
+
+def test_doctor_concurrency_limit(tmp_path):
+    """원장 동시 진료는 DOCTOR_CONCURRENCY건까지 — 하나 더 넣으면 잡힌다"""
+    conn = make_db(tmp_path)
+    for chair in range(2, 1 + verify.DOCTOR_CONCURRENCY):
+        appt(conn, "2026-10-06 10:00:00", duration=60, chair=chair)
+    assert verify.check_doctor_concurrency(conn, CTX) == []
+    appt(conn, "2026-10-06 10:30:00", chair=1 + verify.DOCTOR_CONCURRENCY)
+    assert verify.check_doctor_concurrency(conn, CTX)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE emr_appointments SET chair_no = 1 WHERE id = 7",  # 상담인데 체어
+        "UPDATE emr_appointments SET chair_no = NULL WHERE id = 5",  # 진료인데 체어 없음
+        f"UPDATE emr_appointments SET chair_no = {verify.CHAIRS + 1} WHERE id = 5",
+    ],
+)
+def test_consult_no_chair(tmp_path, sql):
+    conn = make_db(tmp_path)
+    conn.execute(sql)
+    assert verify.check_consult_no_chair(conn, CTX)
+
+
 def test_confirmed_uses_previous_open_day(tmp_path):
     conn = make_db(tmp_path)
     appt(
@@ -619,21 +643,6 @@ def test_run_survives_closed_day_and_unborn_patient(tmp_path, capsys):
     assert "check_timestamps_not_future" in out
 
 
-def test_truth_checks_skip_until_truth_claims_exist(tmp_path):
-    conn = make_db(tmp_path)
-    conn.execute("DELETE FROM truth.truth_claims")  # 심사결과 슬롯 착수 전에는 비어 있다
-    assert verify.check_truth_claims_match(conn, CTX) == []
-    assert verify.check_extra_claim_review_not_in_ledger(conn, CTX) == []
-
-
-def test_truth_claims_extra_must_have_no_claim_id(tmp_path):
-    conn = make_db(tmp_path)
-    with pytest.raises(sqlite3.IntegrityError):
-        conn.execute(
-            "UPDATE truth.truth_claims SET claim_id = 1 WHERE outcome = 'extra_in_claim_review'"
-        )
-
-
 def _two_dbs(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir()
@@ -694,7 +703,7 @@ def test_pre_window_visit_has_no_payment(tmp_path):
     assert verify.check_payment_per_visit(conn, CTX) == []
     pre_id = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
     conn.execute(
-        "INSERT INTO emr_payments VALUES (5, 1, ?, 'visit', 18000, 18000, '2026-09-15 10:40:00', 'card')",
+        "INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method) VALUES (5, 1, ?, 'visit', 18000, 18000, '2026-09-15 10:40:00', 'card')",
         (pre_id,),
     )
     assert verify.check_payment_per_visit(conn, CTX)

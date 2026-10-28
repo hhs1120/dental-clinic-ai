@@ -41,24 +41,24 @@ INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, appoi
   (2, 2, 'CHILD_COOP', 'intake', '2025-01-01', NULL, '2031-03-01'),
   (3, 1, 'ANES_FAIL', 'visit', '2026-10-06', 1, NULL);
 INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
-                              planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at) VALUES
-  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL),
-  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL),
-  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00'),
-  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL),
-  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL),
-  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL),
-  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL);
+                              planned_procedure_code, status, rescheduled_from_id, booked_via, created_at, cancelled_at, chair_no) VALUES
+  (1, 1, 1, '2026-10-06 10:00:00', 60, 'treatment', 'U0008', 'completed', NULL, 'phone', '2026-10-02 11:00:00', NULL, 1),
+  (2, 1, 2, '2026-11-03 10:00:00', 30, 'hygiene',   'U0001', 'completed', NULL, 'desk',  '2026-10-06 11:00:00', NULL, 2),
+  (3, 2, 1, '2026-11-17 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', '2026-10-30 11:00:00', '2026-11-14 10:00:00', 1),
+  (4, 2, 1, '2026-11-18 10:00:00', 30, 'treatment', 'U0005', 'completed', 3,    'phone', '2026-11-14 10:00:00', NULL, 1),
+  (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 1),
+  (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 2),
+  (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL, NULL);
 INSERT INTO emr_treatments VALUES
   (1, 1, 1, 'U0008', '26', '2026-10-06 10:00:00', 120000, 84000, 36000),
   (2, 2, 1, 'U0001', '00', '2026-11-03 10:00:00', 60000, 42000, 18000),
   (3, 4, 2, 'U0005', '16', '2026-11-18 10:00:00', 80000, 0, 80000);
-INSERT INTO emr_payments VALUES
+INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method) VALUES
   (1, 1, 1, 'visit', 36000, 20000, '2026-10-06 11:00:00', 'card'),
   (2, 1, 2, 'visit', 18000, 18000, '2026-11-03 10:30:00', 'card'),
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash');
-INSERT INTO emr_claims VALUES
+INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES
   (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL, NULL),
   (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL);
 -- 차트: 1·2는 템플릿, 3(소아 레진)은 서술 디코이
@@ -92,11 +92,7 @@ INSERT INTO ax_calls (id, call_uid, source, patient_id, caller_phone, caller_nam
 직원: 상담 후 안내드리는데, 이번 주에 한번 오실 수 있으세요?', 1, 2, 0, NULL);
 """
 
-# 9~10월 심사 결과 정답 (가상 데이터 생성 설계 §2.4). extra_in_claim_review 줄은 장부에 없는 키
 TRUTH_SEED = """
-INSERT INTO truth_claims VALUES
-  (1, 1, 'C-00001', '2026-10-06', 'U0008', '26', 84000, 'paid_full', 84000, NULL, NULL),
-  (2, NULL, 'C-00001', '2026-10-06', 'U0018', '00', 24500, 'extra_in_claim_review', 24500, NULL, NULL);
 INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evidence_present, is_decoy, facts) VALUES
   (1, 'template', 0, NULL, NULL, 0, '{}'),
   (2, 'template', 0, NULL, NULL, 0, '{}'),
@@ -272,10 +268,14 @@ def appt(
     duration=30,
     status="completed",
     created_at="2026-10-02 10:00:00",
+    chair=None,
 ):
     staff = {"treatment": 1, "hygiene": 2, "consult": 3}[type]
+    if chair is None and type != "consult":
+        chair = 3  # 고정 예약(체어 1·2)과 겹치지 않게
     conn.execute(
         "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
-        " planned_procedure_code, status, booked_via, created_at) VALUES (?, ?, ?, ?, ?, 'U0008', ?, 'phone', ?)",
-        (patient, staff, scheduled_at, duration, type, status, created_at),
+        " planned_procedure_code, status, booked_via, created_at, chair_no)"
+        " VALUES (?, ?, ?, ?, ?, 'U0008', ?, 'phone', ?, ?)",
+        (patient, staff, scheduled_at, duration, type, status, created_at, chair),
     )

@@ -109,9 +109,7 @@ def test_staff_role_and_duration(db):
     assert all(ROLE[r["type"]] == r["role"] for r in rows)
     assert all(r["duration_min"] == DURATION[r["planned_procedure_code"]] for r in rows)
     hygienists = Counter(r["staff_id"] for r in rows if r["type"] == "hygiene")
-    assert (
-        len(hygienists) == 3 and max(hygienists.values()) - min(hygienists.values()) <= 1
-    )  # 순환
+    assert len(hygienists) == 3  # 그 시각에 비어 있는 위생사 중 균등
 
 
 def test_planned_procedure_fits_age(db):

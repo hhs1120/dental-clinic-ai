@@ -2,25 +2,6 @@
 -- 정의: docs/치과 AX - 평가 설계.md §6. 생성 규칙: 가상 데이터 생성 설계 §2.4
 -- 테이블은 그 단계를 구현할 때 추가한다
 
--- 9~10월 청구 심사 결과 + 장부에 없는 심사결과 줄(extra_in_claim_review). 심사결과 슬롯 착수 때 채움 — 그 전에는 비어 있음
-CREATE TABLE truth_claims (
-    id             INTEGER PRIMARY KEY,
-    claim_id       INTEGER UNIQUE,  -- app.sqlite emr_claims.id (다른 DB라 FK 없음). extra_in_claim_review는 NULL
-    chart_no       TEXT NOT NULL,
-    service_date   TEXT NOT NULL,
-    procedure_code TEXT NOT NULL,
-    tooth_no       TEXT NOT NULL,
-    claim_amount   INTEGER NOT NULL,
-    outcome        TEXT NOT NULL CHECK (outcome IN ('paid_full', 'adjusted', 'denied',
-                       'missing_in_claim_review', 'extra_in_claim_review')),
-    paid_amount    INTEGER,
-    adjust_code    TEXT,
-    adjust_note    TEXT,
-    CHECK ((outcome = 'extra_in_claim_review') = (claim_id IS NULL))
-);
-
-CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_date, procedure_code, tooth_no);
-
 -- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool·documents_core·documents_distractor). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
 -- (verify 테스트 DB는 config와 값이 다름).
 -- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
@@ -51,10 +32,53 @@ CREATE TABLE truth_chart_notes (
 
 -- 청구 오류 정답 (5b단계, 생성 설계 §2.4·§4.3). 진료 1건당 최대 1개. requirement는 임상 요건형 오류의 요건 사유 키
 CREATE TABLE truth_claim_errors (
-    treatment_id INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
-    kind         TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement')),
-    requirement  TEXT,
-    CHECK ((kind = 'requirement') = (requirement IS NOT NULL))
+    treatment_id         INTEGER PRIMARY KEY,  -- source.sqlite emr_treatments.id
+    kind                 TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement', 'omitted_extra')),
+    requirement          TEXT,
+    extra_procedure_code TEXT,  -- 추가 처치 누락(omitted_extra): 차트에만 있는 처치
+    extra_tooth_no       TEXT,
+    CHECK ((kind = 'requirement') = (requirement IS NOT NULL)),
+    CHECK ((kind = 'omitted_extra') = (extra_procedure_code IS NOT NULL AND extra_tooth_no IS NOT NULL))
+);
+
+-- 다른 치과 이용(⑨ 정답, 가상 데이터 생성 설계 §2.2). churn = 이탈(이탈일부터 응하지 않음), parallel = 병행
+CREATE TABLE truth_patient_churn (
+    patient_id INTEGER PRIMARY KEY,  -- source.sqlite emr_patients.id
+    kind       TEXT NOT NULL CHECK (kind IN ('churn', 'parallel')),
+    churned_on TEXT,
+    CHECK ((kind = 'churn') = (churned_on IS NOT NULL))
+);
+
+-- 장부 실수(⑧-1 장부 쪽 원인, §2.4). payment_id = 실수가 들어간 수납 행, 실제 값은 true_*
+CREATE TABLE truth_ledger_errors (
+    id             INTEGER PRIMARY KEY,
+    kind           TEXT NOT NULL CHECK (kind IN ('entry_missing', 'amount_typo', 'date_shift', 'method_wrong')),
+    payment_id     INTEGER NOT NULL,  -- source.sqlite emr_payments.id
+    true_amount    INTEGER NOT NULL,
+    true_paid_at   TEXT NOT NULL,
+    true_method    TEXT NOT NULL CHECK (true_method IN ('card', 'cash', 'transfer'))
+);
+
+-- ⑧-1 불일치 정답(§2.7). fin_ids·payment_ids = JSON 배열
+CREATE TABLE truth_recon_mismatches (
+    id              INTEGER PRIMARY KEY,
+    occurred_on     TEXT NOT NULL,
+    cause           TEXT NOT NULL CHECK (cause IN ('split_payment', 'cancel_reapprove', 'fee_mismatch', 'deposit_delay',
+                        'non_clinical_sale', 'entry_missing', 'amount_typo', 'date_shift', 'method_wrong')),
+    fin_ids         TEXT NOT NULL,  -- [{"table": "fin_card_sales", "id": 12}, ...]
+    payment_ids     TEXT NOT NULL,
+    split           TEXT NOT NULL CHECK (split IN ('dev', 'test')),
+    ledger_error_id INTEGER REFERENCES truth_ledger_errors(id)
+);
+
+-- ⑧-2 출금 → 정답 증빙·계정 과목(§2.7). document_ids = JSON 배열(비면 증빙 없음)
+CREATE TABLE truth_expense_matches (
+    outflow_table TEXT NOT NULL CHECK (outflow_table IN ('fin_bank_transactions', 'fin_card_expenses')),
+    outflow_id    INTEGER NOT NULL,
+    document_ids  TEXT NOT NULL,
+    account       TEXT NOT NULL,  -- master.ACCOUNTS
+    split         TEXT CHECK (split IN ('dev', 'test')),  -- 평가 달(master.RECON_MONTHS) 밖은 NULL
+    PRIMARY KEY (outflow_table, outflow_id)
 );
 
 -- 통화 골드 라벨 (6단계, 평가 설계 §6). 목적·상대·급함·노이즈 enum은 master.CALL_*.

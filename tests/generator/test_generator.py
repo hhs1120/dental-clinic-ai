@@ -113,7 +113,7 @@ def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
         )
     }
     assert {"emr_patients", "emr_appointments", "ax_calls"} <= app_tables
-    assert {"truth_gen_meta", "truth_claims"} <= truth_tables
+    assert {"truth_gen_meta", "truth_claim_errors"} <= truth_tables
     assert not any(
         t.startswith("truth_") for t in app_tables
     )  # 정답은 생성기 출력(source.sqlite)에 넣지 않는다

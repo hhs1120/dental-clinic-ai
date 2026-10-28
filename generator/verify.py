@@ -1,7 +1,7 @@
 """make verify — 생성 데이터 검사. 검사 목록은 docs/치과 AX - 가상 데이터 생성 설계.md §5.3.
 필수 검사 실패 시 exit 1, 경고는 위반만 보여 주고, 리포트(report_*)는 허용치 없이 수치만 출력한다(튜닝 때 눈으로 봄).
 
-구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·RAG 문서(9단계)·truth_claims(있을 때)·
+구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·RAG 문서(9단계)·
 RAG 질문(truth_rag_qa 있을 때) 필수 검사 + 분포·치아·통화 분포·전사·RAG 질문 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). 청크 검사는 구현 전까지 [SKIP]으로 출력:
   필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix·정답 청크가 ax_chunks에 존재(app.sqlite를 붙였을 때 — --app),
@@ -41,11 +41,13 @@ from generator.master import (
     CALL_PAIN_PURPOSES,
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
+    CHAIRS,
     CHART_FORBIDDEN_WORDS,
     CHART_REQUIREMENT,
     CLINIC_NAME,
     CONDITIONAL_INSURED_MIN_AGE,
     COURSE_VISITS,
+    DOCTOR_CONCURRENCY,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -305,6 +307,62 @@ def check_patient_same_day(conn, ctx):
         "SELECT patient_id, date(scheduled_at) AS day, group_concat(id) AS ids"
         " FROM emr_appointments WHERE status != 'cancelled'"
         " GROUP BY patient_id, day HAVING count(*) > 1",
+    )
+
+
+def _window_busy(conn, ctx, role=None) -> list[dict]:
+    """창 안 비취소 예약의 시작·끝 — 창 이전 내원은 체어·동시 진료 검사 대상 아님 (생성 설계 §5.3)"""
+    rows = _rows(
+        conn,
+        "SELECT a.id, a.staff_id, a.chair_no, a.scheduled_at, a.duration_min, s.role"
+        " FROM emr_appointments a JOIN emr_staff s ON s.id = a.staff_id"
+        " WHERE a.status != 'cancelled' AND a.scheduled_at >= ?",
+        ctx.range_start.isoformat(),
+    )
+    for r in rows:
+        r["start"] = _dt(r["scheduled_at"])
+        r["end"] = r["start"] + timedelta(minutes=r["duration_min"])
+    return [r for r in rows if role is None or r["role"] == role]
+
+
+def _over_capacity(rows: list[dict], key: str, cap: int) -> list[dict]:
+    """같은 key(체어·담당)에서 어떤 예약의 시작 시각에 진행 중인 예약이 cap건을 넘는 예약 — 동시 건수의 최대는 어떤 시작 시각에 나온다"""
+    groups: dict = {}
+    for r in rows:
+        if r[key] is not None:
+            groups.setdefault(r[key], []).append(r)
+    bad = []
+    for group in groups.values():
+        for r in group:
+            n = sum(1 for o in group if o["start"] <= r["start"] < o["end"])
+            if n > cap:
+                bad.append({"id": r["id"], key: r[key], "scheduled_at": r["scheduled_at"], "n": n})
+    return bad
+
+
+def check_chair_overlap(conn, ctx):
+    """같은 체어는 소요시간 동안 예약 1건 — 창 안 비취소 예약끼리 시간 겹침 없음"""
+    return _over_capacity(_window_busy(conn, ctx), "chair_no", 1)
+
+
+def check_hygienist_concurrency(conn, ctx):
+    """위생사는 동시에 1건 — 창 안 비취소 예약"""
+    return _over_capacity(_window_busy(conn, ctx, "hygienist"), "staff_id", 1)
+
+
+def check_doctor_concurrency(conn, ctx):
+    """원장은 동시에 master.DOCTOR_CONCURRENCY건까지 — 창 안 비취소 예약"""
+    return _over_capacity(_window_busy(conn, ctx, "doctor"), "staff_id", DOCTOR_CONCURRENCY)
+
+
+def check_consult_no_chair(conn, ctx):
+    """상담은 체어 없음(chair_no NULL), 그 밖의 예약은 체어 1~master.CHAIRS"""
+    return _rows(
+        conn,
+        "SELECT id, type, chair_no FROM emr_appointments WHERE"
+        " (type = 'consult' AND chair_no IS NOT NULL)"
+        " OR (type != 'consult' AND (chair_no IS NULL OR chair_no NOT BETWEEN 1 AND ?))",
+        CHAIRS,
     )
 
 
@@ -621,49 +679,6 @@ def check_extracted_tooth(conn, ctx):
         if code == IMPLANT_CODE:
             implanted[pid].add(tooth)
     return bad
-
-
-def check_extra_claim_review_not_in_ledger(conn, ctx):
-    """truth_claims의 extra_in_claim_review 대조 키가 emr_claims와 겹치지 않음"""
-    return _rows(
-        conn,
-        "SELECT t.id, t.chart_no, t.service_date, t.procedure_code, t.tooth_no, c.id AS claim_id"
-        " FROM truth.truth_claims t JOIN emr_claims c USING (chart_no, service_date, procedure_code, tooth_no)"
-        " WHERE t.outcome = 'extra_in_claim_review'",
-    )
-
-
-def check_truth_claims_match(conn, ctx):
-    """9~10월 emr_claims마다 truth_claims 1행(claim_id·대조 키·금액 일치), 그 밖을 가리키는 truth 행 없음,
-    extra_in_claim_review 줄도 9~10월 진료일. truth_claims는 심사결과 슬롯 착수 때 생성 — 비어 있으면 건너뜀"""
-    if not conn.execute("SELECT 1 FROM truth.truth_claims LIMIT 1").fetchone():
-        return []
-    months = _submitted_months(ctx)
-    marks = ",".join("?" * len(months))
-    unmatched = _rows(
-        conn,
-        "SELECT c.id AS claim_id, c.claim_month, t.id AS truth_id FROM emr_claims c"
-        " LEFT JOIN truth.truth_claims t ON t.claim_id = c.id"
-        f" WHERE c.claim_month IN ({marks}) AND (t.id IS NULL"
-        " OR t.chart_no IS NOT c.chart_no OR t.service_date IS NOT c.service_date"
-        " OR t.procedure_code IS NOT c.procedure_code OR t.tooth_no IS NOT c.tooth_no"
-        " OR t.claim_amount IS NOT c.claim_amount)",
-        *months,
-    )
-    stray = _rows(
-        conn,
-        "SELECT t.id AS truth_id, t.claim_id FROM truth.truth_claims t"
-        f" LEFT JOIN emr_claims c ON c.id = t.claim_id AND c.claim_month IN ({marks})"
-        " WHERE t.outcome != 'extra_in_claim_review' AND c.id IS NULL",
-        *months,
-    )
-    extra_outside = _rows(
-        conn,
-        "SELECT id AS truth_id, service_date FROM truth.truth_claims"
-        f" WHERE outcome = 'extra_in_claim_review' AND substr(service_date, 1, 7) NOT IN ({marks})",
-        *months,
-    )
-    return unmatched + stray + extra_outside
 
 
 # ── 수납 ────────────────────────────────────────────────────
@@ -2755,6 +2770,10 @@ REQUIRED = [
     check_submitted_months_no_result,
     check_settled_claims,
     check_patient_same_day,
+    check_chair_overlap,
+    check_hygienist_concurrency,
+    check_doctor_concurrency,
+    check_consult_no_chair,
     check_confirmed_not_future,
     check_confirmed_reminded,
     check_created_before_scheduled,
@@ -2773,8 +2792,6 @@ REQUIRED = [
     check_treatment_amounts,
     check_insured_claim_one_line,
     check_adjust_reason,
-    check_extra_claim_review_not_in_ledger,
-    check_truth_claims_match,
     check_balance_non_negative,
     check_visit_payment_completed,
     check_payment_per_visit,

@@ -12,9 +12,11 @@ from datetime import date, datetime, time, timedelta
 
 from generator.demand import arrivals, recall_due
 from generator.master import (
+    CHAIRS,
     CHECKUP_CODE,
     COURSE_INTERVAL_DAYS,
     COURSE_VISITS,
+    DOCTOR_CONCURRENCY,
     EPISODE_MIX,
     FAMILY_SIZE,
     GUARDIAN_MIN_AGE_GAP,
@@ -43,6 +45,8 @@ from generator.master import (
 from generator.patients import new_patient_candidates
 
 ROLE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
+# 담당 1명이 동시에 맡는 예약 수 (§1 (4)). 상담은 제약 없음
+CONCURRENCY = {"treatment": DOCTOR_CONCURRENCY, "hygiene": 1}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 
@@ -89,6 +93,7 @@ class Appt:
     id: int
     patient: Patient
     staff_id: int
+    chair: int | None  # 상담은 None (§1 (3))
     start: datetime
     duration: int
     type: str
@@ -119,7 +124,6 @@ class Sim:
             ]
             for role in ROLE.values()
         }
-        self.hygienist_turn = 0
         self.appts: list[Appt] = []
         self.changes_on: dict[date, list[Appt]] = {}
         self.by_day: dict[date, list[Appt]] = {}
@@ -143,16 +147,18 @@ class Sim:
         self.add_pre_window(run.state.get("pre_window", {}))
 
     def add_pre_window(self, visits: dict) -> None:
-        """3b단계가 뽑은 창 이전 내원 — 완료된 위생 예약으로 먼저 넣는다(id 앞번호, 담당 위생사 순환 시작).
-        그해 급여 스케일링이면 연 1회 이력에 넣어 창 안 리콜이 다시 급여로 잡히지 않게"""
+        """3b단계가 뽑은 창 이전 내원 — 완료된 위생 예약으로 먼저 넣는다(id 앞번호, 위생사·체어 균등 — 창 밖이라
+        체어·동시 진료 제약은 보지 않는다, §5.3). 그해 급여 스케일링이면 연 1회 이력에 넣어 창 안 리콜이 다시 급여로 잡히지 않게"""
         for p in self.patients:
             v = visits.get(p.id)
             if v is None:
                 continue
+            hygienists = self.staff["hygienist"]
             a = Appt(
                 len(self.appts) + 1,
                 p,
-                self.staff_for("hygiene"),
+                hygienists[int(self.rng.integers(len(hygienists)))],
+                int(self.rng.integers(1, CHAIRS + 1)),
                 v["start"],
                 DURATION[v["code"]],
                 "hygiene",
@@ -203,10 +209,51 @@ class Sim:
             d += timedelta(days=1)
         return None
 
-    def pick_start(self, d: date, duration: int) -> datetime:
-        """그날 duration분 예약의 시작 시각 균등 추첨"""
-        starts = self.starts(d, duration)
-        return starts[int(self.rng.integers(len(starts)))]
+    def openings(self, d: date, duration: int, visit_type: str) -> dict:
+        """그날 duration분 visit_type 예약이 들어갈 시작 시각 → (빈 체어, 빈 담당) — §1 (3)·(4).
+        체어나 담당이 하나도 없는 시각은 빠진다"""
+        out = {}
+        for s in self.starts(d, duration):
+            e = s + timedelta(minutes=duration)
+            busy = [
+                a
+                for a in self.by_day.get(d, [])
+                if a.status != "cancelled"
+                and a.start < e
+                and s < a.start + timedelta(minutes=a.duration)
+            ]
+            chairs = [None]
+            if visit_type != "consult":
+                used = {a.chair for a in busy}
+                chairs = [c for c in range(1, CHAIRS + 1) if c not in used]
+            cap = CONCURRENCY.get(visit_type)
+            staff = [
+                sid
+                for sid in self.staff[ROLE[visit_type]]
+                if cap is None or sum(a.staff_id == sid for a in busy) < cap
+            ]
+            if chairs and staff:
+                out[s] = (chairs, staff)
+        return out
+
+    def pick(self, options: list):
+        return options[int(self.rng.integers(len(options)))]
+
+    def find_slot(
+        self, patient: Patient, visit_type: str, first: date, last: date, code_for
+    ) -> tuple | None:
+        """first~last 중 첫 가능일(§2.6 (3) — 운영 제약 + 같은 환자 같은 날 없음)의 (시술, 시작, 체어, 담당).
+        시술은 code_for(그날)로 정하고, 그 소요로 들어갈 시각이 없으면 다음 날. 시각·체어·담당은 각각 균등"""
+        d = first
+        while (d := self.find_day(patient, d, last)) is not None:
+            code = code_for(d)
+            openings = self.openings(d, DURATION[code], visit_type)
+            if openings:
+                start = self.pick(sorted(openings))
+                chairs, staff = openings[start]
+                return code, start, self.pick(chairs), self.pick(staff)
+            d += timedelta(days=1)
+        return None
 
     def any_minute(self, d: date) -> datetime:
         """그날 개원~평일 마감 사이 분 단위 시각 균등 추첨 — 통화·취소 시각. 점심·토요일 마감은 따지지 않는다"""
@@ -230,19 +277,14 @@ class Sim:
             return CHECKUP_CODE if on.year in patient.scaling_years else SCALING_CODE
         return CODE[self.weighted(PLANNED_WEIGHTS[visit_type][band])]
 
-    def staff_for(self, visit_type: str) -> int:
-        ids = self.staff[ROLE[visit_type]]
-        if visit_type != "hygiene":
-            return ids[0]
-        self.hygienist_turn += 1
-        return ids[(self.hygienist_turn - 1) % len(ids)]
-
     def book(
         self,
         patient: Patient,
         visit_type: str,
         code: str,
         start: datetime,
+        chair: int | None,
+        staff_id: int,
         created: datetime,
         via: str,
         rescheduled_from: int | None = None,
@@ -250,7 +292,8 @@ class Sim:
         a = Appt(
             len(self.appts) + 1,
             patient,
-            self.staff_for(visit_type),
+            staff_id,
+            chair,
             start,
             DURATION[code],
             visit_type,
@@ -283,19 +326,18 @@ class Sim:
 
     def find_booking(
         self, patient: Patient, visit_type: str, first: date, missed: "Appt | None" = None
-    ) -> tuple[str, datetime] | None:
-        """first부터 첫 가능일 → 그날 기준(나이·그해 스케일링)으로 시술 → 시술 소요로 시각.
+    ) -> tuple | None:
+        """first부터 첫 가능일 → 그날 기준(나이·그해 스케일링)으로 시술 → 시술 소요로 시각·체어·담당.
         재예약(missed)은 그날의 code_key가 놓친 예약과 같으면 같은 시술"""
-        d = self.find_day(patient, first, self.run.range_end)
-        if d is None:
-            return None
-        if missed is not None and self.code_key(patient, d) == self.code_key(
-            patient, missed.start.date()
-        ):
-            code = missed.code
-        else:
-            code = self.planned_code(patient, visit_type, d)
-        return code, self.pick_start(d, DURATION[code])
+
+        def code_for(d: date) -> str:
+            if missed is not None and self.code_key(patient, d) == self.code_key(
+                patient, missed.start.date()
+            ):
+                return missed.code
+            return self.planned_code(patient, visit_type, d)
+
+        return self.find_slot(patient, visit_type, first, self.run.range_end, code_for)
 
     def phone_book(
         self, patient: Patient, visit_type: str, d: date, missed: "Appt | None" = None
@@ -482,16 +524,19 @@ class Sim:
             p = a.patient
             self.occupy(a, -1)
             orig = a.start.date()
-            day = self.find_day(
-                p, orig + timedelta(days=1), orig + timedelta(days=RESCHEDULE_MAX_DAYS)
+            found = self.find_slot(
+                p,
+                a.type,
+                orig + timedelta(days=1),
+                orig + timedelta(days=RESCHEDULE_MAX_DAYS),
+                lambda _, code=a.code: code,
             )
-            if day is None:
+            if found is None:
                 self.occupy(a, +1)
                 continue
-            start = self.pick_start(day, a.duration)
             t = self.any_minute(d)
             a.status, a.cancelled = "cancelled", t
-            self.book(p, a.type, a.code, start, t, "phone", rescheduled_from=a.id)
+            self.book(p, a.type, *found, t, "phone", rescheduled_from=a.id)
 
     def reminders(self, d: date) -> None:
         """4. 리마인드: 오늘 전에 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed (날짜 단위).
@@ -521,8 +566,8 @@ class Sim:
         fmt = "%Y-%m-%d %H:%M:%S"
         conn.executemany(
             "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
-            " planned_procedure_code, status, rescheduled_from_id, booked_via, confirmed, created_at, cancelled_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " planned_procedure_code, status, rescheduled_from_id, booked_via, confirmed, created_at, cancelled_at,"
+            " chair_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     a.id,
@@ -538,6 +583,7 @@ class Sim:
                     a.confirmed,
                     a.created.strftime(fmt),
                     a.cancelled.strftime(fmt) if a.cancelled else None,
+                    a.chair,
                 )
                 for a in self.appts
             ],

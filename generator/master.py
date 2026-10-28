@@ -11,7 +11,6 @@ STAFF = [("doctor", 1), ("hygienist", 3), ("desk", 2), ("consultant", 1)]
 # 체어·동시 진료 운영 제약 (§1 (3)·(4)). 한 체어는 소요시간 동안 예약 1건, 위생사는 동시에 1건, 상담은 체어 없음.
 # 하루 상한을 막지 않을 만큼(체어 × 슬롯 ≥ 상한 × 평균 슬롯) — 넣은 뒤 내원 구성 경고·하루 채움 리포트(§5.3)로 확인
 CHAIRS = 5
-# 원장 동시 진료 건수. 추정값 — 리포트로 확인(현재 데이터의 원장 동시 진료 95%선 4건 — config visits_per_day를 막지 않게)
 DOCTOR_CONCURRENCY = 3
 
 # 영업시간 (§1). emr_clinic.hours_json에 그대로 저장한다. 요일은 월=0
@@ -154,7 +153,7 @@ FULL_MOUTH = "00"
 PAYMENT_METHOD_WEIGHTS = {"card": 80, "cash": 10, "transfer": 10}
 UNPAID_PAID_RANGE = (0.0, 0.7)
 
-# 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
+# 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 아직 없음 (§2.4)
 SUBMITTED_MONTHS = 2
 
 # 재심 기한 = 확정 월 청구의 심사결과 통보일(emr_claims.reviewed_at) + 이 일수 (§2.4 통보일, ⑤-3 조정 목록)

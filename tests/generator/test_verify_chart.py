@@ -90,7 +90,10 @@ D03 = ("K", "부위·산정 내역 기재 누락")
 
 
 def _error(conn, tid, kind, requirement=None):
-    conn.execute("INSERT INTO truth.truth_claim_errors VALUES (?, ?, ?)", (tid, kind, requirement))
+    conn.execute(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (?, ?, ?)",
+        (tid, kind, requirement),
+    )
 
 
 # ── 정상 사례 (통과해야 함) ─────────────────────────────────
@@ -241,15 +244,15 @@ BREAKS = {
         "check_chart_dx",
     ),
     "dx_error_but_allowed": (
-        "INSERT INTO truth.truth_claim_errors VALUES (1, 'diagnosis', NULL)",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (1, 'diagnosis', NULL)",
         "check_chart_dx",
     ),
     "error_on_uninsured": (
-        "INSERT INTO truth.truth_claim_errors VALUES (3, 'diagnosis', NULL)",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (3, 'diagnosis', NULL)",
         "check_claim_errors",
     ),
     "requirement_error_without_requirement": (
-        "INSERT INTO truth.truth_claim_errors VALUES (2, 'requirement', 'R02')",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (2, 'requirement', 'R02')",
         "check_claim_errors",
     ),
     "unknown_requirement": (
