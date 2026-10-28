@@ -33,7 +33,7 @@ def test_inverse_weights_and_weighted_accuracy():
     "chunk, source",
     [
         ("doc:12:3", "doc:12"),
-        ("call:481:0", "call:481"),
+        ("call:c-0481:0", "call:c-0481"),
         ("thread:C-00001:2026-07", "thread:C-00001:2026-07"),
         ("chart:55", "chart:55"),
     ],

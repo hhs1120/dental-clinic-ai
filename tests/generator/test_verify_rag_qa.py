@@ -151,7 +151,7 @@ QA = [
         "dev",
         "김하늘 쪽에서 날짜 옮겨 달라고 했던 게 언제였지?",
         "11월 17일 → 18일로 변경",
-        ["call:3"],
+        ["call:c-0004"],
         "하루 미룰 수",
     ),
     _q(
@@ -282,7 +282,7 @@ BREAKS = {
     "counts_off": ([q for q in QA if q["id"] != "m1"], ["check_qa_counts"]),
     "split_ratio": (_edit("m1", split="test"), ["check_qa_counts"]),
     "doc_missing": (_edit("m1", answer_doc_ids=["doc:99"]), ["check_qa_answer_ids"]),
-    "wrong_source": (_edit("m1", answer_doc_ids=["call:1"]), ["check_qa_answer_ids"]),
+    "wrong_source": (_edit("m1", answer_doc_ids=["call:c-0003"]), ["check_qa_answer_ids"]),
     "thread_empty": (
         _edit("c2", answer_doc_ids=["thread:C-00001:2026-09"]),
         ["check_qa_answer_ids", "check_qa_patient_names"],

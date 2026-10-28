@@ -1,4 +1,4 @@
-"""평가 테스트용 작은 DB — 앱 스키마(shared/schema.sql) + 정답 스키마, 통화 6건·분류 두 버전·판정·투표·RAG 질문.
+"""평가 테스트용 작은 DB — 생성 스키마(shared/source_schema.sql)·앱 스키마(shared/app_schema.sql)·정답 스키마, 통화 6건·분류 두 버전·판정·투표·RAG 질문.
 
 통화(생성 5 + 붙여넣기 1): 1·2 dev 판정 풀(블라인드 풀) / 3 test 판정 풀 / 4·5 비풀(silver) / 6 붙여넣기(골드 없음).
 골드 목적: 1·3·4·5 book, 2 complaint. 모집단(생성 전사) = book 4 · complaint 1
@@ -12,7 +12,8 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = (ROOT / "shared" / "schema.sql").read_text(encoding="utf-8")
+SOURCE_SCHEMA = (ROOT / "shared" / "source_schema.sql").read_text(encoding="utf-8")
+APP_SCHEMA = (ROOT / "shared" / "app_schema.sql").read_text(encoding="utf-8")
 TRUTH_SCHEMA = (ROOT / "ground_truth" / "schema.sql").read_text(encoding="utf-8")
 
 ITEM_DEFAULTS = {
@@ -68,14 +69,13 @@ def make_db(tmp_path) -> sqlite3.Connection:
             )
     truth.commit()
     truth.close()
-    conn = sqlite3.connect(tmp_path / "app.sqlite")
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA)
+    src = sqlite3.connect(tmp_path / "source.sqlite")
+    src.executescript(SOURCE_SCHEMA)
     for cid, uid, source, pool, blind, _purpose, _split in CALLS:
-        conn.execute(
+        src.execute(
             "INSERT INTO ax_calls (id, call_uid, source, direction, started_at, duration_sec, has_transcript, transcript,"
-            " in_eval_pool, eval_sort_order, judge_status, in_blind_pool) VALUES (?, ?, ?, 'inbound', '2026-11-02 10:00:00',"
-            " 120, 1, ?, ?, ?, ?, ?)",
+            " in_eval_pool, eval_sort_order, in_blind_pool) VALUES (?, ?, ?, 'inbound', '2026-11-02 10:00:00',"
+            " 120, 1, ?, ?, ?, ?)",
             (
                 cid,
                 uid,
@@ -83,10 +83,15 @@ def make_db(tmp_path) -> sqlite3.Connection:
                 f"환자: 통화 {cid}",
                 pool,
                 cid if pool else None,
-                "done" if cid in (1, 2) else "none",
                 blind,
             ),
         )
+    src.commit()
+    src.close()
+    conn = sqlite3.connect(tmp_path / "app.sqlite")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(APP_SCHEMA)
+    uid_of = {cid: uid for cid, uid, *_ in CALLS}
     cls_id = 0
     for version, preds in (("v1", V1), ("v2", V2)):
         for cid in range(1, 7):
@@ -101,11 +106,11 @@ def make_db(tmp_path) -> sqlite3.Connection:
             )
             if cid in preds:
                 conn.execute(
-                    "INSERT INTO ax_call_classifications (id, call_id, model_alias, model_actual, prompt_version, status,"
+                    "INSERT INTO ax_call_classifications (id, call_uid, model_alias, model_actual, prompt_version, status,"
                     " labels, summary, llm_call_id) VALUES (?, ?, 'classify', 'claude-haiku-5-5', ?, 'ok', ?, '요약', ?)",
                     (
                         cls_id,
-                        cid,
+                        uid_of[cid],
                         version,
                         json.dumps(labels(preds[cid], complaint=int(preds[cid] == "complaint"))),
                         cls_id,
@@ -113,14 +118,14 @@ def make_db(tmp_path) -> sqlite3.Connection:
                 )
             else:
                 conn.execute(
-                    "INSERT INTO ax_call_classifications (id, call_id, model_alias, model_actual, prompt_version, status,"
-                    " llm_call_id) VALUES (?, 5, 'classify', 'claude-haiku-5-5', 'v2', 'failed', ?)",
-                    (cls_id, cls_id),
+                    "INSERT INTO ax_call_classifications (id, call_uid, model_alias, model_actual, prompt_version, status,"
+                    " llm_call_id) VALUES (?, ?, 'classify', 'claude-haiku-5-5', 'v2', 'failed', ?)",
+                    (cls_id, uid_of[5], cls_id),
                 )
     for cid, purpose in ((1, "book"), (2, "complaint")):
         conn.execute(
-            "INSERT INTO ax_judgments (call_id, labels, judged_by, judged_at) VALUES (?, ?, '데스크', '2026-12-01 10:00:00')",
-            (cid, json.dumps(labels(purpose, complaint=int(purpose == "complaint")))),
+            "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at) VALUES (?, ?, '데스크', '2026-12-01 10:00:00')",
+            (uid_of[cid], json.dumps(labels(purpose, complaint=int(purpose == "complaint")))),
         )
     # 분류 id: v1 = 1..6(통화 id), v2 = 7..12
     conn.executemany(
@@ -129,5 +134,6 @@ def make_db(tmp_path) -> sqlite3.Connection:
         [(1, 7, "right"), (8, 2, "left")],
     )
     conn.commit()
+    conn.execute("ATTACH DATABASE ? AS source", (str(tmp_path / "source.sqlite"),))
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))
     return conn

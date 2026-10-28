@@ -95,7 +95,7 @@ CREATE TABLE truth_doc_meta (
 );
 
 -- RAG 질문 70개 (평가 설계 §3.1, 사람이 생성 후 작성). 원본은 ground_truth/rag_qa.json — make data가 적재한다.
--- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.id>' /
+-- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.call_uid>' /
 -- 'thread:<chart_no>:<YYYY-MM>' / 'chart:<emr_treatments.id>' (청크 id에서 끝 순번을 뗀 것 — 앱 설계 §3).
 -- answer_chunk_hint = 정답 문단을 가리키는 심은 사실 id(truth_doc_meta.planted_facts.id) 또는 본문 구절, 거절형은 답이 있다면 나올 말.
 -- answer_sql = 정답 재계산 쿼리(app.sqlite + truth ATTACH) — 데이터형은 답 숫자 한 칸, 차트형은 treatment_id 목록

@@ -27,7 +27,7 @@ TOOTH_LEVEL = {p["code"] for p in PROCEDURES if p["is_tooth_level"]}
 
 
 def _open(out):
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -36,7 +36,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("records")
-    run = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     return conn, verify.load_ctx(CONFIG, conn), run
 
@@ -234,7 +234,7 @@ def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
     cfg = {**CFG, "unpaid_rate": 0.5}
     path = tmp_path / "generator.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
     other = _open(tmp_path)
     for table in ("emr_treatments", "emr_claims"):
         assert [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")] == [

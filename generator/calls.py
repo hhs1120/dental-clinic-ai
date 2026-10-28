@@ -586,7 +586,7 @@ def stage_pools(run, rng, fake) -> None:
     ]
     split = {uid: "dev" for uid in dev} | {uid: "test" for uid in test}
     conn.executemany(
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ?, judge_status = 'pending' WHERE call_uid = ?",
+        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ? WHERE call_uid = ?",
         [(i, uid) for i, uid in enumerate(pool, start=1)],
     )
     conn.executemany(

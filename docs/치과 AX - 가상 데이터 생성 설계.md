@@ -32,7 +32,7 @@ tags:
 
 ## 2. `emr_*`·`fin_*`
 
-컬럼·enum은 `shared/schema.sql`. 여기서는 **규칙이 붙은 것만** 적는다.
+컬럼·enum은 `shared/source_schema.sql`. 여기서는 **규칙이 붙은 것만** 적는다.
 
 ### 2.1 시술
 

@@ -4,13 +4,13 @@
 구현: 정형(emr_*)·ax_calls·통화 슬롯(6단계)·전사(7단계)·문자(8단계)·RAG 문서(9단계)·truth_claims(있을 때)·
 RAG 질문(truth_rag_qa 있을 때) 필수 검사 + 분포·치아·통화 분포·전사·RAG 질문 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). 청크 검사는 구현 전까지 [SKIP]으로 출력:
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix·정답 청크가 ax_chunks에 존재(앱 색인 후),
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix·정답 청크가 ax_chunks에 존재(app.sqlite를 붙였을 때 — --app),
          누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order)
   경고 — 통화 복수 주제 accepted ≥ 2(라벨 값 검사가 대신함)
 결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)
 검사 함수는 (conn, ctx) → 위반 행 목록(dict). 빈 목록이면 통과. 리포트는 (conn, ctx) → 수치 dict.
-conn은 app.sqlite이고 truth.sqlite가 `truth` 스키마로 ATTACH되어 있다.
+conn은 source.sqlite(생성기 출력)이고 truth.sqlite가 `truth` 스키마로, --app을 주면 app.sqlite가 `app` 스키마로 ATTACH되어 있다.
 """
 
 import argparse
@@ -1389,8 +1389,9 @@ QA_TOOL_ARGS = {
     "refuse": {"reason"},
 }
 QA_REFUSE_REASONS = {"not_found", "restricted"}
-# 정답 출처 id (schema.sql truth_rag_qa) — 앞자리 0 없는 번호만 (doc:07과 doc:7이 다른 문자열로 격리 검사를 빠져나가지 않게)
-QA_SOURCE_ID = re.compile(r"(doc|call|chart):([1-9]\d*)|thread:(C-\d{5}):(\d{4}-\d{2})")
+# 정답 출처 id (ground_truth/schema.sql truth_rag_qa) — 번호는 앞자리 0 없이 (doc:07과 doc:7이 다른 문자열로 격리 검사를 빠져나가지 않게),
+# 통화는 call_uid (앱 설계 §1)
+QA_SOURCE_ID = re.compile(r"(doc|chart):([1-9]\d*)|call:(c-\d{4,})|thread:(C-\d{5}):(\d{4}-\d{2})")
 QA_SOURCES = {
     "manual": ("doc",),
     "notice": ("doc",),
@@ -1482,21 +1483,22 @@ def _qa_source(conn, sid: str, docs: dict) -> dict | None:
     m = QA_SOURCE_ID.fullmatch(sid) if isinstance(sid, str) else None
     if not m:
         return None
-    kind, num = m.group(1) or "thread", int(m.group(2) or 0)
+    kind = m.group(1) or ("call" if m.group(3) else "thread")
+    num = int(m.group(2) or 0)
     if kind == "doc":
         d = docs.get(num)
         return d and {"kind": kind, "text": d["body"], "patient_id": None, "doc": d}
     if kind == "call":
         r = conn.execute(
-            "SELECT transcript, patient_id FROM ax_calls WHERE id = ? AND transcript IS NOT NULL",
-            (num,),
+            "SELECT transcript, patient_id FROM ax_calls WHERE call_uid = ? AND transcript IS NOT NULL",
+            (m.group(3),),
         ).fetchone()
         return r and {"kind": kind, "text": r[0], "patient_id": r[1], "doc": None}
     if kind == "thread":
         rows = conn.execute(
             "SELECT m.body, p.id FROM emr_messages m JOIN emr_patients p ON p.id = m.patient_id"
             " WHERE p.chart_no = ? AND substr(m.sent_at, 1, 7) = ? ORDER BY m.sent_at",
-            (m.group(3), m.group(4)),
+            (m.group(4), m.group(5)),
         ).fetchall()
         return (
             {
@@ -1824,7 +1826,7 @@ def check_qa_copied_wording(conn, ctx):
 
 # ── 누출 ────────────────────────────────────────────────────
 
-# shared/schema.sql의 ax_calls 컬럼(의미는 가상 데이터 생성 설계 §3). 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
+# shared/source_schema.sql의 ax_calls 컬럼(의미는 가상 데이터 생성 설계 §3). 이 밖의 컬럼(라벨·노이즈·카테고리 등)은 정답 누출
 AX_CALLS_COLUMNS = {
     "id",
     "call_uid",
@@ -1840,10 +1842,8 @@ AX_CALLS_COLUMNS = {
     "transcript",
     "in_eval_pool",
     "eval_sort_order",
-    "judge_status",
     "in_blind_pool",
     "blind_sort_order",
-    "indexed_at",
 }
 CALL_UID = re.compile(r"c-\d{4,}")
 
@@ -2303,7 +2303,7 @@ def check_call_facts_as_of(conn, ctx):
 
 def check_eval_pool(conn, ctx):
     """판정 풀: 크기 = eval_pool_size, 순번 1..P, 앞 ⌈P/2⌉ = dev·나머지 test(라벨 split과 일치),
-    풀만 judge_status pending, 비풀은 순번 없음·silver"""
+    비풀은 순번 없음·silver(판정 상태는 앱 DB — 앱 설계 §1)"""
     rows = _calls(conn)
     pool = [r for r in rows if r["in_eval_pool"]]
     bad = [] if len(pool) == ctx.eval_pool else [{"pool": len(pool), "expected": ctx.eval_pool}]
@@ -2312,17 +2312,14 @@ def check_eval_pool(conn, ctx):
     dev_n = (len(pool) + 1) // 2
     for r in rows:
         if r["in_eval_pool"]:
-            want = ("dev" if (r["eval_sort_order"] or 0) <= dev_n else "test", "pending")
+            want = "dev" if (r["eval_sort_order"] or 0) <= dev_n else "test"
         else:
-            want = ("silver", "none")
-        if (r["split"], r["judge_status"]) != want or (
-            not r["in_eval_pool"] and r["eval_sort_order"] is not None
-        ):
+            want = "silver"
+        if r["split"] != want or (not r["in_eval_pool"] and r["eval_sort_order"] is not None):
             bad.append(
                 {
                     "call_uid": r["call_uid"],
                     "split": r["split"],
-                    "judge_status": r["judge_status"],
                     "expected": want,
                 }
             )
@@ -2863,13 +2860,10 @@ REPORTS = [
 
 # ── 결정성 ──────────────────────────────────────────────────
 
-# 실행할 때마다 바뀌는 컬럼 (§5.3 결정성: indexed_at 제외)
-HASH_EXCLUDED = {("ax_calls", "indexed_at"), ("ax_chunk_vectors", "embedding")}
-
 
 def canonical_hash(conn, schema: str = "main") -> str:
-    """한 스키마(main = app.sqlite, truth = truth.sqlite) 전 테이블의 내용 해시 — 테이블·컬럼 이름순, 행은 정렬.
-    같은 시드 2회 비교용. 결정성은 두 스키마 모두 본다"""
+    """한 스키마(main = source.sqlite, truth = truth.sqlite) 전 테이블의 내용 해시 — 테이블·컬럼 이름순, 행은 정렬.
+    같은 시드 2회 비교용. 결정성은 두 스키마 모두 본다(실행마다 바뀌는 칸 — 색인·벡터 — 은 app.sqlite에만 있다)"""
     h = hashlib.sha256()
     tables = [
         r[0]
@@ -2879,11 +2873,7 @@ def canonical_hash(conn, schema: str = "main") -> str:
         )
     ]
     for table in tables:
-        cols = sorted(
-            r[1]
-            for r in conn.execute(f"PRAGMA {schema}.table_info({table})")
-            if (table, r[1]) not in HASH_EXCLUDED
-        )
+        cols = sorted(r[1] for r in conn.execute(f"PRAGMA {schema}.table_info({table})"))
         rows = sorted(
             repr(tuple(r))
             for r in conn.execute(
@@ -2929,6 +2919,9 @@ def main(argv=None) -> int:
         "--db", type=Path, help="경로를 직접 줄 때(테스트용). 기본은 generator/paths.py"
     )
     parser.add_argument("--truth", type=Path)
+    parser.add_argument(
+        "--app", type=Path, help="app.sqlite — 주면 앱 쪽 검사(색인·LLM 로그)를 붙여서 본다"
+    )
     parser.add_argument("--config", type=Path, default=ROOT / "config" / "generator.yaml")
     parser.add_argument(
         "--rag-qa",
@@ -2937,7 +2930,7 @@ def main(argv=None) -> int:
     )
     args = parser.parse_args(argv)
     paths = output_paths()
-    db, truth_db = args.db or paths["app"], args.truth or paths["truth"]
+    db, truth_db = args.db or paths["source"], args.truth or paths["truth"]
     for path in (db, truth_db):
         if not path.exists():
             print(f"DB 없음: {path} — make data 먼저")
@@ -2945,6 +2938,8 @@ def main(argv=None) -> int:
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (f"file:{truth_db}?mode=ro",))
+    if args.app:
+        conn.execute("ATTACH DATABASE ? AS app", (f"file:{args.app}?mode=ro",))
     try:
         ctx = load_ctx(
             args.config, conn, args.rag_qa or (paths["rag_qa"] if args.db is None else None)

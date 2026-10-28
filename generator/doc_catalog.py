@@ -7,7 +7,8 @@
 - 방해 문서: similar = 짝과 비슷한 주제를 다루되 skip(짝의 사실이 있는 내용)은 쓰지 않음 — 짝과 avoid 문서의 사실 말 금지 /
   external = 같은 주제를 다른 값으로(타 병원·일반)
 - 같은 사실을 담은 핵심 문서(공지와 FAQ·매뉴얼 등)는 Fact.same 묶음 키가 같다 — ③ 질문의 정답 문서를 함께 묶는 기준
-- 공지는 시행일('N월 M일')도 꼭 넣을 말. 문서를 더하거나 빼면 번호가 다시 섞이니 ③ 질문을 쓰기 전에 목록을 확정한다
+- 공지는 시행일('N월 M일')도 꼭 넣을 말. 문서를 빼면 번호가 다시 섞이니 ③ 질문을 쓰기 전에 목록을 확정한다.
+  더한 문서는 기존 번호를 두고 뒤에 붙인다 — 키를 documents.APPENDED에 더한 순서대로 넣는다
 """
 
 from dataclasses import dataclass, field, replace
@@ -16,6 +17,7 @@ from generator.master import (
     AGE_BANDS,
     CONDITIONAL_INSURED_MIN_AGE,
     HOURS,
+    ORAL_CARE_PRICES,
     PERIO_LINK_DAYS,
     PROCEDURES,
     SCALING_MIN_AGE,
@@ -205,7 +207,7 @@ def _claim_doc(field_name: str, reasons: tuple[str, ...]) -> Doc:
 
 
 _DOCS: tuple[Doc, ...] = (
-    # ── 직원 매뉴얼 26 ──
+    # ── 직원 매뉴얼 28 ──
     Doc(
         "manual-denture-repair",
         "manual",
@@ -560,6 +562,45 @@ _DOCS: tuple[Doc, ...] = (
                 "준비 완료 문자",
             ),
             F("copy.proxy", "가족이 대신 신청하면 가족관계증명서가 필요하다", "가족관계증명서"),
+        ),
+    ),
+    Doc(
+        "manual-oral-care-sales",
+        "manual",
+        "구강용품 판매 안내",
+        "데스크에서 파는 구강용품 가격과 판매 기록",
+        (
+            F(
+                "oralcare.prices",
+                "데스크 판매 가격은 "
+                + ", ".join(f"{n} {_won(p)}" for n, p in ORAL_CARE_PRICES.items())
+                + "이다",
+                *(_won(p) for p in ORAL_CARE_PRICES.values()),
+            ),
+            F(
+                "oralcare.record",
+                "구강용품을 팔면 카드 결제와 함께 전자차트 수납에 진료 외 매출로 입력한다",
+                "진료 외 매출",
+            ),
+        ),
+    ),
+    Doc(
+        "manual-plan-followup",
+        "manual",
+        "치료계획 후속 연락",
+        "치료계획을 세우고 예약하지 않은 환자에게 연락",
+        (
+            F(
+                "planfollow.call",
+                "치료계획을 세우고 3주가 지나도 예약하지 않은 환자에게는 상담실장이 전화로 안내한다",
+                "3주",
+                "상담실장",
+            ),
+            F(
+                "planfollow.log",
+                "두 차례 연락해도 답이 없으면 차트에 연락 기록을 남기고 다음 리콜 때 다시 안내한다",
+                "연락 기록",
+            ),
         ),
     ),
     # ── FAQ 10 ──

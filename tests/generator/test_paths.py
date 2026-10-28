@@ -5,6 +5,7 @@ from generator.paths import ROOT, output_paths
 
 def test_default_paths_app_and_eval_read():
     p = output_paths()
+    assert p["source"] == ROOT / "data" / "source.sqlite"
     assert p["app"] == ROOT / "data" / "app.sqlite"
     assert p["truth"] == ROOT / "ground_truth" / "truth.sqlite"
     assert p["llm_log"].parent == ROOT / "data"

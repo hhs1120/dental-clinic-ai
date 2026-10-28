@@ -25,7 +25,7 @@ def main() -> None:
     paths = output_paths()
     try:
         generate(
-            args.db or paths["app"],
+            args.db or paths["source"],
             args.truth or paths["truth"],
             ROOT / "config" / "generator.yaml",
             fake_llm=args.fake_llm,

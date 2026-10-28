@@ -10,8 +10,8 @@ tags:
   - 앱
 ---
 
-> **앱이 데이터를 어떻게 읽고 쓰나.** backend 코드가 읽는 문서 — 테이블·도구 시그니처·고정 쿼리·기술 선택. 앱 `ax_*` 테이블은 목적과 핵심 제약만 적는다 — DDL(컬럼)은 `shared/schema.sql`이 원본이다(§1). 무엇을 만드나(화면·API·완료 기준)는 [[치과 AX - 기능 정의]], 뭘 측정하나는 [[치과 AX - 평가 설계]].
-> **앱이 읽는 입력**: `data/source.sqlite`(생성기 출력 — `emr_*`·`fin_*`·생성기가 적재한 `ax_calls`·`ax_documents`)를 읽기 전용으로 붙여서(SQLite ATTACH) 읽는다 — `emr_`·`fin_`을 쓰지 않는다는 절대 규칙이 연결 방식으로 지켜진다. 앱이 쓰는 것은 전부 `data/app.sqlite`. 컬럼은 `shared/schema.sql`, 의미는 [[치과 AX - 가상 데이터 생성 설계]] §2·§3. 앱은 생성 규칙(분포·추첨·정답)에 의존하지 않는다 — 그건 정답 힌트다.
+> **앱이 데이터를 어떻게 읽고 쓰나.** backend 코드가 읽는 문서 — 테이블·도구 시그니처·고정 쿼리·기술 선택. 앱 `ax_*` 테이블은 목적과 핵심 제약만 적는다 — DDL(컬럼)은 `shared/app_schema.sql`이 원본이다(§1). 무엇을 만드나(화면·API·완료 기준)는 [[치과 AX - 기능 정의]], 뭘 측정하나는 [[치과 AX - 평가 설계]].
+> **앱이 읽는 입력**: `data/source.sqlite`(생성기 출력 — `emr_*`·`fin_*`·생성기가 적재한 `ax_calls`·`ax_documents`)를 읽기 전용으로 붙여서(SQLite ATTACH) 읽는다 — `emr_`·`fin_`을 쓰지 않는다는 절대 규칙이 연결 방식으로 지켜진다. 앱이 쓰는 것은 전부 `data/app.sqlite`. 컬럼은 `shared/source_schema.sql`, 의미는 [[치과 AX - 가상 데이터 생성 설계]] §2·§3. 앱은 생성 규칙(분포·추첨·정답)에 의존하지 않는다 — 그건 정답 힌트다.
 
 ## 1. 통화 분류·판정
 
@@ -19,7 +19,7 @@ tags:
 
 **분류기 입력 = `transcript` + `direction`만** (환자·번호·시각은 정답 힌트. 함수 시그니처 `classify(transcript, direction)`로 강제).
 
-eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/schema.sql`에 먼저 정해 두었다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(db_path)`로 내준다.
+eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`에 먼저 정해 두었다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|

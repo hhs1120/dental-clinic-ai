@@ -36,7 +36,7 @@ def conn(tmp_path):
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA)
     truth.close()
-    conn = sqlite3.connect(tmp_path / "app.sqlite")
+    conn = sqlite3.connect(tmp_path / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))

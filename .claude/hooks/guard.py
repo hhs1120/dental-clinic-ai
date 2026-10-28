@@ -27,6 +27,7 @@ from pathlib import Path
 
 GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
     "generator/llm/cache/",
+    "data/source.sqlite",
     "data/app.sqlite",
     "ground_truth/truth.sqlite",
     "ground_truth/call_labels.json",
@@ -35,7 +36,7 @@ GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
 # 고친 뒤 캐시 미스 확인을 알릴 파일 — 생성 결과를 바꾸지 않는 생성기 파일은 뺀다
 STAGE_FILES = re.compile(
     r"generator/(?!verify\.py|paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
-    r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/schema\.sql"
+    r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/source_schema\.sql"
 )
 READONLY_GIT = {
     "status",

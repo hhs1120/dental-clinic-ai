@@ -1,5 +1,5 @@
 """① 통화 분류 채점 — 평가 설계 §2.2(지표·정확도 셋), §2.4(블라인드), §1 원칙 5(폴백 제외)·§7(few-shot 제외·dev 덤프).
-입력은 앱이 쓴 ax_call_classifications·ax_judgments·ax_blind_votes·ax_llm_calls(칸은 shared/schema.sql)와 truth_call_labels."""
+입력은 앱이 쓴 ax_call_classifications·ax_judgments·ax_blind_votes·ax_llm_calls(칸은 shared/app_schema.sql)와 truth_call_labels."""
 
 import json
 import re
@@ -19,15 +19,15 @@ def version_key(v: str) -> list:
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", v)]
 
 
-def _calls(conn) -> dict[int, dict]:
+def _calls(conn) -> dict[str, dict]:
     """생성 통화 + 골드(붙여넣기 통화는 골드가 없어 빠진다)"""
     rows = conn.execute(
-        "SELECT c.id, c.call_uid, c.in_eval_pool, c.in_blind_pool, c.transcript, l.split, "
+        "SELECT c.call_uid, c.in_eval_pool, c.in_blind_pool, c.transcript, l.split, "
         + ", ".join(f"l.{i}" for i in ITEMS)
         + " FROM ax_calls c JOIN truth.truth_call_labels l ON l.call_uid = c.call_uid WHERE c.source = 'generated'"
     ).fetchall()
     return {
-        r["id"]: {
+        r["call_uid"]: {
             "uid": r["call_uid"],
             "pool": r["in_eval_pool"],
             "blind": r["in_blind_pool"],
@@ -41,7 +41,7 @@ def _calls(conn) -> dict[int, dict]:
 
 def _classifications(conn) -> list[dict]:
     rows = conn.execute(
-        "SELECT cl.id, cl.call_id, cl.prompt_version, cl.model_alias, cl.model_actual, cl.status, cl.labels,"
+        "SELECT cl.id, cl.call_uid, cl.prompt_version, cl.model_alias, cl.model_actual, cl.status, cl.labels,"
         " lc.fallback_used AS fallback FROM ax_call_classifications cl"
         " JOIN ax_llm_calls lc ON lc.id = cl.llm_call_id"
     ).fetchall()
@@ -86,8 +86,8 @@ def evaluate(
     pool_ids = {i for i, c in calls.items() if c["pool"] and c["split"] == split}
     gold = {i: c["gold"] for i, c in calls.items()}
     human = {
-        r["call_id"]: json.loads(r["labels"])
-        for r in conn.execute("SELECT call_id, labels FROM ax_judgments")
+        r["call_uid"]: json.loads(r["labels"])
+        for r in conn.execute("SELECT call_uid, labels FROM ax_judgments")
     }
     rows = _classifications(conn)
     versions = versions or sorted({r["prompt_version"] for r in rows}, key=version_key)
@@ -98,23 +98,25 @@ def evaluate(
     }
     usable = {}
     for v in versions:
-        mine = [r for r in rows if r["prompt_version"] == v and r["call_id"] in calls]
+        mine = [r for r in rows if r["prompt_version"] == v and r["call_uid"] in calls]
         if len({r["model_alias"] for r in mine}) > 1:
             raise EvalRefused(
                 f"{v}: 한 버전에 모델 별칭이 둘 이상 — 모델 2개 교차검증(평가 설계 §2.5) 착수 때 채점 단위를 정한다"
             )
         skip = (
-            {calls[r["call_id"]]["uid"] for r in mine} & fewshot.get(v, set())
+            {calls[r["call_uid"]]["uid"] for r in mine} & fewshot.get(v, set())
             if split == "dev"
             else set()
         )
         ok = {
-            r["call_id"]: r["labels"]
+            r["call_uid"]: r["labels"]
             for r in mine
-            if r["status"] == "ok" and not r["fallback"] and calls[r["call_id"]]["uid"] not in skip
+            if r["status"] == "ok"
+            and not r["fallback"]
+            and calls[r["call_uid"]]["uid"] not in skip
         }
         usable[v] = ok
-        in_gold = [r for r in mine if r["call_id"] in gold_ids]
+        in_gold = [r for r in mine if r["call_uid"] in gold_ids]
         out["versions"][v] = {
             "model_actual": sorted({r["model_actual"] for r in mine}),
             "model_vs_gold": _score(gold_ids, ok, gold, calls, population),
@@ -122,7 +124,7 @@ def evaluate(
             "excluded": {
                 "fallback": sum(r["status"] == "ok" and bool(r["fallback"]) for r in in_gold),
                 "failed": sum(r["status"] == "failed" for r in in_gold),
-                "fewshot": sum(calls[r["call_id"]]["uid"] in skip for r in in_gold),
+                "fewshot": sum(calls[r["call_uid"]]["uid"] in skip for r in in_gold),
             },
         }
     judged = pool_ids & human.keys()
@@ -174,7 +176,7 @@ def _blind(conn, rows: list[dict], calls: dict, split: str) -> list[dict]:
         "SELECT left_classification_id, right_classification_id, choice FROM ax_blind_votes"
     ):
         left, right = by_id[v[0]], by_id[v[1]]
-        call = calls.get(left["call_id"])
+        call = calls.get(left["call_uid"])
         if not call or not call["blind"] or call["split"] != split:
             continue
         if any(x["fallback"] or x["status"] != "ok" for x in (left, right)):

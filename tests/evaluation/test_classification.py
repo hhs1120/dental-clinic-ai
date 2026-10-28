@@ -79,8 +79,8 @@ def test_two_models_in_one_version_refused(conn):
         " VALUES (99, 'classify', 'classify_b', 'claude-sonnet-5-5', 'v1', 1, '2026-12-01 09:00:00')"
     )
     conn.execute(
-        "INSERT INTO ax_call_classifications (call_id, model_alias, model_actual, prompt_version, status, labels, llm_call_id)"
-        " VALUES (1, 'classify_b', 'claude-sonnet-5-5', 'v1', 'ok', '{}', 99)"
+        "INSERT INTO ax_call_classifications (call_uid, model_alias, model_actual, prompt_version, status, labels, llm_call_id)"
+        " VALUES ('c-0001', 'classify_b', 'claude-sonnet-5-5', 'v1', 'ok', '{}', 99)"
     )
     with pytest.raises(EvalRefused, match="모델"):
         classification.evaluate(conn, "dev")

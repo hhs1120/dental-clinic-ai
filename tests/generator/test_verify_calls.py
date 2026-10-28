@@ -229,16 +229,8 @@ BREAKS = {
         "UPDATE ax_calls SET eval_sort_order = 3 - eval_sort_order WHERE in_eval_pool = 1",
         "check_eval_pool",
     ),
-    "pool_judge_status": (
-        "UPDATE ax_calls SET judge_status = 'none' WHERE id = 4",
-        "check_eval_pool",
-    ),
-    "nonpool_pending": (
-        "UPDATE ax_calls SET judge_status = 'pending' WHERE id = 2",
-        "check_eval_pool",
-    ),
     "pool_too_big": (
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3, judge_status = 'pending' WHERE id = 2",
+        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3 WHERE id = 2",
         "check_eval_pool",
     ),
     "blind_outside_pool": (
@@ -405,9 +397,9 @@ def test_eval_pool_strata(tmp_path):
         pool = i <= 2
         conn.execute(
             "INSERT INTO ax_calls (id, call_uid, source, direction, started_at, duration_sec, in_eval_pool,"
-            " eval_sort_order, judge_status) VALUES (?, ?, 'generated', 'inbound', '2026-11-27 10:00:00', 150,"
-            " ?, ?, ?)",
-            (i, f"c-{i:04d}", int(pool), i if pool else None, "pending" if pool else "none"),
+            " eval_sort_order) VALUES (?, ?, 'generated', 'inbound', '2026-11-27 10:00:00', 150,"
+            " ?, ?)",
+            (i, f"c-{i:04d}", int(pool), i if pool else None),
         )
         conn.execute(
             "INSERT INTO truth.truth_call_labels VALUES (?, 'complaint', '[\"complaint\"]', 'patient',"
@@ -416,9 +408,7 @@ def test_eval_pool_strata(tmp_path):
         )
     assert verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=2))
     # 3건이면 통과(dev 2·test 1)
-    conn.execute(
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3, judge_status = 'pending' WHERE id = 3"
-    )
+    conn.execute("UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3 WHERE id = 3")
     conn.execute(L + "split = 'dev' WHERE call_uid = 'c-0003'")
     assert verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=3)) == []
     # dev 3·test 0이면 실패
@@ -430,9 +420,7 @@ def test_eval_pool_strata(tmp_path):
         + "primary_purpose = 'book', accepted_purposes = '[\"book\"]', complaint = 0, wants_appt = 1"
     )
     conn.execute(L + "split = 'silver' WHERE call_uid = 'c-0003'")
-    conn.execute(
-        "UPDATE ax_calls SET in_eval_pool = 0, eval_sort_order = NULL, judge_status = 'none' WHERE id = 3"
-    )
+    conn.execute("UPDATE ax_calls SET in_eval_pool = 0, eval_sort_order = NULL WHERE id = 3")
     assert any(
         v["problem"] == "split당 최소 건수 미달"
         for v in verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=2))

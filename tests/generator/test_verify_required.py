@@ -534,7 +534,7 @@ def test_confirmed_uses_previous_open_day(tmp_path):
 def test_main_exit_codes(tmp_path, capsys):
     conn = make_db(tmp_path)
     conn.commit()
-    args = ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
+    args = ["--db", str(tmp_path / "source.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
     assert verify.main(args) == 0
 
     conn.execute("UPDATE emr_patients SET phone = '010-1234-5678' WHERE id = 2")
@@ -558,7 +558,7 @@ def test_missing_truth_exits(tmp_path):
     make_db(tmp_path).commit()
     assert (
         verify.main(
-            ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "nope.sqlite")]
+            ["--db", str(tmp_path / "source.sqlite"), "--truth", str(tmp_path / "nope.sqlite")]
         )
         == 1
     )
@@ -570,7 +570,7 @@ def test_missing_gen_meta_exits(tmp_path, capsys):
     conn.commit()
     assert (
         verify.main(
-            ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
+            ["--db", str(tmp_path / "source.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
         )
         == 1
     )
@@ -584,7 +584,7 @@ def test_missing_gen_meta_table_exits(tmp_path, capsys):
     truth.commit()
     assert (
         verify.main(
-            ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
+            ["--db", str(tmp_path / "source.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
         )
         == 1
     )
@@ -669,12 +669,6 @@ def test_canonical_hash_truth_schema(tmp_path):
     b.execute("UPDATE truth.truth_gen_meta SET value = '1' WHERE key = 'seed'")
     assert verify.canonical_hash(a, "truth") != verify.canonical_hash(b, "truth")
     assert verify.canonical_hash(a) == verify.canonical_hash(b)  # main은 그대로
-
-
-def test_canonical_hash_ignores_indexed_at(tmp_path):
-    a, b = _two_dbs(tmp_path)
-    b.execute("UPDATE ax_calls SET indexed_at = '2026-12-01 09:00:00'")
-    assert verify.canonical_hash(a) == verify.canonical_hash(b)
 
 
 def test_rag_checks_skipped_without_chunks(tmp_path, capsys):

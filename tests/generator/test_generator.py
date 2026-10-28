@@ -49,7 +49,7 @@ def no_stages(monkeypatch):
 
 
 def _generate(tmp_path):
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     generate(app, truth, CONFIG)
     return app, truth
 
@@ -84,7 +84,7 @@ def test_rag_qa_loaded_when_given(tmp_path, no_stages):
 
     qa = tmp_path / "rag_qa.json"
     qa.write_text(json.dumps(QA, ensure_ascii=False), encoding="utf-8")
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     generate(app, truth, CONFIG, rag_qa_path=qa)
     rows = (
         sqlite3.connect(truth)
@@ -114,7 +114,9 @@ def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
     }
     assert {"emr_patients", "emr_appointments", "ax_calls"} <= app_tables
     assert {"truth_gen_meta", "truth_claims"} <= truth_tables
-    assert not any(t.startswith("truth_") for t in app_tables)  # 정답은 app.sqlite에 넣지 않는다
+    assert not any(
+        t.startswith("truth_") for t in app_tables
+    )  # 정답은 생성기 출력(source.sqlite)에 넣지 않는다
 
 
 def test_truth_json_written_next_to_truth_db(tmp_path, monkeypatch):
@@ -166,7 +168,7 @@ def test_truth_json_written_next_to_truth_db(tmp_path, monkeypatch):
 
 
 def test_regenerate_replaces_existing_db(tmp_path, no_stages):
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     for path in (app, truth):
         conn = sqlite3.connect(path)
         conn.execute("CREATE TABLE leftover (x)")
@@ -199,7 +201,7 @@ def test_llm_miss_exports_jobs_and_keeps_db(tmp_path, monkeypatch):
         [("toy", llm_stage), ("after", lambda run, rng, fake: seen.append("after"))],
     )
     llm = {k: tmp_path / k for k in ("llm_cache", "llm_jobs", "llm_results")}
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     app.write_text("old")
     with pytest.raises(build.LLMMissing) as e:
         generate(app, truth, CONFIG, llm_paths=llm)
@@ -256,7 +258,7 @@ def _run_cli(out, hashseed):
             "generator",
             "--fake-llm",
             "--db",
-            str(out / "app.sqlite"),
+            str(out / "source.sqlite"),
             "--truth",
             str(out / "truth.sqlite"),
         ],
@@ -264,7 +266,7 @@ def _run_cli(out, hashseed):
         env=env,
         check=True,
     )
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return verify.canonical_hash(conn), verify.canonical_hash(conn, "truth")
 

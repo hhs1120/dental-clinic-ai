@@ -24,7 +24,7 @@ RUN = {}  # db 픽스처의 생성 실행(run.state — 4단계 에피소드)
 
 
 def _open(out):
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -33,7 +33,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("chart")
-    RUN["run"] = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    RUN["run"] = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -129,7 +129,7 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
     """디코이 배수를 바꿔도 오류·상병·요건은 그대로 — 사실(chart_facts)과 본문(chart_notes) 난수를 나눈다 (§5.1)"""
     conn, _, _ = db
     monkeypatch.setattr(chart, "CHART_DECOY_RATIO", 1.0)
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     for sql in (
         "SELECT * FROM truth.truth_claim_errors ORDER BY treatment_id",
@@ -157,7 +157,7 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
             "other": {"requirement": 0, "documentation": 50, "diagnosis": 50},
         },
     )
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     open_months = "SELECT treatment_id FROM emr_claims WHERE status IN ('submitted', 'pending')"
     for sql in (

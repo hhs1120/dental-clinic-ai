@@ -28,7 +28,7 @@ hooks:
 
 1. **날짜·경위**: "결정 2026-…" 같은 날짜 표시, 어떻게 정했는지 경위, 규칙을 다시 풀어 쓰는 이유. 날짜·경위는 git 기록에 있다. 되돌림을 막는 이유가 꼭 필요하면 한 구절만 남긴다(예: "등록일로 두면 오래된 임신 항목이 준비표에 뜬다")
 2. **중복**: 같은 규칙이 두 절·두 문서에 있음 → 원본 하나만 두고 나머지는 이름·절로 가리킴
-3. **값이 문서에 박힘**: 숫자·enum·컬럼은 코드(`generator/master.py`·`shared/schema.sql`·`ground_truth/schema.sql`·`config/generator.yaml`·`generator/verify.py`·`evaluation/metrics.py` 등)가 원본. 문서에 숫자로 남아 있으면 코드 이름으로 가리키거나, 남길 이유가 있으면 `tests/generator/test_doc_sync.py`(또는 같은 역할의 테스트)가 비교하는지 확인 — 비교가 없으면 짚는다
+3. **값이 문서에 박힘**: 숫자·enum·컬럼은 코드(`generator/master.py`·`shared/source_schema.sql`·`shared/app_schema.sql`·`ground_truth/schema.sql`·`config/generator.yaml`·`generator/verify.py`·`evaluation/metrics.py` 등)가 원본. 문서에 숫자로 남아 있으면 코드 이름으로 가리키거나, 남길 이유가 있으면 `tests/generator/test_doc_sync.py`(또는 같은 역할의 테스트)가 비교하는지 확인 — 비교가 없으면 짚는다
 4. **낡은 참조**: 문서가 가리키는 코드 이름(`master.X`·`verify.X`·함수·테이블·컬럼·파일 경로·make 타깃·CLI 옵션)이 실제로 있는지 `grep`으로 확인. 문서 간 링크(`[[문서]] §n`)의 절이 있고 그 내용을 가리키는지 확인
 5. **끝난 할 일·해결된 미결**: §9 다음 액션·§8 미결 등에서 이미 된 것, 이미 정한 것
 6. **쓸데없는 규칙**: 기능·평가 지표가 기대지 않는 세부 규칙이나 추정값 튜닝 지시(현실감 값은 현장 확인·튜닝 대상이 아님)

@@ -492,7 +492,7 @@
   "question": "송정호 님 서류 요청하셨던 거 뭐였고, 준비됐다고 연락드렸어?",
   "answer_text": "3월 13일 전화로 회사 제출용 진료확인서 요청(담을 내용: 2025년 5월 20일 스케일링) → 다음 날 3월 14일 서류 준비 완료 문자 보냄",
   "answer_doc_ids": [
-   "call:104",
+   "call:c-0882",
    "thread:C-00322:2026-03"
   ],
   "answer_chunk_hint": "진료 확인서",
@@ -510,7 +510,7 @@
   "question": "양명숙 님이 교정 진료 때문에 불만 전화하셨던 거 무슨 내용이었지?",
   "answer_text": "교정 때 아프다고 했는데 설명 없이 계속해 속상했다 — 다음엔 천천히 설명하며 하기로",
   "answer_doc_ids": [
-   "call:213"
+   "call:c-0254"
   ],
   "answer_chunk_hint": "철사",
   "expected_tools": [
@@ -527,7 +527,7 @@
   "question": "임은영 님이 전화로 뭐 물어보셨고 우리가 어떻게 답했지?",
   "answer_text": "당뇨가 있는데 스케일링을 얼마나 자주 받아야 하는지 — 원장 확인 후 다시 연락하기로",
   "answer_doc_ids": [
-   "call:29"
+   "call:c-0793"
   ],
   "answer_chunk_hint": "당뇨",
   "expected_tools": [
@@ -544,7 +544,7 @@
   "question": "서미영 님이 사랑니 발치 비용 물어보셨을 때 얼마라고 했지?",
   "answer_text": "본인 부담 27,000원(총 진료비 90,000원, 건강보험 적용)",
   "answer_doc_ids": [
-   "call:227"
+   "call:c-0577"
   ],
   "answer_chunk_hint": "27,000원",
   "expected_tools": [
@@ -595,7 +595,7 @@
   "question": "심현숙 님 피 난다고 급하게 전화하셨을 때 뭐라고 안내했지?",
   "answer_text": "거즈나 수건을 말아 꽉 물고 있기, 원장께 전달 후 내원 시간 정해 다시 전화",
   "answer_doc_ids": [
-   "call:95"
+   "call:c-0861"
   ],
   "answer_chunk_hint": "거즈",
   "expected_tools": [
@@ -612,7 +612,7 @@
   "question": "윤정훈 님이 보험 적용 물어보셨던 건 어떻게 됐어?",
   "answer_text": "구강검진은 급여 항목이나 실제 처리 내역은 확인 후 연락(문자도 남기기로)",
   "answer_doc_ids": [
-   "call:6"
+   "call:c-0974"
   ],
   "answer_chunk_hint": "구강검진",
   "expected_tools": [
@@ -629,7 +629,7 @@
   "question": "권영수 님께 미수 안내 전화했을 때 반응 어떠셨어?",
   "answer_text": "11,580원 남았다고 하자 카드로 다 냈다며 불쾌해함 — 결제 내역 확인 후 연락하기로",
   "answer_doc_ids": [
-   "call:155"
+   "call:c-0344"
   ],
   "answer_chunk_hint": "11,580원",
   "expected_tools": [
@@ -646,7 +646,7 @@
   "question": "송광수 님 레진 보험 문의 전화 어떻게 답했지?",
   "answer_text": "8월 5일 전화로 레진 보험 적용 문의(대상 진료: 7월 21일 41번 레진) → 비급여로 기록돼 있다고 안내, 비급여인 이유는 원장 확인 후 회신하기로",
   "answer_doc_ids": [
-   "call:597"
+   "call:c-0430"
   ],
   "answer_chunk_hint": "41번",
   "expected_tools": [
@@ -680,7 +680,7 @@
   "question": "진미정 님 보험사 서류 뭐 요청하셨고, 준비됐다고 연락드렸어?",
   "answer_text": "11월 14일 전화로 실손 청구용 진료비 세부내역서·진료확인서 요청(담을 내용: 3월 28일·4월 8일 아말감, 4월 20일 스케일링) → 11월 16일 서류 준비 완료 문자",
   "answer_doc_ids": [
-   "call:933",
+   "call:c-0526",
    "thread:C-00525:2026-11"
   ],
   "answer_chunk_hint": "세부내역서",

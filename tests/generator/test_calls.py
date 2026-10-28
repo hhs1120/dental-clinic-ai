@@ -50,8 +50,8 @@ def test_allocate_oversamples_rare_and_lifts_small_categories():
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("calls")
-    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
-    conn = sqlite3.connect(out / "app.sqlite")
+    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -209,8 +209,8 @@ def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
             "guardian_confused": 0.02,
         },
     )
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
-    assert rows(sqlite3.connect(tmp_path / "app.sqlite")) == before
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    assert rows(sqlite3.connect(tmp_path / "source.sqlite")) == before
 
 
 def test_pool_split_halves(db):

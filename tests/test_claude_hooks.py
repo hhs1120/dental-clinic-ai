@@ -78,6 +78,7 @@ def test_commit_blocked_when_lint_fails(monkeypatch):
     [
         "generator/llm/cache/transcript.jsonl",
         "ground_truth/truth.sqlite",
+        "data/source.sqlite",
         "data/app.sqlite",
         "ground_truth/call_labels.json",
         "ground_truth/doc_meta.json",
@@ -193,7 +194,7 @@ def test_main_asks_with_json():
         "config/generator.yaml",
         "config/holidays.json",
         "config/forbidden_topics.json",
-        "shared/schema.sql",
+        "shared/source_schema.sql",
     ],
 )
 def test_stage_edit_warns(path):

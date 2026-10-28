@@ -55,7 +55,7 @@ APPOINTMENT_CHECKS = [
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("sim")
-    app, truth = out / "app.sqlite", out / "truth.sqlite"
+    app, truth = out / "source.sqlite", out / "truth.sqlite"
     run = build.generate(app, truth, CONFIG, fake_llm=True)
     conn = sqlite3.connect(app)
     conn.row_factory = sqlite3.Row
@@ -137,7 +137,7 @@ def test_planned_procedure_fits_age(db):
 
 def test_planned_code_hygiene_scaling_rule():
     run = build.new_run(sqlite3.connect(":memory:"), CFG)
-    run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:3]:
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
     sim = schedule.Sim(run, np.random.default_rng(0))
@@ -357,7 +357,7 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
     """창 이전 급여 스케일링은 그해를 연 1회 이력에 넣는다 — 같은 해 창 안 위생 내원은 구강검진 (§2.6 (1)).
     리콜 12개월이라 생성 데이터에는 같은 해 재방문이 거의 없어 Sim 상태로 본다"""
     run = build.new_run(sqlite3.connect(":memory:"), CFG)
-    run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
     sim = schedule.Sim(run, np.random.default_rng(0))

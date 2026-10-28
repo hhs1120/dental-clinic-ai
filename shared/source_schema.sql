@@ -1,6 +1,6 @@
--- app.sqlite 스키마 (emr_* / ax_*). 컬럼·enum·인덱스의 원본 — 생성기와 앱이 같이 쓴다.
--- 의미·생성 규칙: emr_*·생성기 적재 ax_*(ax_calls·ax_documents)는 docs/치과 AX - 가상 데이터 생성 설계.md §2·§3,
---                나머지 ax_*는 docs/치과 AX - 앱 설계.md
+-- source.sqlite 스키마 — 생성기 출력(emr_* / 생성기가 적재하는 ax_calls·ax_documents). 컬럼·enum·인덱스의 원본.
+-- 생성기만 쓰고 앱은 읽기 전용으로 ATTACH한다(가상 데이터 생성 설계 §0). 의미·생성 규칙은 그 문서 §2·§3.
+-- 앱이 쓰는 테이블은 shared/app_schema.sql
 -- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
 -- 시각은 naive KST ISO 문자열('2026-07-03 10:30:00'), 날짜는 'YYYY-MM-DD'
 
@@ -185,13 +185,10 @@ CREATE TABLE ax_calls (
     transcript       TEXT,
     in_eval_pool     INTEGER NOT NULL DEFAULT 0,
     eval_sort_order  INTEGER,
-    judge_status     TEXT NOT NULL DEFAULT 'none' CHECK (judge_status IN ('none', 'pending', 'skipped', 'done')),
     in_blind_pool    INTEGER NOT NULL DEFAULT 0,
-    blind_sort_order INTEGER,
-    indexed_at       TEXT
+    blind_sort_order INTEGER
 );
 
-CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
 CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
 
@@ -205,55 +202,4 @@ CREATE TABLE ax_documents (
     effective_date TEXT,
     path           TEXT NOT NULL,
     body           TEXT NOT NULL
-);
-
--- ── 앱이 쓰는 ax_* (앱 설계 §1·§2). eval.py가 읽는 칸 ─────────────────
--- labels JSON = 9항목 {primary_purpose, counterpart, urgency, emergency, complaint, price_inquiry, wants_appt,
--- appt_confirmed, has_todo}(enum은 generator/master.py CALL_*), 플래그는 0/1
-
--- LLM 게이트웨이 호출 1건 = 1행. fallback_used면 평가 집계에서 제외 (평가 설계 §1 원칙 5)
-CREATE TABLE ax_llm_calls (
-    id            INTEGER PRIMARY KEY,
-    task          TEXT NOT NULL,
-    model_alias   TEXT NOT NULL,
-    model_actual  TEXT NOT NULL,
-    prompt_version TEXT,
-    fallback_used INTEGER NOT NULL DEFAULT 0,
-    ok            INTEGER NOT NULL,
-    is_eval       INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT NOT NULL
-);
-
-CREATE TABLE ax_call_classifications (
-    id             INTEGER PRIMARY KEY,
-    call_id        INTEGER NOT NULL REFERENCES ax_calls(id),
-    model_alias    TEXT NOT NULL,
-    model_actual   TEXT NOT NULL,
-    prompt_version TEXT NOT NULL,
-    status         TEXT NOT NULL CHECK (status IN ('ok', 'failed')),
-    labels         TEXT,
-    summary        TEXT,
-    todo           TEXT,
-    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
-    UNIQUE (call_id, model_alias, prompt_version)
-);
-
--- 사람 판정. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
-CREATE TABLE ax_judgments (
-    id        INTEGER PRIMARY KEY,
-    call_id   INTEGER NOT NULL UNIQUE REFERENCES ax_calls(id),
-    labels    TEXT NOT NULL,
-    judged_by TEXT NOT NULL,
-    judged_at TEXT NOT NULL
-);
-
--- 블라인드 투표 (평가 설계 §2.4). 좌·우 = 화면 배치
-CREATE TABLE ax_blind_votes (
-    id                       INTEGER PRIMARY KEY,
-    left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),
-    right_classification_id  INTEGER NOT NULL REFERENCES ax_call_classifications(id),
-    choice                   TEXT NOT NULL CHECK (choice IN ('left', 'right', 'tie', 'both_wrong')),
-    voted_by                 TEXT NOT NULL,
-    voted_at                 TEXT NOT NULL,
-    UNIQUE (left_classification_id, right_classification_id)
 );
