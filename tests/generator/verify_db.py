@@ -26,6 +26,7 @@ CTX = Ctx(
     documents_distractor=3,
     link_failure_days=0,
     ledger_errors={},
+    recon_mismatches={},
 )
 
 # 2026-12-01(화) 기준. 10/06·11/03·11/17·11/24 화, 11/18 수, 12/05 토, 10/01·11/19 목(휴진)
@@ -67,6 +68,19 @@ INSERT INTO emr_payments (id, patient_id, appointment_id, kind, amount_due, amou
   (2, 1, 2, 'visit', 18000, 18000, '2026-11-03 10:30:00', 'card', '10000002'),
   (3, 1, 2, 'settlement', 0, 16000, '2026-11-03 10:31:00', 'card', '10000003'),
   (4, 2, 4, 'visit', 80000, 80000, '2026-11-18 10:30:00', 'cash', NULL);
+-- 재무(8b): 카드 수납 3건 = 가온카드 승인(정산 2영업일·율 1.2%), 10/06분 10/08·11/03분 11/05 입금,
+-- 11/18 현금은 다음 월요일 11/23 입금. 확정 월 청구가 없어 공단 입금 없음
+INSERT INTO fin_card_sales (id, approved_at, issuer, amount, approval_no, cancel_of) VALUES
+  (1, '2026-10-06 11:00:00', '가온카드', 20000, '10000001', NULL),
+  (2, '2026-11-03 10:30:00', '가온카드', 18000, '10000002', NULL),
+  (3, '2026-11-03 10:31:00', '가온카드', 16000, '10000003', NULL);
+INSERT INTO fin_card_deposits (id, deposited_on, issuer, sales_date, sales_total, fee, amount) VALUES
+  (1, '2026-10-08', '가온카드', '2026-10-06', 20000, 240, 19760),
+  (2, '2026-11-05', '가온카드', '2026-11-03', 34000, 408, 33592);
+INSERT INTO fin_bank_transactions (id, occurred_at, direction, amount, memo) VALUES
+  (1, '2026-10-08 08:00:00', 'in', 19760, '가온카드'),
+  (2, '2026-11-05 08:00:00', 'in', 33592, '가온카드'),
+  (3, '2026-11-23 13:10:00', 'in', 80000, '현금 입금');
 INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date, procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note) VALUES
   (1, 1, 1, 'C-00001', '26', '2026-10', '2026-10-06', 'U0008', 84000, '2026-11-02 10:00:00', 'submitted', NULL, NULL, NULL),
   (2, 2, 1, 'C-00001', '00', '2026-11', '2026-11-03', 'U0001', 42000, NULL, 'pending', NULL, NULL, NULL);
@@ -122,7 +136,7 @@ INSERT INTO truth_call_labels VALUES
 INSERT INTO truth_gen_meta VALUES
   ('seed', '20261201'), ('range_start', '2026-10-01'), ('range_end', '2026-12-15'),
   ('call_slots', '4'), ('eval_pool', '2'), ('blind_pool', '1'), ('documents_core', '3'), ('documents_distractor', '3'),
-  ('link_failure_days', '0'), ('ledger_errors', '{}');
+  ('link_failure_days', '0'), ('ledger_errors', '{}'), ('recon_mismatches', '{}');
 """
 
 

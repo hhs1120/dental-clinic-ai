@@ -33,6 +33,7 @@ from generator.master import (
     HAS_TODO_SHARE,
     HOURS,
     IMPLIED_FLAG,
+    LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
     PAIN_URGENT_SHARE,
     PLANNED_WEIGHTS,
@@ -100,6 +101,15 @@ class Ledger:
     def __init__(self, conn, plan_items: list, churn: dict):
         self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
         self.churn = churn  # 4단계 state — 이탈 환자 → 이탈일
+        self.ledger_debt = defaultdict(
+            list
+        )  # 환자 → [(장부 입력 시각, 실제 내원일, 실수로 생긴 미수)] (§2.4)
+        for pid, at, day, debt in conn.execute(
+            "SELECT p.patient_id, p.paid_at, date(e.true_paid_at), e.true_amount - p.amount_paid"
+            " FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+            " WHERE e.kind IN ('entry_missing', 'amount_typo') ORDER BY p.paid_at, p.id"
+        ):
+            self.ledger_debt[pid].append((at, day, debt))
         self.patients = {
             r[0]: {
                 "id": r[0],
@@ -369,6 +379,7 @@ def stage_slots(run, rng, fake) -> None:
                     "counterpart": _side(led, about, t[:10]) if side else who,
                 }
             )
+    _ledger_debt_calls(led, slots, days, rng.spawn(1)[0])
     for s in slots:
         if s["patient"] is not None:
             speaker = led.speaker(s["patient"], s["t"][:10])
@@ -376,6 +387,34 @@ def stage_slots(run, rng, fake) -> None:
         else:
             s["caller"] = (next(run.state["phones"]), fake.name())
     run.state["call_slots"], run.state["call_ledger"] = slots, led
+
+
+def _ledger_debt_calls(led, slots: list, days: list, rng) -> None:
+    """수납 문의 발신 LEDGER_DEBT_CALLS건을 장부 실수 미수 환자에게 다시 배정 — 서로 다른 환자, 통화일은 그 미수가 장부에
+    들어간 뒤 30일 안의 진료일(그 시각 잔액 > 0). 다른 슬롯은 그대로 (§4.1 환자 고르기)"""
+    rule = CALL_PATIENT_RULES[("billing_q", "outbound")]
+    billing = [s for s in slots if s["purpose"] == "billing_q" and s["direction"] == "outbound"]
+    patients = sorted(led.ledger_debt)
+    targets = rng.permutation(len(billing)).tolist()[:LEDGER_DEBT_CALLS]
+    for k in rng.permutation(len(patients)).tolist():
+        if not targets:
+            break
+        pid = patients[k]
+        entered = led.ledger_debt[pid][0][0]
+        start = datetime.strptime(entered, FMT).date()
+        options = [d for d in days if start < d <= start + timedelta(days=30)]
+        for d in [options[int(i)] for i in rng.permutation(len(options))]:
+            t = (
+                datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
+            ).strftime(FMT)
+            if led.matches(pid, rule, t):
+                s = billing[targets.pop()]
+                s.update(t=t, patient=pid, about=pid, counterpart=_side(led, pid, t[:10]))
+                break
+    if targets:
+        raise ValueError(
+            f"장부 실수 미수 수납 문의 {LEDGER_DEBT_CALLS - len(targets)}건 < {LEDGER_DEBT_CALLS}건"
+        )
 
 
 def _noise_eligible(s: dict, noise: str) -> bool:
@@ -419,9 +458,11 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             and on
             and on.isoformat() <= s["t"]
         ):
-            fact["churned"] = (
-                True  # 리콜 발신에 이탈 환자 — 다른 치과로 옮겼다는 말 (§4.1 환자 고르기)
-            )
+            fact["churned"] = True  # 리콜 발신에 이탈 환자 — 다른 치과로 옮겼다는 말 (§4.1)
+        debts = [d for d in led.ledger_debt[s["about"]] if d[0] <= s["t"]]
+        if s["purpose"] == "billing_q" and s["direction"] == "outbound" and debts:
+            _, day, debt = debts[-1]  # 수납 문의 미수가 장부 실수 — 이미 냈다는 말 (⑧-1 근거)
+            fact["already_paid"] = {"date": day, "amount": debt}
     if (
         s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]
     ):  # 부 주제 가격 문의도 무엇의 가격인지

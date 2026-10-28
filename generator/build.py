@@ -17,6 +17,7 @@ from generator import (
     clinic,
     demand,
     documents,
+    finance,
     messages,
     patients,
     pre_window,
@@ -65,6 +66,7 @@ STAGES: list = [
     ("call_pools", calls.stage_pools),
     ("call_transcripts", transcripts.stage),
     ("messages", messages.stage),
+    ("fin_income", finance.stage_income),
     ("doc_plan", documents.stage_plan),
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
@@ -140,6 +142,7 @@ def generate(
                     "ledger_errors",
                     json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
                 ),
+                ("recon_mismatches", json.dumps(RECON_MISMATCH_COUNTS)),
             ],
         )
         for name, stage in STAGES:

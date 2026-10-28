@@ -105,6 +105,12 @@ from generator.verify.documents import (
     check_forbidden_topics,
     check_notice_versions,
 )
+from generator.verify.fin import (
+    check_bank_inflows,
+    check_card_deposits,
+    check_card_sales,
+    check_recon_mismatches,
+)
 from generator.verify.messages import (
     APPOINTMENT_TRIGGERS,
     check_churn_no_recall_reply,
@@ -241,6 +247,7 @@ __all__ = [
     "check_approval_no",
     "check_ax_calls_columns",
     "check_balance_non_negative",
+    "check_bank_inflows",
     "check_blind_pool",
     "check_booking_call_event",
     "check_call_counterpart",
@@ -258,6 +265,8 @@ __all__ = [
     "check_cancel_time",
     "check_cancellation_kind",
     "check_cancelled_at_status",
+    "check_card_deposits",
+    "check_card_sales",
     "check_chair_overlap",
     "check_chart_decoy_ratio",
     "check_chart_dx",
@@ -329,6 +338,7 @@ __all__ = [
     "check_qa_same_fact_docs",
     "check_qa_split_isolation",
     "check_recall_once_a_month",
+    "check_recon_mismatches",
     "check_registration_age",
     "check_reply_after_out",
     "check_requirement_facts",
@@ -454,6 +464,10 @@ REQUIRED = [
     check_confirmed_has_reminder,
     check_reply_after_out,
     check_fake_phone,
+    check_card_sales,
+    check_card_deposits,
+    check_bank_inflows,
+    check_recon_mismatches,
     check_document_counts,
     check_doc_meta_match,
     check_doc_planted_facts,

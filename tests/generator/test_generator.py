@@ -69,6 +69,7 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
         "documents_distractor": str(CFG["documents"]["distractor"]),
         "link_failure_days": str(LINK_FAILURE_DAYS),
         "ledger_errors": json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
+        "recon_mismatches": json.dumps(RECON_MISMATCH_COUNTS),
     }
 
 

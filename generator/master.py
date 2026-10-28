@@ -804,20 +804,39 @@ MESSAGE_REPLIES = {
 }
 # 이미 냈다는 balance 답장 (§2.5 reply(in)) — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 답장(균등)
 MESSAGE_REPLIES_PAID = ("그날 다 냈는데요", "이미 계산했어요", "이체했는데 확인 부탁드려요")
+# 수납 문의 발신 중 장부 실수 미수(§2.4) 환자에게 거는 통화 수 — 전사에 이미 냈다는 말(already_paid, ⑧-1 근거)이 있게.
+# 균등 선택이면 장부 실수 환자가 적어 거의 안 걸린다
+LEDGER_DEBT_CALLS = 3
 # 진짜 미수의 balance 답장 중 MESSAGE_REPLIES_PAID에서 뽑는 비율(착각한 환자). 추정값 — 리포트로 확인
 PAID_REPLY_NOISE_RATE = 0.10
 
 
 # 재무 원본 fin_* (§2.7, 8b·8c단계 — ⑧). 카드사·거래처 이름은 전부 가상
-# 연동 실패일 수 — 그날은 카드 수납도 손으로 입력해 승인번호가 없다(§2.4). 장부 실수·불일치는 RECON_MONTHS에만
+# 연동 실패일 수 — 그날은 카드 수납도 손으로 입력해 승인번호가 없다(§2.4). 장부 실수·불일치는 평가 달(recon_months)에만
 LINK_FAILURE_DAYS = 3
 # 장부 실수 종류(truth_ledger_errors.kind) — 건수는 RECON_MISMATCH_COUNTS의 같은 이름. 금액 오입력은 0 하나 빠뜨림이라
 # 이 금액 이상 수납에서만 (§2.4)
 LEDGER_ERROR_KINDS = ("entry_missing", "amount_typo", "date_shift", "method_wrong")
 AMOUNT_TYPO_MIN = 10_000
-# ⑧-1·⑧-2 평가 달(claim_month와 같은 'YYYY-MM') — config today 2026-12-01의 직전 3개월. RECON_TEST_MONTH가 test, 나머지 dev
-RECON_MONTHS = ("2026-09", "2026-10", "2026-11")
-RECON_TEST_MONTH = "2026-11"
+# ⑧-1·⑧-2 평가 달 = TODAY가 속한 달 직전 RECON_MONTH_COUNT개월(recon_months). 마지막 RECON_TEST_COUNT달이
+# test(가장 최근 기간으로 시험), 나머지 dev
+RECON_MONTH_COUNT = 4
+RECON_TEST_COUNT = 2
+
+
+def recon_months(today: date) -> tuple[str, ...]:
+    """평가 달('YYYY-MM', claim_month와 같은 꼴) — TODAY가 속한 달 직전 RECON_MONTH_COUNT개월, 오래된 달부터"""
+    base = today.year * 12 + today.month - 1
+    return tuple(
+        f"{(base - k) // 12}-{(base - k) % 12 + 1:02d}" for k in range(RECON_MONTH_COUNT, 0, -1)
+    )
+
+
+def recon_test_months(today: date) -> tuple[str, ...]:
+    """평가 달 중 test — 마지막 RECON_TEST_COUNT달"""
+    return recon_months(today)[-RECON_TEST_COUNT:]
+
+
 # 카드사 (§2.7 fin_card_deposits): 이름 → 카드 수납 중 비중(%)·수수료율·정산 지연(매출일 뒤 영업일). 가상 값 — 비중·율은 추정값
 CARD_ISSUERS = {
     "가온카드": {"weight": 35, "fee_rate": 0.0120, "settle_days": 2},
@@ -827,9 +846,47 @@ CARD_ISSUERS = {
 }
 # 현금 입금 요일(월=0) — 그 사이 현금 합계를 한 번에 입금(주 단위 합산 입금 디코이, §2.7). 추정값
 CASH_DEPOSIT_WEEKDAYS = (0,)
+# 통장 입금의 시각·적요 (§2.7) — 카드 정산 입금 적요는 카드사 이름, 환자 이체는 입금자 이름. 가상 값
+BANK_TIMES = {"card": "08:00", "cash": "13:10", "nhis": "10:00"}
+CASH_DEPOSIT_MEMO = "현금 입금"
+NHIS_MEMO = "국민건강보험공단"
+
+
+def bank_day(d: date, holidays) -> bool:
+    """은행 영업일 — 평일·공휴일 아님(치과 휴진 요일과 무관)"""
+    return d.weekday() < 5 and d not in holidays
+
+
+def add_bank_days(d: date, n: int, holidays) -> date:
+    """d 뒤 n번째 은행 영업일 (카드 정산 입금일 — §2.7)"""
+    while n:
+        d += timedelta(days=1)
+        n -= bank_day(d, holidays)
+    return d
+
+
+def cash_deposit_day(d: date, holidays) -> date:
+    """d에 받은 현금이 들어가는 통장 입금일 — d 뒤 첫 CASH_DEPOSIT_WEEKDAYS 요일(은행 영업일이 아니면 다음 영업일).
+    입금은 그날 아침이라 입금일 당일 현금은 다음 입금으로 간다 (§2.7)"""
+    x = d + timedelta(days=1)
+    while x.weekday() not in CASH_DEPOSIT_WEEKDAYS:
+        x += timedelta(days=1)
+    while not bank_day(x, holidays):
+        x += timedelta(days=1)
+    return x
+
+
 # 소아 환자 이체 중 입금자명이 보호자 이름인 비율(디코이, §2.7). 추정값 — 리포트로 확인
 GUARDIAN_PAYER_SHARE = 0.8
-# ⑧-1 불일치 원인별 건수 (§2.7 불일치 심기, RECON_MONTHS 전체 합 65). 원인 enum = 평가 설계 §5 —
+# 정산 지연의 최대 — 장부 실수·불일치는 정산·현금 입금이 TODAY 전에 오는 날에만 (§2.7 TODAY 경계)
+MAX_SETTLE_DAYS = max(i["settle_days"] for i in CARD_ISSUERS.values())
+# 입금 지연(deposit_delay) 불일치의 늦어지는 은행 영업일 (양 끝 포함). 추정값
+DEPOSIT_DELAY_DAYS = (1, 2)
+# 수수료 차이(fee_mismatch) 불일치 — 그 정산의 수수료율이 카드사 율보다 이만큼 높다. 추정값
+FEE_MISMATCH_RATE_DIFF = 0.003
+# 분할결제·취소 후 재승인은 이 금액 이상 카드 수납에서 (분할한 두 승인이 모두 의미 있는 금액이게)
+SPLIT_MIN_AMOUNT = 20_000
+# ⑧-1 불일치 원인별 건수 (§2.7 불일치 심기, 평가 달 전체 합 65 — 손으로 입력한 수납의 장부 실수가 10% 안쪽이게). 원인 enum = 평가 설계 §5 —
 # 통장·카드 쪽은 8b가 심고, 장부 쪽은 5단계 장부 실수(§2.4)를 원인으로 연결
 RECON_MISMATCH_COUNTS = {
     "split_payment": 6,

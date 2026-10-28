@@ -13,8 +13,8 @@ from generator.master import (
     HOURS,
     IMPLANT_CODE,
     LEDGER_ERROR_KINDS,
+    MAX_SETTLE_DAYS,
     MIN_VISIT_AGE,
-    RECON_MONTHS,
     REVIEW_NOTICE_DAYS,
     SATURDAY,
     SCALING_CODE,
@@ -22,9 +22,12 @@ from generator.master import (
     SUBMITTED_MONTHS,
     TOOTH_CHOICES,
     TOOTH_TREATMENT_MIN_AGE,
+    add_bank_days,
     age_on,
+    cash_deposit_day,
     insured_on,
     open_slots,
+    recon_months,
 )
 from generator.verify.common import CHILD_MAX_AGE, PROCEDURE, REASON_BY_TEXT, _dt, _end, _rows
 
@@ -596,7 +599,7 @@ def _next_open_day(d: date, holidays) -> date:
 
 def check_approval_no(conn, ctx):
     """승인번호 = 연동 단말기 카드 수납(받은 금액 > 0)에만, 서로 다름. 연동 실패일 = 받은 카드 수납에 승인번호가
-    하나도 없는 날 — 그날은 전부 없음, master.RECON_MONTHS 안 평일, 날 수 = 메타 link_failure_days (§2.4·§2.7)"""
+    하나도 없는 날 — 그날은 전부 없음, 평가 달(master.recon_months) 안 평일, 날 수 = 메타 link_failure_days (§2.4·§2.7)"""
     bad, days = [], defaultdict(set)
     seen = defaultdict(int)
     for r in _rows(conn, "SELECT id, method, amount_paid, paid_at, approval_no FROM emr_payments"):
@@ -616,7 +619,7 @@ def check_approval_no(conn, ctx):
     bad += [
         {"day": d, "problem": "연동 실패일이 평가 달 밖"}
         for d in failed
-        if d[:7] not in RECON_MONTHS
+        if d[:7] not in recon_months(ctx.today)
     ]
     bad += [
         {"day": d, "problem": "연동 실패일이 토요일"}
@@ -629,9 +632,10 @@ def check_approval_no(conn, ctx):
 
 
 def check_ledger_errors(conn, ctx):
-    """장부 실수(truth_ledger_errors)는 창 안 visit 수납, 실제 일시 = 내원 종료·master.RECON_MONTHS 안·다음 진료일 < TODAY,
+    """장부 실수(truth_ledger_errors)는 창 안 visit 수납, 실제 일시 = 내원 종료·평가 달(master.recon_months) 안·다음 진료일 < TODAY,
     실제 금액 = 진료비(전액 수납). 입력 누락 = 받은 금액 0 / 금액 오입력 = 0 하나 빠뜨림(master.AMOUNT_TYPO_MIN 이상) /
-    날짜 밀림 = 다음 진료일 영업시간에 입력 / 결제수단 오입력 = 실제 카드가 연동 실패일에 다른 수단으로.
+    날짜 밀림 = 다음 진료일 영업시간에 입력(이체, 또는 다음 현금 입금으로 넘어가는 현금) / 결제수단 오입력 = 실제 카드가 연동
+    실패일에 다른 수단으로. 그날 받은 돈은 TODAY 전에 통장에 보여야 함(카드 정산·현금 입금 — §2.7 TODAY 경계).
     종류별 건수 = 메타 ledger_errors, 수납 1행에 실수 1개 (§2.4)"""
     bad, counts, seen = [], defaultdict(int), set()
     linked = {
@@ -657,6 +661,10 @@ def check_ledger_errors(conn, ctx):
             and r["paid_at"] == r["true_paid_at"],
             "date_shift": r["amount_paid"] == r["true_amount"]
             and shifted.date() == nxt
+            and (
+                r["method"] == "transfer"
+                or cash_deposit_day(true_day, ctx.holidays) != cash_deposit_day(nxt, ctx.holidays)
+            )
             and HOURS["open"] <= shifted.strftime("%H:%M") <= _close(nxt),
             "method_wrong": r["amount_paid"] == r["true_amount"]
             and r["true_method"] == "card"
@@ -670,8 +678,10 @@ def check_ledger_errors(conn, ctx):
             or r["true_paid_at"] != _end(r)
             or r["true_amount"] != r["amount_due"]
             or r["true_amount"] <= 0
-            or true_day.strftime("%Y-%m") not in RECON_MONTHS
+            or true_day.strftime("%Y-%m") not in recon_months(ctx.today)
             or nxt >= ctx.today
+            or add_bank_days(true_day, MAX_SETTLE_DAYS, ctx.holidays) >= ctx.today
+            or cash_deposit_day(nxt, ctx.holidays) >= ctx.today
             or (r["kind"] != "method_wrong" and r["true_method"] != r["method"])
         ):
             bad.append(r)

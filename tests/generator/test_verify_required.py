@@ -658,11 +658,24 @@ def _ledger(conn, kind, paid=None, paid_at=None, method=None, true_method="cash"
         ("amount_typo", {"paid": 8000}, {"paid": 7000}),
         ("date_shift", {"paid_at": "2026-11-20 15:00:00"}, {"paid_at": "2026-11-19 15:00:00"}),
         ("date_shift", {"paid_at": "2026-11-20 15:00:00"}, {"paid_at": "2026-11-20 20:00:00"}),
+        (
+            "date_shift_cash",
+            {"paid_at": "2026-11-20 15:00:00"},
+            {"paid_at": "2026-11-20 15:00:00"},
+        ),
         ("method_wrong", {"method": "cash"}, {"method": "card"}),
     ],
 )
 def test_ledger_error_shape(tmp_path, kind, ok, bad):
-    true_method = "card" if kind == "method_wrong" else "cash"
+    """날짜 밀림은 이체로(11/18 수 → 11/20 금은 같은 주 현금 입금 11/23이라 현금이면 통장과 어긋나지 않음 — 그 경우는
+    date_shift_cash로 잡히는지만 본다)"""
+    true_method = {"method_wrong": "card", "date_shift": "transfer"}.get(kind, "cash")
+    if kind == "date_shift":
+        ok, bad = ok | {"method": "transfer"}, bad | {"method": "transfer"}
+    if kind == "date_shift_cash":
+        broken = make_db(tmp_path)
+        assert verify.check_ledger_errors(broken, _ledger(broken, "date_shift", **bad))
+        return
     (tmp_path / "g").mkdir()
     (tmp_path / "b").mkdir()
     good = make_db(tmp_path / "g")
@@ -1129,3 +1142,27 @@ def test_alert_unique_per_patient_code(tmp_path):
         conn.execute(
             "INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at) VALUES (1, 'HTN', 'intake', '2025-01-01')"
         )
+
+
+def test_call_fact_already_paid(tmp_path):
+    """수납 문의 발신(c-0001, 10/20)의 미수가 장부 실수(1번 수납 금액 오입력)면 사실에 already_paid가 있어야 한다"""
+    conn = make_db(tmp_path)
+    conn.execute(
+        "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at, true_method)"
+        " VALUES ('amount_typo', 1, 36000, '2026-10-06 11:00:00', 'card')"
+    )
+    assert verify.check_call_facts_as_of(conn, CTX)
+    conn.commit()  # 정답 DB를 따로 열어 고친다
+    truth = sqlite3.connect(tmp_path / "truth.sqlite")
+    fact = json.loads(
+        truth.execute(
+            "SELECT used_fact FROM truth_call_labels WHERE call_uid = 'c-0001'"
+        ).fetchone()[0]
+    )
+    fact["already_paid"] = {"date": "2026-10-06", "amount": 16000}
+    truth.execute(
+        "UPDATE truth_call_labels SET used_fact = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(fact, ensure_ascii=False),),
+    )
+    truth.commit()
+    assert verify.check_call_facts_as_of(conn, CTX) == []

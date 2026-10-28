@@ -19,11 +19,11 @@ from generator.master import (
     HOURS,
     IMPLANT_CODE,
     LINK_FAILURE_DAYS,
+    MAX_SETTLE_DAYS,
     PARALLEL_SHARE,
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURES,
     RECON_MISMATCH_COUNTS,
-    RECON_MONTHS,
     REVIEW_NOTICE_DAYS,
     REVIEW_OUTCOME_WEIGHTS,
     SATURDAY,
@@ -31,10 +31,13 @@ from generator.master import (
     SUBMITTED_MONTHS,
     TOOTH_CHOICES,
     UNPAID_PAID_RANGE,
+    add_bank_days,
     adjust_group,
     age_on,
+    cash_deposit_day,
     insured_on,
     open_slots,
+    recon_months,
 )
 
 PROCEDURE = {p["code"]: p for p in PROCEDURES}
@@ -222,16 +225,30 @@ def _next_open(run, d: date) -> date:
     return d
 
 
-def _pick_ledger_errors(run, rng, visits: list[dict]) -> tuple[list[date], dict[int, str]]:
-    """연동 실패일(RECON_MONTHS 안 평일 진료일 중 LINK_FAILURE_DAYS일, 다음 진료일 < TODAY — 토요일은 반나절이라 카드
+def _visible(run, d: date) -> bool:
+    """그날 받은 돈이 TODAY 전에 통장에 보임 — 카드 정산(최대 MAX_SETTLE_DAYS)·현금 입금·다음 진료일 입력 모두 (§2.7)"""
+    nxt = _next_open(run, d)
+    return (
+        add_bank_days(d, MAX_SETTLE_DAYS, run.holidays) < run.today
+        and cash_deposit_day(nxt, run.holidays) < run.today
+    )
+
+
+def _pick_ledger_errors(
+    run, rng, visits: list[dict]
+) -> tuple[list[date], dict[int, str], dict[int, str]]:
+    """연동 실패일(평가 달(recon_months) 안 평일 진료일 중 LINK_FAILURE_DAYS일, 다음 진료일 < TODAY — 토요일은 반나절이라 카드
     수납이 적어 결제수단 오입력이 몰리지 않게)과 장부 실수(내원 index → 종류).
-    실수 후보 = 평가 달·다음 진료일 < TODAY인 전액 수납(진료비 > 0) 중 손으로 입력한 것 — 현금·이체, 연동 실패일 카드.
-    결제수단 오입력은 연동 실패일 카드만, 날짜 밀림은 현금·이체만(밀린 날이 연동일이면 수기 카드가 섞인다), 금액 오입력은
+    실수 후보 = 평가 달·입금이 TODAY 전에 보이는 날(_visible)의 전액 수납(진료비 > 0) 중 손으로 입력한 것 — 현금·이체,
+    연동 실패일 카드. 결제수단 오입력은 연동 실패일 카드만, 날짜 밀림은 이체와 입금 경계를 넘는 현금만(밀린 날이 연동일이면
+    수기 카드가 섞인다), 같은 현금 입금에는 실수 1건만, 금액 오입력은
     AMOUNT_TYPO_MIN 이상. 좁은 종류부터 뽑는다. 건수는 RECON_MISMATCH_COUNTS (§2.4·§2.7)"""
     ok_day = {
         v["day"]
         for v in visits
-        if v["day"].strftime("%Y-%m") in RECON_MONTHS and _next_open(run, v["day"]) < run.today
+        if v["day"].strftime("%Y-%m") in recon_months(run.today)
+        and _next_open(run, v["day"]) < run.today
+        and _visible(run, v["day"])
     }
     days = sorted(d for d in ok_day if d.weekday() != SATURDAY)
     failure = sorted(
@@ -240,21 +257,60 @@ def _pick_ledger_errors(run, rng, visits: list[dict]) -> tuple[list[date], dict[
     base = [i for i, v in enumerate(visits) if v["day"] in ok_day and v["paid"] == v["due"] > 0]
     card_fail = {i for i in base if visits[i]["method"] == "card" and visits[i]["day"] in failure}
     hand = {i for i in base if visits[i]["method"] != "card"}
+    # 현금 날짜 밀림은 다음 진료일이 다음 현금 입금에 들어갈 때만 — 같은 입금 안이면 통장과 어긋나지 않는다
+    crosses = {
+        i
+        for i in hand
+        if visits[i]["method"] == "transfer"
+        or cash_deposit_day(visits[i]["day"], run.holidays)
+        != cash_deposit_day(_next_open(run, visits[i]["day"]), run.holidays)
+    }
     pools = {
         "method_wrong": card_fail,
         "amount_typo": {i for i in hand | card_fail if visits[i]["due"] >= AMOUNT_TYPO_MIN},
-        "date_shift": hand,
+        "date_shift": crosses,
         "entry_missing": hand | card_fail,
     }
+
+    def cash_periods(i: int, kind: str) -> set:
+        """그 실수가 건드리는 현금 입금 — 같은 입금에 실수가 둘이면 통장엔 합계 차이 하나라 가려낼 수 없다.
+        결제수단 오입력은 장부에 적을 수단을 따로 정한다(아래 wrong)"""
+        v = visits[i]
+        if v["method"] != "cash":
+            return set()
+        out = {cash_deposit_day(v["day"], run.holidays)}
+        if kind == "date_shift":
+            out.add(cash_deposit_day(_next_open(run, v["day"]), run.holidays))
+        return out
+
     errors: dict[int, str] = {}
+    taken: set = set()  # 실수가 이미 든 현금 입금일
     for kind in ("method_wrong", "amount_typo", "date_shift", "entry_missing"):
         free = sorted(pools[kind] - set(errors))
         n = RECON_MISMATCH_COUNTS[kind]
-        if len(free) < n:
-            raise ValueError(f"장부 실수 {kind} 후보 {len(free)}건 < {n}건")
-        for k in rng.choice(len(free), size=n, replace=False).tolist():
+        got = 0
+        for k in rng.permutation(len(free)).tolist():
+            touch = cash_periods(free[k], kind)
+            if touch & taken:
+                continue
             errors[free[k]] = kind
-    return failure, errors
+            taken |= touch
+            got += 1
+            if got == n:
+                break
+        if got < n:
+            raise ValueError(f"장부 실수 {kind} 후보가 모자람 — {got}건 < {n}건")
+    # 결제수단 오입력의 장부 수단 — 현금·이체 균등, 그 주 현금 입금에 이미 실수가 있으면 이체
+    wrong = {}
+    for i in sorted(k for k, kind in errors.items() if kind == "method_wrong"):
+        period = cash_deposit_day(visits[i]["day"], run.holidays)
+        method = ("cash", "transfer")[int(rng.integers(2))]
+        if method == "cash" and period in taken:
+            method = "transfer"
+        if method == "cash":
+            taken.add(period)
+        wrong[i] = method
+    return failure, errors, wrong
 
 
 def stage_payments(run, rng, fake) -> None:
@@ -288,7 +344,7 @@ def stage_payments(run, rng, fake) -> None:
             }
         )
     error_rng, approval_rng = rng.spawn(2)
-    failure, errors = _pick_ledger_errors(run, error_rng, visits)
+    failure, errors, wrong = _pick_ledger_errors(run, error_rng, visits)
     run.state["link_failure_days"] = failure
     owed: dict[int, int] = defaultdict(int)  # 환자 → 다음 내원 때 정산할 미수
     rows, truth = [], []
@@ -309,7 +365,7 @@ def stage_payments(run, rng, fake) -> None:
                 minutes=int(error_rng.integers(span + 1))
             )
         elif kind == "method_wrong":
-            method = ("cash", "transfer")[int(error_rng.integers(2))]
+            method = wrong[i]
         if kind:
             truth.append((kind, len(rows) + 1, v["due"], v["end"].strftime(FMT), v["method"]))
         rows.append([pid, v["appt"], "visit", v["due"], paid, paid_at.strftime(FMT), method])

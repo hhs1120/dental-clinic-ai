@@ -15,6 +15,7 @@ from generator.master import (
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
+    LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
 )
 from generator.paths import ROOT
@@ -219,3 +220,14 @@ def test_pool_split_halves(db):
     rows = [r for r in _labels(db) if r["in_eval_pool"]]
     split = Counter(r["split"] for r in rows)
     assert split["dev"] == (len(rows) + 1) // 2 and split["test"] == len(rows) // 2
+
+
+def test_ledger_debt_billing_calls(db):
+    """수납 문의 발신 중 LEDGER_DEBT_CALLS건은 장부 실수 미수 환자 — 사실에 already_paid(이미 냈다는 말, ⑧-1 근거)"""
+    rows = db.execute(
+        "SELECT l.used_fact FROM truth.truth_call_labels l JOIN ax_calls c USING (call_uid)"
+        " WHERE l.primary_purpose = 'billing_q' AND c.direction = 'outbound'"
+    ).fetchall()
+    paid = [json.loads(r[0]) for r in rows if "already_paid" in json.loads(r[0])]
+    assert len(paid) >= LEDGER_DEBT_CALLS
+    assert len({f["patient"]["id"] for f in paid}) >= LEDGER_DEBT_CALLS

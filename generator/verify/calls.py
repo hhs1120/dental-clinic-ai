@@ -458,6 +458,18 @@ def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict]) -> dict:
     }
 
 
+def _already_paid(conn, pid: int, t: str) -> dict | None:
+    """통화 시각 t까지 장부에 들어간 장부 실수(입력 누락·금액 오입력) 미수 중 가장 최근 것 — {내원일, 미수 금액}.
+    수납 문의 발신에서 환자가 이미 냈다고 말하는 근거 (§4.1 환자 고르기, ⑧-1)"""
+    r = conn.execute(
+        "SELECT date(e.true_paid_at), e.true_amount - p.amount_paid FROM truth.truth_ledger_errors e"
+        " JOIN emr_payments p ON p.id = e.payment_id WHERE p.patient_id = ? AND p.paid_at <= ?"
+        " AND e.kind IN ('entry_missing', 'amount_typo') ORDER BY p.paid_at DESC, p.id DESC LIMIT 1",
+        (pid, t),
+    ).fetchone()
+    return {"date": r[0], "amount": r[1]} if r else None
+
+
 def _appt_detail(a: dict, appts: dict) -> dict:
     """예약류 통화의 예약 상세(날짜·시각·시술, 변경이면 원래 날짜·시각)"""
     out = {
@@ -473,7 +485,7 @@ def _appt_detail(a: dict, appts: dict) -> dict:
 
 def check_call_facts_as_of(conn, ctx):
     """used_fact는 통화 시점 사실: 통화 날짜, 예약류의 예약 상세, 환자(통화 환자와 같음 — 환자가 연결됐거나 보험사면
-    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음. 리콜 발신의 이탈 환자(이탈일 ≤ 통화일)는 churned"""
+    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음. 리콜 발신의 이탈 환자(이탈일 ≤ 통화일)는 churned, 수납 문의 발신에 장부 실수 미수가 있으면 already_paid"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
     appts = {
         a["id"]: a
@@ -511,6 +523,11 @@ def check_call_facts_as_of(conn, ctx):
             bad.append({"call_uid": r["call_uid"], "problem": "사실의 환자 ≠ 통화 환자"})
             continue
         want = _facts_at(conn, pid, t, patients[pid]["birth_date"], items)
+        want["already_paid"] = (
+            _already_paid(conn, pid, t)
+            if r["primary_purpose"] == "billing_q" and r["direction"] == "outbound"
+            else None
+        )
         want["churned"] = (
             r["primary_purpose"] == "recall"
             and r["direction"] == "outbound"
@@ -526,6 +543,7 @@ def check_call_facts_as_of(conn, ctx):
             "alerts": set(f["alerts"]),
             "open_plan_items": f.get("open_plan_items"),
             "churned": f.get("churned", False),
+            "already_paid": f.get("already_paid"),
         }
         if f["patient"]["name"] != patients[pid]["name"]:
             got["name"] = f["patient"]["name"]

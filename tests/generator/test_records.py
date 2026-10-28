@@ -2,7 +2,7 @@
 
 import sqlite3
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 import yaml
@@ -134,12 +134,14 @@ def test_unpaid_and_settlement(db):
     assert settlements and all(
         r["status"] == "completed" and r["amount_paid"] > 0 for r in settlements
     )
-    # 정산 행은 내원 종료 시각 — 같은 예약의 visit 행과 같은 시각
-    paid_at = {
-        r["appointment_id"]: r["paid_at"]
-        for r in _rows(conn, "SELECT * FROM emr_payments WHERE kind = 'visit'")
+    # 정산 행은 그 예약의 내원 종료 시각 (visit 행은 장부 실수 날짜 밀림이면 다음 진료일이라 예약에서 계산)
+    end = {
+        r["id"]: (
+            datetime.fromisoformat(r["scheduled_at"]) + timedelta(minutes=r["duration_min"])
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        for r in _rows(conn, "SELECT id, scheduled_at, duration_min FROM emr_appointments")
     }
-    assert all(r["paid_at"] == paid_at[r["appointment_id"]] for r in settlements)
+    assert all(r["paid_at"] == end[r["appointment_id"]] for r in settlements)
 
 
 def test_visit_paid_at_is_end_of_visit(db):

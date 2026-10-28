@@ -44,6 +44,7 @@ class Ctx:
     documents_distractor: int
     link_failure_days: int  # 연동 실패일 수·장부 실수 종류별 건수 — truth_gen_meta에서 (§2.4·§2.7)
     ledger_errors: dict
+    recon_mismatches: dict  # ⑧-1 불일치 원인별 건수 — truth_gen_meta에서
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -67,6 +68,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         documents_distractor=int(meta["documents_distractor"]),
         link_failure_days=int(meta["link_failure_days"]),
         ledger_errors=json.loads(meta["ledger_errors"]),
+        recon_mismatches=json.loads(meta["recon_mismatches"]),
         rag_qa=rag_qa,
     )
 
@@ -135,8 +137,18 @@ def check_no_records_after_today(conn, ctx):
     )
 
 
+FIN_DATE_COLUMNS = (
+    ("fin_card_sales", "approved_at"),
+    ("fin_card_deposits", "deposited_on"),
+    ("fin_bank_transactions", "occurred_at"),
+    ("fin_card_expenses", "used_at"),
+    ("fin_expense_documents", "issued_on"),
+)
+
+
 def check_timestamps_not_future(conn, ctx):
-    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date·recorded_at·effective_date ≤ TODAY"""
+    """submitted_at·sent_at·started_at·created_at·cancelled_at·registered_at·birth_date·recorded_at·effective_date·
+    fin_* 날짜 칸 ≤ TODAY"""
     today = ctx.today.isoformat()
     return (
         _rows(
@@ -193,4 +205,13 @@ def check_timestamps_not_future(conn, ctx):
             " WHERE effective_date IS NOT NULL AND date(effective_date) > ?",
             today,
         )
+        + [
+            r
+            for tbl, col in FIN_DATE_COLUMNS
+            for r in _rows(
+                conn,
+                f"SELECT '{tbl}' AS tbl, id, {col} AS at FROM {tbl} WHERE date({col}) > ?",
+                today,
+            )
+        ]
     )
