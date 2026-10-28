@@ -276,3 +276,82 @@ def test_one_ledger_error_per_cash_deposit(tmp_path):
         conn, replace(CTX, recon_mismatches={"entry_missing": 2})
     )
     assert any(r.get("problem") == "같은 현금 입금에 장부 실수 불일치가 둘 이상" for r in found)
+
+
+# ── ⑧-2 지출 ─────────────────────────────────────────────────
+# 10월 임대료 자동이체(세금계산서), 11/03 솔밭식당 카드(영수증), 11/05 모아덴탈몰 카드(결제대행사 표기, 주문 메일 — 커피 원두라
+# 복리후생비). 평가 달 8~11월 중 10·11월 = test
+EXPENSES = [
+    "INSERT INTO fin_bank_transactions VALUES (10, '2026-10-26 06:00:00', 'out', 3300000, '한결빌딩관리')",
+    "INSERT INTO fin_card_expenses VALUES (1, '2026-11-03 12:30:00', '솔밭식당', 45000)",
+    "INSERT INTO fin_card_expenses VALUES (2, '2026-11-05 15:00:00', '페이온*모아덴탈몰', 30000)",
+    "INSERT INTO fin_expense_documents VALUES (1, 'tax_invoice', '한결빌딩관리', '2026-10-20', 3300000,"
+    " '세금계산서\n품목 월 임대료\n합계금액 3,300,000원')",
+    "INSERT INTO fin_expense_documents VALUES (2, 'receipt', '솔밭식당', '2026-11-03', 45000,"
+    " '솔밭식당\n점심 식대 45,000원\n합계 45,000원')",
+    "INSERT INTO fin_expense_documents VALUES (3, 'order_email', '모아덴탈몰', '2026-11-05', 30000,"
+    " '[모아덴탈몰] 주문 완료\n- 커피 원두 30,000원\n결제금액 30,000원')",
+    "INSERT INTO truth.truth_expense_matches VALUES ('fin_bank_transactions', 10, '[1]', '지급임차료', 'test')",
+    "INSERT INTO truth.truth_expense_matches VALUES ('fin_card_expenses', 1, '[2]', '복리후생비', 'test')",
+    "INSERT INTO truth.truth_expense_matches VALUES ('fin_card_expenses', 2, '[3]', '복리후생비', 'test')",
+]
+
+
+@pytest.fixture
+def exp_db(tmp_path):
+    conn = make_db(tmp_path)
+    for sql in EXPENSES:
+        conn.execute(sql)
+    return conn
+
+
+def test_expenses_valid(exp_db):
+    assert verify.check_expense_matches(exp_db, CTX) == []
+    assert verify.check_lab_statements(exp_db, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DELETE FROM truth.truth_expense_matches WHERE outflow_id = 10",  # 정답 없음
+        "UPDATE fin_expense_documents SET issuer = '다른상사' WHERE id = 1",
+        "UPDATE fin_expense_documents SET issued_on = '2026-10-27' WHERE id = 1",  # 출금 뒤 발행
+        "UPDATE truth.truth_expense_matches SET account = '소모품비' WHERE outflow_id = 2",  # 품목은 복리후생비
+        "UPDATE truth.truth_expense_matches SET account = '수선비' WHERE outflow_id = 10",
+        "UPDATE truth.truth_expense_matches SET split = 'dev' WHERE outflow_id = 10",  # 10월 = test
+        "UPDATE fin_card_expenses SET merchant = '모르는가게' WHERE id = 1",
+        "UPDATE truth.truth_expense_matches SET document_ids = '[]' WHERE outflow_id = 10",  # 자동이체 증빙 없음
+        "UPDATE fin_bank_transactions SET amount = 3290000 WHERE id = 10",  # 금액 차이 1건 ≠ round(0.05 × 3)
+        "UPDATE truth.truth_expense_matches SET document_ids = '[2, 3]' WHERE outflow_id = 1",  # 증빙 두 출금에
+    ],
+)
+def test_expense_break(exp_db, sql):
+    exp_db.execute(sql)
+    assert verify.check_expense_matches(exp_db, CTX)
+
+
+def test_lab_statement_lines(tmp_path):
+    """기공 명세서 줄 = 창 안 기공 진료 — 1번 환자 11/10 36번 인레이 진료가 있으면 그 줄로 통과, 진료가 없으면 잡힌다"""
+    conn = make_db(tmp_path)
+    body = "거래명세서\n- 김철수 36번 인레이 80,000원\n합계 80,000원"
+    conn.execute(
+        "INSERT INTO fin_expense_documents VALUES (1, 'statement', '온새미치과기공소', '2026-11-09', 80000, ?)",
+        (body,),
+    )
+    assert verify.check_lab_statements(conn, CTX)
+    conn.execute(
+        "INSERT INTO emr_appointments (patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, created_at, chair_no) VALUES"
+        " (1, 1, '2026-11-10 10:00:00', 60, 'treatment', 'U0007', 'completed', 'phone', '2026-11-01 10:00:00', 3)"
+    )
+    aid = conn.execute("SELECT max(id) FROM emr_appointments").fetchone()[0]
+    conn.execute(
+        "INSERT INTO emr_treatments (appointment_id, patient_id, procedure_code, tooth_no, performed_at,"
+        " fee_total, insured_amount, patient_amount) VALUES (?, 1, 'U0007', '36', '2026-11-10 10:00:00', 350000, 0, 350000)",
+        (aid,),
+    )
+    assert verify.check_lab_statements(conn, CTX) == []
+    conn.execute(
+        "UPDATE fin_expense_documents SET body = replace(body, '80,000원\n합계', '90,000원\n합계')"
+    )
+    assert verify.check_lab_statements(conn, CTX)

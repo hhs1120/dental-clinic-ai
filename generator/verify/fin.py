@@ -1,21 +1,31 @@
-"""재무 원본(fin_*) 검사 — ⑧-1 수입(8b단계): 카드 승인·정산 입금·통장 입금·불일치 정답
+"""재무 원본(fin_*) 검사 — ⑧-1 수입(8b단계): 카드 승인·정산 입금·통장 입금·불일치 정답 / ⑧-2 지출(8c단계): 출금·증빙·정답
 (가상 데이터 생성 설계 §2.7·§5.3 재무). 실제로 낸 돈 = 장부(emr_payments)에 장부 실수 정답(truth_ledger_errors)의
 실제 값을 덮은 것 — 금융 내역은 이것에서 나오고, 장부와의 차이가 불일치다"""
 
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 from itertools import combinations_with_replacement
 
 from generator.master import (
+    ACCOUNTS,
     BANK_TIMES,
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     DEPOSIT_DELAY_DAYS,
+    EXPENSE_AMOUNT_DIFF_RANGE,
+    EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_ITEMS,
+    EXPENSE_NO_DOC_RATE,
+    FULL_MOUTH,
+    LAB_FEES,
     LEDGER_ERROR_KINDS,
     NHIS_MEMO,
     ORAL_CARE_PRICES,
+    PROCEDURES,
     RECON_MISMATCH_COUNTS,
+    VENDORS,
     add_bank_days,
     bank_day,
     cash_deposit_day,
@@ -327,4 +337,182 @@ def check_recon_mismatches(conn, ctx):
                 why = "정산 입금 불일치 모양"
         if why:
             bad.append({"id": m["id"], "cause": m["cause"], "problem": why})
+    return bad
+
+
+# ── ⑧-2 지출 (8c단계) ───────────────────────────────────────
+
+_LAB_LINE = re.compile(r"^- (\S+) (?:(\d{2})번 )?(" + "|".join(LAB_FEES) + r") ([\d,]+)원$", re.M)
+_VENDOR = {v["name"]: v for v in VENDORS}
+_CARD_NAMES = {v["card_name"] or v["name"]: v for v in VENDORS if v["pay"] == "card"}
+
+
+def _outflows(conn) -> list[dict]:
+    """출금 — 통장 출금(적요 = 거래처) + 병원 카드 사용(가맹점명 → 거래처), 각각 정답 행·증빙을 붙인다"""
+    truth = {
+        (r["outflow_table"], r["outflow_id"]): r
+        for r in _rows(conn, "SELECT * FROM truth.truth_expense_matches")
+    }
+    docs = {d["id"]: d for d in _rows(conn, "SELECT * FROM fin_expense_documents")}
+    rows = [
+        {
+            "table": "fin_bank_transactions",
+            "id": r["id"],
+            "at": r["occurred_at"],
+            "amount": r["amount"],
+            "vendor": _VENDOR.get(r["memo"]),
+            "label": r["memo"],
+        }
+        for r in _rows(conn, "SELECT * FROM fin_bank_transactions WHERE direction = 'out'")
+    ] + [
+        {
+            "table": "fin_card_expenses",
+            "id": r["id"],
+            "at": r["used_at"],
+            "amount": r["amount"],
+            "vendor": _CARD_NAMES.get(r["merchant"]),
+            "label": r["merchant"],
+        }
+        for r in _rows(conn, "SELECT * FROM fin_card_expenses")
+    ]
+    for r in rows:
+        r["truth"] = truth.get((r["table"], r["id"]))
+        ids = json.loads(r["truth"]["document_ids"]) if r["truth"] else []
+        r["docs"] = [docs[i] for i in ids if i in docs]
+        r["missing_docs"] = [i for i in ids if i not in docs]
+    return rows
+
+
+def check_expense_matches(conn, ctx):
+    """⑧-2 정답: 출금마다 truth_expense_matches 1행, 증빙은 정확히 한 출금에(발행처 = 그 거래처, 발행일 ≤ 출금일,
+    본문에 금액), 계정 과목 ∈ master.ACCOUNTS(이체·자동이체 = 거래처 과목, 카드 = 증빙 품목의 과목 — 증빙 없으면 거래처 과목),
+    split = 평가 달만(⑧-1과 같은 달 기준). 통장 출금 적요 = 이체·자동이체 거래처, 카드 가맹점명 = 카드 거래처(표기 차이 포함).
+    증빙 합계(명세서 등) = 출금액 — 다른 출금은 증빙 있는 출금의 EXPENSE_AMOUNT_DIFF_RATE건, 차이는 100원 ~ 출금액 × 최대 비율.
+    세금계산서 = 그 출금 명세서 합계. 증빙 없음은 카드 사용에만, EXPENSE_NO_DOC_RATE건 (§2.7)"""
+    rows = _outflows(conn)
+    bad = []
+    keys = {(r["table"], r["id"]) for r in rows}
+    bad += [
+        {"outflow": k, "problem": "없는 출금의 정답"}
+        for k in conn.execute("SELECT outflow_table, outflow_id FROM truth.truth_expense_matches")
+        if tuple(k) not in keys
+    ]
+    used = Counter(d["id"] for r in rows for d in r["docs"])
+    bad += [
+        {"document_id": i, "problem": "증빙이 한 출금에 정확히 속하지 않음"}
+        for (i,) in conn.execute("SELECT id FROM fin_expense_documents")
+        if used.get(i, 0) != 1
+    ]
+    with_docs = diffs = cards = no_docs = 0
+    hi = EXPENSE_AMOUNT_DIFF_RANGE[1]
+    for r in rows:
+        v, t = r["vendor"], r["truth"]
+        month = r["at"][:7]
+        why = None
+        if t is None:
+            why = "정답 없음"
+        elif v is None or (r["table"] == "fin_card_expenses") != (v["pay"] == "card"):
+            why = "적요·가맹점명이 거래처가 아님"
+        elif r["missing_docs"]:
+            why = "없는 증빙"
+        elif t["account"] not in ACCOUNTS:
+            why = "계정 과목"
+        elif t["split"] != (
+            None
+            if month not in recon_months(ctx.today)
+            else "test"
+            if month in recon_test_months(ctx.today)
+            else "dev"
+        ):
+            why = "split"
+        elif any(
+            d["issuer"] != v["name"]
+            or d["issued_on"] > r["at"][:10]
+            or f"{d['amount']:,}원" not in d["body"]
+            for d in r["docs"]
+        ):
+            why = "증빙 발행처·발행일·본문 금액"
+        if why:
+            bad.append({"outflow": (r["table"], r["id"]), "problem": why})
+            continue
+        if r["table"] == "fin_card_expenses":
+            cards += 1
+            items = {
+                acct
+                for item, acct in EXPENSE_ITEMS[v["kind"]]
+                for d in r["docs"]
+                if item in d["body"]
+            }
+            want = items if r["docs"] else {v["account"]}
+            if want != {t["account"]}:
+                bad.append(
+                    {"outflow": (r["table"], r["id"]), "problem": "카드 계정 과목 ≠ 품목 과목"}
+                )
+        elif t["account"] != v["account"]:
+            bad.append({"outflow": (r["table"], r["id"]), "problem": "계정 과목 ≠ 거래처 과목"})
+        if not r["docs"]:
+            no_docs += 1
+            if r["table"] != "fin_card_expenses":
+                bad.append(
+                    {"outflow": (r["table"], r["id"]), "problem": "이체·자동이체에 증빙 없음"}
+                )
+            continue
+        with_docs += 1
+        main = [d for d in r["docs"] if d["kind"] != "tax_invoice"] or r["docs"]
+        total = sum(d["amount"] for d in main)
+        if any(
+            d["amount"] != total for d in r["docs"] if d["kind"] == "tax_invoice" and d not in main
+        ):
+            bad.append({"outflow": (r["table"], r["id"]), "problem": "세금계산서 ≠ 명세서 합계"})
+        diff = abs(total - r["amount"])
+        if diff:
+            diffs += 1
+            if not (100 <= diff <= r["amount"] * hi):
+                bad.append(
+                    {
+                        "outflow": (r["table"], r["id"]),
+                        "problem": "증빙 금액 차이가 범위 밖",
+                        "diff": diff,
+                    }
+                )
+    if diffs != round(EXPENSE_AMOUNT_DIFF_RATE * with_docs):
+        bad.append(
+            {"amount_diffs": diffs, "expected": round(EXPENSE_AMOUNT_DIFF_RATE * with_docs)}
+        )
+    if no_docs != round(EXPENSE_NO_DOC_RATE * cards):
+        bad.append({"no_docs": no_docs, "expected": round(EXPENSE_NO_DOC_RATE * cards)})
+    return bad
+
+
+def check_lab_statements(conn, ctx):
+    """기공소 명세서 줄 = 창 안 completed 인레이·크라운·브릿지 진료 1건(환자 이름·치아 — 브릿지는 치아 없음·보철 종류),
+    줄 금액 = master.LAB_FEES, 명세서 금액 = 줄 합계 (§2.7)"""
+    lab = {v["name"] for v in VENDORS if v["kind"] == "lab"}
+    codes = {p["code"]: p["name"] for p in PROCEDURES if p["name"] in LAB_FEES}
+    want = Counter(
+        (name, None if tooth == FULL_MOUTH else tooth, codes[code])
+        for name, tooth, code in conn.execute(
+            "SELECT p.name, t.tooth_no, t.procedure_code FROM emr_treatments t"
+            " JOIN emr_patients p ON p.id = t.patient_id"
+            f" WHERE t.procedure_code IN ({', '.join('?' * len(codes))}) AND date(t.performed_at) >= ?",
+            (*codes, ctx.range_start.isoformat()),
+        )
+    )
+    got, bad = Counter(), []
+    for d in _rows(conn, "SELECT * FROM fin_expense_documents"):
+        if d["issuer"] not in lab:
+            continue
+        lines = _LAB_LINE.findall(d["body"])
+        total = 0
+        for name, tooth, kind, fee in lines:
+            got[(name, tooth or None, kind)] += 1
+            total += int(fee.replace(",", ""))
+            if int(fee.replace(",", "")) != LAB_FEES[kind]:
+                bad.append(
+                    {"document_id": d["id"], "problem": "기공 단가", "line": (name, kind, fee)}
+                )
+        if not lines or total != d["amount"]:
+            bad.append({"document_id": d["id"], "problem": "명세서 금액 ≠ 줄 합계"})
+    bad += [{"missing_line": k, "n": n} for k, n in (want - got).items()]
+    bad += [{"extra_line": k, "n": n} for k, n in (got - want).items()]
     return bad

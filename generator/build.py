@@ -67,6 +67,7 @@ STAGES: list = [
     ("call_transcripts", transcripts.stage),
     ("messages", messages.stage),
     ("fin_income", finance.stage_income),
+    ("fin_expenses", finance.stage_expenses),
     ("doc_plan", documents.stage_plan),
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
