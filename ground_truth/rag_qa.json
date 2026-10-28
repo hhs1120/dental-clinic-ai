@@ -558,12 +558,12 @@
   "id": "case-05",
   "type": "case",
   "split": "dev",
-  "question": "장경수 님 10월에 미수 문자 나갔어? 답장 왔어?",
-  "answer_text": "10월 13일 미납 12,140원 안내 문자 → '다음에 갈 때 낼게요'",
+  "question": "강준서 님 7월에 미수 문자 나갔어? 답장 왔어?",
+  "answer_text": "7월 1일 6월 30일 진료비 미납 333,670원 안내 문자 → '확인했습니다'",
   "answer_doc_ids": [
-   "thread:C-00922:2026-10"
+   "thread:C-00362:2026-07"
   ],
-  "answer_chunk_hint": "12,140원",
+  "answer_chunk_hint": "333,670원",
   "expected_tools": [
    "search_docs"
   ],
@@ -575,10 +575,10 @@
   "id": "case-06",
   "type": "case",
   "split": "dev",
-  "question": "주정훈 님 지난달 노쇼 문자 보냈었나? 뭐라고 답하셨어?",
-  "answer_text": "11월 24일 실란트 노쇼 안내 문자 → '죄송합니다. 다시 연락드릴게요'",
+  "question": "정서연 님 지난달 노쇼 문자 보냈었나? 뭐라고 답하셨어?",
+  "answer_text": "11월 6일 단순발치 노쇼 안내 문자 → '죄송합니다. 다시 연락드릴게요'",
   "answer_doc_ids": [
-   "thread:C-01411:2026-11"
+   "thread:C-02682:2026-11"
   ],
   "answer_chunk_hint": "다시 연락드릴게요",
   "expected_tools": [
@@ -660,10 +660,10 @@
   "id": "case-11",
   "type": "case",
   "split": "test",
-  "question": "유영호 님 8월에 예약 안 오셨을 때 문자 보냈어?",
-  "answer_text": "8월 31일 노쇼 안내 문자 보냄(답장 없음)",
+  "question": "하영길 님 8월에 예약 안 오셨을 때 문자 보냈어?",
+  "answer_text": "8월 25일 잇몸치료 노쇼 안내 문자 보냄(답장 없음)",
   "answer_doc_ids": [
-   "thread:C-01711:2026-08"
+   "thread:C-00360:2026-08"
   ],
   "answer_chunk_hint": "내원하지 않으셔서",
   "expected_tools": [
@@ -716,7 +716,7 @@
   "type": "data",
   "split": "dev",
   "question": "지난달 노쇼 중에 위생 예약 몇 건이었어?",
-  "answer_text": "7건",
+  "answer_text": "10건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -736,7 +736,7 @@
   "type": "data",
   "split": "dev",
   "question": "오늘 오는 분 중 밀린 진료비 있는 환자 몇 명?",
-  "answer_text": "2명",
+  "answer_text": "8명",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -757,7 +757,7 @@
   "type": "data",
   "split": "dev",
   "question": "7월 진료분 청구에서 조정된 거 몇 건이야?",
-  "answer_text": "19건",
+  "answer_text": "13건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -777,7 +777,7 @@
   "type": "data",
   "split": "dev",
   "question": "이번 주 위생 예약 환자 중에 미수 있는 분 몇 명?",
-  "answer_text": "2명",
+  "answer_text": "5명",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -797,8 +797,8 @@
   "id": "data-06",
   "type": "data",
   "split": "dev",
-  "question": "고경숙 님 올해 청구 몇 건 나갔어?",
-  "answer_text": "4건",
+  "question": "하민재 님 올해 청구 몇 건 나갔어?",
+  "answer_text": "5건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -807,21 +807,21 @@
   ],
   "expected_args": {
    "query_patient": {
-    "name": "고경숙"
+    "name": "하민재"
    },
    "query_claims": {
-    "chart_no": "C-01285"
+    "chart_no": "C-00131"
    }
   },
   "expect_refusal": false,
-  "answer_sql": "SELECT count(*) FROM emr_claims WHERE chart_no = 'C-01285' AND service_date LIKE '2026-%'"
+  "answer_sql": "SELECT count(*) FROM emr_claims WHERE chart_no = 'C-00131' AND service_date LIKE '2026-%'"
  },
  {
   "id": "data-07",
   "type": "data",
   "split": "test",
   "question": "다음 주 월요일 위생 예약 몇 건이야?",
-  "answer_text": "9건",
+  "answer_text": "3건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -841,7 +841,7 @@
   "type": "data",
   "split": "test",
   "question": "11월에 취소된 예약 몇 건?",
-  "answer_text": "19건",
+  "answer_text": "13건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -861,7 +861,7 @@
   "type": "data",
   "split": "test",
   "question": "이번 주 금요일 예약 환자 중 미수 있는 사람 몇 명?",
-  "answer_text": "4명",
+  "answer_text": "2명",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -882,7 +882,7 @@
   "type": "data",
   "split": "test",
   "question": "6월부터 8월까지 청구에서 불능 난 거 몇 건?",
-  "answer_text": "21건",
+  "answer_text": "25건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -902,7 +902,7 @@
   "type": "data",
   "split": "test",
   "question": "다음 주 신환 중에 위생 예약 몇 건이야?",
-  "answer_text": "3건",
+  "answer_text": "6건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -922,8 +922,8 @@
   "id": "data-12",
   "type": "data",
   "split": "test",
-  "question": "오하윤 님 미수 얼마 남았어?",
-  "answer_text": "16,300원",
+  "question": "황현준 님 미수 얼마 남았어?",
+  "answer_text": "16,120원",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -935,16 +935,17 @@
    }
   },
   "expect_refusal": false,
-  "answer_sql": "SELECT sum(amount_due - amount_paid) FROM emr_payments y JOIN emr_patients p ON p.id = y.patient_id WHERE p.chart_no = 'C-00364' AND date(y.paid_at) < '2026-12-01'"
+  "answer_sql": "SELECT sum(amount_due - amount_paid) FROM emr_payments y JOIN emr_patients p ON p.id = y.patient_id WHERE p.chart_no = 'C-00092' AND date(y.paid_at) < '2026-12-01'"
  },
  {
   "id": "chart-01",
   "type": "chart",
   "split": "dev",
-  "question": "다른 치과에서 발치하고 11개월 된 자리에 우리가 임플란트 심은 차트 있어?",
-  "answer_text": "타 기관 발치 후 11개월 무치악 부위 임플란트 1차",
+  "question": "다른 치과에서 이 빼고 1년 된 오른쪽 아래 자리에 우리가 임플란트 심은 차트 있어?",
+  "answer_text": "타 기관 발치 후 12개월 무치악 부위(오른쪽 아래) 임플란트 1차",
   "answer_doc_ids": [
-   "chart:2771"
+   "chart:2630",
+   "chart:7458"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -952,17 +953,17 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.other_clinic') AND json_extract(n.facts, '$.requirement.edentulous_months') = 11"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.other_clinic') AND json_extract(n.facts, '$.requirement.edentulous_months') = 12 AND t.tooth_no LIKE '4%'"
  },
  {
   "id": "chart-02",
   "type": "chart",
   "split": "dev",
-  "question": "우리 병원에서 발치하고 열흘도 안 돼서 임플란트 1차 들어간 케이스 찾아 줘",
-  "answer_text": "발치 7·8일 뒤 임플란트 1차",
+  "question": "우리 병원에서 발치하고 일주일 만에 임플란트 1차 들어간 케이스 찾아 줘",
+  "answer_text": "발치 7일 뒤 임플란트 1차",
   "answer_doc_ids": [
-   "chart:1707",
-   "chart:2275"
+   "chart:6395",
+   "chart:6472"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -970,7 +971,7 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.extracted_days_ago') < 10"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R06' AND json_extract(n.facts, '$.requirement.extracted_days_ago') <= 7"
  },
  {
   "id": "chart-03",
@@ -979,8 +980,9 @@
   "question": "기존 충전물 깨져서 1년 반 이상 지나 같은 이를 다시 때운 차트 있어?",
   "answer_text": "기존 충전물 파절로 18개월 이상 뒤 아말감/GI 재충전",
   "answer_doc_ids": [
-   "chart:2574",
-   "chart:2990"
+   "chart:3070",
+   "chart:3930",
+   "chart:7802"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -994,12 +996,14 @@
   "id": "chart-04",
   "type": "chart",
   "split": "dev",
-  "question": "스케일링하고 2주 안 돼서 잇몸치료로 넘어간 환자들은 차트에 간격을 어떻게 적었어?",
-  "answer_text": "스케일링 11~13일 뒤 치주치료(재평가 소견·연결 기재)",
+  "question": "스케일링하고 닷새도 안 돼서 잇몸치료로 넘어간 환자들은 차트에 간격을 어떻게 적었어?",
+  "answer_text": "스케일링 3~4일 뒤 치주치료(재평가 소견·연결 기재)",
   "answer_doc_ids": [
-   "chart:3425",
-   "chart:4135",
-   "chart:4636"
+   "chart:2325",
+   "chart:3596",
+   "chart:6134",
+   "chart:9470",
+   "chart:10001"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1007,17 +1011,17 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R02' AND json_extract(n.facts, '$.requirement.scaling_days_ago') < 14"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R02' AND json_extract(n.facts, '$.requirement.scaling_days_ago') < 5"
  },
  {
   "id": "chart-05",
   "type": "chart",
   "split": "dev",
-  "question": "인레이 하던 날 마취 후 실신 이력 있는 걸 알게 된 환자 차트",
-  "answer_text": "인레이 내원에서 마취 후 실신 이력 발견",
+  "question": "크라운 하던 날 마취 후 실신 이력 있는 걸 알게 된 환자 차트",
+  "answer_text": "크라운 내원에서 마취 후 실신 이력 발견",
   "answer_doc_ids": [
-   "chart:3581",
-   "chart:3677"
+   "chart:6677",
+   "chart:10166"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1025,7 +1029,7 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0007' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취 후 실신 이력')"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0009' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취 후 실신 이력')"
  },
  {
   "id": "chart-06",
@@ -1034,8 +1038,7 @@
   "question": "인공관절이나 인공판막 있는 분 임플란트 수술한 차트 보여 줘",
   "answer_text": "인공관절·인공판막 주의사항 환자의 임플란트 1차(예방 항생제 확인)",
   "answer_doc_ids": [
-   "chart:1975",
-   "chart:2024"
+   "chart:3440"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1049,11 +1052,11 @@
   "id": "chart-07",
   "type": "chart",
   "split": "test",
-  "question": "크라운 본뜨다가 구역반사 심한 거 알게 된 환자 차트",
-  "answer_text": "크라운 내원에서 구역반사 발견",
+  "question": "인레이 본뜨다가 구역반사 심한 거 알게 된 환자 차트",
+  "answer_text": "인레이 내원에서 구역반사 발견",
   "answer_doc_ids": [
-   "chart:3359",
-   "chart:4733"
+   "chart:2968",
+   "chart:5828"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1061,19 +1064,18 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0009' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '구역반사')"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0007' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '구역반사')"
  },
  {
   "id": "chart-08",
   "type": "chart",
   "split": "test",
-  "question": "골다공증 약 드시는 분 임플란트 심은 차트 찾아 줘",
-  "answer_text": "골다공증 약 복용 환자의 임플란트 1차(약 종류·기간 확인)",
+  "question": "골다공증 약 드시는 분 중에 우리 병원에서 이 뺀 자리에 임플란트 심은 차트 찾아 줘",
+  "answer_text": "골다공증 약 복용 환자의 원내 발치 부위 임플란트 1차(약 종류·기간 확인)",
   "answer_doc_ids": [
-   "chart:1831",
-   "chart:2361",
-   "chart:3376",
-   "chart:4140"
+   "chart:1856",
+   "chart:2124",
+   "chart:9526"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1081,17 +1083,19 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0013' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.alerts')) WHERE json_extract(value, '$.label') = '골다공증 약 복용')"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0013' AND json_extract(n.facts, '$.requirement.extracted_days_ago') IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.alerts')) WHERE json_extract(value, '$.label') = '골다공증 약 복용')"
  },
  {
   "id": "chart-09",
   "type": "chart",
   "split": "test",
-  "question": "사랑니 발치하다가 마취가 잘 안 든다는 걸 새로 알게 된 환자 차트",
-  "answer_text": "사랑니 발치 내원에서 마취가 잘 안 됨 발견",
+  "question": "왼쪽 아래 사랑니 빼다가 마취가 잘 안 든다는 걸 새로 알게 된 환자 차트",
+  "answer_text": "38번 사랑니 발치 내원에서 마취가 잘 안 됨 발견",
   "answer_doc_ids": [
-   "chart:4054",
-   "chart:4101"
+   "chart:1793",
+   "chart:3700",
+   "chart:4147",
+   "chart:6516"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1099,16 +1103,18 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0012' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취가 잘 안 됨')"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE t.procedure_code = 'U0012' AND EXISTS (SELECT 1 FROM json_each(json_extract(n.facts, '$.discovered')) WHERE value = '마취가 잘 안 됨') AND t.tooth_no = '38'"
  },
  {
   "id": "chart-10",
   "type": "chart",
   "split": "test",
-  "question": "충전물 깨져서 신경치료 다시 한 차트 있어?",
-  "answer_text": "기존 충전물 파절로 신경치료 재치료",
+  "question": "다른 치과에서 때운 게 1년도 안 돼서 깨져 신경치료 다시 한 차트 있어?",
+  "answer_text": "타 기관 충전 12개월 안에 기존 충전물 파절로 신경치료",
   "answer_doc_ids": [
-   "chart:3553"
+   "chart:3498",
+   "chart:3786",
+   "chart:8811"
   ],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -1116,7 +1122,7 @@
   ],
   "expected_args": {},
   "expect_refusal": false,
-  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R01' AND t.procedure_code = 'U0008' AND json_extract(n.facts, '$.requirement.reason') = '기존 충전물 파절'"
+  "answer_sql": "SELECT n.treatment_id FROM truth.truth_chart_notes n JOIN emr_treatments t ON t.id = n.treatment_id WHERE n.requirement = 'R01' AND t.procedure_code = 'U0008' AND json_extract(n.facts, '$.requirement.reason') = '기존 충전물 파절' AND json_extract(n.facts, '$.requirement.other_clinic') AND json_extract(n.facts, '$.requirement.prev_months') < 12"
  },
  {
   "id": "refusal-01",

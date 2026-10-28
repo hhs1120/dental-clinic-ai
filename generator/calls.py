@@ -26,6 +26,7 @@ from generator.master import (
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
     CALL_URGENCY_WEIGHTS,
+    CHECKUP_CODE,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -40,6 +41,8 @@ from generator.master import (
     PLANNED_WEIGHTS,
     PROCEDURES,
     RECALL_CYCLE,
+    SCALING_CODE,
+    SCALING_MIN_AGE,
     SUBTOPIC_PURPOSE,
     age_band,
     age_on,
@@ -271,6 +274,14 @@ class Ledger:
         at, kind, due = max(got)
         return {"sent_at": at, "kind": kind, "due_month": due.month}
 
+    def scaled_this_year(self, pid: int, t: str) -> bool:
+        """시각 t 전에 그해 스케일링을 받음 — 4단계가 그해 두 번째부터 구강검진으로 바꾸므로 스케일링 진료 = 급여 사용"""
+        name = PROCEDURE_NAME[SCALING_CODE]
+        return any(
+            x["procedure"] == name and x["at"][:4] == t[:4] and x["at"] <= t
+            for x in self.treatments[pid]
+        )
+
     def completed_before(self, pid: int, day: str) -> list[dict]:
         return [
             a for a in self.by_patient[pid] if a["status"] == "completed" and a["at"][:10] < day
@@ -280,10 +291,11 @@ class Ledger:
         return sum(owed for at, owed in self.payments[pid] if at <= t)
 
     def next_appointment(self, pid: int, t: str) -> dict | None:
+        """시각 t 직전에 잡혀 있던 가장 가까운 예약 — t에 생기는 예약은 아직 없고, t에 취소·변경되는 예약은 아직 있다"""
         live = [
             a
             for a in self.by_patient[pid]
-            if a["created"] <= t < a["at"] and (a["cancelled"] is None or a["cancelled"] > t)
+            if a["created"] < t < a["at"] and (a["cancelled"] is None or a["cancelled"] >= t)
         ]
         return min(live, key=lambda a: a["at"]) if live else None
 
@@ -574,39 +586,55 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
     if (
         s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]
     ):  # 부 주제 가격 문의도 무엇의 가격인지
-        if (
-            a is not None and fact["appointment"]["procedure"] in PRICED
-        ):  # 0원(상담 등)이면 아래 후보에서
-            fact["topic_procedure"] = fact["appointment"]["procedure"]
-            return fact
-        if (
-            (s["purpose"], s["direction"]) == ("treatment_q", "outbound")
-            and "price_q" not in s["accepted"]
-            and s["about"] is not None
-        ):
-            fact["topic_procedure"] = led.recent_treatment(
-                s["about"], s["t"]
-            )  # 경과 확인 = 며칠 전 진료
-            return fact
-        if s["about"] is not None:
-            nxt = fact["next_appointment"]
-            known = _plan_topics(fact) or sorted(
+        fact["topic_procedure"] = _topic(rng, led, s, fact)
+        if fact["topic_procedure"] == PROCEDURE_NAME[SCALING_CODE] and s["about"] is not None:
+            if led.scaled_this_year(s["about"], s["t"]):
+                fact["scaling_used_this_year"] = (
+                    True  # 연 1회 급여를 이미 씀 — 가격은 비급여로 (§2.4)
+                )
+    return fact
+
+
+def _topic(rng, led: Ledger, s: dict, fact: dict) -> str:
+    """주제 시술 (§4.1 used_fact) — 비용이 있는 시술(PRICED)만"""
+    a = s["appointment"]
+    if (
+        a is not None and fact["appointment"]["procedure"] in PRICED
+    ):  # 0원(상담 등)이면 아래 후보에서
+        return fact["appointment"]["procedure"]
+    if (
+        (s["purpose"], s["direction"]) == ("treatment_q", "outbound")
+        and "price_q" not in s["accepted"]
+        and s["about"] is not None
+    ):
+        return led.recent_treatment(s["about"], s["t"])  # 경과 확인 = 며칠 전 진료
+    if s["purpose"] == "recall_q":
+        # 검진 문자를 보고 묻는 가격 = 위생 시술 — 성인은 그해 아직이면 스케일링, 그 밖은 구강검진
+        adult = fact["patient"]["age"] >= SCALING_MIN_AGE
+        if adult and not led.scaled_this_year(s["about"], s["t"]):
+            return PROCEDURE_NAME[SCALING_CODE]
+        return PROCEDURE_NAME[CHECKUP_CODE]
+    if s["about"] is not None:
+        nxt = fact["next_appointment"]
+        known = _plan_topics(fact) or sorted(
+            (
                 {v["procedure"] for v in fact["recent_visits"]}
                 | ({nxt["procedure"]} if nxt else set())
             )
-        else:
-            known = []
-        pool = known or PRICED
-        topic = pool[int(rng.integers(len(pool)))]
-        if (
-            s["about"] is not None
-            and "price_q" in s["accepted"]
-            and topic not in (upcoming := _upcoming(fact))
-        ):
-            # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
-            topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
-        fact["topic_procedure"] = topic
-    return fact
+            & set(PRICED)
+        )
+    else:
+        known = []
+    pool = known or PRICED
+    topic = pool[int(rng.integers(len(pool)))]
+    if (
+        s["about"] is not None
+        and "price_q" in s["accepted"]
+        and topic not in (upcoming := _upcoming(fact))
+    ):
+        # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
+        topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
+    return topic
 
 
 def _plan_topics(fact: dict) -> list[str]:

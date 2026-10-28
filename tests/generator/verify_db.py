@@ -123,13 +123,13 @@ INSERT INTO truth_chart_notes (treatment_id, kind, is_special, requirement, evid
   (3, 'narrative', 0, NULL, NULL, 1, '{"alerts": [], "cc": "이에 까만 점이 생겼어요", "discovered": [], "findings": null, "plan": null, "procedure": "레진", "requirement": null, "tooth": "16"}');
 INSERT INTO truth_call_labels VALUES
   ('c-0003', 'book', '["book"]', 'patient', 'normal', 0, 0, 0, 1, 1, 0, NULL,
-   '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 1, "date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "family": ["김하늘"], "alerts": ["고혈압"], "open_plan_items": []}',
+   '{"call_date": "2026-10-02", "appointment_id": 1, "appointment": {"date": "2026-10-06", "time": "10:00", "procedure": "신경치료"}, "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [], "balance": 0, "next_appointment": null, "family": ["김하늘"], "alerts": ["고혈압"], "open_plan_items": []}',
    'dev'),
   ('c-0001', 'billing_q', '["billing_q", "complaint"]', 'patient', 'normal', 0, 1, 0, 0, 0, 1, NULL,
    '{"call_date": "2026-10-20", "patient": {"id": 1, "name": "김철수", "age": 46, "sex": "M"}, "recent_visits": [{"date": "2026-10-06", "procedure": "신경치료", "tooth": "26"}], "balance": 16000, "next_appointment": {"appointment_id": 2, "date": "2026-11-03", "time": "10:00", "procedure": "스케일링"}, "family": ["김하늘"], "alerts": ["고혈압", "마취가 잘 안 됨"], "open_plan_items": [{"procedure": "신경치료", "tooth": "26"}, {"procedure": "크라운", "tooth": "26"}]}',
    'silver'),
   ('c-0004', 'reschedule', '["reschedule"]', 'guardian', 'low', 0, 0, 0, 0, 1, 1, 'guardian_confused',
-   '{"call_date": "2026-11-14", "appointment_id": 4, "appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진", "from_date": "2026-11-17", "from_time": "10:00"}, "patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 4, "date": "2026-11-18", "time": "10:00", "procedure": "레진"}, "family": ["김철수"], "alerts": ["협조 어려운 소아"], "open_plan_items": []}',
+   '{"call_date": "2026-11-14", "appointment_id": 4, "appointment": {"date": "2026-11-18", "time": "10:00", "procedure": "레진", "from_date": "2026-11-17", "from_time": "10:00"}, "patient": {"id": 2, "name": "김하늘", "age": 8, "sex": "F"}, "recent_visits": [], "balance": 0, "next_appointment": {"appointment_id": 3, "date": "2026-11-17", "time": "10:00", "procedure": "레진"}, "family": ["김철수"], "alerts": ["협조 어려운 소아"], "open_plan_items": []}',
    'silver'),
   ('c-0002', 'price_q', '["price_q", "book"]', 'new_caller', 'normal', 0, 0, 1, 1, 0, 1, 'two_topics',
    '{"call_date": "2026-11-27", "topic_procedure": "미백"}',

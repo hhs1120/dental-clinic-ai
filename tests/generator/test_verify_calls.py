@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from generator import verify
+from generator.master import CLINIC_NAME, RECALL_TEMPLATES
 from tests.generator.verify_db import CTX, make_db
 
 CALL_CHECKS = [
@@ -271,14 +272,26 @@ FACT_BREAKS = {
             }
         },
     ),
-    "next_appt_cancelled": (
+    # 예약 사실은 통화 직전 상태 — 그 통화로 생기는 예약은 아직 없고, 옮기는 원래 예약은 아직 있다
+    "next_appt_made_by_call": (
         "c-0004",
         {
             "next_appointment": {
-                "appointment_id": 3,
-                "date": "2026-11-17",
+                "appointment_id": 4,
+                "date": "2026-11-18",
                 "time": "10:00",
                 "procedure": "레진",
+            }
+        },
+    ),
+    "booking_sees_own_appt": (
+        "c-0003",
+        {
+            "next_appointment": {
+                "appointment_id": 1,
+                "date": "2026-10-06",
+                "time": "10:00",
+                "procedure": "신경치료",
             }
         },
     ),
@@ -525,7 +538,8 @@ def _recall_q(conn):
     conn.execute("UPDATE ax_calls SET direction = 'inbound' WHERE call_uid = 'c-0001'")
     conn.execute(
         "UPDATE truth.truth_call_labels SET primary_purpose = 'recall_q',"
-        " accepted_purposes = '[\"recall_q\"]', complaint = 0, noise_type = NULL"
+        " accepted_purposes = '[\"recall_q\"]', complaint = 0, noise_type = NULL,"
+        " used_fact = json_set(used_fact, '$.next_appointment', json('null'))"
         " WHERE call_uid = 'c-0001'"
     )
 
@@ -549,7 +563,8 @@ def test_recall_q_follows_recall_text(tmp_path, sent_at, fact_at, ok):
     _recall_q(conn)
     if sent_at:
         conn.execute(
-            "INSERT INTO emr_messages VALUES (9, 1, 'out', ?, '리콜', 'recall', NULL)", (sent_at,)
+            "INSERT INTO emr_messages VALUES (9, 1, 'out', ?, ?, 'recall', NULL)",
+            (sent_at, RECALL_TEMPLATES["after"].format(clinic=CLINIC_NAME, name="김철수")),
         )
     if fact_at:
         conn.execute(
@@ -559,6 +574,33 @@ def test_recall_q_follows_recall_text(tmp_path, sent_at, fact_at, ok):
         )
     assert (verify.check_recall_q_calls(conn, CTX) == []) == ok
     assert verify.check_recall_q_calls in verify.REQUIRED
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "json_set(used_fact, '$.recall_text.kind', 'before')",  # 문자는 '지남'
+        "json_set(used_fact, '$.next_appointment', json('{\"appointment_id\": 2}'))",  # 예약 있음
+    ],
+)
+def test_recall_q_fact_matches_text_and_no_booking(tmp_path, change):
+    """사실 recall_text의 다가옴/지남·기한 월은 받은 문자 본문과 같고, 그 시점 잡힌 예약이 없다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    conn.execute(
+        "INSERT INTO emr_messages VALUES (9, 1, 'out', '2026-10-15 09:00:00', ?, 'recall', NULL)",
+        (RECALL_TEMPLATES["after"].format(clinic=CLINIC_NAME, name="김철수"),),
+    )
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recall_text',"
+        " json_object('sent_at', '2026-10-15 09:00:00', 'kind', 'after', 'due_month', 9))"
+        " WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_recall_q_calls(conn, CTX) == []
+    conn.execute(
+        f"UPDATE truth.truth_call_labels SET used_fact = {change} WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_recall_q_calls(conn, CTX)
 
 
 def test_recall_q_is_inbound(tmp_path):

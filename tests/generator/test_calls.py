@@ -8,15 +8,18 @@ from collections import Counter
 import pytest
 
 from generator import build, calls, verify
+from generator.calls import PROCEDURE_NAME
 from generator.master import (
     CALL_NOISE_SHARE,
     CALL_OUTBOUND_SHARE,
     CALL_PURPOSE_SHARE,
+    CHECKUP_CODE,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
     LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
+    SCALING_CODE,
 )
 from generator.paths import ROOT
 
@@ -142,13 +145,14 @@ def test_booking_calls_not_urgent_for_later_visit(db):
 
 def test_price_topic_is_not_a_past_visit(db):
     """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약·열린 치료계획 항목 시술이거나 지난 진료에 없는 시술.
-    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다. 리콜 문의는 다음 검진(위생 시술)의 가격이라 뺀다"""
     checked = 0
-    for (fact,) in db.execute(
-        "SELECT used_fact FROM truth.truth_call_labels WHERE accepted_purposes LIKE '%price_q%'"
+    for fact, purpose in db.execute(
+        "SELECT used_fact, primary_purpose FROM truth.truth_call_labels"
+        " WHERE accepted_purposes LIKE '%price_q%'"
     ):
         f = json.loads(fact)
-        if "patient" not in f:
+        if "patient" not in f or purpose == "recall_q":
             continue
         upcoming = {
             x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x
@@ -217,6 +221,34 @@ def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
     )
     build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     assert rows(sqlite3.connect(tmp_path / "source.sqlite")) == before
+
+
+SCALING = PROCEDURE_NAME[SCALING_CODE]
+
+
+def test_topic_procedures_are_priced_and_scaling_use_marked(gen):
+    """주제 시술은 비용이 있는 시술(상담 같은 0원 제외), 리콜 문의의 가격은 위생 시술(스케일링·구강검진), 그해 스케일링을
+    이미 받은 환자의 스케일링 주제엔 scaling_used_this_year (§4.1 used_fact)"""
+    conn, _ = gen
+    done = {
+        (r["patient_id"], r["performed_at"][:4], r["performed_at"])
+        for r in conn.execute(
+            "SELECT patient_id, performed_at FROM emr_treatments WHERE procedure_code = ?",
+            (SCALING_CODE,),
+        )
+    }
+    for r in _labels(conn):
+        fact = json.loads(r["used_fact"])
+        topic = fact.get("topic_procedure")
+        if topic is None:
+            continue
+        assert topic in calls.PRICED, r["call_uid"]
+        if r["primary_purpose"] == "recall_q":
+            assert topic in (SCALING, PROCEDURE_NAME[CHECKUP_CODE]), r["call_uid"]
+        if topic == SCALING and "patient" in fact:
+            pid, t = fact["patient"]["id"], fact["call_date"]
+            used = any(p == pid and y == t[:4] and at[:10] <= t for p, y, at in done)
+            assert bool(fact.get("scaling_used_this_year")) == used, r["call_uid"]
 
 
 def test_recall_q_patients_awake_and_unbooked(gen):

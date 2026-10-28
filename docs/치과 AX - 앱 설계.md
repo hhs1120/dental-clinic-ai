@@ -36,7 +36,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 ## 3. 검색
 
-**색인**(`make index`): 청킹 300~500자, 겹침 50, 마크다운 헤더 우선. 문자는 건별이 아니라 **환자별 월 스레드 1청크**(`[환자: 김○○(C-00001) | 2026-07] 07-03 예약 확인 … 07-10 답장: …`). 색인 코드는 앱 쪽이고 `app.sqlite`에 쓴다 — 생성기는 `source.sqlite`만 쓰고, `make data`는 끝에 `make index`를 이어 부른다. 색인 상태는 `ax_chunks`로 판단한다(생성 테이블에 색인 칸을 두지 않음). 붙여넣기 통화는 앱이 색인. 청크 id의 통화 부분은 `call_uid`.
+**색인**(`make index`): 청킹 300~500자, 겹침 50, 마크다운 헤더 우선. 문자는 건별이 아니라 **환자별 월 스레드 1청크**(`[환자: 김○○(C-00001) | 2026-07] 07-03 예약 확인 … 07-10 답장: …`). 색인 코드는 앱 쪽이고 `app.sqlite`에 쓴다 — 생성기는 `source.sqlite`만 쓰고, `make index`는 `make data`와 따로 실행한다([[치과 AX - 가상 데이터 생성 설계]] §5.1). 색인 상태는 `ax_chunks`로 판단한다(생성 테이블에 색인 칸을 두지 않음). 붙여넣기 통화는 앱이 색인. 청크 id의 통화 부분은 `call_uid`.
 
 **`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:c-0481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread/chart_note)`(id `'chart:<treatment_id>'`, 진료 1건 = 1청크), 필터용 실컬럼(`chart_no`·`event_date`·`doc_type`).
 `text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`, 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`, 차트 `[차트 C-00001 | 2026-07-03 | 스케일링]`(환자 이름 없음 — 케이스 내용으로 찾고 차트 번호로 환자에 닿는다).
@@ -78,7 +78,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 ## 6. 설정·작업·고정 쿼리
 
-**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수, test 판정 시 풀 전체. dev 건수 = 판정 풀의 ⌈풀 크기/2⌉ = `eval_sort_order` 앞부분(평가 설계 §2.1의 계약이라 앱은 생성 규칙을 몰라도 됨). 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
+**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수(dev가 `eval_sort_order` 앞부분), test 판정 시 풀 전체. 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성)의 상태·진행률. 프론트는 폴링
 

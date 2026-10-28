@@ -31,9 +31,9 @@
    },
    {
     "id": "old-parking.effective",
-    "text": "6월 2일부터 시행한다",
+    "text": "6월 3일부터 시행한다",
     "words": [
-     "6월 2일"
+     "6월 3일"
     ],
     "reason": null,
     "same": null
@@ -140,19 +140,19 @@
   "planted_facts": [
    {
     "id": "old.seollal",
-    "text": "1월 27일부터 1월 30일까지 휴진한다",
+    "text": "2월 9일부터 2월 12일까지 휴진한다",
     "words": [
-     "1월 27일",
-     "1월 30일"
+     "2월 9일",
+     "2월 12일"
     ],
     "reason": null,
     "same": null
    },
    {
     "id": "old-seollal.effective",
-    "text": "1월 13일부터 시행한다",
+    "text": "1월 29일부터 시행한다",
     "words": [
-     "1월 13일"
+     "1월 29일"
     ],
     "reason": null,
     "same": null
@@ -200,19 +200,19 @@
   "planted_facts": [
    {
     "id": "old.chuseok",
-    "text": "10월 5일부터 10월 9일까지 휴진한다",
+    "text": "9월 16일부터 9월 18일까지 휴진한다",
     "words": [
-     "10월 5일",
-     "10월 9일"
+     "9월 16일",
+     "9월 18일"
     ],
     "reason": null,
     "same": null
    },
    {
     "id": "old-chuseok.effective",
-    "text": "9월 22일부터 시행한다",
+    "text": "9월 2일부터 시행한다",
     "words": [
-     "9월 22일"
+     "9월 2일"
     ],
     "reason": null,
     "same": null
@@ -308,9 +308,9 @@
    },
    {
     "id": "old-wifi.effective",
-    "text": "4월 7일부터 시행한다",
+    "text": "4월 8일부터 시행한다",
     "words": [
-     "4월 7일"
+     "4월 8일"
     ],
     "reason": null,
     "same": null
@@ -350,9 +350,9 @@
    },
    {
     "id": "old-installment.effective",
-    "text": "5월 2일부터 시행한다",
+    "text": "5월 3일부터 시행한다",
     "words": [
-     "5월 2일"
+     "5월 3일"
     ],
     "reason": null,
     "same": null
@@ -468,9 +468,9 @@
    },
    {
     "id": "notice-hours.effective",
-    "text": "12월 30일부터 시행한다",
+    "text": "10월 30일부터 시행한다",
     "words": [
-     "12월 30일"
+     "10월 30일"
     ],
     "reason": null,
     "same": null
@@ -526,9 +526,9 @@
    },
    {
     "id": "notice-whitening.effective",
-    "text": "12월 30일부터 시행한다",
+    "text": "10월 30일부터 시행한다",
     "words": [
-     "12월 30일"
+     "10월 30일"
     ],
     "reason": null,
     "same": null
@@ -915,9 +915,9 @@
    },
    {
     "id": "notice-scaling-fee.effective",
-    "text": "1월 1일부터 시행한다",
+    "text": "11월 1일부터 시행한다",
     "words": [
-     "1월 1일"
+     "11월 1일"
     ],
     "reason": null,
     "same": null
@@ -944,9 +944,9 @@
    },
    {
     "id": "old-reminder.effective",
-    "text": "4월 1일부터 시행한다",
+    "text": "4월 3일부터 시행한다",
     "words": [
-     "4월 1일"
+     "4월 3일"
     ],
     "reason": null,
     "same": null
@@ -1745,9 +1745,9 @@
    },
    {
     "id": "old-sterile-log.effective",
-    "text": "8월 4일부터 시행한다",
+    "text": "8월 5일부터 시행한다",
     "words": [
-     "8월 4일"
+     "8월 5일"
     ],
     "reason": null,
     "same": null
@@ -1896,9 +1896,9 @@
    },
    {
     "id": "notice-reminder.effective",
-    "text": "12월 30일부터 시행한다",
+    "text": "10월 30일부터 시행한다",
     "words": [
-     "12월 30일"
+     "10월 30일"
     ],
     "reason": null,
     "same": null
@@ -1925,9 +1925,9 @@
    },
    {
     "id": "old-hours.effective",
-    "text": "3월 4일부터 시행한다",
+    "text": "3월 6일부터 시행한다",
     "words": [
-     "3월 4일"
+     "3월 6일"
     ],
     "reason": null,
     "same": null
@@ -2278,6 +2278,69 @@
      "치주낭 깊이"
     ],
     "reason": "R03",
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 92,
+  "doc_key": "manual-oral-care-sales",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "oralcare.prices",
+    "text": "데스크 판매 가격은 칫솔 3,000원, 치간칫솔 4,500원, 치실 5,000원, 구강 세정제 7,000원, 시린이 치약 8,500원이다",
+    "words": [
+     "3,000원",
+     "4,500원",
+     "5,000원",
+     "7,000원",
+     "8,500원"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "oralcare.record",
+    "text": "구강용품은 데스크 카드 단말기로 결제하고 판매 대장에 적는다 — 전자차트 수납에는 들어가지 않아 그날 카드 승인 합계가 수납보다 그만큼 많다",
+    "words": [
+     "판매 대장"
+    ],
+    "reason": null,
+    "same": null
+   }
+  ]
+ },
+ {
+  "doc_id": 93,
+  "doc_key": "manual-plan-followup",
+  "kind": "core",
+  "is_distractor": 0,
+  "pair_doc_id": null,
+  "supersedes_doc_id": null,
+  "avoid_doc_ids": [],
+  "planted_facts": [
+   {
+    "id": "planfollow.call",
+    "text": "치료계획을 세우고 3주가 지나도 예약하지 않은 환자에게는 상담실장이 전화로 안내한다",
+    "words": [
+     "3주",
+     "상담실장"
+    ],
+    "reason": null,
+    "same": null
+   },
+   {
+    "id": "planfollow.log",
+    "text": "두 차례 연락해도 답이 없으면 차트에 연락 기록을 남기고 다음 리콜 때 다시 안내한다",
+    "words": [
+     "연락 기록"
+    ],
+    "reason": null,
     "same": null
    }
   ]

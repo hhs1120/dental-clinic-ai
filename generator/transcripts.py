@@ -18,6 +18,7 @@ from generator.master import (
     FULL_MOUTH,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
+    SCALING_CODE,
     SCALING_MIN_AGE,
     TRANSCRIPT_CHARS_PER_SEC,
     insured_on,
@@ -45,7 +46,8 @@ INTERNAL_KEYS = (
 
 def rows(conn) -> list[dict]:
     cur = conn.execute(
-        "SELECT c.id, c.call_uid, c.direction, l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+        "SELECT c.id, c.call_uid, c.direction, c.caller_name, l.* FROM ax_calls c"
+        " JOIN truth.truth_call_labels l USING (call_uid)"
         " WHERE c.source = 'generated' ORDER BY c.id"
     )
     cols = [d[0] for d in cur.description]
@@ -77,12 +79,15 @@ _AGE_RULE = {
 }
 
 
-def topic_price(name: str, age: int | None = None) -> dict:
+def topic_price(name: str, age: int | None = None, scaling_used: bool = False) -> dict:
     """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천). 환자 나이를 알면 그 나이에 급여인지
-    (master.insured_on — 적용 연령 밖이면 비급여 가격), 모르면(처음 연락) 급여 시술인지로"""
+    (master.insured_on — 적용 연령 밖이면 비급여 가격), 모르면(처음 연락) 급여 시술인지로. 그해 급여 스케일링을 이미 받았으면
+    (scaling_used) 스케일링은 비급여 가격(연 1회, §2.4)"""
     p = _PROC[name]
     insured = insured_on(p, age) if age is not None else p["is_insured"] != "no"
     out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": insured}
+    if insured and scaling_used and p["code"] == SCALING_CODE:
+        return out | {"insured": False, "insured_limit": "연 1회 — 올해 이미 받음"}
     if out["insured"]:
         out["patient_pays"] = f"{round(p['fee_total'] * p['patient_share_rate']):,}원"
         if p["age_group"] in _AGE_RULE:
@@ -97,8 +102,13 @@ def payload(row: dict) -> dict:
         "topic_procedure"
     ):  # 부 주제 포함
         facts["topic_price"] = topic_price(
-            fact["topic_procedure"], (fact.get("patient") or {}).get("age")
+            fact["topic_procedure"],
+            (fact.get("patient") or {}).get("age"),
+            bool(fact.get("scaling_used_this_year")),
         )
+    facts["caller"] = {
+        "name": row["caller_name"]
+    }  # 말하는 사람(보호자·보험사 직원 등) — 이름을 지어내지 않게
     if "recall_q" in json.loads(row["accepted_purposes"]):
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
@@ -120,7 +130,8 @@ def payload(row: dict) -> dict:
 
 
 def simplify(p: dict) -> dict:
-    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)과 ⑧-1 근거(이미 냈다)만"""
+    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술과 그 가격)과 ⑧-1 근거(이미 냈다)·
+    리콜 주기·받은 리콜 문자·말하는 사람만"""
     keep = (
         "call_date",
         "appointment",
@@ -128,6 +139,7 @@ def simplify(p: dict) -> dict:
         "topic_price",
         "recall_months",
         "recall_text",
+        "caller",
         "already_paid",
     )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}

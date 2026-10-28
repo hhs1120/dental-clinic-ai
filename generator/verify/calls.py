@@ -19,11 +19,13 @@ from generator.master import (
     CALL_PATIENT_RULES,
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
+    CLINIC_NAME,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
     HOURS,
     IMPLIED_FLAG,
+    RECALL_TEMPLATES,
     SUBTOPIC_PURPOSE,
     URGENCIES,
     age_on,
@@ -441,8 +443,9 @@ def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict]) -> dict:
         (pid, t),
     ).fetchone()[0]
     nxt = conn.execute(
-        "SELECT id FROM emr_appointments WHERE patient_id = ? AND created_at <= ? AND scheduled_at > ?"
-        " AND (cancelled_at IS NULL OR cancelled_at > ?) ORDER BY scheduled_at LIMIT 1",
+        # 예약은 통화 직전 상태 — 그 통화로 생기는 예약(created_at = 통화 시각)은 아직 없고, 취소·변경되는 원래 예약은 아직 있다
+        "SELECT id FROM emr_appointments WHERE patient_id = ? AND created_at < ? AND scheduled_at > ?"
+        " AND (cancelled_at IS NULL OR cancelled_at >= ?) ORDER BY scheduled_at LIMIT 1",
         (pid, t, t, t),
     ).fetchone()
     alerts = {
@@ -566,22 +569,45 @@ def check_churn_calls(conn, ctx):
 
 def check_recall_q_calls(conn, ctx):
     """리콜 문의(recall_q, 수신)는 통화 전 규칙 창(master.CALL_PATIENT_RULES recall_q inbound — 문자 뒤 일수) 안에 그 환자가
-    받은 리콜 문자가 있고, 사실 recall_text(받은 문자)가 그 문자를 가리킨다 — 리콜은 문자로 하고 환자가 보고 건다 (§2.5·§4.1)"""
+    받은 리콜 문자가 있고, 사실 recall_text(받은 문자)가 그 문자를 가리키며 다가옴/지남·기한 월이 본문과 같고, 그 시점 잡힌
+    예약이 없다 — 리콜은 문자로 하고 환자가 보고 건다 (§2.5·§4.1)"""
     lo, hi = CALL_PATIENT_RULES[("recall_q", "inbound")][1]
-    texts = defaultdict(list)
-    for pid, at in conn.execute(
-        "SELECT patient_id, sent_at FROM emr_messages WHERE \"trigger\" = 'recall' AND direction = 'out'"
+    names = dict(conn.execute("SELECT id, name FROM emr_patients"))
+    texts = defaultdict(dict)
+    for pid, at, body in conn.execute(
+        "SELECT patient_id, sent_at, body FROM emr_messages WHERE \"trigger\" = 'recall' AND direction = 'out'"
     ):
-        texts[pid].append(at)
+        texts[pid][at] = body
     bad = []
     for r in _calls(conn):
         if r["primary_purpose"] != "recall_q":
             continue
         t, day = r["started_at"], _dt(r["started_at"]).date()
         pid = (r["fact"].get("patient") or {}).get("id")
-        at = (r["fact"].get("recall_text") or {}).get("sent_at")
-        if not (at in texts.get(pid, []) and at <= t and lo <= (day - _dt(at).date()).days <= hi):
-            bad.append({"call_uid": r["call_uid"], "patient": pid, "started_at": t})
+        text = r["fact"].get("recall_text") or {}
+        at = text.get("sent_at")
+        body = texts.get(pid, {}).get(at)
+        kind = text.get("kind")
+        want = (
+            RECALL_TEMPLATES[kind].format(
+                clinic=CLINIC_NAME, name=names.get(pid), month=text.get("due_month")
+            )
+            if kind in RECALL_TEMPLATES
+            else None
+        )
+        problem = (
+            "규칙 창 안 리콜 문자 없음"
+            if body is None or not (at <= t and lo <= (day - _dt(at).date()).days <= hi)
+            else "사실의 문자 ≠ 본문"
+            if body != want
+            else "잡힌 예약 있음"
+            if r["fact"].get("next_appointment")
+            else None
+        )
+        if problem:
+            bad.append(
+                {"call_uid": r["call_uid"], "patient": pid, "started_at": t, "problem": problem}
+            )
     return bad
 
 

@@ -38,6 +38,16 @@ def _row(conn, uid):
     return {r["call_uid"]: r for r in transcripts.rows(conn)}[uid]
 
 
+def test_payload_names_the_caller(conn):
+    """건(발신이면 받은) 사람 이름 — 보호자 통화의 환자는 아이라, 말하는 사람 이름이 따로 없으면 모델이 지어낸다"""
+    assert transcripts.payload(_row(conn, "c-0004"))["facts"]["caller"] == {
+        "name": "김철수"
+    }  # 보호자
+    assert transcripts.payload(_row(conn, "c-0002"))["facts"]["caller"] == {
+        "name": "박민수"
+    }  # 처음 연락
+
+
 def test_payload_has_labels_and_facts_without_internal_ids(conn):
     p = transcripts.payload(_row(conn, "c-0004"))
     assert p["direction"] == "inbound" and p["call_date"] == "2026-11-14"
@@ -92,7 +102,7 @@ def test_checks(conn):
 def test_simplify_keeps_only_needed_facts(conn):
     p = transcripts.payload(_row(conn, "c-0004"))
     s = transcripts.simplify(p)
-    assert s["labels"] == p["labels"] and set(s["facts"]) == {"call_date", "appointment"}
+    assert s["labels"] == p["labels"] and set(s["facts"]) == {"call_date", "appointment", "caller"}
     assert s["facts"]["appointment"]["from_date"] == "2026-11-17"
 
 
@@ -189,6 +199,13 @@ def test_price_and_insurance_calls_get_master_price(conn):
     assert (
         transcripts.payload(sub)["facts"]["topic_price"]["procedure"] == "미백"
     )  # 부 주제 가격 문의도
+
+
+def test_scaling_price_after_this_years_use():
+    """그해 급여 스케일링을 이미 받았으면 스케일링은 비급여 가격 — 연 1회(§2.4)"""
+    assert transcripts.topic_price("스케일링", 40)["insured"]
+    used = transcripts.topic_price("스케일링", 40, scaling_used=True)
+    assert not used["insured"] and "patient_pays" not in used and used["insured_limit"]
 
 
 def test_recall_calls_get_recall_cycle(conn):
