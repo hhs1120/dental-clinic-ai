@@ -360,7 +360,7 @@ DDL은 `ground_truth/schema.sql`(테이블은 그 단계를 구현할 때 추가
 
 ### 5.3 `make verify`
 
-불변식("항상 성립해야 하는 것")의 원본은 이 표다. 대상은 `source.sqlite`(+ `truth.sqlite`), "app.sqlite를 붙였을 때"라고 적은 검사는 verify에 app DB를 넘겼을 때만 돈다. §2의 절차는 이것을 지키도록 짠다. 구현 현황은 `generator/verify.py` docstring.
+불변식("항상 성립해야 하는 것")의 원본은 이 표다. 대상은 `source.sqlite`(+ `truth.sqlite`), "app.sqlite를 붙였을 때"라고 적은 검사는 verify에 app DB를 넘겼을 때만 돈다. §2의 절차는 이것을 지키도록 짠다. 구현 현황은 `generator/verify/__init__.py` docstring.
 
 **필수**(실패 시 중단. `planned_procedure_code`·`tooth_no` 값 있음과 대조 키 유일은 스키마(NOT NULL·UNIQUE)가 보장해 검사하지 않음)
 | 영역 | 검사 |

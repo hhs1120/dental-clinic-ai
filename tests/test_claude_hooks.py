@@ -202,7 +202,7 @@ def test_stage_edit_warns(path):
 
 
 @pytest.mark.parametrize(
-    "path", ["generator/verify.py", "generator/paths.py", "evaluation/eval.py", "docs/a.md"]
+    "path", ["generator/verify/calls.py", "generator/paths.py", "evaluation/eval.py", "docs/a.md"]
 )
 def test_other_edit_no_warning(path):
     assert guard.check_post_edit(str(ROOT / path)) is None

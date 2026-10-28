@@ -35,7 +35,7 @@ GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
 )
 # 고친 뒤 캐시 미스 확인을 알릴 파일 — 생성 결과를 바꾸지 않는 생성기 파일은 뺀다
 STAGE_FILES = re.compile(
-    r"generator/(?!verify\.py|paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
+    r"generator/(?!paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
     r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/source_schema\.sql"
 )
 READONLY_GIT = {
@@ -292,7 +292,11 @@ def _readonly_problem(tokens: list[str], cwd: Path) -> str | None:
         and "-m" in tokens
         or any(t.startswith("generator/") and t.endswith(".py") for t in tokens)
     )
-    if runs_generator and "generator.verify" not in tokens and "generator/verify.py" not in tokens:
+    if (
+        runs_generator
+        and "generator.verify" not in tokens
+        and not any(t.startswith("generator/verify/") for t in tokens)
+    ):
         return "생성기는 DB를 다시 쓴다(make data 금지)"
     return None
 

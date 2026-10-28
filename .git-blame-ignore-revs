@@ -1,3 +1,5 @@
 # git blame에서 건너뛸 커밋 — 동작 변화 없는 일괄 정리. git config blame.ignoreRevsFile .git-blame-ignore-revs
 # ruff format + 안전한 자동 수정
 d65ddbd6759f372b5386dcdd0089b40e84649bf0
+# verify를 영역별 파일로 나눔
+bc28daa1a7669411e2a42691167e6ca2e1773586
