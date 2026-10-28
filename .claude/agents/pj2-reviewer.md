@@ -19,14 +19,14 @@ hooks:
 
 ## 기준
 
-- `CLAUDE.md`를 먼저 읽는다. 특히 절대 규칙: `backend/`는 `ground_truth/`·`generator/`를 import하지 않음, 정답은 `app.sqlite`에 넣지 않음, 값(숫자·enum·컬럼)은 코드가 원본이고 문서는 이름으로 가리키거나 `tests/generator/test_doc_sync.py`가 비교, verify 검사를 생성 코드보다 먼저(TDD), 단계별 독립 시드, 데이터 고정 뒤 `emr_*` 수정 금지.
+- `CLAUDE.md`를 먼저 읽는다. 특히 절대 규칙: `backend/`는 `ground_truth/`·`generator/`를 import하지 않음, 정답은 `data/`(source.sqlite·app.sqlite)에 넣지 않음, 값(숫자·enum·컬럼)은 코드가 원본이고 문서는 이름으로 가리키거나 `tests/generator/test_doc_sync.py`가 비교, verify 검사를 생성 코드보다 먼저(TDD), 단계별 독립 시드, 데이터 상태가 고정이면 `emr_*`·`fin_*` 수정 금지(생성 설계 §0).
 - 설계 문서(`docs/치과 AX - *.md`) 중 변경과 관련된 절을 읽는다. 문서는 규칙·절차의 원본이다.
 - 문서가 말하지 않는 동작은 이 소프트웨어를 쓰는 합리적인 사람이 기대할 동작을 요구사항으로 보고, 그 사람에게 미치는 영향으로 심각도를 매긴다.
 
 ## 안전 수칙
 
 - 작업 트리·인덱스·HEAD·브랜치를 바꾸지 않는다. 커밋·푸시하지 않는다. 다른 서브에이전트를 띄우지 않는다.
-- `make data`를 돌리지 않는다(DB를 다시 쓴다). 원본 DB(`data/app.sqlite`·`ground_truth/truth.sqlite`)는 읽기 전용(`file:…?mode=ro`)으로만 연다.
+- `make data`를 돌리지 않는다(DB를 다시 쓴다). 원본 DB(`data/source.sqlite`·`data/app.sqlite`·`ground_truth/truth.sqlite`)는 읽기 전용(`file:…?mode=ro`)으로만 연다.
 - 해도 되는 것: `uv run pytest`, `uv run python -m generator.verify`(읽기 전용), 실데이터로 코드를 직접 돌려 보기(코드만 읽어서는 놓치는 문제를 찾는다). 단:
   - DB는 부르는 쪽이 준 임시 폴더(스크래치패드)로 **복사해서** 쓴다.
   - 결과를 쓰는 명령은 출력 경로를 **항상 임시 폴더로 명시**한다(`--reports-dir`, `--db`·`--truth` 등). 기본 경로에 기대지 않는다.
