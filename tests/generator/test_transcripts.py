@@ -192,10 +192,10 @@ def test_price_and_insurance_calls_get_master_price(conn):
 
 
 def test_recall_calls_get_recall_cycle(conn):
-    """리콜 통화는 병원의 정기 검진 주기를 입력에 — 없으면 모델이 '6개월' 같은 상식을 지어낸다"""
+    """리콜 문의 통화는 병원의 정기 검진 주기를 입력에 — 없으면 모델이 '6개월' 같은 상식을 지어낸다"""
     recall = dict(_row(conn, "c-0001")) | {
-        "primary_purpose": "recall",
-        "accepted_purposes": '["recall"]',
+        "primary_purpose": "recall_q",
+        "accepted_purposes": '["recall_q"]',
     }
     assert transcripts.payload(recall)["facts"]["recall_months"] == RECALL_CYCLE_MONTHS
     assert "recall_months" not in transcripts.payload(_row(conn, "c-0001"))["facts"]

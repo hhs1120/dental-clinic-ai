@@ -27,6 +27,7 @@ from generator.master import (
     SUBTOPIC_PURPOSE,
     URGENCIES,
     age_on,
+    call_day_weight,
     close_time,
     open_slots,
 )
@@ -82,6 +83,9 @@ def check_call_uid_format(conn, ctx):
 
 
 CALL_MIX_TOLERANCE = 0.02  # 목적·노이즈 분포 경고 허용치 (§5.3 경고 표)
+# 통화 최근 가중 경고 허용치 (§5.3 경고 표) — 추첨이라 흔들림(1500건에 약 ±1.3%p)이 있고, 예약 변경처럼 이벤트를 많이
+# 뽑는 목적은 가중이 덜 먹어 목표보다 조금 낮게 나온다. 가중이 빠지면 1/2 근처로 떨어져 이 값으로도 잡힌다
+CALL_RECENCY_TOLERANCE = 0.04
 
 
 OPEN_TIME = datetime.strptime(HOURS["open"], "%H:%M").time()
@@ -145,10 +149,6 @@ def _label_problem(r) -> str | None:
         and r["fact"].get("appointment", {}).get("date") != r["started_at"][:10]
     ):
         return "예약·변경 통화가 urgent인데 예약이 그날이 아님"
-    if r["fact"].get("churned") and (
-        r["accepted"] != ["recall"] or r["wants_appt"] or r["price_inquiry"] or r["has_todo"]
-    ):
-        return "이탈 환자 리콜인데 부 주제·예약 원함·가격 문의·할 일이 있음(옮겼다는 통화)"
     if r["appt_confirmed"] and purpose not in ("book", "reschedule"):
         return "appt_confirmed는 book·reschedule만"
     if r["direction"] == "outbound" and purpose not in CALL_OUTBOUND_SHARE:
@@ -490,7 +490,7 @@ def _appt_detail(a: dict, appts: dict) -> dict:
 
 def check_call_facts_as_of(conn, ctx):
     """used_fact는 통화 시점 사실: 통화 날짜, 예약류의 예약 상세, 환자(통화 환자와 같음 — 환자가 연결됐거나 보험사면
-    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음. 리콜 발신의 이탈 환자(이탈일 ≤ 통화일)는 churned, 수납 문의 발신에 장부 실수 미수가 있으면 already_paid"""
+    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음. 수납 문의 발신에 장부 실수 미수가 있으면 already_paid"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
     appts = {
         a["id"]: a
@@ -501,11 +501,6 @@ def check_call_facts_as_of(conn, ctx):
         )
     }
     items = _plan_items(conn)
-    churn = dict(
-        conn.execute(
-            "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
-        )
-    )
     bad = []
     for r in _calls(conn):
         f, t = r["fact"], r["started_at"]
@@ -533,12 +528,6 @@ def check_call_facts_as_of(conn, ctx):
             if r["primary_purpose"] == "billing_q" and r["direction"] == "outbound"
             else None
         )
-        want["churned"] = (
-            r["primary_purpose"] == "recall"
-            and r["direction"] == "outbound"
-            and churn.get(pid) is not None
-            and churn[pid] <= t[:10]
-        )
         nxt = f.get("next_appointment")
         got = {
             "age": f["patient"]["age"],
@@ -547,7 +536,6 @@ def check_call_facts_as_of(conn, ctx):
             "next": nxt["appointment_id"] if nxt else None,
             "alerts": set(f["alerts"]),
             "open_plan_items": f.get("open_plan_items"),
-            "churned": f.get("churned", False),
             "already_paid": f.get("already_paid"),
         }
         if f["patient"]["name"] != patients[pid]["name"]:
@@ -559,7 +547,8 @@ def check_call_facts_as_of(conn, ctx):
 
 
 def check_churn_calls(conn, ctx):
-    """이탈 환자(이탈일 ≤ 통화일)의 통화는 리콜 발신뿐 — 치료 수요에 응하지 않고 다른 용건으로 연락하지 않는다 (§2.2·§4.1)"""
+    """이탈 환자(이탈일 ≤ 통화일)의 통화는 없다 — 치료 수요·리콜 문자에 응하지 않고 다른 용건으로 연락하지 않으며, 치과가
+    거는 발신(수납 안내·경과 확인)의 대상도 아니다 (§2.2·§4.1)"""
     churn = dict(
         conn.execute(
             "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
@@ -568,14 +557,31 @@ def check_churn_calls(conn, ctx):
     bad = []
     for r in _calls(conn):
         pid = (r["fact"].get("patient") or {}).get("id")
-        if (
-            pid in churn
-            and churn[pid] <= r["started_at"][:10]
-            and (r["primary_purpose"], r["direction"]) != ("recall", "outbound")
-        ):
+        if pid in churn and churn[pid] <= r["started_at"][:10]:
             bad.append(
                 {"call_uid": r["call_uid"], "purpose": r["primary_purpose"], "patient": pid}
             )
+    return bad
+
+
+def check_recall_q_calls(conn, ctx):
+    """리콜 문의(recall_q, 수신)는 통화 전 규칙 창(master.CALL_PATIENT_RULES recall_q inbound — 문자 뒤 일수) 안에 그 환자가
+    받은 리콜 문자가 있고, 사실 recall_text(받은 문자)가 그 문자를 가리킨다 — 리콜은 문자로 하고 환자가 보고 건다 (§2.5·§4.1)"""
+    lo, hi = CALL_PATIENT_RULES[("recall_q", "inbound")][1]
+    texts = defaultdict(list)
+    for pid, at in conn.execute(
+        "SELECT patient_id, sent_at FROM emr_messages WHERE \"trigger\" = 'recall' AND direction = 'out'"
+    ):
+        texts[pid].append(at)
+    bad = []
+    for r in _calls(conn):
+        if r["primary_purpose"] != "recall_q":
+            continue
+        t, day = r["started_at"], _dt(r["started_at"]).date()
+        pid = (r["fact"].get("patient") or {}).get("id")
+        at = (r["fact"].get("recall_text") or {}).get("sent_at")
+        if not (at in texts.get(pid, []) and at <= t and lo <= (day - _dt(at).date()).days <= hi):
+            bad.append({"call_uid": r["call_uid"], "patient": pid, "started_at": t})
     return bad
 
 
@@ -716,6 +722,23 @@ def check_call_noise_mix(conn, ctx):
         for k, v in CALL_NOISE_SHARE.items()
         if abs(got.get(k, 0) - v) > CALL_MIX_TOLERANCE
     ]
+
+
+def check_call_recency(conn, ctx):
+    """통화 날짜 최근 가중 — 창(range_start ~ TODAY 전날) 뒤 절반의 통화 비중이 진료일 가중치(master.call_day_weight)로
+    계산한 기대값 ±CALL_RECENCY_TOLERANCE (§4.1 6단계)"""
+    rows = _calls(conn)
+    if not rows:
+        return []
+    days = [ctx.range_start + timedelta(days=i) for i in range((ctx.today - ctx.range_start).days)]
+    days = [d for d in days if open_slots(d.weekday()) and d not in ctx.holidays]
+    mid = ctx.range_start + (ctx.today - ctx.range_start) / 2
+    weight = {d: call_day_weight(d, ctx.range_start, ctx.today) for d in days}
+    want = sum(w for d, w in weight.items() if d >= mid) / sum(weight.values())
+    got = sum(_dt(r["started_at"]).date() >= mid for r in rows) / len(rows)
+    if abs(got - want) > CALL_RECENCY_TOLERANCE:
+        return [{"recent_half_share": round(got, 3), "target": round(want, 3)}]
+    return []
 
 
 def report_call_mix(conn, ctx):

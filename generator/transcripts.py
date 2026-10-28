@@ -99,7 +99,7 @@ def payload(row: dict) -> dict:
         facts["topic_price"] = topic_price(
             fact["topic_procedure"], (fact.get("patient") or {}).get("age")
         )
-    if "recall" in json.loads(row["accepted_purposes"]):
+    if "recall_q" in json.loads(row["accepted_purposes"]):
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
         )
@@ -120,14 +120,14 @@ def payload(row: dict) -> dict:
 
 
 def simplify(p: dict) -> dict:
-    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)과 ⑧-1·⑨ 근거(이미 냈다·옮겼다)만"""
+    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)과 ⑧-1 근거(이미 냈다)만"""
     keep = (
         "call_date",
         "appointment",
         "topic_procedure",
         "topic_price",
         "recall_months",
-        "churned",
+        "recall_text",
         "already_paid",
     )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
@@ -138,12 +138,8 @@ def korean_date(iso: str) -> str:
     return f"{d.month}월 {d.day}일"
 
 
-CHURN_WORDS = ("다른 치과", "다른 병원", "옮겼")  # 이탈 리콜 전사에 하나는 있어야 하는 말 (⑨ 근거)
-
-
 def must_include(fact: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)·⑧-1·⑨ 근거(이미 냈다는 내원일,
-    다른 치과로 옮겼다는 말)"""
+    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)·⑧-1 근거(이미 냈다는 내원일)"""
     out = []
     appt = fact.get("appointment")
     if appt:
@@ -154,8 +150,6 @@ def must_include(fact: dict, names: dict) -> list[list[str]]:
         out.append(names.get(fact["topic_procedure"], [fact["topic_procedure"]]))
     if fact.get("already_paid"):
         out.append([korean_date(fact["already_paid"]["date"])])
-    if fact.get("churned"):
-        out.append(list(CHURN_WORDS))
     return out
 
 

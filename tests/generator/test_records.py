@@ -230,9 +230,9 @@ def test_pre_window_treatment_and_claim(db):
     )
     assert pre and all(r["tooth_no"] == FULL_MOUTH for r in pre)
     claimed = [r for r in pre if r["status"] is not None]
-    assert claimed and all(
-        r["procedure_code"] == SCALING_CODE and r["status"] == "paid" for r in claimed
-    )
+    assert all(r["procedure_code"] == SCALING_CODE and r["status"] == "paid" for r in claimed)
+    # 창이 TODAY 앞 해에 시작하면 창 이전 내원이 모두 앞 해라 청구가 없다
+    assert bool(claimed) == (ctx.range_start.year == ctx.today.year)
 
 
 def test_review_and_teeth_independent_of_payment_params(db, tmp_path):

@@ -44,6 +44,7 @@ from generator.master import (
     age_band,
     age_on,
     business_minutes,
+    call_day_weight,
     close_time,
     open_slots,
 )
@@ -107,12 +108,53 @@ def _in_hours(t: str) -> bool:
     return OPEN <= at.time() < datetime.strptime(close_time(at.weekday()), "%H:%M").time()
 
 
+def recall_targets(run) -> list[tuple[datetime, int, str, date]]:
+    """리콜 문자 대상 (그달 첫 진료일 개원 시각, 환자, before·after, 기한) — 8단계가 보내고 6단계 리콜 문의가 따른다(§2.5·§4.1).
+    그 시각에 잡힌 예약이 없고 기한(마지막 completed 위생 내원 +
+    RECALL_CYCLE)이 다음 달이면 before, 지난달이면 after"""
+    hygiene, appts = defaultdict(list), defaultdict(list)
+    for pid, at, typ, status, created, cancelled in run.conn.execute(
+        "SELECT patient_id, scheduled_at, type, status, created_at, cancelled_at FROM emr_appointments"
+    ):
+        appts[pid].append((created, at, cancelled))
+        if typ == "hygiene" and status == "completed":
+            hygiene[pid].append(at)
+    out = []
+    y, m = run.range_start.year, run.range_start.month
+    while date(y, m, 1) < run.today:
+        d = date(y, m, 1)
+        while not open_slots(d.weekday()) or d in run.holidays:
+            d += timedelta(days=1)
+        t = datetime.combine(d, OPEN)
+        ts = t.strftime(FMT)
+        nxt = (y + 1, 1) if m == 12 else (y, m + 1)
+        prv = (y - 1, 12) if m == 1 else (y, m - 1)
+        if run.range_start <= d < run.today:
+            for pid in sorted(hygiene):
+                last = max((a for a in hygiene[pid] if a < ts), default=None)
+                if last is None or any(
+                    c <= ts < a and (x is None or x > ts) for c, a, x in appts[pid]
+                ):
+                    continue
+                due = datetime.strptime(last, FMT).date() + RECALL_CYCLE
+                kind = {nxt: "before", prv: "after"}.get((due.year, due.month))
+                if kind:
+                    out.append((t, pid, kind, due))
+        y, m = nxt
+    return out
+
+
 class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
-    def __init__(self, conn, plan_items: list, churn: dict):
+    def __init__(self, conn, plan_items: list, churn: dict, dormant: dict, recall_texts: list):
         self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
         self.churn = churn  # 4단계 state — 이탈 환자 → 이탈일
+        self.dormant = dormant  # 4단계 state — 휴면 환자 → 휴면일
+        # 환자 → [(리콜 문자 시각, before·after, 기한)] — 8단계가 보낼 것(recall_targets)
+        self.recall_texts = defaultdict(list)
+        for t, pid, kind, due in recall_texts:
+            self.recall_texts[pid].append((t.strftime(FMT), kind, due))
         self.ledger_debt = defaultdict(
             list
         )  # 환자 → [(장부 입력 시각, 실제 내원일, 실수로 생긴 미수)] (§2.4)
@@ -191,6 +233,11 @@ class Ledger:
         on = self.churn.get(pid)
         return on is not None and on.isoformat() <= t[:10]
 
+    def asleep(self, pid: int, t: str) -> bool:
+        """시각 t에 이미 휴면인 환자 (§2.6 (1)) — 새 수요가 없어 리콜 문자를 보고 걸지 않는다"""
+        on = self.dormant.get(pid)
+        return on is not None and on.isoformat() <= t[:10]
+
     def recent_treatment(self, pid: int, t: str) -> str | None:
         """경과 확인 규칙 창(CALL_PATIENT_RULES treatment_q outbound) 안의 가장 최근 completed 진료 내원 시술"""
         lo, hi = CALL_PATIENT_RULES[("treatment_q", "outbound")][1]
@@ -209,6 +256,20 @@ class Ledger:
             if recent
             else None
         )
+
+    def recall_text(self, pid: int, t: str) -> dict | None:
+        """시각 t 전 규칙 창(CALL_PATIENT_RULES recall_q inbound) 안에 받은 가장 최근 리콜 문자 — 리콜 문의 사실"""
+        lo, hi = CALL_PATIENT_RULES[("recall_q", "inbound")][1]
+        d = date.fromisoformat(t[:10])
+        got = [
+            (at, kind, due)
+            for at, kind, due in self.recall_texts[pid]
+            if at <= t and lo <= (d - date.fromisoformat(at[:10])).days <= hi
+        ]
+        if not got:
+            return None
+        at, kind, due = max(got)
+        return {"sent_at": at, "kind": kind, "due_month": due.month}
 
     def completed_before(self, pid: int, day: str) -> list[dict]:
         return [
@@ -234,11 +295,10 @@ class Ledger:
             return False
         kind, value = rule
         d = date.fromisoformat(day)
-        if kind == "recall_due":
-            hygiene = [a for a in visits if a["type"] == "hygiene"]
+        if kind == "recall_text":
             return (
-                bool(hygiene)
-                and date.fromisoformat(hygiene[-1]["at"][:10]) + RECALL_CYCLE < d
+                not self.asleep(pid, t)
+                and self.recall_text(pid, t) is not None
                 and self.next_appointment(pid, t) is None
             )
         if kind == "balance":
@@ -341,11 +401,25 @@ def _side(led: Ledger, pid: int, day: str) -> str:
     return "guardian" if led.is_child(pid, day) else "patient"
 
 
+def _recency_p(days: list, run) -> list:
+    """날짜마다 최근 가중(master.call_day_weight)을 확률로 — 예약류 이벤트·그 밖 통화일 추첨 (§4.1 6단계)"""
+    w = [call_day_weight(d, run.range_start, run.today) for d in days]
+    total = sum(w)
+    return [x / total for x in w]
+
+
 def stage_slots(run, rng, fake) -> None:
-    led = Ledger(run.conn, run.state["plan_items"], run.state["churn"])
+    led = Ledger(
+        run.conn,
+        run.state["plan_items"],
+        run.state["churn"],
+        run.state["dormant"],
+        recall_targets(run),
+    )
     n = run.cfg["calls_with_transcript"]
     days = [run.range_start + timedelta(days=i) for i in range((run.today - run.range_start).days)]
     days = [d for d in days if is_open(d, run.holidays)]
+    day_p = _recency_p(days, run)
     slots = []
     for purpose, k in quota(CALL_PURPOSE_SHARE, n).items():
         out_share = CALL_OUTBOUND_SHARE.get(purpose, 0) / CALL_PURPOSE_SHARE[purpose]
@@ -358,9 +432,9 @@ def stage_slots(run, rng, fake) -> None:
             events = _booking_events(led, purpose, run, rng)
             if len(events) < k:
                 raise ValueError(f"{purpose} 이벤트 {len(events)}건 < 통화 {k}건")
-            for (direction, structural), i in zip(
-                shape, rng.choice(len(events), size=k, replace=False).tolist(), strict=True
-            ):
+            event_p = _recency_p([date.fromisoformat(t[:10]) for _, t in events], run)
+            picks = rng.choice(len(events), size=k, replace=False, p=event_p).tolist()
+            for (direction, structural), i in zip(shape, picks, strict=True):
                 a, t = events[i]
                 pid = a["patient"]
                 new = purpose == "book" and led.patients[pid]["registered"] == t[:10]
@@ -387,7 +461,7 @@ def stage_slots(run, rng, fake) -> None:
             )
             rule = CALL_PATIENT_RULES.get((purpose, direction), ("visited", None))
             for _ in range(MAX_DATE_TRIES):
-                d = days[int(rng.integers(len(days)))]
+                d = days[int(rng.choice(len(days), p=day_p))]
                 t = any_minute(rng, d).strftime(FMT)
                 if who not in ("side", "insurer"):
                     about = None
@@ -397,9 +471,7 @@ def stage_slots(run, rng, fake) -> None:
                     for pid in led.patients
                     if led.matches(pid, rule, t)
                     and (who == "side" or led.patients[pid]["private"])
-                    and (
-                        (purpose, direction) == ("recall", "outbound") or not led.gone(pid, t)
-                    )  # 이탈 환자는 이탈일부터 리콜 발신만 (§2.2)
+                    and not led.gone(pid, t)  # 이탈 환자는 이탈일부터 통화 없음 (§2.2)
                 ]
                 if cands:
                     about = cands[int(rng.integers(len(cands)))]
@@ -491,14 +563,10 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             fact["appointment"] |= {"from_date": orig["at"][:10], "from_time": orig["at"][11:16]}
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
-        on = led.churn.get(s["about"])
-        if (
-            s["purpose"] == "recall"
-            and s["direction"] == "outbound"
-            and on
-            and on.isoformat() <= s["t"]
-        ):
-            fact["churned"] = True  # 리콜 발신에 이탈 환자 — 다른 치과로 옮겼다는 말 (§4.1)
+        if s["purpose"] == "recall_q":
+            fact["recall_text"] = led.recall_text(
+                s["about"], s["t"]
+            )  # 받은 문자 — 월을 지어내지 않게
         debts = [d for d in led.ledger_debt[s["about"]] if d[0] <= s["t"]]
         if s["purpose"] == "billing_q" and s["direction"] == "outbound" and debts:
             _, day, debt = debts[-1]  # 수납 문의 미수가 장부 실수 — 이미 냈다는 말 (⑧-1 근거)
@@ -611,10 +679,6 @@ def stage_labels(run, rng, fake) -> None:
             and s["appointment"]["at"][:10] != s["t"][:10]
         ):
             urgency = "normal"  # 오늘 봐야 하는 통화가 며칠 뒤 예약을 잡지는 않는다 — 추첨 뒤 덮어써 난수 흐름은 그대로
-        if (purpose, s["direction"]) == ("recall", "outbound") and led.gone(s["about"], s["t"]):
-            # 이탈 환자 리콜 — 옮겼다고 말하는 통화라 부 주제·예약 원함·가격 문의·할 일 없음(추첨 뒤 덮어써 난수 흐름은 그대로)
-            sub = None
-            flags.update(wants_appt=0, price_inquiry=0, has_todo=0)
         s.update(
             flags=flags,
             urgency=urgency,

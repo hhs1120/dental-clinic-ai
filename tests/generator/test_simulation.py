@@ -141,7 +141,7 @@ def test_planned_code_hygiene_scaling_rule():
     run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:3]:
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0), {})
+    sim = schedule.Sim(run, np.random.default_rng(0), {}, np.random.default_rng(1))
     on = date(2026, 9, 1)
     adult = schedule.Patient(0, date(1980, 1, 1), [], None, None)
     assert sim.planned_code(adult, "hygiene", on) == SCALING_CODE
@@ -318,6 +318,28 @@ def test_lapsed_patients_skip_first_recall(db):
     assert seen and all(first[pid]["type"] != "hygiene" for pid in seen)
 
 
+def test_dormant_patients_start_no_new_demand(db):
+    """휴면(DORMANT_MONTHLY_RATE): 휴면일부터 리콜·새 치료 수요 없음 — 그날 이후 전화로 시작하는 에피소드가 없다
+    (진행 중 에피소드에서 이어지는 치료계획 코스 — 데스크에서 못 잡아 다음 날 전화로 잡아도 — 는 이어 감, §2.6 (1))"""
+    conn, _, run = db
+    dormant = run.state["dormant"]
+    assert dormant
+    first = {}
+    for r in _appts(conn):
+        ep = run.state["episode"].get(r["id"])
+        if ep is not None:
+            first.setdefault(ep, r)
+    late = [
+        r
+        for r in first.values()
+        if r["patient_id"] in dormant
+        and r["booked_via"] == "phone"
+        and r["plan_item_id"] is None
+        and r["created"].date() >= dormant[r["patient_id"]]
+    ]
+    assert late == []
+
+
 def test_phone_lead_spreads_early_days(db):
     """시작 직후 수요가 첫날에 몰리지 않음 — 첫 진료일 예약은 리드 1일 이상이라 0, 첫 MAX_LEAD_DAYS 안에 분산"""
     conn, ctx, _ = db
@@ -361,7 +383,7 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
     run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0), {})
+    sim = schedule.Sim(run, np.random.default_rng(0), {}, np.random.default_rng(1))
     visits = run.state["pre_window"]
     scaled = [
         p

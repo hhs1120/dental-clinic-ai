@@ -91,7 +91,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 |---|---|
 | 스택 | **Next.js + TypeScript** / **FastAPI** / **SQLite**(FTS5 + **sqlite-vec** 벡터) |
 | DB | SQLite 2파일 — `source.sqlite`(생성기 출력, 읽기 전용으로 ATTACH) + `app.sqlite`(앱 테이블, 색인 `ax_chunks`·FTS5·벡터). DDL 원본도 `shared/`에서 두 파일로 나눈다. 벡터 접근은 `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
-| 벡터 저장소 결정 근거 | **규모**: 청크 수천~1만(문서 ~100 + 통화 `config` `calls_with_transcript` + 월 스레드 + 차트 기록) — 질의마다 전수 계산해도 ms 단위라 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 같은 파일(`app.sqlite`)이라 하이브리드 검색과 메타데이터 필터가 SQL 조인 하나, 두 저장소 동기화(삭제·재색인 불일치)가 없다. **fixture**: `make fixture`·`save-demo`가 `source.sqlite`·`app.sqlite`를 함께 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드)이 없고 저장소만 둘로 늘린다 |
+| 벡터 저장소 결정 근거 | **규모**: 청크 2만~3만(문서 ~100 + 통화 `config` `calls_with_transcript` + 월 스레드 + 차트 기록) — 질의마다 전수 계산해도 ms 단위라 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 같은 파일(`app.sqlite`)이라 하이브리드 검색과 메타데이터 필터가 SQL 조인 하나, 두 저장소 동기화(삭제·재색인 불일치)가 없다. **fixture**: `make fixture`·`save-demo`가 `source.sqlite`·`app.sqlite`를 함께 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드)이 없고 저장소만 둘로 늘린다 |
 | Chroma로 옮길 때 | 쉽다 — 벡터는 `VectorStore`(`upsert(ids, vectors, metadata)`·`query(vector, filter, k)`) 뒤에만 있고, 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로. 구현 하나 추가 + 필터용 메타데이터를 Chroma에 복사하고 다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사). 옮길 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때 |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | 임베딩 **OpenAI `text-embedding-3-small`**(확정 — 널리 쓰이고 저렴, Anthropic에는 임베딩 모델이 없음). 리랭커는 **Cohere Rerank(다국어) vs LLM 리랭킹(`claude-haiku-5-5`가 후보 순위 매김)**을 `--retrieval-only` dev로 비교 후 확정(LLM 리랭킹은 순위가 실행마다 흔들릴 수 있어 결정성·지연도 같이 본다) |

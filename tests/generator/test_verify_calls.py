@@ -440,10 +440,21 @@ def test_call_mix_warnings(tmp_path):
         verify.check_call_purpose_mix in verify.WARNINGS
         and verify.check_call_noise_mix in verify.WARNINGS
     )
+    # fixture는 창 앞뒤 절반에 2건씩 — 최근 가중(뒤 절반 비중 > 1/2)과 멀다
+    assert verify.check_call_recency(conn, CTX) and verify.check_call_recency in verify.WARNINGS
     report = verify.report_call_mix(conn, CTX)
     assert report["counterpart"] == {"patient": 0.5, "guardian": 0.25, "new_caller": 0.25}
     assert report["outbound"] == 0.25
     assert report["dev_n"] == {"book": 1}  # 평가 설계 §2.1 — 카테고리별 dev n
+
+
+def test_call_recency_passes_near_target(tmp_path, monkeypatch):
+    """가중치가 1(고르게)이면 기대값이 진료일 비율(≈ 1/2)이라 fixture 앞뒤 2건씩이 허용치(CALL_RECENCY_TOLERANCE) 안"""
+    from generator import master
+
+    conn = make_db(tmp_path)
+    monkeypatch.setattr(master, "CALL_RECENCY_WEIGHT", 1)
+    assert verify.check_call_recency(conn, CTX) == []
 
 
 # ── 통화 전사 (7단계, §4.1 '7단계 구현 결정') ──────────────────
@@ -500,32 +511,65 @@ def test_label_tokens_in_stored_text(tmp_path):
     }
 
 
-# 이탈·경과 확인 (§2.2·§4.1): 시드 c-0001 = 1번 환자 10/20 수납 문의 발신
-def test_churned_recall_labels(tmp_path):
-    """이탈 환자 리콜(churned)은 부 주제·예약 원함·가격 문의·할 일 없음"""
-    conn = make_db(tmp_path)
-    conn.execute(
-        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall', accepted_purposes = '[\"recall\"]',"
-        " complaint = 0, has_todo = 0, noise_type = NULL,"
-        " used_fact = json_set(used_fact, '$.churned', json('true')) WHERE call_uid = 'c-0001'"
-    )
-    assert verify.check_call_label_values(conn, CTX) == []
-    conn.execute(
-        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["recall", "book"]\', wants_appt = 1'
-        " WHERE call_uid = 'c-0001'"
-    )
-    assert verify.check_call_label_values(conn, CTX)
-
-
+# 이탈·리콜 문의·경과 확인 (§2.2·§4.1): 시드 c-0001 = 1번 환자 10/20 수납 문의 발신
 def test_churn_patient_calls(tmp_path):
-    """이탈일 뒤 이탈 환자의 통화는 리콜 발신뿐 — 수납 문의(10/20)는 잡히고, 리콜 발신이면 통과"""
+    """이탈일 뒤 이탈 환자의 통화는 없다 — 수납 문의(10/20)는 이탈일(10/10) 뒤라 잡히고, 이탈일이 통화 뒤면 통과"""
     conn = make_db(tmp_path)
     conn.execute("INSERT INTO truth.truth_patient_churn VALUES (1, 'churn', '2026-10-10')")
     assert verify.check_churn_calls(conn, CTX)
-    conn.execute(
-        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall' WHERE call_uid = 'c-0001'"
-    )
+    conn.execute("UPDATE truth.truth_patient_churn SET churned_on = '2026-10-21'")
     assert verify.check_churn_calls(conn, CTX) == []
+
+
+def _recall_q(conn):
+    conn.execute("UPDATE ax_calls SET direction = 'inbound' WHERE call_uid = 'c-0001'")
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall_q',"
+        " accepted_purposes = '[\"recall_q\"]', complaint = 0, noise_type = NULL"
+        " WHERE call_uid = 'c-0001'"
+    )
+
+
+@pytest.mark.parametrize(
+    "sent_at, fact_at, ok",
+    [
+        (None, "2026-10-15 09:00:00", False),  # 리콜 문자 없음
+        ("2026-10-15 09:00:00", "2026-10-15 09:00:00", True),  # 5일 전
+        ("2026-10-20 09:00:00", "2026-10-20 09:00:00", True),  # 그날 아침
+        ("2026-10-01 09:00:00", "2026-10-01 09:00:00", False),  # 19일 전 — 규칙 창 밖
+        ("2026-10-20 16:00:00", "2026-10-20 16:00:00", False),  # 통화(15:00) 뒤
+        ("2026-10-15 09:00:00", None, False),  # 사실에 받은 문자 없음
+        ("2026-10-15 09:00:00", "2026-10-14 09:00:00", False),  # 사실의 문자 ≠ 보낸 문자
+    ],
+)
+def test_recall_q_follows_recall_text(tmp_path, sent_at, fact_at, ok):
+    """리콜 문의(수신)는 통화 전 규칙 창(master.CALL_PATIENT_RULES) 안에 그 환자가 받은 리콜 문자가 있고, 사실
+    recall_text가 그 문자를 가리킨다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    if sent_at:
+        conn.execute(
+            "INSERT INTO emr_messages VALUES (9, 1, 'out', ?, '리콜', 'recall', NULL)", (sent_at,)
+        )
+    if fact_at:
+        conn.execute(
+            "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recall_text',"
+            " json_object('sent_at', ?, 'kind', 'after', 'due_month', 9)) WHERE call_uid = 'c-0001'",
+            (fact_at,),
+        )
+    assert (verify.check_recall_q_calls(conn, CTX) == []) == ok
+    assert verify.check_recall_q_calls in verify.REQUIRED
+
+
+def test_recall_q_is_inbound(tmp_path):
+    """리콜 문의는 발신 목적이 아니다 — 수신이면 통과, 발신이면 라벨 검사에 잡힌다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    assert verify.check_call_label_values(conn, CTX) == []
+    conn.execute("UPDATE ax_calls SET direction = 'outbound' WHERE call_uid = 'c-0001'")
+    assert any(
+        v["problem"] == "outbound가 아닌 목적" for v in verify.check_call_label_values(conn, CTX)
+    )
 
 
 @pytest.mark.parametrize(

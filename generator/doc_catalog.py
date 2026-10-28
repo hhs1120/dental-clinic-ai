@@ -838,7 +838,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "토요일 진료시간 변경",
         "토요일 진료 종료 시각",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F(
@@ -854,7 +854,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "미백 비용 변경",
         "미백 비용",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F("notice.white", f"미백 비용은 {_WHITENING}이다", _WHITENING, same="whitening.fee"),
@@ -865,7 +865,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "스케일링 본인부담 변경",
         "급여 스케일링 본인부담금",
-        effective="2025-01-01",
+        effective="2023-11-01",
         emr=True,
         facts=(
             F(
@@ -889,7 +889,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "리마인드 문자 발송 시각 변경",
         "예약 리마인드 문자 발송 시각",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F(
@@ -975,8 +975,8 @@ _DOCS: tuple[Doc, ...] = (
         "추석 연휴 휴진 날짜",
         kind="old_version",
         pair="notice-chuseok",
-        effective="2025-09-22",
-        facts=(F("old.chuseok", "10월 5일부터 10월 9일까지 휴진한다", "10월 5일", "10월 9일"),),
+        effective="2024-09-02",
+        facts=(F("old.chuseok", "9월 16일부터 9월 18일까지 휴진한다", "9월 16일", "9월 18일"),),
     ),
     Doc(
         "old-seollal",
@@ -985,8 +985,8 @@ _DOCS: tuple[Doc, ...] = (
         "설 연휴 휴진 날짜",
         kind="old_version",
         pair="notice-seollal",
-        effective="2025-01-13",
-        facts=(F("old.seollal", "1월 27일부터 1월 30일까지 휴진한다", "1월 27일", "1월 30일"),),
+        effective="2024-01-29",
+        facts=(F("old.seollal", "2월 9일부터 2월 12일까지 휴진한다", "2월 9일", "2월 12일"),),
     ),
     Doc(
         "old-hours",
@@ -995,7 +995,7 @@ _DOCS: tuple[Doc, ...] = (
         "토요일 진료 종료 시각",
         kind="old_version",
         pair="notice-hours",
-        effective="2024-03-04",
+        effective="2023-03-06",
         facts=(F("old.sat", "토요일 진료는 오후 2시까지다", "오후 2시까지"),),
     ),
     Doc(
@@ -1005,7 +1005,7 @@ _DOCS: tuple[Doc, ...] = (
         "미백 비용",
         kind="old_version",
         pair="notice-whitening",
-        effective="2024-01-02",
+        effective="2023-01-02",
         facts=(F("old.white", "미백 비용은 250,000원이다", "250,000원"),),
     ),
     Doc(
@@ -1015,7 +1015,7 @@ _DOCS: tuple[Doc, ...] = (
         "급여 스케일링 본인부담금",
         kind="old_version",
         pair="notice-scaling-fee",
-        effective="2024-01-01",
+        effective="2023-01-01",
         facts=(F("old.scaling", "스케일링 본인부담은 17,000원이다", "17,000원"),),
     ),
     Doc(
@@ -1025,7 +1025,7 @@ _DOCS: tuple[Doc, ...] = (
         "진료 당일 무료 주차 시간",
         kind="old_version",
         pair="notice-parking",
-        effective="2025-06-02",
+        effective="2024-06-03",
         facts=(F("old.parking", "무료 주차는 1시간이다", "1시간"),),
     ),
     Doc(
@@ -1035,7 +1035,7 @@ _DOCS: tuple[Doc, ...] = (
         "예약 리마인드 문자 발송 시각",
         kind="old_version",
         pair="notice-reminder",
-        effective="2024-04-01",
+        effective="2023-04-03",
         facts=(F("old.remind", "리마인드 문자는 예약 전날 오후 6시에 보낸다", "전날 오후 6시"),),
     ),
     Doc(
@@ -1045,7 +1045,7 @@ _DOCS: tuple[Doc, ...] = (
         "부도 누적 시 조치",
         kind="old_version",
         pair="notice-noshow",
-        effective="2025-03-04",
+        effective="2024-03-04",
         facts=(F("old.noshow", "부도 2회 누적 시 1개월간 전화 예약만 받는다", "2회", "1개월"),),
     ),
     Doc(
@@ -1055,7 +1055,7 @@ _DOCS: tuple[Doc, ...] = (
         "멸균 기록지 마감 시각",
         kind="old_version",
         pair="notice-sterile-log",
-        effective="2025-08-04",
+        effective="2024-08-05",
         facts=(
             F("old.sterile", "멸균 기록지는 다음 날 오전 10시까지 마감한다", "다음 날 오전 10시"),
         ),
@@ -1067,7 +1067,7 @@ _DOCS: tuple[Doc, ...] = (
         "무이자 할부 개월 수",
         kind="old_version",
         pair="notice-installment",
-        effective="2025-05-02",
+        effective="2024-05-03",
         facts=(
             F("old.install", "100만 원 이상 결제는 2개월 무이자 할부가 된다", "100만 원", "2개월"),
         ),
@@ -1079,7 +1079,7 @@ _DOCS: tuple[Doc, ...] = (
         "임플란트 보증 기간",
         kind="old_version",
         pair="notice-implant-warranty",
-        effective="2025-07-01",
+        effective="2024-07-01",
         facts=(F("old.warranty", "임플란트 보증 기간은 3년이다", "3년"),),
     ),
     Doc(
@@ -1089,7 +1089,7 @@ _DOCS: tuple[Doc, ...] = (
         "대기실 무선 인터넷 이름",
         kind="old_version",
         pair="notice-wifi",
-        effective="2025-04-07",
+        effective="2024-04-08",
         facts=(F("old.wifi", "대기실 와이파이 이름은 AX-WAITING이다", "AX-WAITING"),),
     ),
     # ── 방해: 비슷한 주제 10 (짝의 사실은 쓰지 않음) ──

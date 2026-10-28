@@ -179,7 +179,7 @@ _PURPOSE_LABEL = {
     "예약 변경": "reschedule",
     "예약 확인": "confirm",
     "예약 취소": "cancel",
-    "리콜·안내 전화": "recall",
+    "리콜 문의": "recall_q",
     "치료 문의": "treatment_q",
     "보험 문의": "insurance_q",
     "가격·비용 문의": "price_q",
@@ -205,10 +205,7 @@ _NOISE_LABEL = {
     "보호자가 정보 헷갈림": "guardian_confused",
 }
 _OUTBOUND_LABEL = {
-    "리콜·안내": "recall",
-    "예약 확인": "confirm",
     "수납 문의": "billing_q",
-    "서류 요청": "document_req",
     "치료 문의(경과 확인)": "treatment_q",
 }
 
@@ -288,16 +285,23 @@ def test_call_urgency_and_flag_lines_match_code():
     ]
     assert master.HAS_TODO_SHARE == {
         "confirm": master.HAS_TODO_SHARE["confirm"],
-        "recall": master.HAS_TODO_SHARE["confirm"],
+        "recall_q": master.HAS_TODO_SHARE["confirm"],
     }
     implied = dict(re.findall(r"`(\w+)`→(\w+)", flags))
     assert implied == master.IMPLIED_FLAG
 
 
-def test_call_mix_warning_row_matches_code():
-    row = next(r for key, r in _target_rows().items() if key.startswith("통화 목적·노이즈"))
+@pytest.mark.parametrize(
+    "name, tolerance",
+    [
+        ("통화 목적·노이즈", verify.CALL_MIX_TOLERANCE),
+        ("통화 최근 가중", verify.CALL_RECENCY_TOLERANCE),
+    ],
+)
+def test_call_mix_warning_row_matches_code(name, tolerance):
+    row = next(r for key, r in _target_rows().items() if key.startswith(name))
     assert list(_labeled_percents(row[2].replace("%p", "%")).values()) == pytest.approx(
-        [verify.CALL_MIX_TOLERANCE]
+        [tolerance]
     )
 
 

@@ -7,7 +7,7 @@ from collections import Counter
 
 import pytest
 
-from generator import build, calls
+from generator import build, calls, verify
 from generator.master import (
     CALL_NOISE_SHARE,
     CALL_OUTBOUND_SHARE,
@@ -49,13 +49,18 @@ def test_allocate_oversamples_rare_and_lifts_small_categories():
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
+def gen(tmp_path_factory):
     out = tmp_path_factory.mktemp("calls")
-    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
-    return conn
+    return conn, run
+
+
+@pytest.fixture(scope="module")
+def db(gen):
+    return gen[0]
 
 
 def _labels(conn):
@@ -90,9 +95,7 @@ def test_purpose_direction_noise_follow_quota(db):
         want = calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))[
             "m"
         ]
-        # 이탈 환자 리콜은 옮겼다는 통화라 부 주제를 덮어 지운다 — 그만큼만 모자랄 수 있다
-        churned = [r for r in out if json.loads(r["used_fact"]).get("churned")]
-        assert len(multi) <= want <= len(multi) + len(churned)
+        assert len(multi) == want
         assert all(r["noise_type"] != "two_topics" for r in out)
 
 
@@ -214,6 +217,25 @@ def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
     )
     build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     assert rows(sqlite3.connect(tmp_path / "source.sqlite")) == before
+
+
+def test_recall_q_patients_awake_and_unbooked(gen):
+    """리콜 문의 환자는 통화 시점에 휴면이 아니고(휴면 환자는 새 수요가 없어 문자를 보고 걸지 않는다) 잡힌 예약이 없다
+    — 휴면일은 DB에 없어 verify가 못 본다 (§4.1 환자 고르기)"""
+    conn, run = gen
+    rows = [r for r in _labels(conn) if r["primary_purpose"] == "recall_q"]
+    assert rows
+    dormant = run.state["dormant"]
+    for r in rows:
+        fact = json.loads(r["used_fact"])
+        pid, day = fact["patient"]["id"], fact["call_date"]
+        assert not (pid in dormant and dormant[pid].isoformat() <= day), r["call_uid"]
+        assert fact.get("next_appointment") is None, r["call_uid"]
+
+
+def test_call_days_weighted_to_recent(db):
+    """통화 시각은 최근 가중(master.CALL_RECENCY_WEIGHT) — 창 뒤 절반 비중이 가중치에서 계산한 값 근처"""
+    assert verify.check_call_recency(db, verify.load_ctx(CONFIG, db)) == []
 
 
 def test_pool_split_halves(db):

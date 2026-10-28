@@ -1,8 +1,8 @@
 # 생성기 파라미터 값의 원본. 의미는 docs/치과 AX - 가상 데이터 생성 설계.md §0·§2.6·§5.3
 seed: 20261201
 today: 2026-12-01
-range: { start: 2026-02-01, end: 2026-12-15 }
-returning_patients: 1400    # 구환(창 이전 등록) 수 — 신환은 시뮬레이션 결과, 총수는 결과값(≈ 1,900)
+range: { start: 2024-12-01, end: 2026-12-15 }
+returning_patients: 1600    # 구환(창 이전 등록) 수 — 신환은 시뮬레이션 결과, 총수는 결과값(≈ 2,800)
 visits_per_day: 26          # 하루 비취소 예약 상한(평일). 다른 요일은 슬롯 수 비례 — master.daily_cap
 reschedule_rate: 0.05
 noshow_rate: 0.06
@@ -13,10 +13,10 @@ settle_next_visit: 0.90       # 미수 중 다음 내원 때 정산, 나머지�
 lapse_rate: 0.30              # 구환 중 첫 리콜에 응하지 않는 비율 (§2.6 (1)). 아래 둘과 함께 내원 구성·하루 채움을 맞춘 값
 rebook_delay_days: [1, 14]   # 노쇼·당일 취소 뒤 다시 전화하기까지(양 끝 포함, 균등)
 treatment_demand_monthly: { child: 0.06, teen: 0.08, adult: 0.08, senior: 0.10 }   # 연령 구간별 환자 1인 월 치료 수요 발생률
-calls_with_transcript: 1000
+calls_with_transcript: 1500
 eval_pool_size: 150       # 사람 판정 풀 — 1인 판정 부담 기준(건당 ~1분)
 blind_pool_size: 75       # 판정 풀의 부분집합
 documents: { core: 66, distractor: 27 }
 messages: { appt_confirm: 1.0, reminder: 1.0, noshow: 1.0, balance: 0.5, reply_rate: 0.2 }
-holidays: config/holidays.json               # 출처: 한국천문연구원 월력 (2025 — 창 이전 내원, 2026)
+holidays: config/holidays.json               # 출처: 한국천문연구원 월력 (2023~2024 — 창 이전 내원·옛 공지 시행일, 2024~2026)
 forbidden_topics: config/forbidden_topics.json  # 거절형 상식 2개 — 생성 프롬프트에서 금지, 정규식은 검사(평가 설계 §3.1)

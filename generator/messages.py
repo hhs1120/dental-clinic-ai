@@ -9,10 +9,9 @@
   그 문구(착각)
 """
 
-from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from generator.calls import FMT, OPEN, any_minute, next_open_day, prev_open_day
+from generator.calls import FMT, OPEN, any_minute, next_open_day, prev_open_day, recall_targets
 from generator.master import (
     CLINIC_NAME,
     MESSAGE_CONFIRM_DELAY_MIN,
@@ -23,9 +22,7 @@ from generator.master import (
     MESSAGE_TEMPLATES,
     PAID_REPLY_NOISE_RATE,
     PROCEDURES,
-    RECALL_CYCLE,
     RECALL_TEMPLATES,
-    open_slots,
 )
 
 PROCEDURE_NAME = {p["code"]: p["name"] for p in PROCEDURES}
@@ -39,41 +36,6 @@ def _day(d: date) -> str:
 def _minutes(rng, lo_hi: tuple) -> timedelta:
     lo, hi = lo_hi
     return timedelta(minutes=int(rng.integers(lo, hi + 1)))
-
-
-def _recall_targets(run) -> list[tuple[datetime, int, str, date]]:
-    """(그달 첫 진료일 개원 시각, 환자, before·after, 기한) — 그 시각에 잡힌 예약이 없고 기한(마지막 completed 위생 내원 +
-    RECALL_CYCLE)이 다음 달이면 before, 지난달이면 after"""
-    hygiene, appts = defaultdict(list), defaultdict(list)
-    for pid, at, typ, status, created, cancelled in run.conn.execute(
-        "SELECT patient_id, scheduled_at, type, status, created_at, cancelled_at FROM emr_appointments"
-    ):
-        appts[pid].append((created, at, cancelled))
-        if typ == "hygiene" and status == "completed":
-            hygiene[pid].append(at)
-    out = []
-    y, m = run.range_start.year, run.range_start.month
-    while date(y, m, 1) < run.today:
-        d = date(y, m, 1)
-        while not open_slots(d.weekday()) or d in run.holidays:
-            d += timedelta(days=1)
-        t = datetime.combine(d, OPEN)
-        ts = t.strftime(FMT)
-        nxt = (y + 1, 1) if m == 12 else (y, m + 1)
-        prv = (y - 1, 12) if m == 1 else (y, m - 1)
-        if run.range_start <= d < run.today:
-            for pid in sorted(hygiene):
-                last = max((a for a in hygiene[pid] if a < ts), default=None)
-                if last is None or any(
-                    c <= ts < a and (x is None or x > ts) for c, a, x in appts[pid]
-                ):
-                    continue
-                due = datetime.strptime(last, FMT).date() + RECALL_CYCLE
-                kind = {nxt: "before", prv: "after"}.get((due.year, due.month))
-                if kind:
-                    out.append((t, pid, kind, due))
-        y, m = nxt
-    return out
 
 
 def stage(run, rng, fake) -> None:
@@ -138,7 +100,7 @@ def stage(run, rng, fake) -> None:
                 date=_day(date.fromisoformat(at[:10])),
                 amount=f"{owed:,}",
             )
-    for t, pid, kind, due in _recall_targets(run):  # 대상 전원 (§2.5)
+    for t, pid, kind, due in recall_targets(run):  # 대상 전원 (§2.5)
         send(t, pid, "recall", None, RECALL_TEMPLATES[kind], month=due.month)
     for pid, started in conn.execute(
         "SELECT c.patient_id, c.started_at FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"

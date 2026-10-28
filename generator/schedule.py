@@ -5,6 +5,7 @@
 3. 변경 4. 리마인드. 휴진일은 아무 일도 없다.
 - 신환 수 = 그날 잡힌 기존 환자 예약(전화·데스크, 변경 제외) B × s/(1−s), s = NEW_PATIENT_SHARE (확률적 반올림)
 - lapse(첫 리콜 무응답)는 구환 첫 리콜만(3단계). 내원하면 다음 리콜이 다시 생긴다
+- 휴면(DORMANT_MONTHLY_RATE): 휴면일(지수분포, 자기 난수)부터 리콜·새 치료 수요 없음. 다른 치과로 옮긴 건 아님(⑨ 정답 아님)
 - 치료계획(§2.3): Tn 첫 내원·상담·치주 위생(PERIO_PLAN_RATE)이 계획을 만들고, 코스는 항목 순서대로 예약한다.
   그만둠(PLAN_DROP_RATE)은 계획을 받아들일 때 한 번 — 몇 번째 항목 뒤에 멈출지 함께 뽑는다. 치아는 5단계가 정한다
 - 이탈(§2.2): 구환 중 CHURN_SHARE, 이탈일은 창 시작 ~ TODAY − CHURN_MIN_DAYS 균등(자기 난수). 이탈일부터 전화 예약·
@@ -14,7 +15,7 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
-from generator.demand import arrivals, recall_due
+from generator.demand import DAYS_PER_MONTH, arrivals, recall_due
 from generator.master import (
     CHAIRS,
     CHECKUP_CODE,
@@ -22,6 +23,7 @@ from generator.master import (
     CHURN_SHARE,
     COURSE_INTERVAL_DAYS,
     DOCTOR_CONCURRENCY,
+    DORMANT_MONTHLY_RATE,
     EPISODE_MIX,
     FAMILY_SIZE,
     GUARDIAN_MIN_AGE_GAP,
@@ -113,6 +115,7 @@ class Patient:
     scaling_years: set = field(
         default_factory=set
     )  # 급여 스케일링(SCALING_MIN_AGE 이상)을 받은 해
+    dormant: date | None = None  # 휴면일(DORMANT_MONTHLY_RATE) — 이날부터 리콜·새 치료 수요 없음
 
 
 @dataclass
@@ -148,9 +151,10 @@ def pick_churn(run, rng) -> dict[int, date]:
 
 
 class Sim:
-    def __init__(self, run, rng, churn: dict[int, date]):
+    def __init__(self, run, rng, churn: dict[int, date], dormant_rng):
         self.run, self.rng, self.cfg = run, rng, run.cfg
         self.churn = churn
+        self.dormant_rng = dormant_rng  # 휴면 추첨은 자기 난수 — 시뮬레이션 난수를 쓰지 않게
         self.holidays = run.holidays
         self.staff = {
             role: [
@@ -176,6 +180,7 @@ class Sim:
                     list(run.state["arrivals"][p["id"]]),
                     run.state["recall_due"][p["id"]],
                     p["last_hygiene"],
+                    dormant=self.dormant_day(run.range_start),
                 )
             )
         self.surname = dict(run.conn.execute("SELECT id, surname FROM emr_families"))
@@ -298,6 +303,12 @@ class Sim:
         """그날 개원~평일 마감 사이 분 단위 시각 균등 추첨 — 통화·취소 시각. 점심·토요일 마감은 따지지 않는다"""
         return datetime.combine(d, OPEN) + timedelta(
             minutes=int(self.rng.integers(business_minutes(d.weekday())))
+        )
+
+    def dormant_day(self, start: date) -> date:
+        """휴면일 — start부터 월 DORMANT_MONTHLY_RATE의 지수분포 (자기 난수)"""
+        return start + timedelta(
+            days=int(self.dormant_rng.exponential(DAYS_PER_MONTH / DORMANT_MONTHLY_RATE))
         )
 
     def gone(self, p: Patient, d: date) -> bool:
@@ -522,6 +533,8 @@ class Sim:
 
     def due_demand(self, p: Patient, d: date) -> tuple[str, Episode] | None:
         """기한이 된 수요 중 가장 이른 것 (같으면 치료 먼저) — 예약이 잡혀야 시작하므로 여기서는 보기만"""
+        if p.dormant is not None and d >= p.dormant:
+            return None
         arrival = p.queue[0] if p.queue and p.queue[0].day <= d else None
         recall = p.recall_due if p.recall_due is not None and p.recall_due <= d else None
         if arrival is not None and (recall is None or arrival.day <= recall):
@@ -589,6 +602,7 @@ class Sim:
             if self.phone_book(p, visit_type, d) is None:
                 return  # 빈자리가 없으면 그날 신환은 더 받지 않는다(후보는 버림)
             self.patients.append(p)
+            p.dormant = self.dormant_day(d + timedelta(days=1))
             p.queue = arrivals(
                 self.rng,
                 p.birth,
@@ -725,7 +739,11 @@ class Sim:
             self.run.state["episode"].items(),
         )
         self.run.state["plans"] = self.plans  # 계획 테이블은 5단계가 치아를 정해 적재
-        self.run.state["churn"] = self.churn  # 5단계 병행 후보에서 빼고, 6단계 리콜 통화 사실에
+        self.run.state["churn"] = self.churn  # 5단계 병행 후보에서 빼고, 6단계 통화 후보에서 뺀다
+        # 휴면 환자 → 휴면일 — 6단계 리콜 문의 후보에서 빼고, 휴면 테스트가 본다
+        self.run.state["dormant"] = {
+            p.id: p.dormant for p in self.patients if p.dormant < self.run.today
+        }
         conn.executemany(
             "INSERT INTO truth.truth_patient_churn VALUES (?, 'churn', ?)",
             [(pid, on.isoformat()) for pid, on in sorted(self.churn.items())],
@@ -733,7 +751,8 @@ class Sim:
 
 
 def stage(run, rng, fake) -> None:
-    (churn_rng,) = rng.spawn(1)  # 이탈 추첨은 자기 난수 — 시뮬레이션 난수를 쓰지 않게
-    sim = Sim(run, rng, pick_churn(run, churn_rng))
+    # 이탈·휴면 추첨은 자기 난수 — 시뮬레이션 난수를 쓰지 않게
+    churn_rng, dormant_rng = rng.spawn(2)
+    sim = Sim(run, rng, pick_churn(run, churn_rng), dormant_rng)
     sim.run_days()
     sim.write()
