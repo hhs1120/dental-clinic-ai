@@ -224,7 +224,7 @@ def _load(conn, qa):
 
 @pytest.fixture
 def db(tmp_path, monkeypatch):
-    monkeypatch.setattr(verify, "QA_TYPE_COUNTS", COUNTS)
+    monkeypatch.setattr(verify.rag_qa, "QA_TYPE_COUNTS", COUNTS)  # 검사가 읽는 곳
     conn = make_db(tmp_path)
     conn.executemany("INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", EXTRA_DOCS)
     conn.executemany(
