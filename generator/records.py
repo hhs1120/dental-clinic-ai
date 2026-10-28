@@ -13,10 +13,10 @@ from generator.master import (
     ADJUST_REASONS,
     ADJUST_TYPE_WEIGHTS,
     ADJUSTED_PAID_RANGE,
-    EXTERNAL_SCALING_DENY_RATE,
     EXTRACTION_CODES,
     FULL_MOUTH,
     IMPLANT_CODE,
+    PARALLEL_SHARE,
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURES,
     REVIEW_OUTCOME_WEIGHTS,
@@ -260,12 +260,9 @@ def _submitted_at(month: str) -> str:
 
 
 def review(rng, code: str, amount: int, repeat: bool = False) -> tuple:
-    """확정 월 심사 결과 (status, paid_amount, adjust_code, adjust_note). 급여 스케일링은 먼저 타 기관 이력 불능,
-    그 밖은 시술군별 결과 가중 → 깎이면 사유 유형 가중 → 그 유형에서 그 시술에 맞는 상세 사유 균등.
+    """확정 월 심사 결과 (status, paid_amount, adjust_code, adjust_note). 시술군별 결과 가중 → 깎이면 사유 유형 가중 →
+    그 유형에서 그 시술에 맞는 상세 사유 균등. 타 기관 이력은 여기서 뽑지 않는다(병행 환자 줄 — stage_claims).
     repeat(같은 코스에서 같은 치아·시술을 이미 함 — 이어지는 치료라 재시행이 아님)이면 요건 유형을 빼고 뽑는다"""
-    if code == SCALING_CODE and rng.random() < EXTERNAL_SCALING_DENY_RATE:
-        reason = next(r for r in ADJUST_REASONS.values() if r["type"] == "external")
-        return "denied", 0, reason["category"], reason["note"]
     group = adjust_group(code)
     status = _weighted(rng, REVIEW_OUTCOME_WEIGHTS[group])
     if status == "paid":
@@ -290,14 +287,42 @@ def review(rng, code: str, amount: int, repeat: bool = False) -> tuple:
 
 def stage_claims(run, rng, fake) -> None:
     """급여 진료마다 청구 1줄(claim_month = 진료월, 금액 = 급여 금액). 전월 이후 pending / 그 전 SUBMITTED_MONTHS개월
-    submitted / 그 이전 확정(심사 추첨). 창 이전 내원은 TODAY와 같은 해 급여 스케일링만 paid 고정(심사 추첨 대상 아님)"""
+    submitted / 그 이전 확정(심사 추첨). 창 이전 내원은 TODAY와 같은 해 급여 스케일링만 paid 고정(심사 추첨 대상 아님).
+    병행(§2.2): 확정 월 창 안 급여 스케일링 줄이 있는 환자(이탈 환자 제외) 중 PARALLEL_SHARE — 그 환자의 첫 그 줄은
+    타 기관 이력 거절(자기 난수). 정답은 truth_patient_churn"""
     birth, episode = _birth(run.conn), run.state["episode"]
-    rows, seen = [], set()  # seen = (환자, 치아, 시술, 코스) — 코스 안 반복
-    for tid, appt_id, pid, chart_no, tooth, performed, code, amount in run.conn.execute(
+    lines = run.conn.execute(
         "SELECT t.id, t.appointment_id, t.patient_id, p.chart_no, t.tooth_no, t.performed_at,"
         " t.procedure_code, t.insured_amount FROM emr_treatments t"
         " JOIN emr_patients p ON p.id = t.patient_id ORDER BY t.id"
-    ):
+    ).fetchall()
+
+    def settled(served: date) -> bool:
+        return (
+            served >= run.range_start
+            and _months_before(run.today, served.strftime("%Y-%m")) > 1 + SUBMITTED_MONTHS
+        )
+
+    first_scaling: dict[int, int] = {}  # 병행 후보 환자 → 그 첫 줄(진료 id)
+    for tid, _, pid, _, _, performed, code, _ in lines:
+        served = datetime.fromisoformat(performed).date()
+        if (
+            code == SCALING_CODE
+            and pid not in run.state["churn"]
+            and settled(served)
+            and insured_on(PROCEDURE[code], age_on(birth[pid], served))
+        ):
+            first_scaling.setdefault(pid, tid)
+    (parallel_rng,) = rng.spawn(1)
+    pool = sorted(first_scaling)
+    parallel = sorted(
+        int(i)
+        for i in parallel_rng.choice(pool, size=round(PARALLEL_SHARE * len(pool)), replace=False)
+    )
+    external_lines = {first_scaling[pid] for pid in parallel}
+    external = next(r for r in ADJUST_REASONS.values() if r["type"] == "external")
+    rows, seen = [], set()  # seen = (환자, 치아, 시술, 코스) — 코스 안 반복
+    for tid, appt_id, pid, chart_no, tooth, performed, code, amount in lines:
         key = (pid, tooth, code, episode.get(appt_id))
         repeat = tooth != FULL_MOUTH and key[3] is not None and key in seen
         seen.add(key)
@@ -314,6 +339,8 @@ def stage_claims(run, rng, fake) -> None:
             result = ("pending", None, None, None)
         elif before <= 1 + SUBMITTED_MONTHS:
             result = ("submitted", None, None, None)
+        elif tid in external_lines:
+            result = ("denied", 0, external["category"], external["note"])
         else:
             result = review(rng, code, amount, repeat)
         submitted = None if result[0] == "pending" else _submitted_at(month)
@@ -331,6 +358,10 @@ def stage_claims(run, rng, fake) -> None:
                 *result,
             )
         )
+    run.conn.executemany(
+        "INSERT INTO truth.truth_patient_churn VALUES (?, 'parallel', NULL)",
+        [(pid,) for pid in parallel],
+    )
     run.conn.executemany(
         "INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
         " procedure_code, claim_amount, submitted_at, status, paid_amount, adjust_code, adjust_note)"

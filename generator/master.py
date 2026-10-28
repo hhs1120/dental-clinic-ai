@@ -161,8 +161,9 @@ SUBMITTED_MONTHS = 2
 # 재심 기한 = 확정 월 청구의 심사결과 통보일(emr_claims.reviewed_at) + 이 일수 (§2.4 통보일, ⑤-3 조정 목록)
 APPEAL_DAYS = 90
 
-# 심사 결과 추첨 (§2.4). 급여 스케일링 줄은 먼저 이 비율로 타 기관 이력(연 1회 초과) 불능 — 우리 장부로는 오류가 아님
-EXTERNAL_SCALING_DENY_RATE = 0.02
+# 병행(§2.2): 확정 월 창 안 급여 스케일링 줄이 있는 환자 중 이 비율 — 그 줄이 타 기관 이력(연 1회 초과)으로 불능.
+# 우리 장부로는 오류가 아님. 추정값 — 리포트로 확인
+PARALLEL_SHARE = 0.02
 # 시술군(adjust_group)별 그 밖의 줄 결과 가중(%). 임상 시술(요건 사유가 있는 시술)이 주로 깎인다.
 # 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
 REVIEW_OUTCOME_WEIGHTS = {

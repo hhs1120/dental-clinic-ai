@@ -97,8 +97,9 @@ def _in_hours(t: str) -> bool:
 class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
-    def __init__(self, conn, plan_items: list):
+    def __init__(self, conn, plan_items: list, churn: dict):
         self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
+        self.churn = churn  # 4단계 state — 이탈 환자 → 이탈일
         self.patients = {
             r[0]: {
                 "id": r[0],
@@ -290,7 +291,7 @@ def _side(led: Ledger, pid: int, day: str) -> str:
 
 
 def stage_slots(run, rng, fake) -> None:
-    led = Ledger(run.conn, run.state["plan_items"])
+    led = Ledger(run.conn, run.state["plan_items"], run.state["churn"])
     n = run.cfg["calls_with_transcript"]
     days = [run.range_start + timedelta(days=i) for i in range((run.today - run.range_start).days)]
     days = [d for d in days if is_open(d, run.holidays)]
@@ -411,6 +412,16 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             fact["appointment"] |= {"from_date": orig["at"][:10], "from_time": orig["at"][11:16]}
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
+        on = led.churn.get(s["about"])
+        if (
+            s["purpose"] == "recall"
+            and s["direction"] == "outbound"
+            and on
+            and on.isoformat() <= s["t"]
+        ):
+            fact["churned"] = (
+                True  # 리콜 발신에 이탈 환자 — 다른 치과로 옮겼다는 말 (§4.1 환자 고르기)
+            )
     if (
         s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]
     ):  # 부 주제 가격 문의도 무엇의 가격인지

@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 from generator.master import (
     CHAIRS,
+    CHURN_MIN_DAYS,
     DOCTOR_CONCURRENCY,
     MAX_LEAD_DAYS,
     VISIT_MIX,
@@ -193,6 +194,49 @@ def check_cancellation_kind(conn, ctx):
         " AND NOT (date(a.cancelled_at) = date(a.scheduled_at) AND date(a.scheduled_at) < ?)",
         ctx.today.isoformat(),
     )
+
+
+# ── 이탈·병행 (§2.2·§2.6 (1)) ──────────────────────────────
+
+
+def check_churn_date(conn, ctx):
+    """이탈 환자는 구환(등록일 < 창 시작), 이탈일은 창 시작 ~ TODAY − master.CHURN_MIN_DAYS (흔적이 쌓일 시간)"""
+    last = (ctx.today - timedelta(days=CHURN_MIN_DAYS)).isoformat()
+    return _rows(
+        conn,
+        "SELECT c.patient_id, c.churned_on, p.registered_at FROM truth.truth_patient_churn c"
+        " JOIN emr_patients p ON p.id = c.patient_id WHERE c.kind = 'churn'"
+        " AND (p.registered_at >= ? OR c.churned_on < ? OR c.churned_on > ?)",
+        ctx.range_start.isoformat(),
+        ctx.range_start.isoformat(),
+        last,
+    )
+
+
+def check_churn_after(conn, ctx):
+    """이탈 환자는 이탈일부터 새 예약(created_at)·completed 내원·리마인드 확인 없음 — 이미 잡힌 예약은
+    노쇼 또는 당일 취소(TODAY 전)"""
+    bad = []
+    for r in _rows(
+        conn,
+        "SELECT a.id, a.patient_id, a.scheduled_at, a.created_at, a.status, a.confirmed, c.churned_on"
+        " FROM emr_appointments a JOIN truth.truth_patient_churn c ON c.patient_id = a.patient_id"
+        " WHERE c.kind = 'churn'",
+    ):
+        on = date.fromisoformat(r["churned_on"])
+        day = _dt(r["scheduled_at"]).date()
+        if (
+            _dt(r["created_at"]).date() >= on
+            or (on <= day < ctx.today and r["status"] not in ("noshow", "cancelled"))
+            or (r["confirmed"] and _prev_open_day(day, ctx.holidays) >= on)
+        ):
+            bad.append(r)
+    return bad
+
+
+def report_churn(conn, ctx):
+    """다른 치과 이용 환자 수 — 이탈·병행 (⑨ 다른 치과 추정의 양성)"""
+    return dict(conn.execute("SELECT kind, count(*) FROM truth.truth_patient_churn GROUP BY kind"))
 
 
 # ── 분포 ────────────────────────────────────────────────────

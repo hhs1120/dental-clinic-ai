@@ -585,6 +585,56 @@ def test_call_fact_open_plan_items(tmp_path):
     assert verify.check_call_facts_as_of(conn, CTX)
 
 
+# 이탈·병행 (§2.2): 시드는 둘 다 없음. 이탈일 범위 = 창 시작 ~ TODAY − CHURN_MIN_DAYS — 시드 창이 짧아 TODAY를 미룬다
+LATE = replace(CTX, today=date(2027, 3, 1))
+EXTERNAL_CLAIM = (  # 시드 2번 청구(1번 환자 11/03 스케일링)를 타 기관 이력 거절로
+    "UPDATE emr_claims SET status = 'denied', paid_amount = 0, adjust_code = 'C',"
+    " adjust_note = '연 1회 산정 횟수 초과(타 기관 이력)' WHERE id = 2"
+)
+
+
+def _churn(conn, pid, kind, on):
+    conn.execute("INSERT INTO truth.truth_patient_churn VALUES (?, ?, ?)", (pid, kind, on))
+
+
+@pytest.mark.parametrize(
+    "on, registered",
+    [("2026-09-15", None), ("2026-11-15", None), ("2026-10-10", "2026-10-02")],
+)  # 창 시작 전 / TODAY − CHURN_MIN_DAYS 뒤 / 신환
+def test_churn_date_out_of_range(tmp_path, on, registered):
+    conn = make_db(tmp_path)
+    _churn(conn, 2, "churn", on)
+    if registered:
+        conn.execute("UPDATE emr_patients SET registered_at = ? WHERE id = 2", (registered,))
+    assert verify.check_churn_date(conn, LATE)
+
+
+def test_churn_date_in_range(tmp_path):
+    conn = make_db(tmp_path)
+    _churn(conn, 2, "churn", "2026-10-10")
+    assert verify.check_churn_date(conn, LATE) == []
+
+
+def test_churn_after_activity(tmp_path):
+    """이탈일 뒤 completed(11/03 위생)·새 예약(11/20 생성) — 잡힌다. 마지막 활동 뒤 이탈일이면 통과"""
+    conn = make_db(tmp_path)
+    _churn(conn, 1, "churn", "2026-10-20")
+    assert {r["id"] for r in verify.check_churn_after(conn, CTX)} >= {2, 5, 7}
+    conn.execute("UPDATE truth.truth_patient_churn SET churned_on = '2026-11-25'")
+    assert verify.check_churn_after(conn, CTX) == []
+
+
+def test_parallel_external(tmp_path):
+    """타 기관 이력 청구 ⇔ 병행 환자 — 한쪽만 있으면 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute(EXTERNAL_CLAIM)
+    assert verify.check_parallel_external(conn, CTX)
+    _churn(conn, 1, "parallel", None)
+    assert verify.check_parallel_external(conn, CTX) == []
+    _churn(conn, 2, "parallel", None)
+    assert verify.check_parallel_external(conn, CTX)
+
+
 # 체어·동시 진료 (§1 (3)·(4)): 시드 1번 예약 = 10/06 10:00~11:00 원장·체어 1, 2번 = 11/03 10:00~10:30 위생사 2·체어 2
 def test_chair_overlap(tmp_path):
     conn = make_db(tmp_path)

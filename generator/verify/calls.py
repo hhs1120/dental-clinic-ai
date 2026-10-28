@@ -473,7 +473,7 @@ def _appt_detail(a: dict, appts: dict) -> dict:
 
 def check_call_facts_as_of(conn, ctx):
     """used_fact는 통화 시점 사실: 통화 날짜, 예약류의 예약 상세, 환자(통화 환자와 같음 — 환자가 연결됐거나 보험사면
-    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음"""
+    필수), 최근 진료 3건·잔액·다음 예약·보이는 주의사항·열린 치료계획 항목이 장부를 통화 시각까지만 읽은 값과 같음. 리콜 발신의 이탈 환자(이탈일 ≤ 통화일)는 churned"""
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, name, birth_date FROM emr_patients")}
     appts = {
         a["id"]: a
@@ -484,6 +484,11 @@ def check_call_facts_as_of(conn, ctx):
         )
     }
     items = _plan_items(conn)
+    churn = dict(
+        conn.execute(
+            "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
+        )
+    )
     bad = []
     for r in _calls(conn):
         f, t = r["fact"], r["started_at"]
@@ -506,6 +511,12 @@ def check_call_facts_as_of(conn, ctx):
             bad.append({"call_uid": r["call_uid"], "problem": "사실의 환자 ≠ 통화 환자"})
             continue
         want = _facts_at(conn, pid, t, patients[pid]["birth_date"], items)
+        want["churned"] = (
+            r["primary_purpose"] == "recall"
+            and r["direction"] == "outbound"
+            and churn.get(pid) is not None
+            and churn[pid] <= t[:10]
+        )
         nxt = f.get("next_appointment")
         got = {
             "age": f["patient"]["age"],
@@ -514,6 +525,7 @@ def check_call_facts_as_of(conn, ctx):
             "next": nxt["appointment_id"] if nxt else None,
             "alerts": set(f["alerts"]),
             "open_plan_items": f.get("open_plan_items"),
+            "churned": f.get("churned", False),
         }
         if f["patient"]["name"] != patients[pid]["name"]:
             got["name"] = f["patient"]["name"]

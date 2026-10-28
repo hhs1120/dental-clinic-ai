@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from generator.master import (
+    ADJUST_REASONS,
     CONDITIONAL_INSURED_MIN_AGE,
     EXTRACTION_CODES,
     FULL_MOUTH,
@@ -71,6 +72,36 @@ def check_settled_claims(conn, ctx):
         " OR (status = 'denied' AND paid_amount = 0 AND adjust_code IS NOT NULL AND adjust_note IS NOT NULL))",
         first_submitted,
     )
+
+
+def check_parallel_external(conn, ctx):
+    """타 기관 이력 사유(master.ADJUST_REASONS의 external)로 깎인 청구 ⇔ 병행 환자(truth_patient_churn parallel) —
+    병행 환자마다 한 줄 이상 (§2.2)"""
+    external = [
+        (r["category"], r["note"]) for r in ADJUST_REASONS.values() if r["type"] == "external"
+    ]
+    hit = {
+        pid
+        for pid, code, note in conn.execute(
+            "SELECT patient_id, adjust_code, adjust_note FROM emr_claims WHERE adjust_code IS NOT NULL"
+        )
+        if (code, note) in external
+    }
+    parallel = {
+        r[0]
+        for r in conn.execute(
+            "SELECT patient_id FROM truth.truth_patient_churn WHERE kind = 'parallel'"
+        )
+    }
+    return [
+        {
+            "patient_id": pid,
+            "problem": "병행 환자가 아닌데 타 기관 이력"
+            if pid in hit
+            else "병행 환자인데 타 기관 이력 없음",
+        }
+        for pid in sorted(hit ^ parallel)
+    ]
 
 
 # ── 시술·청구 ─────────────────────────────────────────────────

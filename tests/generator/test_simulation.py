@@ -11,6 +11,7 @@ import yaml
 from generator import build, schedule, verify
 from generator.master import (
     CHECKUP_CODE,
+    CHURN_SHARE,
     COURSE_INTERVAL_DAYS,
     FAMILY_SIZE,
     GUARDIAN_MIN_AGE_GAP,
@@ -49,6 +50,8 @@ APPOINTMENT_CHECKS = [
     verify.check_reschedule_pair,
     verify.check_fake_phone,
     verify.check_pre_window_visit,
+    verify.check_churn_date,
+    verify.check_churn_after,
 ]
 
 
@@ -138,7 +141,7 @@ def test_planned_code_hygiene_scaling_rule():
     run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:3]:
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0))
+    sim = schedule.Sim(run, np.random.default_rng(0), {})
     on = date(2026, 9, 1)
     adult = schedule.Patient(0, date(1980, 1, 1), [], None, None)
     assert sim.planned_code(adult, "hygiene", on) == SCALING_CODE
@@ -358,7 +361,7 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
     run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0))
+    sim = schedule.Sim(run, np.random.default_rng(0), {})
     visits = run.state["pre_window"]
     scaled = [
         p
@@ -372,3 +375,19 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
         year = visits[p.id]["start"].year
         assert year in p.scaling_years
         assert sim.planned_code(p, "hygiene", date(year, 12, 31)) == CHECKUP_CODE
+
+
+def test_churn_and_parallel_counts(db):
+    """이탈 = 구환의 CHURN_SHARE, 병행은 한 명 이상(타 기관 이력 줄 — 필수 검사가 짝을 본다). 이탈 환자의 이탈일 뒤
+    예약은 노쇼·당일 취소로 남아 흔적이 된다 (§2.2)"""
+    conn, ctx, run = db
+    kinds = dict(
+        conn.execute("SELECT kind, count(*) FROM truth.truth_patient_churn GROUP BY kind")
+    )
+    assert kinds["churn"] == round(CHURN_SHARE * CFG["returning_patients"])
+    assert kinds["parallel"] >= 1
+    missed = conn.execute(
+        "SELECT count(*) FROM emr_appointments a JOIN truth.truth_patient_churn c USING (patient_id)"
+        " WHERE c.kind = 'churn' AND date(a.scheduled_at) >= c.churned_on"
+    ).fetchone()[0]
+    assert missed

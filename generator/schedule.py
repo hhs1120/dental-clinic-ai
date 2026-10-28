@@ -7,6 +7,8 @@
 - lapse(첫 리콜 무응답)는 구환 첫 리콜만(3단계). 내원하면 다음 리콜이 다시 생긴다
 - 치료계획(§2.3): Tn 첫 내원·상담·치주 위생(PERIO_PLAN_RATE)이 계획을 만들고, 코스는 항목 순서대로 예약한다.
   그만둠(PLAN_DROP_RATE)은 계획을 받아들일 때 한 번 — 몇 번째 항목 뒤에 멈출지 함께 뽑는다. 치아는 5단계가 정한다
+- 이탈(§2.2): 구환 중 CHURN_SHARE, 이탈일은 창 시작 ~ TODAY − CHURN_MIN_DAYS 균등(자기 난수). 이탈일부터 전화 예약·
+  변경·재예약·리마인드 확인이 없고, 잡혀 있던 예약은 노쇼 또는 당일 취소. 정답은 truth_patient_churn
 """
 
 from dataclasses import dataclass, field
@@ -16,6 +18,8 @@ from generator.demand import arrivals, recall_due
 from generator.master import (
     CHAIRS,
     CHECKUP_CODE,
+    CHURN_MIN_DAYS,
+    CHURN_SHARE,
     COURSE_INTERVAL_DAYS,
     DOCTOR_CONCURRENCY,
     EPISODE_MIX,
@@ -136,9 +140,19 @@ class Appt:
     plan_item: int | None = None  # 이행하는 치료계획 항목 id
 
 
+def pick_churn(run, rng) -> dict[int, date]:
+    """이탈 환자 → 이탈일. 구환(3단계까지 있는 환자) 중 CHURN_SHARE, 이탈일은 창 시작 ~ TODAY − CHURN_MIN_DAYS 균등"""
+    ids = sorted(p["id"] for p in run.state["patients"])
+    k = round(CHURN_SHARE * len(ids))
+    span = (run.today - timedelta(days=CHURN_MIN_DAYS) - run.range_start).days
+    chosen = sorted(int(i) for i in rng.choice(ids, size=k, replace=False))
+    return {pid: run.range_start + timedelta(days=int(rng.integers(span + 1))) for pid in chosen}
+
+
 class Sim:
-    def __init__(self, run, rng):
+    def __init__(self, run, rng, churn: dict[int, date]):
         self.run, self.rng, self.cfg = run, rng, run.cfg
+        self.churn = churn
         self.holidays = run.holidays
         self.staff = {
             role: [
@@ -286,6 +300,10 @@ class Sim:
         """그날 개원~평일 마감 사이 분 단위 시각 균등 추첨 — 통화·취소 시각. 점심·토요일 마감은 따지지 않는다"""
         return datetime.combine(d, OPEN) + timedelta(minutes=int(self.rng.integers(DAY_MINUTES)))
 
+    def gone(self, p: Patient, d: date) -> bool:
+        """그날 이미 이탈한 환자"""
+        return p.id in self.churn and d >= self.churn[p.id]
+
     def occupy(self, a: Appt, sign: int) -> None:
         d = a.start.date()
         self.day_count[d] = self.day_count.get(d, 0) + sign
@@ -398,6 +416,15 @@ class Sim:
         ):
             p, r = a.patient, self.rng.random()
             p.appt = None
+            if self.gone(p, d):  # 잡혀 있던 예약 — 노쇼 또는 당일 취소, 수요는 버린다
+                if r * (noshow + sameday) < noshow:
+                    a.status = "noshow"
+                else:
+                    lead = int(self.rng.integers(1, SAMEDAY_CANCEL_LEAD_MIN + 1))
+                    a.status, a.cancelled = "cancelled", a.start - timedelta(minutes=lead)
+                    self.occupy(a, -1)
+                p.ep = None
+                continue
             if r < noshow:
                 a.status = "noshow"
             elif r < noshow + sameday:
@@ -510,6 +537,7 @@ class Sim:
             p
             for p in self.patients
             if p.appt is None
+            and not self.gone(p, d)
             and (
                 (p.ep is not None and p.ep.call_on is not None and p.ep.call_on <= d)
                 or (p.ep is None and self.due_demand(p, d) is not None)
@@ -608,7 +636,11 @@ class Sim:
 
     def changes(self, d: date) -> None:
         """3. 변경: 오늘이 변경일인 예약 → 원래 날짜 뒤 1~RESCHEDULE_MAX_DAYS일의 첫 가능일로. 가능일이 없으면 변경하지 않음"""
-        for a in [a for a in self.changes_on.get(d, []) if a.status == "scheduled"]:
+        for a in [
+            a
+            for a in self.changes_on.get(d, [])
+            if a.status == "scheduled" and not self.gone(a.patient, d)
+        ]:
             p = a.patient
             self.occupy(a, -1)
             orig = a.start.date()
@@ -630,7 +662,11 @@ class Sim:
         """4. 리마인드: 오늘 전에 잡혀 있고 오늘 취소되지 않은 다음 진료일 예약 → confirm_rate로 confirmed (날짜 단위).
         오늘 잡은 예약은 대상 아님 — 문자·확인 통화가 created_at 뒤 같은 날에 들어갈 자리가 없을 수 있어서"""
         for a in sorted(self.by_day.get(self.next_open(d), []), key=lambda a: a.id):
-            if a.created.date() < d and (a.cancelled is None or a.cancelled.date() > d):
+            if (
+                a.created.date() < d
+                and (a.cancelled is None or a.cancelled.date() > d)
+                and not self.gone(a.patient, d)
+            ):
                 a.confirmed = int(self.rng.random() < self.cfg["confirm_rate"])
 
     def run_days(self) -> None:
@@ -689,9 +725,15 @@ class Sim:
             self.run.state["episode"].items(),
         )
         self.run.state["plans"] = self.plans  # 계획 테이블은 5단계가 치아를 정해 적재
+        self.run.state["churn"] = self.churn  # 5단계 병행 후보에서 빼고, 6단계 리콜 통화 사실에
+        conn.executemany(
+            "INSERT INTO truth.truth_patient_churn VALUES (?, 'churn', ?)",
+            [(pid, on.isoformat()) for pid, on in sorted(self.churn.items())],
+        )
 
 
 def stage(run, rng, fake) -> None:
-    sim = Sim(run, rng)
+    (churn_rng,) = rng.spawn(1)  # 이탈 추첨은 자기 난수 — 시뮬레이션 난수를 쓰지 않게
+    sim = Sim(run, rng, pick_churn(run, churn_rng))
     sim.run_days()
     sim.write()
