@@ -1,5 +1,5 @@
 """진료·청구·치료계획·수납 검사, 치아·나이 검사, 잔액·열린 치료계획 리포트
-(가상 데이터 생성 설계 §2.3·§2.4·§2.6·§5.3 시술·청구·수납)"""
+(가상 데이터 생성 설계 §2.3·§2.4·§2.6·§5.3 진료 기록·청구·청구 오류·수납)"""
 
 from collections import defaultdict
 from datetime import date, timedelta

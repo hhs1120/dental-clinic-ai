@@ -19,7 +19,7 @@ tags:
 
 **분류기 입력 = `transcript` + `direction`만** (환자·번호·시각은 정답 힌트. 함수 시그니처 `classify(transcript, direction)`로 강제).
 
-eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`에 먼저 정해 두었다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
+eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`이 정한다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
@@ -51,10 +51,15 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 |---|---|---|
 | `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?=5` | 청크 목록 |
 | `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`)·열린 치료계획 항목 |
-| `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?`(`has_unpaid_balance` = 그 예약일 개원 전 잔액 > 0 — 정의 원본. `is_new_patient` = 창 안에서 처음 등록한 환자 — 생성 설계 §2.2) | 예약 목록 + `{count, by_status, by_type}`. `count`는 조건에 맞는 행 전체(`status`를 주지 않으면 취소·변경 포함). `by_status`는 변경으로 대체된 원래 예약(새 예약의 `rescheduled_from_id`가 가리키는 `cancelled`)을 취소와 따로 `rescheduled`로 센다 — 예약 변경은 취소가 아니다 |
+| `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?` | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
 
+- `query_schedule` 칸
+  - `has_unpaid_balance` = 그 예약일 개원 전 잔액 > 0 (정의 원본)
+  - `is_new_patient` = 창 안에서 처음 등록한 환자 (생성 설계 §2.2)
+  - `count`는 조건에 맞는 행 전체(`status`를 주지 않으면 취소·변경 포함)
+  - `by_status`는 변경으로 대체된 원래 예약(새 예약의 `rescheduled_from_id`가 가리키는 `cancelled`)을 취소와 따로 `rescheduled`로 센다 — 예약 변경은 취소가 아니다
 - 날짜 전부 `YYYY-MM-DD`. 도구 description에 TODAY 값(§6) 예시를 넣음
 - 호출 상한 6회/질문. 경계: 건수·목록 → `query_*`, 절차·규정·과거 대화 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document` 상위 25 + `call/message_thread/chart_note` 상위 25 따로 → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제
@@ -91,17 +96,41 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 |---|---|
 | 스택 | **Next.js + TypeScript** / **FastAPI** / **SQLite**(FTS5 + **sqlite-vec** 벡터) |
 | DB | SQLite 2파일 — `source.sqlite`(생성기 출력, 읽기 전용으로 ATTACH) + `app.sqlite`(앱 테이블, 색인 `ax_chunks`·FTS5·벡터). DDL 원본도 `shared/`에서 두 파일로 나눈다. 벡터 접근은 `VectorStore` 인터페이스 뒤, 두 번째 구현 안 함 |
-| 벡터 저장소 결정 근거 | **규모**: 청크 2만~3만(문서 ~100 + 통화 `config` `calls_with_transcript` + 월 스레드 + 차트 기록) — 질의마다 전수 계산해도 ms 단위라 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 같은 파일(`app.sqlite`)이라 하이브리드 검색과 메타데이터 필터가 SQL 조인 하나, 두 저장소 동기화(삭제·재색인 불일치)가 없다. **fixture**: `make fixture`·`save-demo`가 `source.sqlite`·`app.sqlite`를 함께 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드)이 없고 저장소만 둘로 늘린다 |
-| Chroma로 옮길 때 | 쉽다 — 벡터는 `VectorStore`(`upsert(ids, vectors, metadata)`·`query(vector, filter, k)`) 뒤에만 있고, 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로. 구현 하나 추가 + 필터용 메타데이터를 Chroma에 복사하고 다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사). 옮길 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때 |
+| 벡터 저장소 결정 근거 | **규모**: 청크 2만~3만(추정 — 문서 ~100 + 통화 `config` `calls_with_transcript` + 월 스레드 + 차트 기록)이면 전수 계산도 ms 단위라 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 `app.sqlite` 하나라 하이브리드 검색·메타데이터 필터가 SQL 조인 하나이고 두 저장소 동기화가 없다. **fixture**: `make fixture`·`save-demo`가 두 sqlite 파일만 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드) 없이 저장소만 늘린다 |
+| Chroma로 옮길 때 | 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때. 벡터는 `VectorStore`(`upsert(ids, vectors, metadata)`·`query(vector, filter, k)`) 뒤에만 있어 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로 — 구현 하나 추가 + 필터용 메타데이터 복사·다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사) |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | 임베딩 **OpenAI `text-embedding-3-small`**(확정 — 널리 쓰이고 저렴, Anthropic에는 임베딩 모델이 없음). 리랭커는 **Cohere Rerank(다국어) vs LLM 리랭킹(`claude-haiku-5-5`가 후보 순위 매김)**을 `--retrieval-only` dev로 비교 후 확정(LLM 리랭킹은 순위가 실행마다 흔들릴 수 있어 결정성·지연도 같이 본다) |
 | 모델 (확정) | 프로바이더 **Anthropic**(LLM). ① 분류 경량 `claude-haiku-5-5` → 최종 v3-final `claude-sonnet-5-5`, ③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑧ 에이전트·⑨ 문자 초안 `claude-sonnet-5-5`, 생성기(통화 전사·문서·차트 서술) `claude-sonnet-5-5` |
-| LLM (원본은 여기) | 게이트웨이 모듈 1개(`shared/llm.py`, 생성기 7·9·9b단계의 API 채우기도 경유), Anthropic 공식 SDK를 직접 쓴다(프로바이더가 Anthropic 하나라 LiteLLM 같은 변환 계층을 두지 않음). 설정은 `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 오류·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 호출하지 않음). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`). 구조화 출력은 JSON 스키마(`output_config.format`). 호출 1건 = 기록 1행 — 생성기는 jsonl, 앱은 `ax_llm_calls`(앱 착수 때). Batch(생성기 API 채우기)는 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다. `FakeGateway`는 같은 인터페이스로 입력 해시에서 결정적 응답(스키마가 있으면 스키마에 맞는 JSON) — 테스트·CI·fixture용. 도구 호출은 ③ 착수 때 |
-| 프롬프트 | 앱은 `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안). 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify). 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정. 생성기(`gen_transcript`·`gen_document`·`gen_chart`)는 작업당 파일 하나 `prompts/<task>.md`를 고쳐 쓴다 — LLM 캐시 키에 그 파일 해시가 들어가 출력을 구분하고, 이력은 git |
+| LLM | 게이트웨이 모듈 1개 `shared/llm.py` — §7.1 |
+| 프롬프트 | `prompts/` — §7.2 |
 | 테스트 fixture | **`make fixture`**: fake 게이트웨이로 생성한 데이터로 판정 풀 전체 분류를 가짜 프롬프트 버전 v1·v2 두 벌로 적재(블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
-| 사람 데이터 보존 | 재생성해도 `app.sqlite`는 덮어쓰지 않는다. 다만 앱 테이블이 가리키는 생성 데이터의 키(`call_uid`·환자·예약·`fin_` id)가 다른 실체를 가리킬 수 있어 테이블마다 처리를 정한다 — **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·준비표·⑦ 브리핑 / **해시로 다시 붙임**: 판정(메모 포함)·투표 — `hash(transcript)`로만(`export-human/import-human`), 미스 시 버리고 "복원 실패 N건" 리포트. 투표는 `(hash, left_model, left_version, right_model, right_version, choice)` / **버림**: 판정 상태(풀에서 다시 채움)·후속 큐 처리·⑧ 확정·⑨ 연락 기록·붙여넣기 통화 |
+| 사람 데이터 보존 | 재생성해도 `app.sqlite`는 덮어쓰지 않는다 — 테이블별 처리는 §7.3 |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |
 | 실행 | `make index / fixture / save-demo / reset-demo / set KEY=… VALUE=…`(설정 변경, 허용 키는 [[치과 AX - 기능 정의]] §7) |
+
+### 7.1 LLM (원본은 여기)
+
+- **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b단계의 API 채우기도 경유). Anthropic 공식 SDK를 직접 쓴다(프로바이더가 Anthropic 하나라 LiteLLM 같은 변환 계층을 두지 않음)
+- **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 오류·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 호출하지 않음). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
+- **구조화 출력**: JSON 스키마(`output_config.format`)
+- **기록**: 호출 1건 = 기록 1행 — 생성기는 jsonl, 앱은 `ax_llm_calls`(앱 착수 때)
+- **Batch**(생성기 API 채우기): 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다
+- **`FakeGateway`**: 같은 인터페이스로 입력 해시에서 결정적 응답(스키마가 있으면 스키마에 맞는 JSON) — 테스트·CI·fixture용
+- 도구 호출은 ③ 착수 때
+
+### 7.2 프롬프트
+
+- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안)
+  - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
+  - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, chat·prep은 코드에 고정
+- **생성기**(`gen_transcript`·`gen_document`·`gen_chart`): 작업당 파일 하나 `prompts/<task>.md`를 고쳐 쓴다 — LLM 캐시 키에 그 파일 해시가 들어가 출력을 구분하고, 이력은 git
+
+### 7.3 사람 데이터 보존
+
+재생성해도 `app.sqlite`는 덮어쓰지 않는다. 다만 앱 테이블이 가리키는 생성 데이터의 키(`call_uid`·환자·예약·`fin_` id)가 다른 실체를 가리킬 수 있어 테이블마다 처리를 정한다.
+- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·준비표·⑦ 브리핑
+- **해시로 다시 붙임**: 판정(메모 포함)·투표 — `hash(transcript)`로만(`export-human/import-human`), 미스 시 버리고 "복원 실패 N건" 리포트. 투표는 `(hash, left_model, left_version, right_model, right_version, choice)`
+- **버림**: 판정 상태(풀에서 다시 채움)·후속 큐 처리·⑧ 확정·⑨ 연락 기록·붙여넣기 통화
 
 ## 8. 미결
 

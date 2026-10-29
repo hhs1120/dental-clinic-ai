@@ -50,6 +50,7 @@ from generator.master import (
     call_day_weight,
     close_time,
     open_slots,
+    recall_due_year,
 )
 from generator.records import open_plan_items
 
@@ -274,11 +275,15 @@ class Ledger:
         at, kind, due = max(got)
         return {"sent_at": at, "kind": kind, "due_month": due.month}
 
-    def scaled_this_year(self, pid: int, t: str) -> bool:
-        """시각 t 전에 그해 스케일링을 받음 — 4단계가 그해 두 번째부터 구강검진으로 바꾸므로 스케일링 진료 = 급여 사용"""
-        name = PROCEDURE_NAME[SCALING_CODE]
+    def scaled_in(self, pid: int, year: int, t: str) -> bool:
+        """시각 t 전에 그 해 급여 스케일링(그 진료일 SCALING_MIN_AGE 이상)을 받음 — 4단계가 그해 두 번째부터 구강검진으로
+        바꾸므로 성인 스케일링 진료 = 급여 사용"""
+        name, birth = PROCEDURE_NAME[SCALING_CODE], self.patients[pid]["birth"]
         return any(
-            x["procedure"] == name and x["at"][:4] == t[:4] and x["at"] <= t
+            x["procedure"] == name
+            and x["at"][:4] == str(year)
+            and x["at"] <= t
+            and age_on(birth, date.fromisoformat(x["at"][:10])) >= SCALING_MIN_AGE
             for x in self.treatments[pid]
         )
 
@@ -588,11 +593,20 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
     ):  # 부 주제 가격 문의도 무엇의 가격인지
         fact["topic_procedure"] = _topic(rng, led, s, fact)
         if fact["topic_procedure"] == PROCEDURE_NAME[SCALING_CODE] and s["about"] is not None:
-            if led.scaled_this_year(s["about"], s["t"]):
+            if led.scaled_in(s["about"], _topic_year(s, fact), s["t"]):
                 fact["scaling_used_this_year"] = (
                     True  # 연 1회 급여를 이미 씀 — 가격은 비급여로 (§2.4)
                 )
     return fact
+
+
+def _topic_year(s: dict, fact: dict) -> int:
+    """급여 연 1회를 따지는 해 — 리콜 문의는 받은 문자의 기한 해(12월에 받은 '1월 검진' 문자면 새해), 그 밖은 통화한 해"""
+    text = fact.get("recall_text")
+    if s["purpose"] == "recall_q" and text:
+        sent = date.fromisoformat(text["sent_at"][:10])
+        return recall_due_year(sent, text["kind"], text["due_month"])
+    return int(s["t"][:4])
 
 
 def _topic(rng, led: Ledger, s: dict, fact: dict) -> str:
@@ -609,9 +623,9 @@ def _topic(rng, led: Ledger, s: dict, fact: dict) -> str:
     ):
         return led.recent_treatment(s["about"], s["t"])  # 경과 확인 = 며칠 전 진료
     if s["purpose"] == "recall_q":
-        # 검진 문자를 보고 묻는 가격 = 위생 시술 — 성인은 그해 아직이면 스케일링, 그 밖은 구강검진
+        # 검진 문자를 보고 묻는 가격 = 다음 검진의 위생 시술 — 성인은 기한 해에 아직이면 스케일링, 그 밖은 구강검진
         adult = fact["patient"]["age"] >= SCALING_MIN_AGE
-        if adult and not led.scaled_this_year(s["about"], s["t"]):
+        if adult and not led.scaled_in(s["about"], _topic_year(s, fact), s["t"]):
             return PROCEDURE_NAME[SCALING_CODE]
         return PROCEDURE_NAME[CHECKUP_CODE]
     if s["about"] is not None:

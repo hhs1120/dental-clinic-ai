@@ -273,9 +273,11 @@ def test_narrative_must_include_facts():
         ["6mm"],
         ["고혈압"],
         ["마취가 잘 안 됨"],
+        list(chart.DISCOVERED_WORDS),  # 진료 중 새로 알게 됐다는 말
         ["14일"],
         ["재평가"],
         ["잇몸치료"],
+        list(chart.PLAN_WORDS),  # 남은 치료가 그날 시술과 같아도 계획 문장이 빠지지 않게
     ]  # 근거 말
     tooth = {
         **FACTS,
@@ -297,7 +299,11 @@ def test_narrative_must_include_facts():
             "edentulous_months": 5,
         },
     }
-    assert chart.narrative_must_include(other)[-2:] == [["5개월"], ["무치악"]]
+    assert chart.narrative_must_include(other)[-3:] == [
+        ["5개월"],
+        ["무치악"],
+        list(chart.OTHER_CLINIC_WORDS),
+    ]  # 타 기관 이력은 그 말이 있어야 원내 이력으로 읽히지 않는다
     sealant = {
         **tooth,
         "requirement": {

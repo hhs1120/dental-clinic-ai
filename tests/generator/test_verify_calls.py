@@ -614,6 +614,71 @@ def test_recall_q_is_inbound(tmp_path):
     )
 
 
+def _topic(conn, uid, topic, **fact):
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.topic_procedure', ?)"
+        " WHERE call_uid = ?",
+        (topic, uid),
+    )
+    for k, v in fact.items():
+        conn.execute(
+            f"UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.{k}', json(?))"
+            " WHERE call_uid = ?",
+            (json.dumps(v), uid),
+        )
+
+
+def test_call_topic_priced(tmp_path):
+    """주제 시술은 비용이 있는 시술만 — 0원(상담)은 주제가 아님 (§4.1 used_fact)"""
+    conn = make_db(tmp_path)
+    assert verify.check_call_topic(conn, CTX) == [] and verify.check_call_topic in verify.REQUIRED
+    _topic(conn, "c-0002", "상담")
+    assert verify.check_call_topic(conn, CTX)
+
+
+@pytest.mark.parametrize(
+    "started_at, flag, ok",
+    [
+        ("2026-11-20 15:00:00", True, True),  # 11/03 급여 스케일링 뒤 — 사용 표시
+        ("2026-11-20 15:00:00", False, False),
+        ("2026-10-20 15:00:00", False, True),  # 그 전 — 표시 없음
+        ("2026-10-20 15:00:00", True, False),
+    ],
+)
+def test_call_topic_scaling_used(tmp_path, started_at, flag, ok):
+    """주제가 스케일링이면 scaling_used_this_year ⇔ 통화 전 그해 급여 스케일링(19세 이상)을 받음"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE ax_calls SET started_at = ? WHERE call_uid = 'c-0001'", (started_at,))
+    conn.execute(
+        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["billing_q", "price_q"]\''
+        " WHERE call_uid = 'c-0001'"
+    )
+    _topic(conn, "c-0001", "스케일링", **({"scaling_used_this_year": True} if flag else {}))
+    assert (verify.check_call_topic(conn, CTX) == []) == ok
+
+
+@pytest.mark.parametrize("topic, ok", [("스케일링", False), ("구강검진", True), ("레진", False)])
+def test_call_topic_recall_q_hygiene(tmp_path, topic, ok):
+    """리콜 문의의 가격 주제 = 다음 검진의 위생 시술 — 성인이 기한 해에 아직이면 스케일링, 그 밖은 구강검진.
+    1번 환자는 11/03 스케일링 → 11/20의 '지남' 문자(기한 해 2026)면 구강검진"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    conn.execute(
+        "UPDATE ax_calls SET started_at = '2026-11-20 15:00:00' WHERE call_uid = 'c-0001'"
+    )
+    conn.execute(
+        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["recall_q", "price_q"]\','
+        " price_inquiry = 1 WHERE call_uid = 'c-0001'"
+    )
+    _topic(
+        conn,
+        "c-0001",
+        topic,
+        recall_text={"sent_at": "2026-11-16 09:30:00", "kind": "after", "due_month": 10},
+    )
+    assert (verify.check_call_topic(conn, CTX) == []) == ok
+
+
 @pytest.mark.parametrize(
     "started_at, ok", [("2026-10-08 15:00:00", True), ("2026-10-20 15:00:00", False)]
 )

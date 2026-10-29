@@ -19,6 +19,7 @@ from generator.master import (
     CALL_PATIENT_RULES,
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
+    CHECKUP_CODE,
     CLINIC_NAME,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
@@ -26,12 +27,15 @@ from generator.master import (
     HOURS,
     IMPLIED_FLAG,
     RECALL_TEMPLATES,
+    SCALING_CODE,
+    SCALING_MIN_AGE,
     SUBTOPIC_PURPOSE,
     URGENCIES,
     age_on,
     call_day_weight,
     close_time,
     open_slots,
+    recall_due_year,
 )
 from generator.verify.common import CHILD_MAX_AGE, EXAMPLES, PROCEDURE, _dt, _rows
 from generator.verify.records import _open_items_at, _plan_items
@@ -219,7 +223,7 @@ def check_call_transcripts(conn, ctx):
 def _transcripts(conn) -> list[dict]:
     return _rows(
         conn,
-        "SELECT c.id, c.transcript, l.used_fact FROM ax_calls c JOIN truth.truth_call_labels l"
+        "SELECT c.id, c.transcript, l.used_fact, l.primary_purpose FROM ax_calls c JOIN truth.truth_call_labels l"
         " USING (call_uid) WHERE c.source = 'generated' AND c.transcript IS NOT NULL ORDER BY c.id",
     )
 
@@ -243,7 +247,9 @@ def check_transcript_facts(conn, ctx):
     for r in _transcripts(conn):
         missing = [
             alts[0]
-            for alts in transcripts.must_include(json.loads(r["used_fact"]), names)
+            for alts in transcripts.must_include(
+                json.loads(r["used_fact"]), names, r["primary_purpose"]
+            )
             if not any(llm_jobs.contains(r["transcript"], a) for a in alts)
         ]
         if missing:
@@ -608,6 +614,53 @@ def check_recall_q_calls(conn, ctx):
             bad.append(
                 {"call_uid": r["call_uid"], "patient": pid, "started_at": t, "problem": problem}
             )
+    return bad
+
+
+def check_call_topic(conn, ctx):
+    """주제 시술(topic_procedure)은 비용이 있는 시술, 리콜 문의의 가격 주제는 다음 검진의 위생 시술(성인이 기한 해에 급여
+    스케일링을 아직 안 받았으면 스케일링, 그 밖은 구강검진), 주제가 스케일링이면 scaling_used_this_year ⇔ 통화 전 그해(리콜
+    문의는 기한 해) 급여 스케일링(SCALING_MIN_AGE 이상)을 받음 (§4.1 used_fact, §2.4 연 1회)"""
+    priced = {
+        name for name, fee in conn.execute("SELECT name, fee_total FROM emr_procedures") if fee > 0
+    }
+    names = dict(conn.execute("SELECT code, name FROM emr_procedures"))
+    births = {
+        pid: date.fromisoformat(b)
+        for pid, b in conn.execute("SELECT id, birth_date FROM emr_patients")
+    }
+    scaled = defaultdict(list)  # 환자 → 급여 스케일링 시각
+    for pid, at in conn.execute(
+        "SELECT patient_id, performed_at FROM emr_treatments WHERE procedure_code = ?",
+        (SCALING_CODE,),
+    ):
+        if age_on(births[pid], _dt(at).date()) >= SCALING_MIN_AGE:
+            scaled[pid].append(at)
+    bad = []
+    for r in _calls(conn):
+        f, t = r["fact"], r["started_at"]
+        topic = f.get("topic_procedure")
+        if topic is None:
+            continue
+        pid = (f.get("patient") or {}).get("id")
+        year = _dt(t).year
+        problem = None
+        if topic not in priced:
+            problem = "비용 없는 주제"
+        elif r["primary_purpose"] == "recall_q" and pid is not None:
+            text = f.get("recall_text") or {}
+            year = recall_due_year(_dt(text["sent_at"]).date(), text["kind"], text["due_month"])
+            adult = age_on(births[pid], _dt(t).date()) >= SCALING_MIN_AGE
+            used = any(at[:4] == str(year) and at <= t for at in scaled[pid])
+            want = names[SCALING_CODE] if adult and not used else names[CHECKUP_CODE]
+            if topic != want:
+                problem = f"리콜 문의 가격 주제 ≠ {want}"
+        if problem is None and pid is not None and topic == names[SCALING_CODE]:
+            used = any(at[:4] == str(year) and at <= t for at in scaled[pid])
+            if bool(f.get("scaling_used_this_year")) != used:
+                problem = "scaling_used_this_year ≠ 그해 급여 스케일링"
+        if problem:
+            bad.append({"call_uid": r["call_uid"], "topic": topic, "problem": problem})
     return bad
 
 

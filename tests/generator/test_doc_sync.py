@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from generator import chart, documents, llm_jobs, master, verify
+from evaluation import metrics
+from generator import calls, chart, documents, finance, llm_jobs, master, verify
 from generator.master import VISIT_MIX
 from shared import llm
 
@@ -63,20 +64,29 @@ def test_target_table_matches_code(name):
 
 
 def test_named_constants_exist():
-    """문서가 `master.X`·`verify.X`·`llm_jobs.X`·`documents.X`·`chart.X`로 가리키는 이름은 코드에 실제로 있어야 한다"""
-    text = _doc()
+    """설계 문서 전부와 CLAUDE.md가 `모듈.X`로 가리키는 이름은 코드에 실제로 있어야 한다 — 이름이 바뀌면 문서 참조가 낡는다.
+    `messages.X`는 config 키(`config` `messages.balance`)라 여기서 보지 않는다"""
     modules = {
         "master": master,
         "verify": verify,
         "llm_jobs": llm_jobs,
         "documents": documents,
         "chart": chart,
+        "calls": calls,
+        "finance": finance,
+        "metrics": metrics,
     }
-    missing = [
-        f"{mod}.{name}"
-        for mod, name in re.findall(r"`(master|verify|llm_jobs|documents|chart)\.(\w+)`", text)
-        if name not in PENDING and not hasattr(modules[mod], name)
-    ]
+    pattern = re.compile(rf"`({'|'.join(modules)})\.(\w+)`")
+    texts = [p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md"))]
+    texts.append((ROOT / "CLAUDE.md").read_text(encoding="utf-8"))
+    missing = sorted(
+        {
+            f"{mod}.{name}"
+            for text in texts
+            for mod, name in pattern.findall(text)
+            if name not in PENDING and not hasattr(modules[mod], name)
+        }
+    )
     assert not missing, missing
 
 

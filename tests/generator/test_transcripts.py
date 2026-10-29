@@ -76,14 +76,17 @@ def test_full_mouth_tooth_is_blank(conn):
 
 def test_must_include_dates_and_topic(conn):
     names = llm_jobs.procedure_names(conn)
-    assert transcripts.must_include(json.loads(_row(conn, "c-0004")["used_fact"]), names) == [
-        ["11월 18일"],
-        ["11월 17일"],
-    ]
-    assert transcripts.must_include(json.loads(_row(conn, "c-0002")["used_fact"]), names) == [
-        ["미백", "화이트닝"]
-    ]  # 이름 또는 별칭
-    assert transcripts.must_include(json.loads(_row(conn, "c-0001")["used_fact"]), names) == []
+    moved = json.loads(_row(conn, "c-0004")["used_fact"])
+    assert transcripts.must_include(moved, names, "reschedule") == [["11월 18일"], ["11월 17일"]]
+    # 변경으로 생긴 예약의 확인·취소 통화는 원래 날짜를 꼭 넣지 않는다 — 넣으면 변경 통화처럼 읽힌다
+    assert transcripts.must_include(moved, names, "confirm") == [["11월 18일"]]
+    assert transcripts.must_include(
+        json.loads(_row(conn, "c-0002")["used_fact"]), names, "price_q"
+    ) == [["미백", "화이트닝"]]  # 이름 또는 별칭
+    assert (
+        transcripts.must_include(json.loads(_row(conn, "c-0001")["used_fact"]), names, "billing_q")
+        == []
+    )
 
 
 def test_checks(conn):

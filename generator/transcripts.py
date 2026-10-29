@@ -47,10 +47,12 @@ INTERNAL_KEYS = (
 def rows(conn) -> list[dict]:
     cur = conn.execute(
         "SELECT c.id, c.call_uid, c.direction, c.caller_name,"
-        # 말하는 사람의 성별 — 환자 본인이거나 그 보호자(같은 이름)일 때만. 환자 측이 아닌 상대는 기록이 없다
-        " coalesce((SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name),"
-        " (SELECT g.sex FROM emr_patients p JOIN emr_patients g ON g.id = p.guardian_patient_id"
-        " WHERE p.id = c.patient_id AND g.name = c.caller_name)) AS caller_sex,"
+        # 말하는 사람의 성별 — 보호자 통화는 그 환자의 보호자, 그 밖은 환자 본인(이름이 같을 때 — 처음 연락·보험사 등은
+        # 환자 측이 아니라 기록이 없다). 상대로 고르므로 아이와 보호자 이름이 같아도 어긋나지 않는다
+        " CASE WHEN l.counterpart = 'guardian' THEN (SELECT g.sex FROM emr_patients p"
+        " JOIN emr_patients g ON g.id = p.guardian_patient_id WHERE p.id = c.patient_id)"
+        " ELSE (SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name)"
+        " END AS caller_sex,"
         " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
         " WHERE c.source = 'generated' ORDER BY c.id"
     )
@@ -155,13 +157,14 @@ def korean_date(iso: str) -> str:
     return f"{d.month}월 {d.day}일"
 
 
-def must_include(fact: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)·⑧-1 근거(이미 냈다는 내원일)"""
+def must_include(fact: dict, names: dict, purpose: str) -> list[list[str]]:
+    """꼭 넣을 사실 — 예약 날짜(예약 변경 통화는 원래 날짜도 — 변경으로 생긴 예약의 확인·취소 통화에 넣으면 변경 통화처럼
+    읽힌다)·주제 시술(이름 또는 별칭)·⑧-1 근거(이미 냈다는 내원일)"""
     out = []
     appt = fact.get("appointment")
     if appt:
         out.append([korean_date(appt["date"])])
-        if "from_date" in appt:
+        if "from_date" in appt and purpose == "reschedule":
             out.append([korean_date(appt["from_date"])])
     if fact.get("topic_procedure"):
         out.append(names.get(fact["topic_procedure"], [fact["topic_procedure"]]))
@@ -174,7 +177,7 @@ def checks(row: dict, names: dict) -> dict:
     lo, hi = CALL_DURATION_SEC
     return {
         "field": "transcript",
-        "must_include": must_include(json.loads(row["used_fact"]), names),
+        "must_include": must_include(json.loads(row["used_fact"]), names, row["primary_purpose"]),
         "forbidden_words": list(CALL_LABEL_WORDS),
         "forbidden_patterns": llm_jobs.forbidden_patterns(),
         "speakers": SPEAKERS,

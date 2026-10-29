@@ -569,6 +569,12 @@ def _period(days: int) -> str:
     return f"{days}일" if days < 60 else f"{round(days / 30)}개월"
 
 
+# 꼭 넣을 말 묶음(그중 하나) — 타 기관 이력(원내 이력처럼 쓰면 ⑤-3이 장부와 모순), 진료 중 발견, 남은 치료계획
+OTHER_CLINIC_WORDS = ("타 기관", "다른 치과", "타 치과")
+DISCOVERED_WORDS = ("진료 중", "새로")
+PLAN_WORDS = ("남은", "남아", "예정", "다음")
+
+
 def _requirement_words(req: dict) -> list[str]:
     """요건 수치 + 근거가 있으면 근거 말"""
     key = req["key"]
@@ -598,7 +604,7 @@ def evidence_forbidden(f: dict) -> list[str]:
 
 def narrative_must_include(f: dict) -> list[list[str]]:
     """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·추가 처치의 치아·시술·치주낭 'Nmm'·주의사항·
-    발견한 주의사항·요건 수치·다음 계획"""
+    발견한 주의사항과 새로 알게 됐다는 말·요건 수치·타 기관 이력이면 그 말·다음 계획과 계획이라는 말"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
     out.append([f["procedure"]])
     if f.get("extra"):
@@ -606,12 +612,17 @@ def narrative_must_include(f: dict) -> list[list[str]]:
     if f["findings"]:
         out.append([f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
+    if f["discovered"]:
+        out.append(list(DISCOVERED_WORDS))
     if f["requirement"]:
         out += [[w] for w in _requirement_words(f["requirement"])]
+        if f["requirement"].get("other_clinic"):
+            out.append(list(OTHER_CLINIC_WORDS))
     plan = f["plan"]
     if plan and "items" in plan:
         for i in plan["items"]:
             out += ([[f"{i['tooth']}번"]] if i["tooth"] else []) + [[i["procedure"]]]
+        out.append(list(PLAN_WORDS))
     elif plan:
         out.append([f"{plan['recall_months']}개월"])
     return out

@@ -856,6 +856,15 @@ RECON_MONTH_COUNT = 4
 RECON_TEST_COUNT = 2
 
 
+def recall_due_year(sent: date, kind: str, due_month: int) -> int:
+    """리콜 문자의 기한 해 — '다가옴'(before)은 다음 달, '지남'(after)은 지난달이 기한이라 해를 넘을 수 있다(§2.5)"""
+    if kind == "before" and due_month < sent.month:
+        return sent.year + 1
+    if kind == "after" and due_month > sent.month:
+        return sent.year - 1
+    return sent.year
+
+
 def recon_months(today: date) -> tuple[str, ...]:
     """평가 달('YYYY-MM', claim_month와 같은 꼴) — TODAY가 속한 달 직전 RECON_MONTH_COUNT개월, 오래된 달부터"""
     base = today.year * 12 + today.month - 1

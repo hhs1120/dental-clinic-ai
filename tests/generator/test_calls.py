@@ -13,7 +13,6 @@ from generator.master import (
     CALL_NOISE_SHARE,
     CALL_OUTBOUND_SHARE,
     CALL_PURPOSE_SHARE,
-    CHECKUP_CODE,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -227,28 +226,10 @@ SCALING = PROCEDURE_NAME[SCALING_CODE]
 
 
 def test_topic_procedures_are_priced_and_scaling_use_marked(gen):
-    """주제 시술은 비용이 있는 시술(상담 같은 0원 제외), 리콜 문의의 가격은 위생 시술(스케일링·구강검진), 그해 스케일링을
-    이미 받은 환자의 스케일링 주제엔 scaling_used_this_year (§4.1 used_fact)"""
+    """주제 시술 규칙(비용 있는 시술·리콜 문의는 위생 시술·그해 급여 스케일링 표시)을 생성 결과로 — verify가 장부로 따로
+    계산한다 (§4.1 used_fact)"""
     conn, _ = gen
-    done = {
-        (r["patient_id"], r["performed_at"][:4], r["performed_at"])
-        for r in conn.execute(
-            "SELECT patient_id, performed_at FROM emr_treatments WHERE procedure_code = ?",
-            (SCALING_CODE,),
-        )
-    }
-    for r in _labels(conn):
-        fact = json.loads(r["used_fact"])
-        topic = fact.get("topic_procedure")
-        if topic is None:
-            continue
-        assert topic in calls.PRICED, r["call_uid"]
-        if r["primary_purpose"] == "recall_q":
-            assert topic in (SCALING, PROCEDURE_NAME[CHECKUP_CODE]), r["call_uid"]
-        if topic == SCALING and "patient" in fact:
-            pid, t = fact["patient"]["id"], fact["call_date"]
-            used = any(p == pid and y == t[:4] and at[:10] <= t for p, y, at in done)
-            assert bool(fact.get("scaling_used_this_year")) == used, r["call_uid"]
+    assert verify.check_call_topic(conn, verify.load_ctx(CONFIG, conn)) == []
 
 
 def test_recall_q_patients_awake_and_unbooked(gen):
