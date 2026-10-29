@@ -9,6 +9,7 @@
 창 이전 내원은 템플릿만(특이·디코이 대상 아님).
 """
 
+import hashlib
 import json
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -83,6 +84,23 @@ CC = {
         "상담": ("치료 계획을 상담받고 싶어요",),
     }.items()
 }
+
+# 증상을 말하는 C.C — 초안이 '"…" 호소'로 쓸 수 있는 말(검진·예방·상담 희망에는 '호소'가 어색하다)
+SYMPTOM_CC = frozenset(
+    (
+        "잇몸에서 피가 나요",
+        "치석이 많이 낀 것 같아요",
+        *_FILLING,
+        "밤에 이가 욱신거려요",
+        "씹을 때 아파요",
+        "뜨거운 걸 먹으면 아파요",
+        "이가 깨졌어요",
+        "이가 흔들려요",
+        "사랑니 쪽이 붓고 아파요",
+        "잇몸이 붓고 피가 나요",
+        "잇몸이 내려간 것 같아요",
+    )
+)
 
 
 # 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
@@ -461,10 +479,13 @@ def template_note(rng, f) -> str:
     return " ".join([note, *alerts])
 
 
-def _alert_sentences(f) -> list[str]:
-    return [f"{a['label']} 주의, {a['action']}." for a in f["alerts"]] + [
-        f"진료 중 {label} 새로 확인." for label in f["discovered"]
-    ]
+def _alert_sentences(f, key=None) -> list[str]:
+    """주의사항 처리 — 서술 초안(key 있음)은 꼴을 진료 번호로 고른다, 템플릿은 한 꼴"""
+    forms = ("{label} 주의, {action}.", "{action}({label}).")
+    return [
+        (_form(f"{key}:{i}", "alert", forms) if key is not None else forms[0]).format(**a)
+        for i, a in enumerate(f["alerts"])
+    ] + [f"진료 중 {label} 새로 확인." for label in f["discovered"]]
 
 
 def _ro(word: str) -> str:
@@ -487,15 +508,44 @@ def plan_items(plan: dict) -> list[tuple[dict, int]]:
     return [(i, counts[k]) for k, i in seen.items()]
 
 
-def draft_note(f) -> str:
-    """서술 초안 — 사실을 그대로 문장으로. 9b단계가 자연스러운 서술로 덮어쓴다"""
-    out = [f'"{f["cc"]}"라며 내원.']
-    if f["findings"]:
-        x = f["findings"]
+def _form(key, salt: str, options: tuple):
+    """초안 꼴 고르기 — 진료 번호 해시로(난수를 쓰지 않아 다른 결과를 바꾸지 않는다). 프롬프트에 여러 꼴을 줘도 모델은 건마다
+    따로 불려 한 꼴로 몰려서, 초안이 꼴을 정한다"""
+    return options[int(hashlib.sha256(f"{salt}:{key}".encode()).hexdigest(), 16) % len(options)]
+
+
+def draft_note(f, key) -> str:
+    """서술 초안 — 사실을 그대로 메모로. 환자 말·소견·시행·주의사항·남은 계획의 꼴은 진료 번호(key)로 고른다.
+    9b단계가 이 초안을 다시 쓴다(가짜 게이트웨이면 그대로 남는다)"""
+    cc, x = f["cc"], f["findings"]
+    opener = _form(key, "cc", ("라며", "라고 하여", "뒤", "호소"))
+    if opener == "호소" and cc not in SYMPTOM_CC:
+        opener = "라며"
+    said = {
+        "라며": f'"{cc}"라며 내원.',
+        "라고 하여": f'"{cc}"라고 하여 내원.',
+        "뒤": f'"{cc}"라고 함.',
+        "호소": f'"{cc}" 호소.',
+    }[opener]
+    out = [] if opener == "뒤" and x else [said]
+    if x:
+        b = x["bleeding"]
         out.append(
-            f"치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
-            f" 동요도 {x['mobility']}도."
+            _form(
+                key,
+                "findings",
+                (
+                    f"치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if b else '없음'}, 치석 {x['calculus']},"
+                    f" 동요도 {x['mobility']}도.",
+                    f"출혈 {'있고' if b else '없고'} 치주낭 {x['pocket_mm']}mm, 치석 {x['calculus']},"
+                    f" 동요도 {x['mobility']}도.",
+                    f"치석 {x['calculus']}, 치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if b else '없음'},"
+                    f" 동요도 {x['mobility']}도.",
+                ),
+            )
         )
+        if opener == "뒤":
+            out.append(said)
     req = f["requirement"]
     if req and req["key"] == "R01":
         history = (
@@ -522,18 +572,34 @@ def draft_note(f) -> str:
         out.append(f"{_ago(req['extracted_days_ago'])} 발치한 무치악 부위.")
     elif req and req["key"] == "R06" and req.get("other_clinic"):
         out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위.")
-    out.append(f"{_site(f)}{f['procedure']} 시행함.")
+    out.append(f"{_site(f)}{f['procedure']} {_form(key, 'done', ('시행함', '진행함'))}.")
     if f.get("extra"):
         out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행함.")
-    out += _alert_sentences(f)
+    out += _alert_sentences(f, key)
     plan = f["plan"]
     if plan and "items" in plan:
         items = ", ".join(
             _site(i) + i["procedure"] + (f" {n}회" if n > 1 else "") for i, n in plan_items(plan)
         )
-        out.append(f"남은 치료로 {items} 예정.")
+        out.append(
+            _form(
+                key,
+                "plan",
+                (
+                    f"남은 치료로 {items} 예정.",
+                    f"{items} 예정.",
+                    f"{items} 남아 있음.",
+                    f"다음 치료는 {items}.",
+                ),
+            )
+        )
     elif plan:
-        out.append(f"{plan['recall_months']}개월 후 정기 검진 안내함.")
+        n = plan["recall_months"]
+        out.append(
+            _form(
+                key, "recall", (f"{n}개월 후 정기 검진 안내함.", f"정기 검진 {n}개월 후로 안내.")
+            )
+        )
     return " ".join(out)
 
 
@@ -543,7 +609,7 @@ def stage_notes(run, rng, fake) -> None:
     notes, truth = [], []
     for x in lines:
         narrative = x["special"] or x["id"] in decoys
-        note = draft_note(x["facts"]) if narrative else template_note(rng, x["facts"])
+        note = draft_note(x["facts"], x["id"]) if narrative else template_note(rng, x["facts"])
         notes.append((x["id"], x["dx"], note))
         truth.append(
             (

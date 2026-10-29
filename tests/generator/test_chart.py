@@ -260,10 +260,26 @@ def test_notes_are_memo_style(db):
 def test_draft_merges_repeated_plan_items():
     """같은 시술이 계획에 여러 번이면 'N회'로 한 번만 — 같은 말을 여러 번 넣으라고 하면 모델이 문장을 덧붙인다"""
     f = FACTS | {"plan": {"items": [{"procedure": "잇몸치료", "tooth": None}] * 2}}
-    draft = chart.draft_note(f)
+    draft = chart.draft_note(f, 1)
     assert "잇몸치료 2회" in draft and draft.count("잇몸치료") == 2  # 오늘 시술 + 남은 치료(2회)
     must = chart.narrative_must_include(f)
     assert must[-3:] == [["잇몸치료"], ["2회"], list(chart.PLAN_WORDS)]
+
+
+def test_drafts_vary_by_visit():
+    """초안 꼴(환자 말·소견·시행·주의사항·남은 계획)은 진료 번호 해시로 고른다 — 프롬프트에 여러 꼴을 줘도 모델은 건마다
+    따로 불려 한 꼴로 몰린다. 같은 진료는 늘 같은 초안, '호소'는 증상인 환자 말에만"""
+    drafts = [chart.draft_note(FACTS, tid) for tid in range(200)]
+    assert chart.draft_note(FACTS, 7) == chart.draft_note(FACTS, 7)
+    openers = {d.split(".")[0].split('"', 2)[2] for d in drafts if d.startswith('"')}
+    assert len(openers) >= 3 and any(not d.startswith('"') for d in drafts)  # 소견 뒤에 환자 말
+    assert (
+        len({re.search(r"남은|남아|예정|다음", d.split("시행함")[-1]).group(0) for d in drafts})
+        >= 3
+    )
+    calm = FACTS | {"cc": "정기 검진 받으러 왔어요"}
+    assert not any("호소" in chart.draft_note(calm, tid) for tid in range(200))
+    assert any("호소" in d for d in drafts)  # 잇몸이 내려간 것 같아요 — 증상
 
 
 @pytest.mark.parametrize(
@@ -387,10 +403,10 @@ def test_narrative_stage_fake_keeps_draft(db, tmp_path):
     """가짜 게이트웨이면 초안이 그대로 남는다 — db 픽스처(가짜 모드 생성)의 서술 줄 본문 = 초안"""
     conn, _, _ = db
     row = conn.execute(
-        "SELECT n.note, t.facts FROM emr_chart_notes n JOIN truth.truth_chart_notes t USING (treatment_id)"
-        " WHERE t.kind = 'narrative' LIMIT 1"
+        "SELECT n.treatment_id, n.note, t.facts FROM emr_chart_notes n"
+        " JOIN truth.truth_chart_notes t USING (treatment_id) WHERE t.kind = 'narrative' LIMIT 1"
     ).fetchone()
-    assert row["note"] == chart.draft_note(json.loads(row["facts"]))
+    assert row["note"] == chart.draft_note(json.loads(row["facts"]), row["treatment_id"])
 
 
 def test_narrative_payload_hides_requirement_key_and_evidence():
@@ -476,7 +492,7 @@ def test_narrative_drafts_pass_their_checks(db):
             problems := llm_jobs.problems(
                 chart.NARRATIVE_SCHEMA,
                 chart.narrative_checks(x["facts"], names[x["id"]]),
-                {"note": chart.draft_note(x["facts"])},
+                {"note": chart.draft_note(x["facts"], x["id"])},
             )
         )
     }
