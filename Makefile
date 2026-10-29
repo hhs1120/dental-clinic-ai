@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api wireframe
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -15,6 +15,10 @@ llm-fill-api:
 
 verify:
 	uv run python -m generator.verify
+
+# 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
+wireframe:
+	uv run python docs/wireframe/export.py
 
 test:
 	uv run pytest
