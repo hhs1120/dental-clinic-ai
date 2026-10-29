@@ -489,13 +489,13 @@
   "id": "case-01",
   "type": "case",
   "split": "dev",
-  "question": "송정호 님 서류 요청하셨던 거 뭐였고, 준비됐다고 연락드렸어?",
-  "answer_text": "3월 13일 전화로 회사 제출용 진료확인서 요청(담을 내용: 2025년 5월 20일 스케일링) → 다음 날 3월 14일 서류 준비 완료 문자 보냄",
+  "question": "남지영 님 보험사 낼 서류 부탁하셨던 거 뭐였고, 준비됐다고 알려드렸어?",
+  "answer_text": "9월 30일 전화로 보험사 제출용 진료비 세부내역서·진료확인서 요청(작년 4월 4일·4월 18일 15번 치아 치료분), 이메일로 받을 수 있는지는 확인 후 연락하기로 → 10월 2일 서류 준비 완료 문자 보냄",
   "answer_doc_ids": [
-   "call:c-0882",
-   "thread:C-00322:2026-03"
+   "call:c-0448",
+   "thread:C-00744:2026-10"
   ],
-  "answer_chunk_hint": "진료 확인서",
+  "answer_chunk_hint": "15번",
   "expected_tools": [
    "search_docs"
   ],
@@ -507,12 +507,12 @@
   "id": "case-02",
   "type": "case",
   "split": "dev",
-  "question": "양명숙 님이 교정 진료 때문에 불만 전화하셨던 거 무슨 내용이었지?",
-  "answer_text": "교정 때 아프다고 했는데 설명 없이 계속해 속상했다 — 다음엔 천천히 설명하며 하기로",
+  "question": "안하은 님이 불만 전화하셨던 거 무슨 일 때문이었지?",
+  "answer_text": "5월 26일 레진 치료 때 접수 직원이 쳐다보지도 않고 퉁명스럽게 대했고, 그 전 전화 응대도 말을 끊고 짜증 섞였다는 불만 — 접수 담당·실장·원장께 전달하고 실장이 다시 연락하기로",
   "answer_doc_ids": [
-   "call:c-0254"
+   "call:c-0786"
   ],
-  "answer_chunk_hint": "철사",
+  "answer_chunk_hint": "퉁명스러웠어요",
   "expected_tools": [
    "search_docs"
   ],
@@ -524,12 +524,12 @@
   "id": "case-03",
   "type": "case",
   "split": "dev",
-  "question": "임은영 님이 전화로 뭐 물어보셨고 우리가 어떻게 답했지?",
-  "answer_text": "당뇨가 있는데 스케일링을 얼마나 자주 받아야 하는지 — 원장 확인 후 다시 연락하기로",
+  "question": "황보람 님이 치석 제거 관련해서 전화로 뭘 물어보셨고 우리가 어떻게 답했지?",
+  "answer_text": "마지막 스케일링이 2024년 10월 23일이고 요즘 잇몸 출혈·시림이 있는데 지금 받아도 되는지, 받고 더 시릴 수 있는지 문의 — 원장 확인 후 다시 연락하기로",
   "answer_doc_ids": [
-   "call:c-0793"
+   "call:c-1388"
   ],
-  "answer_chunk_hint": "당뇨",
+  "answer_chunk_hint": "2024년 10월 23일",
   "expected_tools": [
    "search_docs"
   ],
@@ -541,12 +541,12 @@
   "id": "case-04",
   "type": "case",
   "split": "dev",
-  "question": "서미영 님이 사랑니 발치 비용 물어보셨을 때 얼마라고 했지?",
-  "answer_text": "본인 부담 27,000원(총 진료비 90,000원, 건강보험 적용)",
+  "question": "장서영 님이 인레이 비용 물어보셨을 때 얼마라고 했지?",
+  "answer_text": "비급여 350,000원 — 몇 번 와야 하는지는 확인 후 연락하기로(예약은 안 함)",
   "answer_doc_ids": [
-   "call:c-0577"
+   "call:c-0554"
   ],
-  "answer_chunk_hint": "27,000원",
+  "answer_chunk_hint": "350,000원",
   "expected_tools": [
    "search_docs"
   ],
@@ -592,12 +592,12 @@
   "id": "case-07",
   "type": "case",
   "split": "test",
-  "question": "심현숙 님 피 난다고 급하게 전화하셨을 때 뭐라고 안내했지?",
-  "answer_text": "거즈나 수건을 말아 꽉 물고 있기, 원장께 전달 후 내원 시간 정해 다시 전화",
+  "question": "임은지 님 급하게 전화하셨을 때 뭐라고 안내했지?",
+  "answer_text": "전날 오른쪽 위 어금니 때운 게 빠져 심하게 시림 → 오늘 바로 오라고 안내, 오기 전까지 찬 것 피하고 그쪽으로 씹지 말기, 빠진 것은 챙겨 오기",
   "answer_doc_ids": [
-   "call:c-0861"
+   "call:c-0166"
   ],
-  "answer_chunk_hint": "거즈",
+  "answer_chunk_hint": "챙겨 오세요",
   "expected_tools": [
    "search_docs"
   ],
@@ -609,12 +609,12 @@
   "id": "case-08",
   "type": "case",
   "split": "test",
-  "question": "윤정훈 님이 보험 적용 물어보셨던 건 어떻게 됐어?",
-  "answer_text": "구강검진은 급여 항목이나 실제 처리 내역은 확인 후 연락(문자도 남기기로)",
+  "question": "남정희 님이 보험 적용 물어보셨던 건 어떻게 됐어?",
+  "answer_text": "8월 27일 단순발치는 건강보험 적용 진료라고 안내, 보험으로 처리된 금액이 어떻게 나뉘었는지는 수납 내역 확인 후 연락하기로",
   "answer_doc_ids": [
-   "call:c-0974"
+   "call:c-0683"
   ],
-  "answer_chunk_hint": "구강검진",
+  "answer_chunk_hint": "단순발치",
   "expected_tools": [
    "search_docs"
   ],
@@ -626,12 +626,12 @@
   "id": "case-09",
   "type": "case",
   "split": "test",
-  "question": "권영수 님께 미수 안내 전화했을 때 반응 어떠셨어?",
-  "answer_text": "11,580원 남았다고 하자 카드로 다 냈다며 불쾌해함 — 결제 내역 확인 후 연락하기로",
+  "question": "곽도윤 님께 미수 안내 전화했을 때 반응 어떠셨어?",
+  "answer_text": "10월 12일 잇몸치료 진료비 9,450원 남았다고 하자 그날 카드로 다 내고 영수증도 받았다고 함 — 결제 기록 다시 확인 후 연락, 영수증 있으면 가져오시라고 안내",
   "answer_doc_ids": [
-   "call:c-0344"
+   "call:c-1166"
   ],
-  "answer_chunk_hint": "11,580원",
+  "answer_chunk_hint": "9,450원",
   "expected_tools": [
    "search_docs"
   ],
@@ -643,12 +643,12 @@
   "id": "case-10",
   "type": "case",
   "split": "test",
-  "question": "송광수 님 레진 보험 문의 전화 어떻게 답했지?",
-  "answer_text": "8월 5일 전화로 레진 보험 적용 문의(대상 진료: 7월 21일 41번 레진) → 비급여로 기록돼 있다고 안내, 비급여인 이유는 원장 확인 후 회신하기로",
+  "question": "심상훈 님이 잇몸치료가 보험 적용되는지 물어보셨을 때 어떻게 안내했어?",
+  "answer_text": "1월 2일·1월 12일·1월 19일 잇몸치료는 건강보험 적용 진료였다고 안내, 다음에 받을 치료의 적용 여부는 그때 원장이 보고 판단",
   "answer_doc_ids": [
-   "call:c-0430"
+   "call:c-1425"
   ],
-  "answer_chunk_hint": "41번",
+  "answer_chunk_hint": "1월 19일",
   "expected_tools": [
    "search_docs"
   ],
@@ -677,11 +677,11 @@
   "id": "case-12",
   "type": "case",
   "split": "test",
-  "question": "진미정 님 보험사 서류 뭐 요청하셨고, 준비됐다고 연락드렸어?",
-  "answer_text": "11월 14일 전화로 실손 청구용 진료비 세부내역서·진료확인서 요청(담을 내용: 3월 28일·4월 8일 아말감, 4월 20일 스케일링) → 11월 16일 서류 준비 완료 문자",
+  "question": "배은정 님 보험회사에 낼 서류 뭐 요청하셨고, 준비됐다고 연락드렸어?",
+  "answer_text": "4월 12일 전화로 보험회사 제출용 진료 확인서·진료비 세부내역서 요청(작년 10월 5일 스케일링·12월 7일 잇몸치료분) → 4월 14일 서류 준비 완료 문자 보냄",
   "answer_doc_ids": [
-   "call:c-0526",
-   "thread:C-00525:2026-11"
+   "call:c-0238",
+   "thread:C-00872:2025-04"
   ],
   "answer_chunk_hint": "세부내역서",
   "expected_tools": [
