@@ -9,5 +9,5 @@ models:
   claude-sonnet-5-5: { input: 2.00, output: 10.00, cache_read: 0.20, server_fallback: true }
   claude-sonnet-5: { input: 2.00, output: 10.00, cache_read: 0.20 }
   claude-haiku-5-5: { input: 0.10, output: 0.50 }   # 프롬프트 10만 토큰 이하 단가(넘으면 0.50/2.50 — 분류 입력은 통화 하나라 해당 없음)
-# 일일 비용 상한($) — 넘으면 호출하지 않는다. 금액의 원본은 docs/치과 AX - 기능 정의.md §7 (tests/generator/test_doc_sync.py가 비교)
+# 일일 비용 상한($) — 넘으면 즉시 호출을 하지 않는다(배치 제출은 상한 밖). 금액의 원본은 docs/치과 AX - 기능 정의.md §7 (tests/generator/test_doc_sync.py가 비교)
 daily_usd_limit: { generator: 40, runtime: 15 }

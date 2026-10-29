@@ -502,8 +502,8 @@ def test_batch_results_priced_at_batch_share_and_logged(tmp_path):
     )
 
 
-def test_batch_submit_checks_budget(tmp_path):
+def test_batch_submit_ignores_daily_limit(tmp_path):
+    """배치는 하루 상한 밖 — 건수가 정해져 있어 사람이 보고 제출한다(기능 정의 §7). 즉시 호출만 상한에 걸린다"""
     gw = _gateway(tmp_path, BatchClient())
     gw.log.write({"at": NOW.isoformat(), "scope": "generator", "cost_usd": 1.0})
-    with pytest.raises(llm.BudgetExceeded):
-        gw.submit_batch("gen", [], task="toy")
+    assert gw.submit_batch("gen", [], task="toy")
