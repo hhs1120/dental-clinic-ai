@@ -282,6 +282,22 @@ def test_drafts_vary_by_visit():
     assert any("호소" in d for d in drafts)  # 잇몸이 내려간 것 같아요 — 증상
 
 
+def test_drafts_quote_or_shorten_the_patient():
+    """환자 말은 진료 번호로 반쯤은 따옴표, 반쯤은 차트식으로 줄인 말(CC_SHORT) — 모든 C.C에 줄인 말이 있고, 줄인 말은
+    근거 말을 품지 않는다(근거 없는 줄의 C.C도 줄여 쓰므로)"""
+    every = {c for ccs in chart.CC.values() for c in ccs} | {
+        c for ccs in chart.CC_NO_EVIDENCE.values() for c in ccs
+    }
+    assert every <= set(chart.CC_SHORT)
+    evidence = [w for ws in chart.EVIDENCE_WORDS.values() for w in ws]
+    assert not [s for s in chart.CC_SHORT.values() if any(w in s for w in evidence)]
+    drafts = [chart.draft_note(FACTS, tid) for tid in range(400)]
+    quoted = sum(f'"{FACTS["cc"]}"' in d for d in drafts)
+    assert 0.35 < quoted / len(drafts) < 0.65
+    short = chart.CC_SHORT[FACTS["cc"]]
+    assert all(short in d for d in drafts if f'"{FACTS["cc"]}"' not in d)
+
+
 @pytest.mark.parametrize(
     "note, hit",
     [
