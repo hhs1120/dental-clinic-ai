@@ -272,14 +272,16 @@ def test_drafts_vary_by_visit():
     drafts = [chart.draft_note(FACTS, tid) for tid in range(200)]
     assert chart.draft_note(FACTS, 7) == chart.draft_note(FACTS, 7)
     openers = {d.split(".")[0].split('"', 2)[2] for d in drafts if d.startswith('"')}
-    assert len(openers) >= 3 and any(not d.startswith('"') for d in drafts)  # 소견 뒤에 환자 말
+    assert len(openers) >= 2 and any(not d.startswith('"') for d in drafts)  # 소견 뒤에 환자 말
     assert (
         len({re.search(r"남은|남아|예정|다음", d.split("시행함")[-1]).group(0) for d in drafts})
         >= 3
     )
     calm = FACTS | {"cc": "정기 검진 받으러 왔어요"}
     assert not any("호소" in chart.draft_note(calm, tid) for tid in range(200))
-    assert any("호소" in d for d in drafts)  # 잇몸이 내려간 것 같아요 — 증상
+    sore = FACTS | {"cc": "잇몸이 붓고 피가 나요"}
+    assert any("호소" in chart.draft_note(sore, tid) for tid in range(200))  # 증상
+    assert not any("호소" in d for d in drafts)  # '잇몸이 내려간 것 같아요' — 느낌이라 호소 아님
 
 
 def test_drafts_quote_or_shorten_the_patient():

@@ -2127,8 +2127,7 @@
    "family": [],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "스케일링",
-   "scaling_used_this_year": true
+   "topic_procedure": "스케일링"
   },
   "split": "silver"
  },
