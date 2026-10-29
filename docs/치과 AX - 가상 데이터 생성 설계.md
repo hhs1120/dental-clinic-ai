@@ -331,10 +331,13 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - **입력**: 병원 이름(`master.CLINIC_NAME`)·방향·통화 날짜·라벨(목적·`accepted_purposes`·상대·급함·플래그·노이즈)·`used_fact`(`appointment_id`·환자 id 제외, 치아 `00`은 비움)에 더해
   - `caller`(늘): 말하는 사람 — `ax_calls.caller_name`과 성별. 성별은 보호자 통화면 그 환자의 보호자 기록, 그 밖은 환자 본인(이름이 같을 때 — 환자 측이 아닌 상대는 없음)
   - `recall_months`(리콜 문의): 정기 검진 주기 `master.RECALL_CYCLE_MONTHS`
+  - `new_booking`(새 예약 통화): 이 통화로 생기는 예약은 `appointment` 대신 이 이름에 "통화 전에는 없던 예약"이라는 말과 함께(`transcripts.NEW_BOOKING_NOTE`) — `appointment`로 넘기면 모델이 정할 날짜를 이미 잡힌 예약으로 쓴다
+  - `caller_situation`(응급·불만, 부 주제 포함): 통화 상황 하나 — 응급은 `master.EMERGENCY_ONSETS` × `master.EMERGENCY_SCENES`, 불만은 `master.COMPLAINT_TOPICS`에서 통화 번호 해시로 고른다(난수를 쓰지 않아 다른 결과를 바꾸지 않는다). 없으면 거의 모든 통화가 같은 이야기가 된다
+  - 보험사 통화(`transcripts.THIRD_PARTY`): 진료 기록(최근 진료·금액·주의사항·예약·가족·나이)을 빼고 환자 이름과 병원 규칙 `master.THIRD_PARTY_RULE`만 — 제3자에게 진료 내용을 알려 주지 않는다
   - `topic_price`(가격·보험 문의, 부 주제 포함): 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값). 환자 나이를 알면 그 나이에 급여인지(`master.insured_on`)로 정하고, `scaling_used_this_year`면 스케일링은 비급여 가격
 - **꼭 넣을 사실**(검증 (a)): 예약 날짜(예약류. 원래 날짜는 **예약 변경 통화만** — 변경으로 생긴 예약의 확인·취소 통화에 넣으면 변경 통화처럼 읽힌다)·주제 시술(`topic_procedure` — 이름 또는 별칭)·`already_paid`면 그 내원일. 날짜는 `11월 24일` 꼴
-- **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
-- **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실(통화 날짜·예약·주제 시술과 그 가격 `topic_price`)과 ⑧-1 근거(`already_paid`)·리콜 주기(`recall_months`)·받은 리콜 문자(`recall_text`)·말하는 사람(`caller`)만 남긴다
+- **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작(영문 낱말·한자가 섞이면 실패 — `llm_jobs.STRAY_SCRIPT`) + 통화 전 예약이 없는 새 예약 통화는 이미 잡힌 예약처럼 말하는 꼴(`transcripts.ALREADY_BOOKED`), 새 예약을 원하지 않는 취소 통화는 직원이 새 날짜를 잡자는 말(`transcripts.REBOOK_OFFER` — `wants_appt`로 읽힌다) 금지 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
+- **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실(통화 날짜·예약(`new_booking` 포함)·주제 시술과 그 가격 `topic_price`)과 ⑧-1 근거(`already_paid`)·리콜 주기(`recall_months`)·받은 리콜 문자(`recall_text`)·말하는 사람(`caller`)·통화 상황(`caller_situation`)·제3자 규칙(`third_party_rule`)만 남긴다
 - **적용**: `transcript`·`has_transcript = 1`, `duration_sec` = 발화 글자 수 ÷ `master.TRANSCRIPT_CHARS_PER_SEC`(`master.CALL_DURATION_SEC`로 자름). `scenario`는 저장하지 않는다(라벨을 풀어 쓴 문장)
 
 
@@ -400,7 +403,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 아말감/GI·신경치료는 같은 치아에 같은 시술을 **다른 코스에서** 다시 할 때만(`master.RETREATMENT_REQUIREMENT` — 신경치료 뒤 충전 같은 같은 치아의 다음 단계 치료와 코스 안 반복은 이어지는 치료라 재시행이 아니다). 코스는 4단계 수요 에피소드(노쇼 뒤 재예약 포함)이고 정답 DB `truth_appointment_courses`에 남긴다(앱은 `plan_item_id`로 계획 항목만 본다)
   - 확정 월에 요건 사유로 깎인 줄은 그 사유가 요건이다. 확정 월 R01로 깎인 줄이 '타 기관' 이력이면 장부에 같은 치아·같은 시술이 없어야 한다(verify)
 - **디코이**: 서술인지 템플릿인지는 본문 모양으로 드러나므로 숨기지 않고, 평범한 진료 일부(특이 케이스 × `master.CHART_DECOY_RATIO`, 시술별로 평범한 창 안 줄 수에 비례해 층화)도 LLM 서술해 "서술 ≠ 특이"를 만든다. 그래도 "서술 있는 줄 전부"는 재현율 100%의 기준선이 되므로 ⑤-2 평가에 이 기준선을 함께 보고한다
-- **서술 규칙**: 본문은 **문장형**(칸 머리말·약어 없이 자연 문장). 임상 사실만. 정답 어휘(`master.CHART_FORBIDDEN_WORDS`) 금지(§4.1 라벨 어휘 금지와 같은 규칙). 기준 충족 판단은 쓰지 않는다. 환자 이름 없음(비식별), 차트 번호는 메타데이터만
+- **서술 규칙**: 본문은 **메모체** — 실제 진료 차트처럼 `~함`·`~음`·명사로 끝내고 `~습니다`·높임말은 쓰지 않는다(템플릿·초안·서술 모두). 칸 머리말·영문 약어 없이. 임상 사실만. 정답 어휘(`master.CHART_FORBIDDEN_WORDS`) 금지(§4.1 라벨 어휘 금지와 같은 규칙). 기준 충족 판단은 쓰지 않는다. 환자 이름 없음(비식별), 차트 번호는 메타데이터만
 
 **9b단계 구현 결정**: 채우기 흐름은 §5.1
 - **입력**: 5b 사실(`truth_chart_notes.facts`)과 초안 본문. 요건 사유 키·충족 여부(정답)는 빼고 사실 필드만 넘긴다
@@ -409,8 +412,8 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 치주낭 `Nmm`
   - 주의사항과 그 내원에서 발견한 주의사항. 발견한 것이 있으면 새로 알게 됐다는 말(`chart.DISCOVERED_WORDS` 중 하나)
   - 요건 근거(기간 `N일`·`N개월`, 매복 정도, 실란트는 `소와열구`/`충전물`). 근거가 있으면 근거 말(`chart.EVIDENCE_WORDS` — 근거가 없으면 금지, 그 줄의 C.C도 근거로 읽히지 않는 문장 `chart.CC_NO_EVIDENCE`). 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
-  - 다음 계획: 남은 항목의 치아 `NN번`·시술 이름과 계획이라는 말(`chart.PLAN_WORDS` 중 하나), 또는 정기 검진 `N개월`
-- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄의 근거 말·환자 이름·금지 토픽 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
+  - 다음 계획: 남은 항목의 치아 `NN번`·시술 이름과 계획이라는 말(`chart.PLAN_WORDS` 중 하나), 또는 정기 검진 `N개월`. 같은 시술·치아가 여러 번이면 초안·꼭 넣을 말 모두 한 번만 `N회`와 함께(`chart.plan_items` — 같은 말을 여러 번 요구하면 모델이 '다음 내원 때' 같은 문장을 덧붙인다)
+- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄의 근거 말·환자 이름·금지 토픽·메모체가 아닌 끝맺음과 초안에 없는 시점(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
 - **적용**: `emr_chart_notes.note`를 덮어쓴다
 
 ## 5. 생성·정답·검증

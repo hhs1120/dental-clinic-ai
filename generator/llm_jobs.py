@@ -34,6 +34,9 @@ SIMPLIFY_AFTER = 2  # 이 횟수만큼 실패하면 다음 시도부터 단순�
 MAX_ATTEMPTS = 3  # 이 횟수만큼 실패하면 더 내보내지 않고 make data가 멈춘다 — 프롬프트를 고치거나 그 건의 캐시 줄을 모두 지운다
 CHUNK_SIZE = 25  # Claude Code 보조 에이전트 하나가 맡는 작업 수
 POLL_SEC = 60
+# 화자 머리가 있는 글(통화 전사)에 섞이면 안 되는 글자 — 영문 낱말·한자는 모델 출력 찌꺼기('Processing'·'直원:')다.
+# 건별 기준(checks)이 아니라 검사 코드라 캐시 키를 바꾸지 않는다
+STRAY_SCRIPT = r"[A-Za-z]{3,}|[一-鿿]"
 REPORT_KEYS = ("ok", "failed", "unknown", "duplicate", "bad")
 
 
@@ -294,6 +297,8 @@ def problems(schema: dict, checks: dict, output) -> list[str]:
         bad = [ln for ln in lines if not ln.startswith(tuple(speakers))]
         if bad:
             out.append(f"화자 표시 없는 줄: {bad[0][:30]}")
+        if m := re.search(STRAY_SCRIPT, text):
+            out.append(f"다른 글자: {m.group(0)}")
         out += [f"화자 {s} 없음" for s in speakers if not any(ln.startswith(s) for ln in lines)]
     if checks.get("length"):
         lo, hi = checks["length"]

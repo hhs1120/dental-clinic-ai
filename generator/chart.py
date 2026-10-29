@@ -10,7 +10,7 @@
 """
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
 import numpy as np
@@ -443,10 +443,10 @@ def _site(f) -> str:
     return f"{f['tooth']}번 치아 " if f["tooth"] else ""
 
 
-TEMPLATES = (
-    "{site}{procedure} 진행했습니다.",
-    "{cc}라고 하셔서 {site}{procedure} 시행했습니다.",
-    "{site}{procedure} 시행했습니다. 특이사항은 없습니다.",  # 주의사항이 있는 줄에는 쓰지 않음
+TEMPLATES = (  # 차트는 짧은 메모체 — '~함·~음'·명사로 끝낸다(§4.3)
+    "{site}{procedure} 진행함.",
+    '"{cc}"라며 내원, {site}{procedure} 시행함.',
+    "{site}{procedure} 시행함. 특이사항 없음.",  # 주의사항이 있는 줄에는 쓰지 않음
 )
 
 
@@ -462,8 +462,8 @@ def template_note(rng, f) -> str:
 
 
 def _alert_sentences(f) -> list[str]:
-    return [f"{a['label']} 주의사항이 있어 {a['action']}." for a in f["alerts"]] + [
-        f"진료 중 확인: {label}." for label in f["discovered"]
+    return [f"{a['label']} 주의, {a['action']}." for a in f["alerts"]] + [
+        f"진료 중 {label} 새로 확인." for label in f["discovered"]
     ]
 
 
@@ -477,14 +477,24 @@ def _ago(days: int) -> str:
     return f"{days}일 전" if days < 60 else f"약 {round(days / 30)}개월 전"
 
 
+def plan_items(plan: dict) -> list[tuple[dict, int]]:
+    """남은 치료 — 같은 시술·치아는 한 번만(횟수와 함께, 처음 나온 순서). 같은 말을 여러 번 넣으라고 하면 모델이 '다음 내원
+    때 이어서' 같은 문장을 덧붙인다"""
+    counts = Counter((i["tooth"], i["procedure"]) for i in plan["items"])
+    seen = {}
+    for i in plan["items"]:
+        seen.setdefault((i["tooth"], i["procedure"]), i)
+    return [(i, counts[k]) for k, i in seen.items()]
+
+
 def draft_note(f) -> str:
     """서술 초안 — 사실을 그대로 문장으로. 9b단계가 자연스러운 서술로 덮어쓴다"""
-    out = [f'"{f["cc"]}"라고 하시며 내원했습니다.']
+    out = [f'"{f["cc"]}"라며 내원.']
     if f["findings"]:
         x = f["findings"]
         out.append(
-            f"치주낭 깊이 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
-            f" 동요도 {x['mobility']}도로 확인했습니다."
+            f"치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
+            f" 동요도 {x['mobility']}도."
         )
     req = f["requirement"]
     if req and req["key"] == "R01":
@@ -494,34 +504,36 @@ def draft_note(f) -> str:
             else _ago(req["prev_days"])
         )
         out.append(
-            f"같은 치아에 {history} 같은 치료를 한 이력이 있습니다."
-            + (f" {_ro(req['reason'])} 다시 치료합니다." if req["reason"] else "")
+            f"같은 치아 {history} 같은 치료 이력 있음."
+            + (f" {_ro(req['reason'])} 재치료." if req["reason"] else "")
         )
     elif req and req["key"] == "R02":
-        where = "타 기관에서 " if req.get("other_clinic") else ""
-        out.append(
-            f"{where}{req['scaling_days_ago']}일 전 치석제거를 했습니다."
-            + (" 재평가 후 치주치료를 이어서 진행합니다." if req["linked"] else "")
+        done = (
+            f"타 기관에서 {req['scaling_days_ago']}일 전 치석제거 받음."
+            if req.get("other_clinic")
+            else f"{req['scaling_days_ago']}일 전 치석제거 시행함."
         )
+        out.append(done + (" 재평가 후 치주치료 이어서 진행." if req["linked"] else ""))
     elif req and req["key"] == "R04":
-        out.append(f"대상 치아는 {req['surface']}입니다.")
+        out.append(f"대상 치아 {req['surface']} 확인.")
     elif req and req["key"] == "R05" and req["impaction"]:
-        out.append(f"{req['impaction']} 상태로 골삭제 후 발치합니다.")
+        out.append(f"{req['impaction']} 상태로 골삭제 후 발치.")
     elif req and req["key"] == "R06" and req.get("extracted_days_ago"):
-        out.append(f"{_ago(req['extracted_days_ago'])} 발치한 무치악 부위입니다.")
+        out.append(f"{_ago(req['extracted_days_ago'])} 발치한 무치악 부위.")
     elif req and req["key"] == "R06" and req.get("other_clinic"):
-        out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위입니다.")
-    out.append(f"{_site(f)}{f['procedure']} 시행했습니다.")
+        out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위.")
+    out.append(f"{_site(f)}{f['procedure']} 시행함.")
     if f.get("extra"):
-        out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행했습니다.")
+        out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행함.")
     out += _alert_sentences(f)
     plan = f["plan"]
     if plan and "items" in plan:
-        out.append(
-            f"남은 치료는 {', '.join(_site(i) + i['procedure'] for i in plan['items'])}입니다."
+        items = ", ".join(
+            _site(i) + i["procedure"] + (f" {n}회" if n > 1 else "") for i, n in plan_items(plan)
         )
+        out.append(f"남은 치료로 {items} 예정.")
     elif plan:
-        out.append(f"{plan['recall_months']}개월 후 정기 검진을 안내했습니다.")
+        out.append(f"{plan['recall_months']}개월 후 정기 검진 안내함.")
     return " ".join(out)
 
 
@@ -573,6 +585,8 @@ def _period(days: int) -> str:
 OTHER_CLINIC_WORDS = ("타 기관", "다른 치과", "타 치과")
 DISCOVERED_WORDS = ("진료 중", "새로")
 PLAN_WORDS = ("남은", "남아", "예정", "다음")
+# 차트 서술에 쓰면 안 되는 꼴 — 메모체가 아닌 끝맺음·높임말, 초안에 없는 시점(초안은 '다음 내원'을 쓰지 않는다)
+MEMO_STYLE_FORBIDDEN = r"니다|하시며|하셨|했다\.|다음 (내원|진료|방문)"
 
 
 def _requirement_words(req: dict) -> list[str]:
@@ -620,8 +634,12 @@ def narrative_must_include(f: dict) -> list[list[str]]:
             out.append(list(OTHER_CLINIC_WORDS))
     plan = f["plan"]
     if plan and "items" in plan:
-        for i in plan["items"]:
-            out += ([[f"{i['tooth']}번"]] if i["tooth"] else []) + [[i["procedure"]]]
+        for i, n in plan_items(plan):
+            out += (
+                ([[f"{i['tooth']}번"]] if i["tooth"] else [])
+                + [[i["procedure"]]]
+                + ([[f"{n}회"]] if n > 1 else [])
+            )
         out.append(list(PLAN_WORDS))
     elif plan:
         out.append([f"{plan['recall_months']}개월"])
@@ -642,7 +660,7 @@ def narrative_checks(f: dict, patient_name: str) -> dict:
         "field": "note",
         "must_include": narrative_must_include(f),
         "forbidden_words": [*CHART_FORBIDDEN_WORDS, *evidence_forbidden(f), patient_name],
-        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+        "forbidden_patterns": [*llm_jobs.forbidden_patterns(), MEMO_STYLE_FORBIDDEN],
     }
 
 

@@ -3,6 +3,7 @@
 통과한 전사는 ax_calls에 넣고 길이를 발화 글자 수로 다시 계산한다. 시나리오는 저장하지 않는다(라벨을 풀어 쓴 문장).
 """
 
+import hashlib
 import json
 from datetime import date
 
@@ -14,12 +15,16 @@ from generator.master import (
     CALL_FLAGS,
     CALL_LABEL_WORDS,
     CLINIC_NAME,
+    COMPLAINT_TOPICS,
     CONDITIONAL_INSURED_MIN_AGE,
+    EMERGENCY_ONSETS,
+    EMERGENCY_SCENES,
     FULL_MOUTH,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    THIRD_PARTY_RULE,
     TRANSCRIPT_CHARS_PER_SEC,
     insured_on,
 )
@@ -42,6 +47,32 @@ INTERNAL_KEYS = (
     "appointment_id",
     "id",
 )  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게. 치아 '00'(전체 구강)은 None
+# 새 예약 통화의 예약은 이 통화에서 정하는 날짜 — 'appointment'로 넘기면 모델이 이미 잡힌 예약으로 읽는다
+NEW_BOOKING_NOTE = "통화 전에는 없던 예약 — 이 통화에서 처음 정하는 날짜"
+# 통화 전 예약이 없는 새 예약 통화에서 쓰면 안 되는 말 — 정할 날짜를 이미 잡힌 예약처럼 말하는 꼴
+ALREADY_BOOKED = r"잡혀 있|예약(이|은)? ?있으|예약되어 있|예약돼 있"
+# 새 예약을 원하지 않는 취소 통화에서 쓰면 안 되는 말 — 직원이 새 날짜를 잡자고 하면 wants_appt로 읽힌다
+REBOOK_OFFER = (  # 직원 줄만 — 환자가 '다시 잡을 생각은 없어요'라고 하는 것·직원의 '잡지 않고'는 괜찮다
+    r"(?m)^직원:(?![^\n]*잡지 않)[^\n]*(새 ?(일정|날짜|예약)|다시 (잡|예약)|"
+    r"일정(을)? (다시 )?(여쭤|맞춰|상의|잡)|(편하신|원하시는) (날|시간|요일))"
+)
+SITUATION_PURPOSES = (
+    "emergency",
+    "complaint",
+)  # 상황(caller_situation)을 입력에 넣는 목적 — 부 주제 포함
+THIRD_PARTY = ("insurer",)  # 진료 기록을 넘기지 않는 상대 — 이름과 병원 규칙만
+THIRD_PARTY_KEEP = ("call_date", "topic_procedure", "topic_price", "caller")
+
+
+def _pick(uid: str, salt: str, options: tuple):
+    """통화 번호로 고르기 — 난수를 쓰지 않아 다른 단계·통화의 결과를 바꾸지 않는다"""
+    return options[int(hashlib.sha256(f"{salt}:{uid}".encode()).hexdigest(), 16) % len(options)]
+
+
+def situation(uid: str, purpose: str) -> str:
+    if purpose == "emergency":
+        return f"{_pick(uid, 'onset', EMERGENCY_ONSETS)} {_pick(uid, 'scene', EMERGENCY_SCENES)}"
+    return _pick(uid, "topic", COMPLAINT_TOPICS)
 
 
 def rows(conn) -> list[dict]:
@@ -120,6 +151,16 @@ def payload(row: dict) -> dict:
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
         )
+    if row["primary_purpose"] == "book" and facts.get("appointment"):
+        facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
+    accepted = json.loads(row["accepted_purposes"])
+    if purpose := next((p for p in accepted if p in SITUATION_PURPOSES), None):
+        facts["caller_situation"] = situation(row["call_uid"], purpose)
+    if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
+        facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {
+            "patient": {"name": fact["patient"]["name"]} if fact.get("patient") else None,
+            "third_party_rule": THIRD_PARTY_RULE,
+        }
     return {
         "clinic": CLINIC_NAME,
         "direction": row["direction"],
@@ -138,16 +179,19 @@ def payload(row: dict) -> dict:
 
 def simplify(p: dict) -> dict:
     """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술과 그 가격)과 ⑧-1 근거(이미 냈다)·
-    리콜 주기·받은 리콜 문자·말하는 사람만"""
+    리콜 주기·받은 리콜 문자·말하는 사람·통화 상황·제3자 규칙만"""
     keep = (
         "call_date",
         "appointment",
+        "new_booking",
         "topic_procedure",
         "topic_price",
         "recall_months",
         "recall_text",
         "caller",
         "already_paid",
+        "caller_situation",
+        "third_party_rule",
     )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
 
@@ -175,11 +219,16 @@ def must_include(fact: dict, names: dict, purpose: str) -> list[list[str]]:
 
 def checks(row: dict, names: dict) -> dict:
     lo, hi = CALL_DURATION_SEC
+    fact = json.loads(row["used_fact"])
+    new_only = row["primary_purpose"] == "book" and not fact.get("next_appointment")
+    no_rebook = row["primary_purpose"] == "cancel" and not row["wants_appt"]
     return {
         "field": "transcript",
-        "must_include": must_include(json.loads(row["used_fact"]), names, row["primary_purpose"]),
+        "must_include": must_include(fact, names, row["primary_purpose"]),
         "forbidden_words": list(CALL_LABEL_WORDS),
-        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+        "forbidden_patterns": llm_jobs.forbidden_patterns()
+        + ([ALREADY_BOOKED] if new_only else [])
+        + ([REBOOK_OFFER] if no_rebook else []),
         "speakers": SPEAKERS,
         "length": [round(lo * TRANSCRIPT_CHARS_PER_SEC), round(hi * TRANSCRIPT_CHARS_PER_SEC)],
     }

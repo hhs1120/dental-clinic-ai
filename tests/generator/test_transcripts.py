@@ -1,6 +1,7 @@
 """7단계 통화 전사 작업 (가상 데이터 생성 설계 §4.1 '7단계 구현 결정') — verify 테스트 DB의 통화 4건으로 본다."""
 
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -11,9 +12,12 @@ from generator.master import (
     CALL_DURATION_SEC,
     CALL_LABEL_WORDS,
     CLINIC_NAME,
+    COMPLAINT_TOPICS,
+    EMERGENCY_SCENES,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
     SCALING_MIN_AGE,
+    THIRD_PARTY_RULE,
     TRANSCRIPT_CHARS_PER_SEC,
 )
 from tests.generator.verify_db import make_db
@@ -206,6 +210,53 @@ def test_price_and_insurance_calls_get_master_price(conn):
     )  # 부 주제 가격 문의도
 
 
+def test_book_call_marks_the_slot_as_new(conn):
+    """새 예약 통화(c-0003)의 예약은 이 통화에서 정하는 날짜 — '예약(appointment)'으로 넘기면 모델이 이미 잡힌 예약으로
+    읽어 '그날 잡혀 있으세요'라고 쓴다. 통화 전 예약이 없으면 그런 말을 금지 패턴으로도 막는다"""
+    row = _row(conn, "c-0003")
+    facts = transcripts.payload(row)["facts"]
+    assert "appointment" not in facts and facts["new_booking"]["date"] == "2026-10-06"
+    assert facts["new_booking"]["before_call"]
+    assert (
+        transcripts.ALREADY_BOOKED
+        in transcripts.checks(row, llm_jobs.procedure_names(conn))["forbidden_patterns"]
+    )
+    assert "new_booking" in transcripts.simplify(transcripts.payload(row))["facts"]
+    moved = _row(conn, "c-0004")  # 예약 변경 — 원래 예약이 있는 통화는 그대로
+    assert "appointment" in transcripts.payload(moved)["facts"]
+    assert (
+        transcripts.ALREADY_BOOKED
+        not in transcripts.checks(moved, llm_jobs.procedure_names(conn))["forbidden_patterns"]
+    )
+
+
+def test_book_call_with_another_appointment_may_mention_it(conn):
+    """통화 전에 다른 예약이 있으면 '그날 잡혀 있으세요'는 그 예약 이야기일 수 있어 금지하지 않는다"""
+    row = dict(_row(conn, "c-0003"))
+    fact = json.loads(row["used_fact"]) | {
+        "next_appointment": {"date": "2026-10-20", "time": "10:00", "procedure": "스케일링"}
+    }
+    row["used_fact"] = json.dumps(fact, ensure_ascii=False)
+    assert (
+        transcripts.ALREADY_BOOKED
+        not in transcripts.checks(row, llm_jobs.procedure_names(conn))["forbidden_patterns"]
+    )
+
+
+@pytest.mark.parametrize(
+    "line, hit",
+    [
+        ("직원: 마침 9월 22일 10시 30분에 스케일링이 잡혀 있으세요.", True),
+        ("직원: 1월 12일 오후 4시에 레진 치료 예약이 있으시네요.", True),
+        ("직원: 1월 31일 10:30에 레진 진료 예약이 이미 잡혀 있으세요.", True),
+        ("직원: 그럼 10월 18일 오전 10시 30분으로 예약해 드릴게요.", False),
+        ("직원: 9월 23일 오후 5시 30분으로 잡아 둘게요.", False),
+    ],
+)
+def test_already_booked_pattern(line, hit):
+    assert bool(re.search(transcripts.ALREADY_BOOKED, line)) is hit
+
+
 def test_scaling_price_after_this_years_use():
     """그해 급여 스케일링을 이미 받았으면 스케일링은 비급여 가격 — 연 1회(§2.4)"""
     assert transcripts.topic_price("스케일링", 40)["insured"]
@@ -221,3 +272,73 @@ def test_recall_calls_get_recall_cycle(conn):
     }
     assert transcripts.payload(recall)["facts"]["recall_months"] == RECALL_CYCLE_MONTHS
     assert "recall_months" not in transcripts.payload(_row(conn, "c-0001"))["facts"]
+
+
+def _as(conn, uid, **over):
+    """통화 행을 목적·상대·플래그만 바꿔 본다 — 테스트 DB의 통화 4건이 모든 경우를 갖추지 않아서"""
+    return dict(_row(conn, uid)) | over
+
+
+def test_cancel_without_new_booking_forbids_rebooking_offer(conn):
+    """새 예약을 원하지 않는 취소 통화에서 직원이 '새 날짜 잡게 연락드릴게요·편한 요일 있으세요'라고 하면 wants_appt로
+    읽힌다 — 금지 패턴으로 막는다. 새 예약을 원하는 취소 통화는 그대로"""
+    names = llm_jobs.procedure_names(conn)
+    no = _as(
+        conn, "c-0003", primary_purpose="cancel", accepted_purposes='["cancel"]', wants_appt=0
+    )
+    yes = no | {"wants_appt": 1}
+    assert transcripts.REBOOK_OFFER in transcripts.checks(no, names)["forbidden_patterns"]
+    assert transcripts.REBOOK_OFFER not in transcripts.checks(yes, names)["forbidden_patterns"]
+
+
+@pytest.mark.parametrize(
+    "line, hit",
+    [
+        ("직원: 원장님 일정 보고 새 날짜 잡게 다시 연락드릴게요.", True),
+        ("직원: 편하신 요일이나 시간대 있으세요?", True),
+        ("직원: 나중에 일정 여쭤보려고 저희가 따로 연락드려도 될까요?", True),
+        ("직원: 오늘 12시 건은 없던 걸로 해 드릴게요.", False),
+        ("환자: 다시 갈 수 있는 날이 정해지면 제가 전화드릴게요.", False),
+        ("환자: 다시 잡을 생각은 아직 없어요.", False),  # 환자 말은 괜찮다
+        ("직원: 새 일정은 따로 잡지 않고 오늘 건만 정리해 둘게요.", False),
+    ],
+)
+def test_rebook_offer_pattern(line, hit):
+    assert bool(re.search(transcripts.REBOOK_OFFER, line)) is hit
+
+
+def test_emergency_and_complaint_calls_get_a_situation(conn):
+    """응급·불만 통화는 상황을 입력에 — 없으면 거의 모두 '어젯밤부터 오른쪽 아래 어금니'·'한 시간 기다렸다'가 된다.
+    통화 번호로 정해져(난수 없음) 같은 통화는 늘 같은 상황"""
+    base = _as(conn, "c-0001", primary_purpose="emergency", accepted_purposes='["emergency"]')
+    facts = transcripts.payload(base)["facts"]
+    assert facts["caller_situation"] == transcripts.payload(base)["facts"]["caller_situation"]
+    seen = {
+        transcripts.payload(base | {"call_uid": f"c-{n:04d}"})["facts"]["caller_situation"]
+        for n in range(60)
+    }
+    assert len(seen) > 10
+    assert all(any(s in x for s in EMERGENCY_SCENES) for x in seen)
+    sub = _as(
+        conn, "c-0001", primary_purpose="cancel", accepted_purposes='["cancel", "complaint"]'
+    )
+    assert transcripts.payload(sub)["facts"]["caller_situation"] in COMPLAINT_TOPICS  # 부 주제도
+    assert "caller_situation" not in transcripts.payload(_row(conn, "c-0003"))["facts"]  # 새 예약
+
+
+def test_insurer_call_hides_patient_records(conn):
+    """보험사 등 제3자에게는 진료 내용을 알려 주지 않는다 — 환자 이름만 넘기고 병원 규칙을 함께"""
+    row = _as(conn, "c-0001", counterpart="insurer")
+    facts = transcripts.payload(row)["facts"]
+    assert facts["patient"] == {"name": "김철수"}
+    assert facts["third_party_rule"] == THIRD_PARTY_RULE
+    assert not {
+        "recent_visits",
+        "balance",
+        "alerts",
+        "open_plan_items",
+        "next_appointment",
+        "family",
+    } & set(facts)
+    assert "third_party_rule" in transcripts.simplify(transcripts.payload(row))["facts"]
+    assert "third_party_rule" not in transcripts.payload(_row(conn, "c-0001"))["facts"]

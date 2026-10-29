@@ -3,6 +3,7 @@
 
 import json
 import math
+import re
 import sqlite3
 from collections import Counter
 
@@ -242,13 +243,44 @@ def test_no_evidence_lines_get_neutral_cc(db):
 
 
 def test_draft_sentences(db):
-    """초안 문장: 조사 처리('2차 우식으로'), 주의사항이 있으면 '특이사항은 없습니다' 템플릿을 쓰지 않음"""
+    """초안 문장: 조사 처리('2차 우식으로'), 주의사항이 있으면 '특이사항 없음' 템플릿을 쓰지 않음"""
     conn, _, _ = db
     notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
     assert not any("우식로" in n for n in notes)
-    assert not any(
-        "특이사항은 없습니다" in n and ("주의사항" in n or "진료 중" in n) for n in notes
-    )
+    assert not any("특이사항 없음" in n and (" 주의, " in n or "진료 중" in n) for n in notes)
+
+
+def test_notes_are_memo_style(db):
+    """차트는 짧은 메모체 — '~함·~음'·명사로 끝내고 '~습니다'·높임말('하시며')을 쓰지 않는다(템플릿·초안 모두)"""
+    conn, _, _ = db
+    notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
+    assert notes and not any(re.search(r"니다|하시며|하셔서|했다\.", n) for n in notes)
+
+
+def test_draft_merges_repeated_plan_items():
+    """같은 시술이 계획에 여러 번이면 'N회'로 한 번만 — 같은 말을 여러 번 넣으라고 하면 모델이 문장을 덧붙인다"""
+    f = FACTS | {"plan": {"items": [{"procedure": "잇몸치료", "tooth": None}] * 2}}
+    draft = chart.draft_note(f)
+    assert "잇몸치료 2회" in draft and draft.count("잇몸치료") == 2  # 오늘 시술 + 남은 치료(2회)
+    must = chart.narrative_must_include(f)
+    assert must[-3:] == [["잇몸치료"], ["2회"], list(chart.PLAN_WORDS)]
+
+
+@pytest.mark.parametrize(
+    "note, hit",
+    [
+        ("잇몸치료 시행했습니다.", True),
+        ('"이가 시려요"라고 하시며 내원.', True),
+        ("레진 시행했다.", True),
+        ("다음 내원 때 이어서 진행.", True),
+        ('"이가 시려요"라며 내원. 26번 치아 레진 시행함. 남은 치료로 크라운 예정.', False),
+    ],
+)
+def test_memo_style_is_checked(note, hit):
+    """서술 검증이 메모체가 아닌 끝맺음·높임말·초안에 없는 시점을 걸러 다시 쓰게 한다"""
+    checks = chart.narrative_checks(FACTS | {"plan": None}, "홍길동")
+    assert chart.MEMO_STYLE_FORBIDDEN in checks["forbidden_patterns"]
+    assert bool(re.search(chart.MEMO_STYLE_FORBIDDEN, note)) is hit
 
 
 # ── 9b단계 차트 서술 작업 (§4.3 '9b단계 구현 결정') ────────────
@@ -391,7 +423,7 @@ def test_narrative_stage_exports_then_applies_cache(tmp_path):
     ]
     assert job["item"] == "3" and job["checks"]["must_include"] == [["16번"], ["레진"]]
     assert "김하늘" in job["checks"]["forbidden_words"]  # 3번 진료 환자 이름
-    note = "16번 치아에 까만 점이 보여 레진 충전을 시행했습니다."
+    note = "16번 치아 까만 점 보여 레진 충전 시행함."
     paths["llm_results"].mkdir()
     (paths["llm_results"] / "chart.jsonl").write_text(
         json.dumps(
