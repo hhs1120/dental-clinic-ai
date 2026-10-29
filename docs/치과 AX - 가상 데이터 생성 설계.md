@@ -413,7 +413,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 주의사항과 그 내원에서 발견한 주의사항. 발견한 것이 있으면 새로 알게 됐다는 말(`chart.DISCOVERED_WORDS` 중 하나)
   - 요건 근거(기간 `N일`·`N개월`, 매복 정도, 실란트는 `소와열구`/`충전물`). 근거가 있으면 근거 말(`chart.EVIDENCE_WORDS` — 근거가 없으면 금지, 그 줄의 C.C도 근거로 읽히지 않는 문장 `chart.CC_NO_EVIDENCE`). 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
   - 다음 계획: 남은 항목의 치아 `NN번`·시술 이름과 계획이라는 말(`chart.PLAN_WORDS` 중 하나), 또는 정기 검진 `N개월`. 같은 시술·치아가 여러 번이면 초안·꼭 넣을 말 모두 한 번만 `N회`와 함께(`chart.plan_items` — 같은 말을 여러 번 요구하면 모델이 '다음 내원 때' 같은 문장을 덧붙인다)
-- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄의 근거 말·환자 이름·금지 토픽·메모체가 아닌 끝맺음과 초안에 없는 시점(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
+- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄의 근거 말·환자 이름·금지 토픽·메모체가 아닌 끝맺음·초안에 없는 시점·치아 없는 진료의 부위 말·시행한 골삭제를 '필요'로 바꾼 말(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
 - **적용**: `emr_chart_notes.note`를 덮어쓴다
 
 ## 5. 생성·정답·검증
