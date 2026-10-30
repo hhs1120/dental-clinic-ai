@@ -417,15 +417,28 @@ def stage_payments(run, rng, fake) -> None:
     )
 
 
-def _months_before(today: date, month: str) -> int:
+def months_before(today: date, month: str) -> int:
     y, m = map(int, month.split("-"))
     return today.year * 12 + today.month - (y * 12 + m)
 
 
-def _submitted_at(month: str) -> str:
+def submitted_at(month: str) -> str:
     """익월 1일 (시각·휴진일은 따지지 않음)"""
     y, m = map(int, month.split("-"))
     return f"{date(y + m // 12, m % 12 + 1, 1).isoformat()} 09:00:00"
+
+
+def claim_bucket(today: date, month: str) -> str:
+    """청구 월의 단계 (§2.4) — 전월 이후 pending / 그 전 SUBMITTED_MONTHS개월 submitted / 그 이전 settled(심사 결과 있음)"""
+    before = months_before(today, month)
+    return (
+        "pending" if before <= 1 else "submitted" if before <= 1 + SUBMITTED_MONTHS else "settled"
+    )
+
+
+def reviewed_on(submitted: str) -> str:
+    """심사결과 통보일 = 제출일 + REVIEW_NOTICE_DAYS (§2.4)"""
+    return (date.fromisoformat(submitted[:10]) + timedelta(days=REVIEW_NOTICE_DAYS)).isoformat()
 
 
 def review(rng, code: str, amount: int, repeat: bool = False) -> tuple:
@@ -469,7 +482,7 @@ def stage_claims(run, rng, fake) -> None:
     def settled(served: date) -> bool:
         return (
             served >= run.range_start
-            and _months_before(run.today, served.strftime("%Y-%m")) > 1 + SUBMITTED_MONTHS
+            and months_before(run.today, served.strftime("%Y-%m")) > 1 + SUBMITTED_MONTHS
         )
 
     first_scaling: dict[int, int] = {}  # 병행 후보 환자 → 그 첫 줄(진료 id)
@@ -499,27 +512,23 @@ def stage_claims(run, rng, fake) -> None:
         if not insured_on(PROCEDURE[code], age_on(birth[pid], served)):
             continue
         month = served.strftime("%Y-%m")
-        before = _months_before(run.today, month)
+        bucket = claim_bucket(run.today, month)
         if served < run.range_start:
             if code != SCALING_CODE or served.year != run.today.year:
                 continue
             result = ("paid", amount, None, None)
-        elif before <= 1:
-            result = ("pending", None, None, None)
-        elif before <= 1 + SUBMITTED_MONTHS:
-            result = ("submitted", None, None, None)
+        elif bucket in ("pending", "submitted"):
+            result = (bucket, None, None, None)
         elif tid in external_lines:
             result = ("denied", 0, external["category"], external["note"])
         else:
             result = review(rng, code, amount, repeat)
-        submitted = None if result[0] == "pending" else _submitted_at(month)
+        submitted = None if result[0] == "pending" else submitted_at(month)
         reviewed = (
             None  # 통보일 — 확정 월(창 이전 스케일링 포함)만, 제출일 + REVIEW_NOTICE_DAYS (§2.4)
         )
         if result[0] in ("paid", "adjusted", "denied"):
-            reviewed = (
-                date.fromisoformat(submitted[:10]) + timedelta(days=REVIEW_NOTICE_DAYS)
-            ).isoformat()
+            reviewed = reviewed_on(submitted)
         rows.append(
             (
                 tid,

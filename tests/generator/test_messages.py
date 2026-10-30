@@ -70,7 +70,7 @@ def test_reply_delay_and_phrases(db):
         " (SELECT max(o.sent_at) FROM emr_messages o WHERE o.direction = 'out'"
         " AND o.patient_id = i.patient_id AND o.related_appointment_id IS i.related_appointment_id"
         " AND o.sent_at < i.sent_at) AS out_at FROM emr_messages i WHERE i.direction = 'in'"
-        " AND i.body != ?",  # 취소 답장(8a단계)은 test_cancels
+        " AND i.body != ?",  # 취소 답장(8a단계)은 test_emergency
         (MESSAGE_REPLY_CANCEL,),
     ).fetchall()
     assert replies

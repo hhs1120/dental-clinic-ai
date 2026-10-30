@@ -18,6 +18,8 @@ from generator.master import (
     CLINIC_NAME,
     COMPLAINT_TOPICS,
     CONDITIONAL_INSURED_MIN_AGE,
+    EMERGENCY_AFTER_VISIT_ONSET,
+    EMERGENCY_AFTER_VISIT_SCENE,
     EMERGENCY_ONSETS,
     EMERGENCY_SCENES,
     FULL_MOUTH,
@@ -52,6 +54,12 @@ INTERNAL_KEYS = (
 NEW_BOOKING_NOTE = "통화 전에는 없던 예약 — 이 통화에서 처음 정하는 날짜"
 # 응급 통화의 내원(6b단계 emergency_visit) — 직원이 바로 오라고 안내하는 시각. 예약을 새로 정하는 통화가 아니다(appt_confirmed 아님)
 EMERGENCY_VISIT_NOTE = "통화 전에는 없던 내원 — 직원이 이 시각에 바로 오시라고 안내한다(그날이면 '오늘', 진료가 끝날 무렵이면 다음 진료일 아침 첫 시간)"
+# 다음 진료일 내원 — 그날 자리가 없어 다음 진료일 오전의 가장 이른 빈 시간. 시각을 제안·조율하면 예약 잡기로 읽힌다
+EMERGENCY_NEXT_DAY_NOTE = (
+    "통화 전에는 없던 내원 — 오늘은 진료가 끝나 가서, 직원이 다음 진료일의 이 시각(그날 오전 비어 있는 가장 이른 시간)에"
+    " 오시라고 정해서 알려 준다. 시간을 제안하거나 맞추지 않고('어떠세요?'·'괜찮으세요?' 없이), 다시 연락해 확정하지도 않는다."
+    " '첫 시간'·'제일 먼저'라고 하지 않는다"
+)
 WEEKDAY_NAMES = "월화수목금토일"
 # 통화 전 예약이 없는 새 예약 통화에서 쓰면 안 되는 말 — 정할 날짜를 이미 잡힌 예약처럼 말하는 꼴
 ALREADY_BOOKED = r"잡혀 있|예약(이|은)? ?있으|예약되어 있|예약돼 있"
@@ -68,7 +76,7 @@ THIRD_PARTY = ("insurer",)  # 진료 기록을 넘기지 않는 상대 — 이�
 THIRD_PARTY_KEEP = ("call_date", "topic_procedure", "topic_price", "caller")
 
 
-def _pick(uid: str, salt: str, options: tuple):
+def pick(uid: str, salt: str, options: tuple):
     """통화 번호로 고르기 — 난수를 쓰지 않아 다른 단계·통화의 결과를 바꾸지 않는다"""
     return options[int(hashlib.sha256(f"{salt}:{uid}".encode()).hexdigest(), 16) % len(options)]
 
@@ -81,13 +89,16 @@ MISSED_WINDOW_DAYS = CALL_PATIENT_RULES[("complaint", "inbound")][
 ]  # 불만 통화가 보는 최근 내원 기간
 
 
-def situation(uid: str, purpose: str, recent_noshow: bool = True) -> str:
-    """응급은 시작 시점 × 상황, 불만은 주제 — 문자를 못 받아 놓쳤다는 불만은 직전 노쇼가 없으면 다른 주제로(기록에 없는 일)"""
+def situation(uid: str, purpose: str, recent_noshow: bool = True, scene: str | None = None) -> str:
+    """응급은 시작 시점 × 상황, 불만은 주제 — 문자를 못 받아 놓쳤다는 불만은 직전 노쇼가 없으면 다른 주제로(기록에 없는 일).
+    scene: 6b단계가 바꾼 상황(emergency_visit.scene — 그날 진료 뒤·소아), 그날 진료 뒤면 시작 시점도 그 진료 뒤"""
     if purpose == "emergency":
-        return f"{_pick(uid, 'onset', EMERGENCY_ONSETS)} {_pick(uid, 'scene', EMERGENCY_SCENES)}"
-    topic = _pick(uid, "topic", COMPLAINT_TOPICS)
+        if scene == EMERGENCY_AFTER_VISIT_SCENE:
+            return f"{EMERGENCY_AFTER_VISIT_ONSET} {scene}"
+        return f"{pick(uid, 'onset', EMERGENCY_ONSETS)} {scene or pick(uid, 'scene', EMERGENCY_SCENES)}"
+    topic = pick(uid, "topic", COMPLAINT_TOPICS)
     if topic == MISSED_TOPIC and not recent_noshow:
-        return _pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
+        return pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
     return topic
 
 
@@ -178,13 +189,20 @@ def payload(row: dict) -> dict:
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
         )
     if facts.get("emergency_visit"):
-        facts["emergency_visit"] |= {"before_call": EMERGENCY_VISIT_NOTE}
+        visit = facts["emergency_visit"]
+        visit.pop("scene", None)  # 상황은 caller_situation으로
+        visit["before_call"] = (
+            EMERGENCY_VISIT_NOTE if visit["date"] == fact["call_date"] else EMERGENCY_NEXT_DAY_NOTE
+        )
     if row["primary_purpose"] == "book" and facts.get("appointment"):
         facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
     accepted = json.loads(row["accepted_purposes"])
     if purpose := next((p for p in accepted if p in SITUATION_PURPOSES), None):
         facts["caller_situation"] = situation(
-            row["call_uid"], purpose, recent_noshow=bool(row.get("recent_noshow"))
+            row["call_uid"],
+            purpose,
+            recent_noshow=bool(row.get("recent_noshow")),
+            scene=(fact.get("emergency_visit") or {}).get("scene"),
         )
     if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
         facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {

@@ -10,6 +10,8 @@ import pytest
 from generator import build, emergency
 from generator.calls import FMT, prev_open_day
 from generator.master import (
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_CHILD_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
     EMERGENCY_TREATMENT,
@@ -94,7 +96,8 @@ def test_today_scene_call(db):
     assert len(scene) == 1
     c, a = scene[0]
     day = prev_open_day(datetime.strptime(TODAY, "%Y-%m-%d").date(), HOLIDAYS)
-    assert c["started_at"] == f"{day.isoformat()} {emergency.SCENE_CALL_TIME}"
+    assert c["started_at"][:10] == day.isoformat()
+    assert c["started_at"][11:] > "17:00:00"  # 진료 끝 무렵(평일 마감 전)
     assert a["status"] == "scheduled" and not c["in_eval_pool"] and not c["in_blind_pool"]
 
 
@@ -152,3 +155,36 @@ def test_visit_area_matches_tooth(db):
             assert visit["area"] == emergency.tooth_area(t[0])
     assert emergency.tooth_area("26") == "왼쪽 위 어금니"
     assert emergency.tooth_area("44") == "오른쪽 아래 작은어금니"
+
+
+def test_scene_follows_same_day_visit_and_age(db):
+    """그날 먼저 진료받고 간 뒤 건 응급 통화는 그 치료와 이어진 통증(상담), 소아는 소아에게 맞는 상황 — 바꾼 상황은 사실에"""
+    changed = 0
+    for c, a in _visits(db):
+        visit = json.loads(c["used_fact"])["emergency_visit"]
+        before = db.execute(
+            "SELECT 1 FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
+            " AND date(scheduled_at) = ? AND scheduled_at < ? AND id != ?",
+            (c["patient_id"], c["started_at"][:10], c["started_at"], a["id"]),
+        ).fetchone()
+        base = emergency.scene(c["call_uid"])
+        if before:
+            assert (
+                visit["scene"] == EMERGENCY_AFTER_VISIT_SCENE
+                and NAME[a["planned_procedure_code"]] == "상담"
+            )
+        elif "scene" in visit:
+            assert visit["scene"] == EMERGENCY_CHILD_SCENES[base]
+        changed += "scene" in visit
+    assert changed
+
+
+def test_recent_visits_mark_emergency(db):
+    """뒤 통화의 최근 진료 3건에 응급 내원이 있으면 응급 표시 — 일반 상담으로 이어 쓰지 않게"""
+    marks = [
+        v
+        for (raw,) in db.execute("SELECT used_fact FROM truth.truth_call_labels")
+        for v in json.loads(raw).get("recent_visits", [])
+        if v.get("emergency")
+    ]
+    assert marks

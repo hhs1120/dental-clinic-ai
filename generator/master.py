@@ -819,6 +819,12 @@ EMERGENCY_TREATMENT = dict(
         strict=True,
     )
 )
+# 그날 먼저 진료를 받고 간 뒤 건 응급 통화는 이 상황(그 치료와 이어진 통증)으로 — 해시로 고른 상황이면 1시간 전 내원과 모순
+EMERGENCY_AFTER_VISIT_SCENE = "오늘 치료받은 이가 마취가 풀리면서 심하게 아픈"
+EMERGENCY_AFTER_VISIT_ONSET = "진료받고 돌아간 뒤부터"
+EMERGENCY_TREATMENT[EMERGENCY_AFTER_VISIT_SCENE] = ("상담", ())
+# 소아(AGE_BANDS child)에게 맞지 않는 상황 → 대신 쓰는 상황(씌운 치아가 빠짐 → 넘어져 흔들리는 앞니)
+EMERGENCY_CHILD_SCENES = {EMERGENCY_SCENES[6]: EMERGENCY_SCENES[2]}
 EMERGENCY_LEAD_MIN = 30
 # 때운 것이 빠진 상황 — 그 환자가 전에 다른 수복 시술로 때운 치아에서 고른다(녹취록이 그 기록을 말해도 맞게). 없으면 위 규칙대로
 EMERGENCY_RESTORED_SCENES = (EMERGENCY_SCENES[3],)

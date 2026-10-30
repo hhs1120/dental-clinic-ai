@@ -27,6 +27,7 @@ from generator.master import (
     CHECKUP_CODE,
     DIAGNOSES,
     DIAGNOSIS_ERROR_RATE,
+    EMERGENCY_AFTER_VISIT_SCENE,
     EMERGENCY_SCENES,
     EXTRACTION_CODES,
     FULL_MOUTH,
@@ -157,6 +158,10 @@ EMERGENCY_CC = dict(
         ),
         strict=True,
     )
+)
+EMERGENCY_CC[EMERGENCY_AFTER_VISIT_SCENE] = (
+    "치료받은 이가 마취 풀리고 너무 아파요",
+    "치료 후 통증",
 )
 CC_SHORT |= dict(EMERGENCY_CC.values())
 SYMPTOM_CC |= {cc for cc, _ in EMERGENCY_CC.values()}

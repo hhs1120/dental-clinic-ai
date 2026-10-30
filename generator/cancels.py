@@ -16,10 +16,12 @@ from generator.master import (
     MESSAGE_REPLY_CANCEL,
     NOSHOW_TO_CANCEL,
     SAMEDAY_CANCEL_LEAD_MIN,
+    open_slots,
 )
 from generator.messages import emergency_appointments
 
 PROCESS_MIN = 5  # 장면 2 — 답장을 보고 직원이 취소하기까지
+REPLY_LEAD_MAX_MIN = 10  # 개원 전 당일 취소의 답장 = 취소 1~이만큼 분 전(예약 번호로)
 
 
 def _hash(*parts) -> int:
@@ -31,12 +33,13 @@ def _prev_month(today: date) -> str:
 
 
 def _untouched(conn, run) -> set[int]:
-    """장면에 쓰지 않는 예약 — 통화 사실이 가리키는 예약, 응급 내원, 이탈 환자의 예약"""
+    """장면에 쓰지 않는 예약 — 통화 사실이 가리키는 예약(그 통화의 예약·다음 예약), 응급 내원, 이탈 환자의 예약"""
     used = {
         r[0]
+        for key in ("$.appointment_id", "$.next_appointment.appointment_id")
         for r in conn.execute(
-            "SELECT json_extract(used_fact, '$.appointment_id') FROM truth.truth_call_labels"
-            " WHERE json_extract(used_fact, '$.appointment_id') IS NOT NULL"
+            f"SELECT json_extract(used_fact, '{key}') FROM truth.truth_call_labels"
+            f" WHERE json_extract(used_fact, '{key}') IS NOT NULL"
         )
     } | emergency_appointments(conn)
     churn = set(run.state["churn"])
@@ -47,31 +50,40 @@ def _untouched(conn, run) -> set[int]:
 
 def _noshow_scenes(conn, run, skip: set) -> list[int]:
     """TODAY 전 달 노쇼 중 개원 전에 당일 취소할 수 있는 시각(개원 뒤 SAMEDAY_CANCEL_LEAD_MIN분 안 — 4단계 당일 취소 규칙)이고
-    그날 이후 그 환자의 통화가 없는 것 — 예약 번호 해시순 NOSHOW_TO_CANCEL건"""
+    그날 이후 그 환자의 통화가 없는 것 — 예약 번호 해시순 NOSHOW_TO_CANCEL건. 그달 첫 진료일은 뺀다(그날 개원 시각 리콜
+    문자의 '잡힌 예약' 판단이 바뀐다)"""
     latest = (
         datetime.combine(run.today, OPEN) + timedelta(minutes=SAMEDAY_CANCEL_LEAD_MIN - 1)
     ).time()
     rows = conn.execute(
-        "SELECT a.id FROM emr_appointments a WHERE a.status = 'noshow' AND substr(a.scheduled_at, 1, 7) = ?"
+        "SELECT a.id, date(a.scheduled_at) FROM emr_appointments a WHERE a.status = 'noshow'"
+        " AND substr(a.scheduled_at, 1, 7) = ?"
         f" AND time(a.scheduled_at) <= '{latest.strftime('%H:%M:%S')}'"
         " AND NOT EXISTS (SELECT 1 FROM ax_calls c WHERE c.patient_id = a.patient_id"
         " AND c.started_at >= date(a.scheduled_at))",
         (_prev_month(run.today),),
     ).fetchall()
-    pool = sorted((r[0] for r in rows if r[0] not in skip), key=lambda a: _hash(a, "noshow"))
+    first = _first_open_day(run, _prev_month(run.today))
+    pool = sorted(
+        (r[0] for r in rows if r[0] not in skip and r[1] != first),
+        key=lambda a: _hash(a, "noshow"),
+    )
     if len(pool) < NOSHOW_TO_CANCEL:
         raise ValueError(f"노쇼 → 취소 장면 후보 {len(pool)}건 < {NOSHOW_TO_CANCEL}건")
     return pool[:NOSHOW_TO_CANCEL]
 
 
 def _today_scene(conn, run, skip: set) -> tuple[int, str] | None:
-    """TODAY 예약 중 리마인드 뒤 답장이 없고 confirmed가 아닌 것 — 해시 첫 번째와 그 리마인드 시각"""
+    """TODAY 예약 중 리마인드 뒤 답장이 없고 confirmed가 아니며 리마인드 뒤 그 환자 통화가 없는 것 — 해시 첫 번째와 그
+    리마인드 시각(취소 뒤 통화가 있으면 이미 만든 녹취록 사실이 취소된 예약을 가리킨다)"""
     rows = conn.execute(
         "SELECT a.id, m.sent_at FROM emr_appointments a JOIN emr_messages m"
         " ON m.related_appointment_id = a.id AND m.\"trigger\" = 'reminder'"
         " WHERE date(a.scheduled_at) = ? AND a.status = 'scheduled' AND a.confirmed = 0"
         " AND NOT EXISTS (SELECT 1 FROM emr_messages r WHERE r.related_appointment_id = a.id"
-        " AND r.direction = 'in' AND r.sent_at > m.sent_at)",
+        " AND r.direction = 'in' AND r.sent_at > m.sent_at)"
+        " AND NOT EXISTS (SELECT 1 FROM ax_calls c WHERE c.patient_id = a.patient_id"
+        " AND c.started_at > m.sent_at)",
         (run.today.isoformat(),),
     ).fetchall()
     pool = sorted((r for r in rows if r[0] not in skip), key=lambda r: _hash(r[0], "today"))
@@ -118,21 +130,24 @@ def stage(run, rng, fake) -> None:
             "SELECT rescheduled_from_id FROM emr_appointments WHERE rescheduled_from_id IS NOT NULL"
         )
     }
-    for aid, cancelled in conn.execute(
-        "SELECT id, cancelled_at FROM emr_appointments WHERE status = 'cancelled'"
+    churn = run.state["churn"]
+    for aid, pid, cancelled in conn.execute(
+        "SELECT id, patient_id, cancelled_at FROM emr_appointments WHERE status = 'cancelled'"
         " AND date(cancelled_at) = date(scheduled_at) AND time(cancelled_at) < ? ORDER BY id",
         (OPEN.strftime("%H:%M:%S"),),
     ).fetchall():
-        if aid in origins:
-            continue
+        if aid in origins or (pid in churn and cancelled[:10] >= churn[pid].isoformat()):
+            continue  # 이탈 환자는 이탈일부터 연락 없이 취소된다(§2.2 — 답장하지 않는다)
         last = conn.execute(
             "SELECT max(sent_at) FROM emr_messages WHERE related_appointment_id = ? AND direction = 'out'"
             " AND sent_at < ?",
             (aid, cancelled),
         ).fetchone()[0]
-        if last is None:
+        if (
+            last is None
+        ):  # 창 안 예약은 예약 확정 문자(config messages.appt_confirm)가 있다 — 비율을 낮추면 여기서 멈춘다
             raise ValueError(f"개원 전 취소 {aid}: 답장할 문자 없음")
-        at = datetime.strptime(cancelled, FMT) - timedelta(minutes=1 + aid % 10)
+        at = datetime.strptime(cancelled, FMT) - timedelta(minutes=1 + aid % REPLY_LEAD_MAX_MIN)
         replies.append((aid, max(at, datetime.strptime(last, FMT) + timedelta(minutes=1))))
     patient = dict(conn.execute("SELECT id, patient_id FROM emr_appointments"))
     conn.executemany(
@@ -141,6 +156,13 @@ def stage(run, rng, fake) -> None:
         [(patient[a], t.strftime(FMT), MESSAGE_REPLY_CANCEL, a) for a, t in replies],
     )
     _renumber_messages(conn)
+
+
+def _first_open_day(run, month: str) -> str:
+    d = date.fromisoformat(f"{month}-01")
+    while not open_slots(d.weekday()) or d in run.holidays:
+        d += timedelta(days=1)
+    return d.isoformat()
 
 
 def _renumber_messages(conn) -> None:

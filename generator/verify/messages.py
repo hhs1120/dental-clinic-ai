@@ -263,10 +263,12 @@ def check_appt_reply_state(conn, ctx):
 
 def check_cancel_replies(conn, ctx):
     """취소 답장(master.MESSAGE_REPLY_CANCEL)은 취소된 예약(변경 쌍의 원래 예약 아님)에만, 취소 시각 이전 — 개원 전 당일 취소와
-    그날 전에 받은 취소는 통화가 없는 시각이라 반드시 취소 답장이 있다(§2.5)"""
+    그날 전에 받은 취소는 통화가 없는 시각이라 반드시 취소 답장이 있다(§2.5) — 이탈 환자의 이탈일부터의 취소는 연락 없이"""
     appts = {
         r["id"]: r
-        for r in _rows(conn, "SELECT id, scheduled_at, status, cancelled_at FROM emr_appointments")
+        for r in _rows(
+            conn, "SELECT id, patient_id, scheduled_at, status, cancelled_at FROM emr_appointments"
+        )
     }
     origins = {
         r[0]
@@ -291,9 +293,16 @@ def check_cancel_replies(conn, ctx):
             bad.append({**m, "problem": "취소 답장인데 그 뒤 취소된 예약이 아님"})
         replied.add(m["appt"])
     opening = HOURS["open"] + ":00"
+    churned = dict(
+        conn.execute(
+            "SELECT patient_id, churned_on FROM truth.truth_patient_churn WHERE kind = 'churn'"
+        )
+    )
     for aid, a in appts.items():
         if a["status"] != "cancelled" or aid in origins or aid in replied:
             continue
+        if (on := churned.get(a["patient_id"])) is not None and a["cancelled_at"][:10] >= on:
+            continue  # 이탈 환자는 이탈일부터 연락 없이 취소(§2.2)
         day, at = a["cancelled_at"][:10], a["cancelled_at"][11:]
         if day < a["scheduled_at"][:10] or at < opening:
             bad.append(

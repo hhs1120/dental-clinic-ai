@@ -151,7 +151,16 @@ def recall_targets(run) -> list[tuple[datetime, int, str, date]]:
 class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
-    def __init__(self, conn, plan_items: list, churn: dict, dormant: dict, recall_texts: list):
+    def __init__(
+        self,
+        conn,
+        plan_items: list,
+        churn: dict,
+        dormant: dict,
+        recall_texts: list,
+        emergency: frozenset = frozenset(),
+    ):
+        self.emergency = emergency  # 6b단계 응급 내원 예약 — 최근 진료에 응급 표시(뒤 통화가 일반 상담으로 이어 쓰지 않게)
         self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
         self.churn = churn  # 4단계 state — 이탈 환자 → 이탈일
         self.dormant = dormant  # 4단계 state — 휴면 환자 → 휴면일
@@ -210,11 +219,12 @@ class Ledger:
             self.by_patient[a["patient"]].append(a)
         self.treatments = defaultdict(list)
         for r in conn.execute(
-            "SELECT patient_id, performed_at, procedure_code, tooth_no FROM emr_treatments"
+            "SELECT patient_id, performed_at, procedure_code, tooth_no, appointment_id FROM emr_treatments"
             " ORDER BY performed_at, id"
         ):
             self.treatments[r[0]].append(
                 {"at": r[1], "procedure": PROCEDURE_NAME[r[2]], "tooth": r[3]}
+                | ({"emergency": True} if r[4] in emergency else {})
             )
         self.payments = defaultdict(list)
         for r in conn.execute(
@@ -347,10 +357,15 @@ class Ledger:
             },
             "recent_visits": [
                 {"date": v["at"][:10], "procedure": v["procedure"], "tooth": v["tooth"]}
+                | ({"emergency": True} if v.get("emergency") else {})
                 for v in visits
             ],
             "balance": self.balance(pid, t),
-            "next_appointment": {"appointment_id": nxt["id"]} | _appt_fact(nxt) if nxt else None,
+            "next_appointment": {"appointment_id": nxt["id"]}
+            | _appt_fact(nxt)
+            | ({"emergency": True} if nxt["id"] in self.emergency else {})
+            if nxt
+            else None,
             "family": [
                 m["name"]
                 for m in self.family[p["family"]]

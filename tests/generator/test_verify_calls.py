@@ -761,6 +761,11 @@ EMERGENCY_BREAKS = {
     "texted": 'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
     " related_appointment_id) VALUES (1, 'out', '2026-10-20 15:05:00', '예약 확정', 'appt_confirm', 8)",
     "unpaid": "UPDATE emr_payments SET amount_due = 10000 WHERE appointment_id = 8",
+    "too_soon": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 15:20:00' WHERE id = 8",
+    "off_grid": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 16:10:00' WHERE id = 8",
+    "after_close": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 18:30:00' WHERE id = 8",
+    "two_calls": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit',"
+    ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0004\'',
 }
 
 

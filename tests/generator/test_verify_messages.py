@@ -347,3 +347,12 @@ def test_cancel_reply_break_is_caught(tmp_path, case):
     assert verify.check_cancel_replies(conn, CTX) == []
     conn.execute(CANCEL_BREAKS[case])
     assert verify.check_cancel_replies(conn, CTX), case
+
+
+def test_churned_cancel_needs_no_reply(tmp_path):
+    """이탈 환자는 이탈일부터 연락 없이 취소된다(§2.2) — 취소 답장이 없어도 된다"""
+    conn = make_db(tmp_path)
+    _preopen_cancel(conn)
+    assert verify.check_cancel_replies(conn, CTX)
+    conn.execute("INSERT INTO truth.truth_patient_churn VALUES (1, 'churn', '2026-11-20')")
+    assert verify.check_cancel_replies(conn, CTX) == []

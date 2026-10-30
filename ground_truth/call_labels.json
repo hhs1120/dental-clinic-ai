@@ -1335,7 +1335,8 @@
     {
      "date": "2025-05-30",
      "procedure": "신경치료",
-     "tooth": "37"
+     "tooth": "37",
+     "emergency": true
     },
     {
      "date": "2025-04-14",
@@ -2391,7 +2392,8 @@
     {
      "date": "2025-08-09",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2025-03-07",
@@ -4109,7 +4111,8 @@
     {
      "date": "2026-10-20",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2026-09-15",
@@ -8425,7 +8428,8 @@
    "emergency_visit": {
     "appointment_id": 12025,
     "date": "2026-03-13",
-    "time": "10:30"
+    "time": "10:30",
+    "scene": "넘어지면서 부딪혀 흔들리는 앞니"
    }
   },
   "split": "test"
@@ -13464,7 +13468,8 @@
     {
      "date": "2025-12-03",
      "procedure": "신경치료",
-     "tooth": "37"
+     "tooth": "37",
+     "emergency": true
     },
     {
      "date": "2025-07-04",
@@ -16842,7 +16847,8 @@
     {
      "date": "2026-04-10",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2024-05-08",
@@ -23388,7 +23394,8 @@
     {
      "date": "2026-03-31",
      "procedure": "신경치료",
-     "tooth": "46"
+     "tooth": "46",
+     "emergency": true
     },
     {
      "date": "2025-11-21",
@@ -31149,7 +31156,8 @@
     {
      "date": "2026-10-20",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2026-09-15",
@@ -35476,7 +35484,8 @@
     {
      "date": "2026-07-13",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2026-07-10",
@@ -43658,7 +43667,8 @@
    "emergency_visit": {
     "appointment_id": 12014,
     "date": "2025-11-07",
-    "time": "14:00"
+    "time": "14:00",
+    "scene": "넘어지면서 부딪혀 흔들리는 앞니"
    }
   },
   "split": "test"
@@ -46829,7 +46839,8 @@
    "emergency_visit": {
     "appointment_id": 12011,
     "date": "2025-09-30",
-    "time": "11:00"
+    "time": "11:00",
+    "scene": "넘어지면서 부딪혀 흔들리는 앞니"
    }
   },
   "split": "dev"
@@ -49006,7 +49017,8 @@
     {
      "date": "2026-01-16",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2025-07-22",
@@ -51087,7 +51099,8 @@
     {
      "date": "2025-05-24",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2024-03-13",
@@ -51455,7 +51468,8 @@
     {
      "date": "2024-12-03",
      "procedure": "아말감/GI",
-     "tooth": "47"
+     "tooth": "47",
+     "emergency": true
     },
     {
      "date": "2024-03-02",
@@ -55676,7 +55690,7 @@
     "appointment_id": 12003,
     "date": "2025-05-31",
     "time": "13:00",
-    "area": "오른쪽 위 앞니"
+    "scene": "오늘 치료받은 이가 마취가 풀리면서 심하게 아픈"
    }
   },
   "split": "silver"
@@ -56701,7 +56715,8 @@
     {
      "date": "2026-01-16",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     },
     {
      "date": "2025-07-22",
@@ -59914,7 +59929,8 @@
     {
      "date": "2026-01-13",
      "procedure": "상담",
-     "tooth": "00"
+     "tooth": "00",
+     "emergency": true
     }
    ],
    "balance": 6820,
@@ -66390,7 +66406,8 @@
     "appointment_id": 12003,
     "date": "2025-05-31",
     "time": "13:00",
-    "procedure": "레진"
+    "procedure": "상담",
+    "emergency": true
    },
    "family": [],
    "alerts": [],

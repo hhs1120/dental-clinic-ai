@@ -21,6 +21,7 @@ from generator.master import (
     CALL_SUBTOPICS,
     CHECKUP_CODE,
     CLINIC_NAME,
+    EMERGENCY_LEAD_MIN,
     EMERGENCY_SCENES,
     EMERGENCY_TREATMENT,
     EVAL_MIN_PER_SPLIT,
@@ -31,6 +32,7 @@ from generator.master import (
     RECALL_TEMPLATES,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    SLOT_MIN,
     SUBTOPIC_PURPOSE,
     URGENCIES,
     age_on,
@@ -407,7 +409,8 @@ def check_booking_call_event(conn, ctx):
 def check_emergency_visits(conn, ctx):
     """응급 내원 (§2.6 (5)): 환자 측 응급 통화(emergency 플래그) ⇔ used_fact emergency_visit. 그 예약은 같은 환자·원장,
     전화로 통화 시각에 잡힘(confirmed 아님), 통화 뒤 그날 또는 다음 진료일, 시술은 그 통화 상황의 처치(master.EMERGENCY_TREATMENT)
-    또는 상담, TODAY 전이면 completed·그날 전액 수납, 사실의 날짜·시각 = 예약, 예약 확정·리마인드 문자 없음"""
+    또는 상담(6b단계가 바꾼 상황이면 그 상황), 통화 뒤 EMERGENCY_LEAD_MIN분 지난 SLOT_MIN분 격자·영업시간·점심 밖, TODAY 전이면
+    completed·그날 전액 수납, 사실의 날짜·시각 = 예약, 예약 확정·리마인드 문자 없음, 응급 내원 하나에 통화 1건"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
     doctors = {r[0] for r in conn.execute("SELECT id FROM emr_staff WHERE role = 'doctor'")}
     code = {p["name"]: c for c, p in PROCEDURE.items()}
@@ -443,7 +446,17 @@ def check_emergency_visits(conn, ctx):
         nxt = day + timedelta(days=1)
         while not open_slots(nxt.weekday()) or nxt in ctx.holidays:
             nxt += timedelta(days=1)
-        name, _ = EMERGENCY_TREATMENT[transcripts._pick(r["call_uid"], "scene", EMERGENCY_SCENES)]
+        scene = visit.get("scene") or transcripts.pick(r["call_uid"], "scene", EMERGENCY_SCENES)
+        name, _ = EMERGENCY_TREATMENT[scene]
+        start = _dt(at)
+        end = start + timedelta(minutes=a["duration_min"])
+        close = datetime.combine(
+            start.date(), datetime.strptime(close_time(start.weekday()), "%H:%M").time()
+        )
+        lunch = [
+            datetime.combine(start.date(), datetime.strptime(x, "%H:%M").time())
+            for x in HOURS["lunch"]
+        ]
         problems = [
             (a["patient_id"] != r["patient_id"], "다른 환자"),
             (a["staff_id"] not in doctors, "원장 아님"),
@@ -452,6 +465,18 @@ def check_emergency_visits(conn, ctx):
                 "통화 시각에 전화로 잡힌 예약 아님",
             ),
             (not (at > call and at[:10] in (call[:10], nxt.isoformat())), "그날·다음 진료일 아님"),
+            (
+                start < _dt(call) + timedelta(minutes=EMERGENCY_LEAD_MIN)
+                or start.minute % SLOT_MIN
+                or start.second,
+                "통화 뒤 EMERGENCY_LEAD_MIN분 지난 SLOT_MIN분 격자 아님",
+            ),
+            (
+                start.time() < datetime.strptime(HOURS["open"], "%H:%M").time()
+                or end > close
+                or (start.weekday() != 5 and start < lunch[1] and end > lunch[0]),
+                "영업시간·점심 밖",
+            ),
             (
                 a["planned_procedure_code"] not in (code[name], code["상담"]),
                 "상황의 처치·상담 아님",
@@ -469,11 +494,17 @@ def check_emergency_visits(conn, ctx):
             for failed, p in problems
             if failed
         ]
-    known = _emergency_appts(conn)
+    pointed = Counter(
+        r[0]
+        for r in conn.execute(
+            "SELECT json_extract(used_fact, '$.emergency_visit.appointment_id') FROM truth.truth_call_labels"
+            " WHERE json_extract(used_fact, '$.emergency_visit') IS NOT NULL"
+        )
+    )
     return bad + [
-        {"appointment_id": aid, "problem": "응급 내원 표시가 없는 예약을 가리킴"}
-        for aid in known
-        if aid not in appts
+        {"appointment_id": aid, "problem": "응급 내원 하나를 통화 여러 건이 가리킴"}
+        for aid, n in pointed.items()
+        if n > 1
     ]
 
 
@@ -535,16 +566,18 @@ def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict]) -> dict:
     """통화 시각 t 시점의 사실 — 생성기와 따로 계산 (§4.1 절차 2: created_at·performed_at·paid_at ≤ t).
     items = _plan_items (열린 치료계획 항목)"""
     day = t[:10]
+    emergency = _emergency_appts(conn)
     visits = [
         {
             "date": v["performed_at"][:10],
             "procedure": PROCEDURE[v["procedure_code"]]["name"],
             "tooth": v["tooth_no"],
         }
+        | ({"emergency": True} if v["appointment_id"] in emergency else {})
         for v in _rows(
             conn,
-            "SELECT performed_at, procedure_code, tooth_no FROM emr_treatments"
-            " WHERE patient_id = ? AND performed_at <= ? ORDER BY performed_at DESC LIMIT 3",
+            "SELECT performed_at, procedure_code, tooth_no, appointment_id FROM emr_treatments"
+            " WHERE patient_id = ? AND performed_at <= ? ORDER BY performed_at DESC, id DESC LIMIT 3",
             pid,
             t,
         )

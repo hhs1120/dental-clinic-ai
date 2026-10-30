@@ -2,7 +2,7 @@
 5단계(진료·수납·청구)·5b(차트)·6단계(통화) 뒤에 덧붙여 다른 예약·진료·통화가 밀리지 않는다 — 이 단계는 난수를 쓰지 않고
 통화 번호 해시로 고른다.
 - 통화 고르기·시각: emergency 플래그 통화 중 환자가 있는 것. 그날 통화 뒤 master.EMERGENCY_LEAD_MIN분이 지난 첫 빈 슬롯
-  (원장 동시 진료·체어·점심·마감), 자리가 없으면 다음 진료일 개원부터. TODAY 전날 늦은 통화 1건(장면)은 그 통화를 진료 끝
+  (원장 동시 진료·체어·점심·마감), 자리가 없으면 다음 진료일 개원부터. TODAY 전 진료일 늦은 통화 1건(장면)은 그 통화를 진료 끝
   뒤로 옮겨 TODAY 첫 시간 예약(scheduled)으로 — TODAY 준비표·오늘 화면에 보인다
 - 처치: master.EMERGENCY_TREATMENT(상황 → 시술·치아 후보), 치아는 장부·치료계획에 없는 치아. 그날 전액 수납, 급여면 청구 1줄
   (확정 월은 paid), 차트는 응급 서술(9b가 덮어씀)
@@ -14,10 +14,20 @@ import json
 from datetime import date, datetime, timedelta
 
 from generator import chart, records
-from generator.calls import FMT, OPEN, Ledger, next_open_day, prev_open_day, recall_targets
+from generator.calls import (
+    CHILD_MAX_AGE,
+    FMT,
+    OPEN,
+    Ledger,
+    next_open_day,
+    prev_open_day,
+    recall_targets,
+)
 from generator.master import (
     CHAIRS,
     DOCTOR_CONCURRENCY,
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_CHILD_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
     EMERGENCY_SCENES,
@@ -29,23 +39,21 @@ from generator.master import (
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURE_DIAGNOSES,
     PROCEDURES,
-    REVIEW_NOTICE_DAYS,
     SLOT_MIN,
-    SUBMITTED_MONTHS,
     TOOTH_TREATMENT_MIN_AGE,
     age_on,
     close_time,
     insured_on,
 )
-from generator.transcripts import _pick
+from generator.transcripts import pick
 
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 PROCEDURE = {p["code"]: p for p in PROCEDURES}
 CONSULT = CODE["상담"]
 RESTORED_CATEGORIES = ("restorative", "prosth")  # 때운·씌운 치아로 보는 시술군
 LUNCH = tuple(datetime.strptime(t, "%H:%M").time() for t in HOURS["lunch"])
-# TODAY 장면 — TODAY 전 마지막 진료일의 이 시각으로 옮긴 응급 통화(진료 끝 뒤라 다음 날 첫 시간)
-SCENE_CALL_TIME = "18:05:00"
+# TODAY 장면 — TODAY 전 진료일 마감 이만큼 전으로 옮긴 응급 통화(진료 끝 무렵이라 그날 자리가 없어 TODAY 오전)
+SCENE_CALL_BEFORE_CLOSE_MIN = 25
 
 
 def _hash(*parts) -> int:
@@ -54,7 +62,7 @@ def _hash(*parts) -> int:
 
 def scene(uid: str) -> str:
     """그 통화의 응급 상황 — 7단계 caller_situation과 같은 고르기(transcripts.situation)"""
-    return _pick(uid, "scene", EMERGENCY_SCENES)
+    return pick(uid, "scene", EMERGENCY_SCENES)
 
 
 def emergency_calls(conn) -> list[dict]:
@@ -73,7 +81,8 @@ class Board:
     check_chair_overlap과 같은 기준: 어떤 예약의 시작 시각에 진행 중인 건수)"""
 
     def __init__(self, conn, start: str):
-        self.busy = []  # (시작, 끝, 원장 여부, 체어)
+        # (시작, 끝, 원장 여부, 체어) — 원장 동시 진료는 원장 전체로 센다(원장 1명 전제 — verify는 staff_id별)
+        self.busy = []
         for at, minutes, chair, role in conn.execute(
             "SELECT a.scheduled_at, a.duration_min, a.chair_no, s.role FROM emr_appointments a"
             " JOIN emr_staff s ON s.id = a.staff_id WHERE a.status != 'cancelled' AND a.scheduled_at >= ?",
@@ -199,13 +208,30 @@ def _scene_call(run, calls: list[dict]) -> dict | None:
     return None
 
 
+def scene_call_time(run) -> datetime:
+    """TODAY 장면 통화 시각 — TODAY 전 진료일 마감 SCENE_CALL_BEFORE_CLOSE_MIN분 전(토요일이면 토요일 마감)"""
+    day = prev_open_day(run.today, run.holidays)
+    close = datetime.combine(day, datetime.strptime(close_time(day.weekday()), "%H:%M").time())
+    return close - timedelta(minutes=SCENE_CALL_BEFORE_CLOSE_MIN)
+
+
+def visit_scene(uid: str, age: int, visited_today: bool) -> tuple[str, bool]:
+    """응급 상황과 바꿨는지 — 해시 상황(scene), 그날 먼저 진료받고 간 뒤면 EMERGENCY_AFTER_VISIT_SCENE, 소아면
+    EMERGENCY_CHILD_SCENES로 (바꾼 상황은 emergency_visit.scene으로 7단계 caller_situation에 간다)"""
+    base = scene(uid)
+    if visited_today:
+        return EMERGENCY_AFTER_VISIT_SCENE, True
+    if age <= CHILD_MAX_AGE and base in EMERGENCY_CHILD_SCENES:
+        return EMERGENCY_CHILD_SCENES[base], True
+    return base, False
+
+
 def stage(run, rng, fake) -> None:
     conn = run.conn
     calls = emergency_calls(conn)
     moved = _scene_call(run, calls)
     if moved is not None:
-        day = prev_open_day(run.today, run.holidays)
-        moved["started_at"] = f"{day.isoformat()} {SCENE_CALL_TIME}"
+        moved["started_at"] = scene_call_time(run).strftime(FMT)
         conn.execute(
             "UPDATE ax_calls SET started_at = ? WHERE id = ?", (moved["started_at"], moved["id"])
         )
@@ -240,11 +266,19 @@ def stage(run, rng, fake) -> None:
     for c in calls:
         uid, pid = c["call_uid"], c["patient_id"]
         call = datetime.strptime(c["started_at"], FMT)
-        name, teeth = EMERGENCY_TREATMENT[scene(uid)]
+        visited_today = conn.execute(
+            "SELECT 1 FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
+            " AND date(scheduled_at) = ? AND scheduled_at < ?",
+            (pid, c["started_at"][:10], c["started_at"]),
+        ).fetchone()
+        situation, changed = visit_scene(
+            uid, age_on(birth[pid], call.date()), visited_today is not None
+        )
+        name, teeth = EMERGENCY_TREATMENT[situation]
         code = CODE[name]
         tooth = FULL_MOUTH
         if teeth and age_on(birth[pid], call.date()) >= TOOTH_TREATMENT_MIN_AGE:
-            if scene(uid) in EMERGENCY_RESTORED_SCENES:
+            if situation in EMERGENCY_RESTORED_SCENES:
                 open_teeth = {
                     i["tooth"]
                     for i in planned.get(pid, [])
@@ -286,8 +320,10 @@ def stage(run, rng, fake) -> None:
                 chair,
             ),
         ).lastrowid
-        visits[uid] = {"appointment_id": appt, "date": at[:10], "time": at[11:16]} | (
-            {"area": tooth_area(tooth)} if tooth != FULL_MOUTH else {}
+        visits[uid] = (
+            {"appointment_id": appt, "date": at[:10], "time": at[11:16]}
+            | ({"area": tooth_area(tooth)} if tooth != FULL_MOUTH else {})
+            | ({"scene": situation} if changed else {})
         )
         if not done:
             continue
@@ -315,24 +351,14 @@ def stage(run, rng, fake) -> None:
             " method, approval_no) VALUES (?, ?, 'visit', ?, ?, ?, ?, ?)",
             (pid, appt, due, due, end, method, approval),
         )
-        if insured:
+        if (
+            insured
+        ):  # 5단계와 같은 청구 월 규칙(records.claim_bucket) — 확정 월은 paid(오류를 심지 않는다)
             month = at[:7]
-            before = records._months_before(run.today, month)
-            status = (
-                "pending"
-                if before <= 1
-                else "submitted"
-                if before <= 1 + SUBMITTED_MONTHS
-                else "paid"
-            )
-            submitted = None if status == "pending" else records._submitted_at(month)
-            reviewed = (
-                (
-                    date.fromisoformat(submitted[:10]) + timedelta(days=REVIEW_NOTICE_DAYS)
-                ).isoformat()
-                if status == "paid"
-                else None
-            )
+            bucket = records.claim_bucket(run.today, month)
+            status = "paid" if bucket == "settled" else bucket
+            submitted = None if status == "pending" else records.submitted_at(month)
+            reviewed = records.reviewed_on(submitted) if status == "paid" else None
             conn.execute(
                 "INSERT INTO emr_claims (treatment_id, patient_id, chart_no, tooth_no, claim_month, service_date,"
                 " procedure_code, claim_amount, submitted_at, status, paid_amount, reviewed_at)"
@@ -361,7 +387,7 @@ def stage(run, rng, fake) -> None:
                 "performed_at": at,
                 "appointment_id": appt,
             },
-            scene(uid),
+            situation,
             alerts,
             run.state["plan_items"],
         )
@@ -380,7 +406,7 @@ def stage(run, rng, fake) -> None:
 def _renumber_calls(conn) -> None:
     """ax_calls id = 통화 시각순 (옮긴 통화가 있으면 다시 매김 — call_uid·풀 표시는 그대로)"""
     order = [r[0] for r in conn.execute("SELECT id FROM ax_calls ORDER BY started_at, id")]
-    offset = len(order) + 1
+    offset = max(order) + 1
     conn.executemany("UPDATE ax_calls SET id = id + ? WHERE id = ?", [(offset, i) for i in order])
     conn.executemany(
         "UPDATE ax_calls SET id = ? WHERE id = ?",
@@ -397,17 +423,25 @@ def _refresh_facts(run, calls: list[dict], visits: dict) -> None:
         run.state["churn"],
         run.state["dormant"],
         recall_targets(run),
+        frozenset(v["appointment_id"] for v in visits.values()),
     )
     patients = {c["patient_id"] for c in calls}
     rows = conn.execute(
-        "SELECT c.call_uid, c.patient_id, c.started_at, l.used_fact FROM ax_calls c"
-        " JOIN truth.truth_call_labels l USING (call_uid) WHERE c.patient_id IS NOT NULL"
+        "SELECT c.call_uid, c.patient_id, c.started_at, c.direction, l.primary_purpose, l.used_fact"
+        " FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid) WHERE c.patient_id IS NOT NULL"
     ).fetchall()
     updates = []
-    for uid, pid, t, raw in rows:
+    for uid, pid, t, direction, purpose, raw in rows:
         if pid not in patients:
             continue
         fact = json.loads(raw)
+        # 6단계가 장부로 고른 주제는 여기서 다시 고르지 않는다 — 응급 내원으로 바뀌면 멈춘다(경과 확인 = 최근 진료, 리콜 문자)
+        if (purpose, direction) == ("treatment_q", "outbound") and fact.get(
+            "topic_procedure"
+        ) != led.recent_treatment(pid, t):
+            raise ValueError(f"{uid}: 응급 내원이 경과 확인 통화의 최근 진료를 바꾼다")
+        if "recall_text" in fact and fact["recall_text"] != led.recall_text(pid, t):
+            raise ValueError(f"{uid}: 응급 내원이 리콜 문의 통화의 받은 문자를 바꾼다")
         new = fact | {"call_date": t[:10]} | led.facts(pid, t)
         if uid in visits:
             new["emergency_visit"] = visits[uid]
