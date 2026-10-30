@@ -593,7 +593,7 @@
   "type": "case",
   "split": "test",
   "question": "임은지 님 급하게 전화하셨을 때 뭐라고 안내했지?",
-  "answer_text": "전날 오른쪽 위 어금니 때운 게 빠져 심하게 시림 → 오늘 바로 오라고 안내, 오기 전까지 찬 것 피하고 그쪽으로 씹지 말기, 빠진 것은 챙겨 오기",
+  "answer_text": "어제 점심부터 오른쪽 위 어금니(작년 10월 인레이) 때운 게 빠져 심하게 시림 → 오늘 4시에 바로 오라고 안내, 오는 동안 찬물·찬 공기 피하기, 빠진 조각 있으면 챙겨 오기",
   "answer_doc_ids": [
    "call:c-0166"
   ],
@@ -716,7 +716,7 @@
   "type": "data",
   "split": "dev",
   "question": "지난달 노쇼 중에 위생 예약 몇 건이었어?",
-  "answer_text": "10건",
+  "answer_text": "9건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
@@ -841,7 +841,7 @@
   "type": "data",
   "split": "test",
   "question": "11월에 취소된 예약 몇 건?",
-  "answer_text": "13건",
+  "answer_text": "16건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
   "expected_tools": [
