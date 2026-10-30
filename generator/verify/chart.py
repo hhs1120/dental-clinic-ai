@@ -2,6 +2,7 @@
 (가상 데이터 생성 설계 §2.2·§2.4·§4.3·§5.3 주의사항·차트)"""
 
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import date
 
@@ -527,6 +528,23 @@ def check_chart_evidence_words(conn, ctx):
         ]
         if hits:
             bad.append({"treatment_id": r["treatment_id"], "words": hits})
+    return bad
+
+
+def check_chart_rules(conn, ctx):
+    """9b 검증의 금지 꼴이 저장된 서술 차트에도 없음 — chart.narrative_checks의 금지 패턴(메모체가 아닌 끝맺음·초안에 없는 시점·
+    부위 말 등). 캐시 줄을 손으로 고치거나 옛 통과 줄이 살아나면 잡는다 (경고)"""
+    bad = []
+    for r in _rows(
+        conn,
+        "SELECT n.treatment_id, n.note, c.facts, p.name FROM emr_chart_notes n"
+        " JOIN truth.truth_chart_notes c USING (treatment_id) JOIN emr_treatments t ON t.id = n.treatment_id"
+        " JOIN emr_patients p ON p.id = t.patient_id WHERE c.kind = 'narrative' ORDER BY n.treatment_id",
+    ):
+        patterns = chart.narrative_checks(json.loads(r["facts"]), r["name"])["forbidden_patterns"]
+        hits = [p for p in patterns if re.search(p, r["note"])]
+        if hits:
+            bad.append({"treatment_id": r["treatment_id"], "patterns": hits[:2]})
     return bad
 
 

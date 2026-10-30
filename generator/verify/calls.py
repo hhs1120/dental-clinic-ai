@@ -240,6 +240,30 @@ def check_transcript_speakers(conn, ctx):
     return bad
 
 
+def check_transcript_rules(conn, ctx):
+    """채우기 검증의 금지 꼴이 저장된 전사에도 없음 — 영문 낱말·한자(llm_jobs.STRAY_SCRIPT), 통화별 금지 패턴
+    (transcripts.checks — 이미 잡힌 예약처럼 말하기·새 날짜 제안 등). 캐시 줄을 손으로 고치거나 옛 통과 줄이 살아나면 잡는다 (경고)"""
+    names = llm_jobs.procedure_names(conn)
+    text = dict(
+        conn.execute(
+            "SELECT call_uid, transcript FROM ax_calls WHERE source = 'generated' AND transcript IS NOT NULL"
+        )
+    )
+    bad = []
+    for row in transcripts.rows(conn):
+        t = text.get(row["call_uid"])
+        if t is None:
+            continue
+        hits = [
+            p
+            for p in [llm_jobs.STRAY_SCRIPT, *transcripts.checks(row, names)["forbidden_patterns"]]
+            if re.search(p, t)
+        ]
+        if hits:
+            bad.append({"call_uid": row["call_uid"], "patterns": hits[:2]})
+    return bad
+
+
 def check_transcript_facts(conn, ctx):
     """꼭 넣을 사실(예약 날짜·주제 시술 별칭)이 전사에 있음 (경고)"""
     names = llm_jobs.procedure_names(conn)

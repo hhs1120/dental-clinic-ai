@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from evaluation import metrics
-from generator import calls, chart, documents, finance, llm_jobs, master, verify
+from generator import calls, chart, documents, finance, llm_jobs, master, transcripts, verify
 from generator.master import VISIT_MIX
 from shared import llm
 
@@ -75,6 +75,7 @@ def test_named_constants_exist():
         "calls": calls,
         "finance": finance,
         "metrics": metrics,
+        "transcripts": transcripts,
     }
     pattern = re.compile(rf"`({'|'.join(modules)})\.(\w+)`")
     texts = [p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md"))]

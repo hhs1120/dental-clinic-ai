@@ -19,6 +19,8 @@ from generator.master import (
     MESSAGE_REPLIES,
     MESSAGE_REPLIES_PAID,
     MESSAGE_REPLIES_PAID_METHOD,
+    MESSAGE_REPLY_CHANGE,
+    MESSAGE_REPLY_OK,
     MESSAGE_TEMPLATES,
     PAID_REPLY_NOISE_RATE,
     PROCEDURES,
@@ -118,6 +120,33 @@ def stage(run, rng, fake) -> None:
     visit_method = dict(
         conn.execute("SELECT appointment_id, method FROM emr_payments WHERE kind = 'visit'")
     )
+    # 예약 확정·리마인드 답장은 예약 상태에 맞춘다(§2.5) — 바뀐 예약(변경 쌍의 원래 예약)과 그 취소 시각, confirmed,
+    # 예약 확인 통화
+    moved = dict(
+        conn.execute(
+            "SELECT o.id, o.cancelled_at FROM emr_appointments n JOIN emr_appointments o ON o.id = n.rescheduled_from_id"
+        )
+    )
+    confirmed = {r[0] for r in conn.execute("SELECT id FROM emr_appointments WHERE confirmed = 1")}
+    called = {
+        r[0]
+        for r in conn.execute(
+            "SELECT json_extract(used_fact, '$.appointment_id') FROM truth.truth_call_labels"
+            " WHERE primary_purpose = 'confirm'"
+        )
+    }
+
+    def appt_reply(trigger: str, appt: int, drawn: str, at: datetime) -> str | None:
+        """뽑은 답장을 예약 상태에 맞춘다(난수를 더 쓰지 않는다) — 시간 변경은 그 뒤 실제로 바뀐 예약에만, 리마인드
+        확인 답장은 confirmed 예약에만(아니면 답장 없음)"""
+        change_ok = appt in moved and at.strftime(FMT) <= moved[appt]
+        if drawn == MESSAGE_REPLY_CHANGE and not change_ok:
+            drawn = MESSAGE_REPLY_OK[appt % len(MESSAGE_REPLY_OK)]
+        if trigger == "reminder" and drawn in MESSAGE_REPLY_OK and appt not in confirmed:
+            return MESSAGE_REPLY_CHANGE if change_ok else None
+        return drawn
+
+    traced = set()  # 리마인드 답장이 있는 예약
     rows = [(t, pid, "out", trigger, appt, body) for t, pid, trigger, appt, body in out]
     for t, pid, trigger, appt, _ in out:
         if rng.random() < rates["reply_rate"]:
@@ -131,9 +160,25 @@ def stage(run, rng, fake) -> None:
                 ):
                     method = ledger_debt.get(appt) or visit_method[appt]
                     options = (*MESSAGE_REPLIES_PAID, MESSAGE_REPLIES_PAID_METHOD[method])
-                rows.append(
-                    (reply, pid, "in", "reply", appt, options[int(rng.integers(len(options)))])
-                )
+                body = options[int(rng.integers(len(options)))]
+                if trigger in ("appt_confirm", "reminder"):
+                    body = appt_reply(trigger, appt, body, reply)
+                    if body is None:
+                        continue
+                rows.append((reply, pid, "in", "reply", appt, body))
+                if trigger == "reminder":
+                    traced.add(appt)
+    # confirmed(리마인드 응답)인데 답장도 확인 통화도 없으면 확인 답장을 남긴다 — 확인의 흔적. 진료 번호로 문구·지연을 정해
+    # 난수를 쓰지 않는다(위 답장 추첨이 그대로)
+    lo, hi = MESSAGE_DELAY_MIN
+    for t, pid, trigger, appt, _ in out:
+        if trigger != "reminder" or appt not in confirmed or appt in traced or appt in called:
+            continue
+        reply = t + timedelta(minutes=lo + appt % (hi - lo + 1))
+        if reply.date() < run.today and not (pid in churn and reply.date() >= churn[pid]):
+            rows.append(
+                (reply, pid, "in", "reply", appt, MESSAGE_REPLY_OK[appt % len(MESSAGE_REPLY_OK)])
+            )
     rows.sort(key=lambda r: r[0])  # 안정 정렬 — 같은 시각은 생성 순서
     conn.executemany(
         'INSERT INTO emr_messages (id, patient_id, direction, sent_at, body, "trigger", related_appointment_id)'

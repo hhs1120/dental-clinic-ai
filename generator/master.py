@@ -846,10 +846,13 @@ RECALL_TEMPLATES = {
     "before": "[{clinic}] {name}님, {month}월에 정기 검진 시기가 다가와 안내드립니다. 예약은 전화로 연락 주세요.",
     "after": "[{clinic}] {name}님, 정기 검진 시기가 지났습니다. 편하실 때 전화로 예약해 주세요.",
 }
-# 트리거별 답장 문구 (균등)
+# 예약 확정·리마인드 답장 — 확인 답장은 리마인드면 confirmed 예약에만, 시간 변경은 그 뒤 실제로 바뀐 예약에만(§2.5)
+MESSAGE_REPLY_OK = ("네", "확인했습니다")
+MESSAGE_REPLY_CHANGE = "시간 변경 가능할까요?"
+# 트리거별 답장 문구 (균등 — 예약 확정·리마인드는 뽑은 뒤 예약 상태에 맞춘다)
 MESSAGE_REPLIES = {
-    "appt_confirm": ("네", "확인했습니다", "시간 변경 가능할까요?"),
-    "reminder": ("네", "확인했습니다", "시간 변경 가능할까요?"),
+    "appt_confirm": (*MESSAGE_REPLY_OK, MESSAGE_REPLY_CHANGE),
+    "reminder": (*MESSAGE_REPLY_OK, MESSAGE_REPLY_CHANGE),
     "noshow": ("죄송합니다. 다시 연락드릴게요", "깜빡했어요"),
     "balance": ("다음에 갈 때 낼게요", "확인했습니다"),
     "doc_ready": ("감사합니다", "네, 들를게요"),

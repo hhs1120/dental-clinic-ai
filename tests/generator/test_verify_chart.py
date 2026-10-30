@@ -732,3 +732,14 @@ def test_extra_fact_without_error(tmp_path):
     conn = make_db(tmp_path)
     conn.execute("UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = 2", (EXTRA,))
     assert verify.check_omitted_extra(conn, CTX)
+
+
+def test_chart_rules_recheck_saved_notes(tmp_path):
+    """저장된 서술 차트에 9b 검증의 금지 꼴(chart.narrative_checks의 금지 패턴 — 메모체가 아닌 끝맺음 등)이 없다 (경고)"""
+    conn = make_db(tmp_path)
+    assert verify.check_chart_rules(conn, CTX) == []
+    assert verify.check_chart_rules in verify.WARNINGS
+    conn.execute(
+        "UPDATE emr_chart_notes SET note = '16번 치아 레진 시행했습니다.' WHERE treatment_id = 3"
+    )
+    assert [r["treatment_id"] for r in verify.check_chart_rules(conn, CTX)] == [3]

@@ -8,6 +8,8 @@ from generator.master import (
     HOURS,
     MESSAGE_REPLIES_PAID,
     MESSAGE_REPLIES_PAID_METHOD,
+    MESSAGE_REPLY_CHANGE,
+    MESSAGE_REPLY_OK,
     RECALL_CYCLE,
     RECALL_TEMPLATES,
     open_slots,
@@ -214,6 +216,48 @@ def check_confirmed_has_reminder(conn, ctx):
         "SELECT id, scheduled_at FROM emr_appointments a WHERE confirmed = 1 AND NOT EXISTS ("
         "SELECT 1 FROM emr_messages m WHERE m.related_appointment_id = a.id AND m.\"trigger\" = 'reminder')",
     )
+
+
+def check_appt_reply_state(conn, ctx):
+    """예약 확정·리마인드 답장이 예약 상태와 맞음 — 리마인드 확인 답장(master.MESSAGE_REPLY_OK)은 confirmed 예약에만,
+    시간 변경(master.MESSAGE_REPLY_CHANGE)은 그 뒤 실제로 바뀐 예약(변경 쌍의 원래 예약, 답장 ≤ 취소 시각)에만, confirmed
+    (리마인드 응답) 예약은 리마인드 답장이나 예약 확인 통화가 있다(확인의 흔적, §2.5)"""
+    appts = {
+        r["id"]: r for r in _rows(conn, "SELECT id, confirmed, cancelled_at FROM emr_appointments")
+    }
+    moved = {
+        r[0]
+        for r in conn.execute(
+            "SELECT rescheduled_from_id FROM emr_appointments WHERE rescheduled_from_id IS NOT NULL"
+        )
+    }
+    called = {
+        r[0]
+        for r in conn.execute(
+            "SELECT json_extract(used_fact, '$.appointment_id') FROM truth.truth_call_labels"
+            " WHERE primary_purpose = 'confirm'"
+        )
+    }
+    bad, traced = [], set()
+    for r in _replies_to(conn):
+        if r["out_trigger"] not in ("appt_confirm", "reminder"):
+            continue
+        a = appts.get(r["out_appt"])
+        if r["body"] == MESSAGE_REPLY_CHANGE:
+            if r["out_appt"] not in moved or r["sent_at"] > (a["cancelled_at"] or ""):
+                bad.append({**r, "problem": "시간 변경 답장인데 그 뒤 바뀐 예약이 아님"})
+        elif (
+            r["out_trigger"] == "reminder" and r["body"] in MESSAGE_REPLY_OK and not a["confirmed"]
+        ):
+            bad.append({**r, "problem": "리마인드 확인 답장인데 confirmed 아님"})
+        if r["out_trigger"] == "reminder":
+            traced.add(r["out_appt"])
+    bad += [
+        {"appointment_id": aid, "problem": "confirmed인데 리마인드 답장·확인 통화 없음"}
+        for aid, a in appts.items()
+        if a["confirmed"] and aid not in traced and aid not in called
+    ]
+    return bad
 
 
 def check_reply_after_out(conn, ctx):

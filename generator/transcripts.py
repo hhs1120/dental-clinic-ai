@@ -14,6 +14,7 @@ from generator.master import (
     CALL_DURATION_SEC,
     CALL_FLAGS,
     CALL_LABEL_WORDS,
+    CALL_PATIENT_RULES,
     CLINIC_NAME,
     COMPLAINT_TOPICS,
     CONDITIONAL_INSURED_MIN_AGE,
@@ -69,10 +70,22 @@ def _pick(uid: str, salt: str, options: tuple):
     return options[int(hashlib.sha256(f"{salt}:{uid}".encode()).hexdigest(), 16) % len(options)]
 
 
-def situation(uid: str, purpose: str) -> str:
+MISSED_TOPIC = next(
+    t for t in COMPLAINT_TOPICS if "놓침" in t
+)  # 직전 노쇼가 있어야 말이 되는 불만
+MISSED_WINDOW_DAYS = CALL_PATIENT_RULES[("complaint", "inbound")][
+    1
+]  # 불만 통화가 보는 최근 내원 기간
+
+
+def situation(uid: str, purpose: str, recent_noshow: bool = True) -> str:
+    """응급은 시작 시점 × 상황, 불만은 주제 — 문자를 못 받아 놓쳤다는 불만은 직전 노쇼가 없으면 다른 주제로(기록에 없는 일)"""
     if purpose == "emergency":
         return f"{_pick(uid, 'onset', EMERGENCY_ONSETS)} {_pick(uid, 'scene', EMERGENCY_SCENES)}"
-    return _pick(uid, "topic", COMPLAINT_TOPICS)
+    topic = _pick(uid, "topic", COMPLAINT_TOPICS)
+    if topic == MISSED_TOPIC and not recent_noshow:
+        return _pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
+    return topic
 
 
 def rows(conn) -> list[dict]:
@@ -84,6 +97,10 @@ def rows(conn) -> list[dict]:
         " JOIN emr_patients g ON g.id = p.guardian_patient_id WHERE p.id = c.patient_id)"
         " ELSE (SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name)"
         " END AS caller_sex,"
+        # 통화 전 MISSED_WINDOW_DAYS일 안의 노쇼 — 문자를 못 받아 놓쳤다는 불만의 근거
+        " (SELECT count(*) FROM emr_appointments a WHERE a.patient_id = c.patient_id AND a.status = 'noshow'"
+        f" AND a.scheduled_at < c.started_at AND a.scheduled_at >= datetime(c.started_at, '-{MISSED_WINDOW_DAYS} days'))"
+        " AS recent_noshow,"
         " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
         " WHERE c.source = 'generated' ORDER BY c.id"
     )
@@ -138,10 +155,16 @@ def payload(row: dict) -> dict:
     if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get(
         "topic_procedure"
     ):  # 부 주제 포함
-        facts["topic_price"] = topic_price(
-            fact["topic_procedure"],
-            (fact.get("patient") or {}).get("age"),
-            bool(fact.get("scaling_used_this_year")),
+        facts["topic_price"] = (
+            topic_price(
+                fact["topic_procedure"]
+            )  # 제3자에게는 일반 가격 — 나이·이력으로 정하면 진료 기록이 샌다
+            if row["counterpart"] in THIRD_PARTY
+            else topic_price(
+                fact["topic_procedure"],
+                (fact.get("patient") or {}).get("age"),
+                bool(fact.get("scaling_used_this_year")),
+            )
         )
     # 말하는 사람(보호자·보험사 직원 등) — 이름을 지어내지 않게. 환자 기록이 있으면 성별도('엄마/아빠'가 어긋나지 않게)
     facts["caller"] = {"name": row["caller_name"]} | (
@@ -155,7 +178,9 @@ def payload(row: dict) -> dict:
         facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
     accepted = json.loads(row["accepted_purposes"])
     if purpose := next((p for p in accepted if p in SITUATION_PURPOSES), None):
-        facts["caller_situation"] = situation(row["call_uid"], purpose)
+        facts["caller_situation"] = situation(
+            row["call_uid"], purpose, recent_noshow=bool(row.get("recent_noshow"))
+        )
     if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
         facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {
             "patient": {"name": fact["patient"]["name"]} if fact.get("patient") else None,
@@ -220,6 +245,8 @@ def must_include(fact: dict, names: dict, purpose: str) -> list[list[str]]:
 def checks(row: dict, names: dict) -> dict:
     lo, hi = CALL_DURATION_SEC
     fact = json.loads(row["used_fact"])
+    if row["counterpart"] in THIRD_PARTY:  # 입력에서 숨긴 사실은 요구하지 않는다
+        fact = {k: v for k, v in fact.items() if k in THIRD_PARTY_KEEP}
     new_only = row["primary_purpose"] == "book" and not fact.get("next_appointment")
     no_rebook = row["primary_purpose"] == "cancel" and not row["wants_appt"]
     return {

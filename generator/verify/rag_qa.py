@@ -378,6 +378,43 @@ def check_qa_distractor_clean(conn, ctx):
     return bad
 
 
+def check_qa_expected_args(conn, ctx):
+    """데이터형 정답 인자 값이 질문·정답 쿼리와 맞음 — query_patient 이름은 환자 목록에 있고 질문에 든 이름, 환자(이름·차트
+    번호)는 정답 쿼리의 차트 번호, query_claims 차트 번호도 같은 환자, 날짜 인자는 정답 쿼리의 날짜(또는 그 달 LIKE)"""
+    chart_of = dict(conn.execute("SELECT name, chart_no FROM emr_patients"))
+    bad = []
+    for q in _qa(conn):
+        if q["type"] != "data" or not isinstance(q["expected_args"], dict):
+            continue
+        args, sql = q["expected_args"], q["answer_sql"] or ""
+        charts = set(re.findall(r"C-\d{5}", sql))
+        days = set(re.findall(r"\d{4}-\d{2}-\d{2}", sql))
+        months = set(re.findall(r"LIKE '(\d{4}-\d{2})%'", sql))
+        p, c = args.get("query_patient", {}), args.get("query_claims", {})
+        who = chart_of.get(p["name"]) if "name" in p else p.get("chart_no")
+        why = (
+            "query_patient 이름이 환자 목록·질문에 없음"
+            if "name" in p and (p["name"] not in chart_of or p["name"] not in q["question"])
+            else "query_patient 환자가 정답 쿼리와 다름"
+            if who and charts and who not in charts
+            else "query_claims 차트 번호가 정답 쿼리·환자와 다름"
+            if "chart_no" in c
+            and ((charts and c["chart_no"] not in charts) or (who and c["chart_no"] != who))
+            else next(
+                (
+                    f"{tool}.{k}가 정답 쿼리 날짜와 다름"
+                    for tool, a in args.items()
+                    for k in ("date_from", "date_to")
+                    if k in a and a[k] not in days and a[k][:7] not in months
+                ),
+                None,
+            )
+        )
+        if why:
+            bad.append({"id": q["id"], "problem": why})
+    return bad
+
+
 def check_qa_patient_names(conn, ctx):
     """질문에 든 환자 이름은 동명이인 없음(데이터형 query_patient(name)도 동명이인이면 답할 수 없음)·질문 하나에만, 사례형 질문은
     정답 환자 이름을 담음, 차트형 질문엔 환자 이름 없음"""

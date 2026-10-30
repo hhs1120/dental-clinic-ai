@@ -698,3 +698,23 @@ def test_already_paid_calls_lower_bound(tmp_path):
     conn = make_db(tmp_path)
     assert verify.check_already_paid_calls(conn, CTX) == []
     assert verify.check_already_paid_calls(conn, replace(CTX, ledger_debt_calls=1))
+
+
+def test_transcript_rules_recheck_saved_text(tmp_path):
+    """저장된 전사에 채우기 검증의 금지 꼴(llm_jobs.STRAY_SCRIPT, transcripts.checks의 금지 패턴)이 없다 (경고) — 캐시 줄을
+    손으로 고치거나 옛 통과 줄이 살아나면 잡는다. c-0003은 통화 전 예약이 없는 새 예약 통화"""
+    conn = make_db(tmp_path)
+    assert verify.check_transcript_rules(conn, CTX) == []
+    assert verify.check_transcript_rules in verify.WARNINGS
+    conn.execute(
+        "UPDATE ax_calls SET transcript = transcript || '\n직원: 네 Processing' WHERE call_uid = 'c-0001'"
+    )
+    assert [r["call_uid"] for r in verify.check_transcript_rules(conn, CTX)] == ["c-0001"]
+    conn.execute(
+        "UPDATE ax_calls SET transcript = transcript || '\n직원: 10월 6일에 신경치료가 잡혀 있으세요.'"
+        " WHERE call_uid = 'c-0003'"
+    )
+    assert {r["call_uid"] for r in verify.check_transcript_rules(conn, CTX)} == {
+        "c-0001",
+        "c-0003",
+    }

@@ -8,6 +8,7 @@ from generator.master import (
     CLINIC_NAME,
     MESSAGE_REPLIES_PAID,
     MESSAGE_REPLIES_PAID_METHOD,
+    MESSAGE_REPLY_CHANGE,
     RECALL_TEMPLATES,
 )
 from tests.generator.verify_db import CTX, make_db
@@ -17,6 +18,7 @@ MESSAGE_CHECKS = [
     verify.check_message_once,
     verify.check_confirmed_has_reminder,
     verify.check_reply_after_out,
+    verify.check_appt_reply_state,
 ]
 
 
@@ -90,6 +92,17 @@ BREAKS = {
         M + "sent_at = '2026-11-02 17:00:00' WHERE id = 2",
         "check_reply_after_out",
     ),
+    # 답장과 예약 상태 (§2.5) — 리마인드 확인 답장은 confirmed 예약에만, 시간 변경은 그 뒤 실제로 바뀐 예약에만,
+    # confirmed 예약은 확인 답장이나 예약 확인 통화가 있다
+    "ok_reply_unconfirmed": (
+        "UPDATE emr_appointments SET confirmed = 0 WHERE id = 2",
+        "check_appt_reply_state",
+    ),
+    "change_reply_not_moved": (
+        M + f"body = '{MESSAGE_REPLY_CHANGE}' WHERE id = 2",
+        "check_appt_reply_state",
+    ),
+    "confirmed_without_trace": ("DELETE FROM emr_messages WHERE id = 2", "check_appt_reply_state"),
 }
 
 
@@ -246,3 +259,27 @@ def test_paid_reply_method_matches(tmp_path):
         (MESSAGE_REPLIES_PAID_METHOD["transfer"],),
     )
     assert verify.check_paid_replies(conn, CTX)
+
+
+def test_change_reply_on_moved_appointment_passes(tmp_path):
+    """시간 변경 답장은 그 뒤 실제로 변경된 예약(변경 쌍의 원래 예약, 답장 ≤ 취소 시각)이면 맞다 — 3번 예약은 11/14에 4번으로 바뀜"""
+    conn = make_db(tmp_path)
+    conn.execute(INS + "(2, 'out', '2026-10-30 11:03:00', '예약 확정', 'appt_confirm', 3)")
+    conn.execute(f"{INS}(2, 'in', '2026-10-30 11:10:00', '{MESSAGE_REPLY_CHANGE}', 'reply', 3)")
+    assert verify.check_appt_reply_state(conn, CTX) == []
+    conn.execute(
+        M + "sent_at = '2026-11-15 10:00:00' WHERE body = ? AND direction = 'in'",
+        (MESSAGE_REPLY_CHANGE,),
+    )
+    assert verify.check_appt_reply_state(conn, CTX)  # 바뀐 뒤에 변경을 묻는 답장
+
+
+def test_confirm_call_counts_as_trace(tmp_path):
+    """confirmed 예약은 답장 대신 예약 확인 통화가 있어도 된다 — 통화 c-0003(1번 예약)을 2번 예약 확인 통화로"""
+    conn = make_db(tmp_path)
+    conn.execute("DELETE FROM emr_messages WHERE id = 2")
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'confirm',"
+        " used_fact = json_set(used_fact, '$.appointment_id', 2) WHERE call_uid = 'c-0003'"
+    )
+    assert verify.check_appt_reply_state(conn, CTX) == []

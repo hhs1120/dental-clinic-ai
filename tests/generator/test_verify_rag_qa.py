@@ -21,6 +21,7 @@ QA_CHECKS = [
     verify.check_qa_distractor_clean,
     verify.check_qa_patient_names,
     verify.check_qa_refusal,
+    verify.check_qa_expected_args,
 ]
 QA_WARNINGS = [verify.check_qa_refusal_absent, verify.check_qa_copied_wording]
 
@@ -181,7 +182,8 @@ QA = [
         "3건",
         tools=("query_schedule",),
         args={"query_schedule": {"date_from": "2026-10-01", "date_to": "2026-11-30"}},
-        sql="SELECT count(*) FROM emr_appointments WHERE status = 'completed'",
+        sql="SELECT count(*) FROM emr_appointments WHERE status = 'completed'"
+        " AND date(scheduled_at) BETWEEN '2026-10-01' AND '2026-11-30'",
     ),
     _q(
         "h2",
@@ -277,7 +279,10 @@ BREAKS = {
     "id_leading_zero": (_edit("m1", answer_doc_ids=["doc:01"]), ["check_qa_answer_ids"]),
     "hint_not_in_answer": (_edit("c1", answer_chunk_hint="없는 구절"), ["check_qa_answer_ids"]),
     "data_two_numbers": (_edit("d1", answer_text="2건(전체 3건 중)"), ["check_qa_answer_sql"]),
-    "data_without_sql": (_edit("d1", answer_sql=None), ["check_qa_answer_sql", "check_qa_fields"]),
+    "data_without_sql": (
+        _edit("d1", answer_sql=None),
+        ["check_qa_answer_sql", "check_qa_expected_args", "check_qa_fields"],
+    ),
     "manual_with_sql": (_edit("m1", answer_sql="SELECT 2"), ["check_qa_fields"]),
     "counts_off": ([q for q in QA if q["id"] != "m1"], ["check_qa_counts"]),
     "split_ratio": (_edit("m1", split="test"), ["check_qa_counts"]),
@@ -296,7 +301,10 @@ BREAKS = {
     ),
     "sql_mismatch": (_edit("d1", answer_text="3건"), ["check_qa_answer_sql"]),
     "sql_single": (_edit("d1", answer_text="1건", sql="SELECT 1"), ["check_qa_answer_sql"]),
-    "sql_error": (_edit("d1", answer_sql="SELECT nope FROM nowhere"), ["check_qa_answer_sql"]),
+    "sql_error": (
+        _edit("d1", answer_sql="SELECT nope FROM nowhere"),
+        ["check_qa_answer_sql", "check_qa_expected_args"],  # 날짜도 대조할 수 없다
+    ),
     "chart_sql_mismatch": (_edit("h1", answer_sql="SELECT 1"), ["check_qa_answer_sql"]),
     "chart_empty": (
         _edit(
@@ -440,3 +448,59 @@ def test_empty_qa_prints_skip_not_ok(tmp_path, capsys):
     verify.run(make_db(tmp_path), CTX)
     out = capsys.readouterr().out
     assert "[SKIP] RAG 질문" in out and "check_qa_" not in out
+
+
+PATIENT_Q = "김철수 님 11월에 진료 마친 예약 몇 건이었어?"
+PATIENT_SQL = (
+    "SELECT count(*) FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"
+    " WHERE p.chart_no = 'C-00001' AND a.status = 'completed' AND a.scheduled_at LIKE '2026-11%'"
+)
+
+
+@pytest.mark.parametrize(
+    "args, sql",
+    [
+        ({"query_patient": {"name": "오하윤"}}, PATIENT_SQL),  # 환자 목록에 없는 이름
+        ({"query_patient": {"name": "김하늘"}}, PATIENT_SQL),  # 질문에 없는 이름(다른 환자)
+        ({"query_patient": {"chart_no": "C-00002"}}, PATIENT_SQL),  # 정답 쿼리와 다른 환자
+        ({"query_claims": {"chart_no": "C-00002"}}, PATIENT_SQL),
+        (
+            {"query_schedule": {"date_from": "2026-10-01", "date_to": "2026-11-30"}},
+            PATIENT_SQL,
+        ),  # 날짜가 쿼리와 다름
+    ],
+)
+def test_expected_args_values_must_match(db, args, sql):
+    """데이터형 정답 인자 값이 질문·정답 쿼리와 맞아야 한다 — 이름만 틀려도 맞게 답한 앱이 늘 '인자' 실패가 된다"""
+    tools = list(args)
+    _load(
+        db,
+        _edit(
+            "d1",
+            question=PATIENT_Q,
+            expected_tools=tools,
+            expected_args=args,
+            answer_sql=sql,
+            answer_text="1건",
+        ),
+    )
+    assert "check_qa_expected_args" in _failed(db)
+
+
+def test_expected_args_values_pass(db):
+    args = {
+        "query_patient": {"name": "김철수"},
+        "query_schedule": {"date_from": "2026-11-01", "date_to": "2026-11-30"},
+    }
+    _load(
+        db,
+        _edit(
+            "d1",
+            question=PATIENT_Q,
+            expected_tools=list(args),
+            expected_args=args,
+            answer_sql=PATIENT_SQL,
+            answer_text="1건",
+        ),
+    )
+    assert verify.check_qa_expected_args(db, CTX) == []

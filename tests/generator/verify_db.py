@@ -53,6 +53,8 @@ INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_m
   (5, 1, 1, '2026-12-01 14:00:00', 60, 'treatment', 'U0008', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 1, 2),
   (6, 2, 2, '2026-12-05 10:00:00', 30, 'hygiene',   'U0002', 'scheduled', NULL, 'phone', '2026-11-20 11:00:00', NULL, 2, NULL),
   (7, 1, 3, '2026-11-24 15:00:00', 30, 'consult',   'U0019', 'noshow',    NULL, 'phone', '2026-11-20 11:00:00', NULL, NULL, NULL);
+-- 2번 예약은 리마인드(문자 1)에 '네'라고 답했다(문자 2) — confirmed(리마인드 응답)
+UPDATE emr_appointments SET confirmed = 1 WHERE id = 2;
 -- 치료계획: 1번 예약(신경치료 코스 첫 내원)이 만든 계획 — 항목 1 완료, 항목 2는 5번 예약(12/01), 항목 3 크라운 열림
 INSERT INTO emr_treatment_plans VALUES (1, 1, '2026-10-06 11:00:00', 1);
 INSERT INTO emr_treatment_plan_items VALUES
@@ -89,7 +91,7 @@ INSERT INTO emr_claims (id, treatment_id, patient_id, chart_no, tooth_no, claim_
 INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES
   (1, 'D02', '26번 치아 치수염으로 신경치료를 진행했습니다. 진료 중 마취가 잘 안 됨을 확인했습니다.'),
   (2, 'D06', '치석이 많아 스케일링을 시행했습니다.'),
-  (3, 'D01', '16번 치아 상아질 우식으로 레진 충전을 했습니다. 보호자와 함께 내원했습니다.');
+  (3, 'D01', '16번 치아 상아질 우식으로 레진 충전함. 보호자와 함께 내원.');
 -- 문자(8단계): 2번 예약 리마인드(직전 진료일 11/02)와 답장, 1번 예약 확정, 7번 노쇼(11/24 15:00 상담 30분 뒤),
 -- 1번 내원 미수(1번 수납 16,000원 미납) 다음 진료일 안내
 INSERT INTO emr_messages VALUES

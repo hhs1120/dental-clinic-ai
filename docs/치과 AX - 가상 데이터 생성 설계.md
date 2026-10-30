@@ -60,7 +60,7 @@ tags:
 - **구환** = `range_start` 전 등록. 차트 번호는 등록순
 - 파생(쿼리): 마지막 내원일, 가족 리콜 지남(가족 구성원의 마지막 completed 위생 내원 + `recall_cycle` < 기준일 — 리콜 문자와 같은 기준)
 - **연령**: 구간·비중은 `master.AGE_BANDS`. 비중은 추첨 없이 비중 × 인원을 반올림한 인원으로 맞춘다. 노인 나이 상한 `master.MAX_AGE`
-- **가족**: 환자의 `master.FAMILY_SHARE`가 `master.FAMILY_SIZE`명 가족으로 묶이고, 소아는 100% 같은 가족 성인이 보호자. 소아 전화는 보호자 번호를 같이 쓴다(나머지는 환자마다 고유)
+- **가족**: 환자의 `master.FAMILY_SHARE`가 `master.FAMILY_SIZE`명 가족으로 묶이고, 소아는 100% 같은 가족 성인이 보호자(소아 = TODAY 기준 나이 구간 — 창 안 예전에 소아였어도 TODAY에 성인이면 보호자 없음). 소아 전화는 보호자 번호를 같이 쓴다(나머지는 환자마다 고유)
 - 실손 `master.PRIVATE_INSURANCE_SHARE`, 이름은 전부 한국 이름, `recall_cycle_months`는 전원 `master.RECALL_CYCLE_MONTHS`
 - **다른 치과 이용**(⑨ 다른 치과 추정의 정답): 환자 일부를 두 가지로 정한다. 누가 어느 쪽인지와 이탈일은 `truth_patient_churn`에만
   - **이탈**: 어느 날부터 다른 치과로 옮겨 리콜·치료 수요에 응하지 않고 문자에 답하지 않으며 전화도 하지 않음. 흔적은 리콜 문자 무응답·노쇼·취소 뒤 재예약 없음. 구환 중 `master.CHURN_SHARE`, 이탈일은 창 시작 ~ TODAY − `master.CHURN_MIN_DAYS`일(흔적이 쌓일 시간) 균등
@@ -137,13 +137,13 @@ tags:
 | balance | 미수 발생(`visit` 수납 `amount_paid < amount_due`) 중 `config` `messages.balance` 비율 | 미수가 생긴 내원의 다음 진료일 임의 분 | 미수가 생긴 내원 예약 |
 | doc_ready | 환자가 건(inbound) 서류 요청 통화(주 목적, 환자 연결) **이후** | 그 통화의 다음 진료일 임의 분 | 없음 |
 | recall | 잡힌 예약이 없는 환자 전원(비율 없음) — 리콜 기한(마지막 completed 위생 내원 + 리콜 주기) 한 달 전에 한 번(다가옴), 기한이 지난 다음 달에 한 번(지남). 문구는 `master.RECALL_TEMPLATES`. 리콜은 문자로만 한다 — 받은 환자 일부가 리콜 문의 전화를 건다(§4.1) | 그달 첫 진료일 개원 시각에 일괄 | 없음 |
-| reply(in) | out 문자마다 `config` `messages.reply_rate` — 문구는 아래 8단계 | 그 out 뒤 `master.MESSAGE_DELAY_MIN` 안 | 그 out과 같음 |
+| reply(in) | out 문자마다 `config` `messages.reply_rate` + confirmed 예약의 확인 흔적 — 문구는 아래 8단계 | 그 out 뒤 `master.MESSAGE_DELAY_MIN` 안 | 그 out과 같음 |
 
 문자는 전부 템플릿(LLM 없음). 색인 방식은 [[치과 AX - 앱 설계]] §3.
 
 **8단계 구현 결정**
 - **대상**: `patient_id` = 그 환자. 트리거별 발송 비율은 `config` `messages`. TODAY 전날까지만. 이탈 환자(§2.2)는 이탈일부터 어떤 문자에도 답장하지 않는다(⑨ 연락 무응답 흔적)
-- **reply(in) 문구**: 트리거별 `master.MESSAGE_REPLIES`에서 균등 — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 balance 문자는 `master.MESSAGE_REPLIES_PAID`와 그 내원 실제 결제수단의 `master.MESSAGE_REPLIES_PAID_METHOD`(이미 냈다는 답)에서, 진짜 미수의 balance 답장도 `master.PAID_REPLY_NOISE_RATE`만큼 그 문구에서(착각한 환자 — 이 답장만으로 장부 실수를 가리지 못하게)
+- **reply(in) 문구**: 트리거별 `master.MESSAGE_REPLIES`에서 균등 — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 balance 문자는 `master.MESSAGE_REPLIES_PAID`와 그 내원 실제 결제수단의 `master.MESSAGE_REPLIES_PAID_METHOD`(이미 냈다는 답)에서, 진짜 미수의 balance 답장도 `master.PAID_REPLY_NOISE_RATE`만큼 그 문구에서(착각한 환자 — 이 답장만으로 장부 실수를 가리지 못하게). 예약 확정·리마인드 답장은 뽑은 뒤 예약 상태에 맞춘다(난수를 더 쓰지 않음): 시간 변경(`master.MESSAGE_REPLY_CHANGE`)은 그 뒤 실제로 바뀐 예약에만(아니면 확인 답장 `master.MESSAGE_REPLY_OK`), 리마인드 확인 답장은 confirmed 예약에만(아니면 답장 없음). confirmed인데 리마인드 답장도 예약 확인 통화도 없으면 확인 답장을 남긴다 — 확인의 흔적, 문구·지연은 예약 번호로 정해 난수 없음
 - **본문**: 트리거별 템플릿 `master.MESSAGE_TEMPLATES`(병원 이름·환자 이름·예약 날짜·시각·시술·미수 금액). 날짜는 `11월 3일(화)`, 리마인드도 '내일'이라 쓰지 않는다
 
 ### 2.6 정형 생성 규칙 (2~5단계) — 정방향 시뮬레이션
@@ -332,11 +332,11 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - `caller`(늘): 말하는 사람 — `ax_calls.caller_name`과 성별. 성별은 보호자 통화면 그 환자의 보호자 기록, 그 밖은 환자 본인(이름이 같을 때 — 환자 측이 아닌 상대는 없음)
   - `recall_months`(리콜 문의): 정기 검진 주기 `master.RECALL_CYCLE_MONTHS`
   - `new_booking`(새 예약 통화): 이 통화로 생기는 예약은 `appointment` 대신 이 이름에 "통화 전에는 없던 예약"이라는 말과 함께(`transcripts.NEW_BOOKING_NOTE`) — `appointment`로 넘기면 모델이 정할 날짜를 이미 잡힌 예약으로 쓴다
-  - `caller_situation`(응급·불만, 부 주제 포함): 통화 상황 하나 — 응급은 `master.EMERGENCY_ONSETS` × `master.EMERGENCY_SCENES`, 불만은 `master.COMPLAINT_TOPICS`에서 통화 번호 해시로 고른다(난수를 쓰지 않아 다른 결과를 바꾸지 않는다). 없으면 거의 모든 통화가 같은 이야기가 된다
-  - 보험사 통화(`transcripts.THIRD_PARTY`): 진료 기록(최근 진료·금액·주의사항·예약·가족·나이)을 빼고 환자 이름과 병원 규칙 `master.THIRD_PARTY_RULE`만 — 제3자에게 진료 내용을 알려 주지 않는다
+  - `caller_situation`(응급·불만, 부 주제 포함): 통화 상황 하나 — 응급은 `master.EMERGENCY_ONSETS` × `master.EMERGENCY_SCENES`, 불만은 `master.COMPLAINT_TOPICS`에서 통화 번호 해시로 고른다(난수를 쓰지 않아 다른 결과를 바꾸지 않는다). 없으면 거의 모든 통화가 같은 이야기가 된다. 문자를 못 받아 놓쳤다는 불만(`transcripts.MISSED_TOPIC`)은 통화 전 `transcripts.MISSED_WINDOW_DAYS`일 안에 노쇼가 있을 때만 — 없으면 다른 주제(기록에 없는 일)
+  - 보험사 통화(`transcripts.THIRD_PARTY`): 사실은 `transcripts.THIRD_PARTY_KEEP`(통화 날짜·주제 시술과 그 일반 가격 — 환자 나이·이력으로 정하지 않음·말하는 사람)과 환자 이름·병원 규칙 `master.THIRD_PARTY_RULE`만 — 제3자에게 진료 내용을 알려 주지 않는다. 꼭 넣을 사실도 숨긴 것(예약·이미 냈다는 내원일)은 요구하지 않는다
   - `topic_price`(가격·보험 문의, 부 주제 포함): 주제 시술의 수가·본인부담·급여 연령(`master` — RAG 문서와 같은 값). 환자 나이를 알면 그 나이에 급여인지(`master.insured_on`)로 정하고, `scaling_used_this_year`면 스케일링은 비급여 가격
 - **꼭 넣을 사실**(검증 (a)): 예약 날짜(예약류. 원래 날짜는 **예약 변경 통화만** — 변경으로 생긴 예약의 확인·취소 통화에 넣으면 변경 통화처럼 읽힌다)·주제 시술(`topic_procedure` — 이름 또는 별칭)·`already_paid`면 그 내원일. 날짜는 `11월 24일` 꼴
-- **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작(영문 낱말·한자가 섞이면 실패 — `llm_jobs.STRAY_SCRIPT`) + 통화 전 예약이 없는 새 예약 통화는 이미 잡힌 예약처럼 말하는 꼴(`transcripts.ALREADY_BOOKED`), 새 예약을 원하지 않는 취소 통화는 직원이 새 날짜를 잡자는 말(`transcripts.REBOOK_OFFER` — `wants_appt`로 읽힌다) 금지 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
+- **검증**: (a)~(c) + 줄마다 `환자:`/`직원:`로 시작 + 영문 낱말·한자 없음(`llm_jobs.STRAY_SCRIPT`) + 통화 전 예약이 없는 새 예약 통화는 이미 잡힌 예약처럼 말하는 꼴(`transcripts.ALREADY_BOOKED`), 새 예약을 원하지 않는 취소 통화는 직원이 새 날짜를 잡자는 말(`transcripts.REBOOK_OFFER` — `wants_appt`로 읽힌다) 금지 + 발화 글자 수(화자 표시·공백 제외)가 `master.CALL_DURATION_SEC` × `master.TRANSCRIPT_CHARS_PER_SEC` 안. 라벨 어휘는 `master.CALL_LABEL_WORDS`
 - **단순화**: `llm_jobs.SIMPLIFY_AFTER`번 실패한 뒤로는 입력 사실을 꼭 넣을 사실(통화 날짜·예약(`new_booking` 포함)·주제 시술과 그 가격 `topic_price`)과 ⑧-1 근거(`already_paid`)·리콜 주기(`recall_months`)·받은 리콜 문자(`recall_text`)·말하는 사람(`caller`)·통화 상황(`caller_situation`)·제3자 규칙(`third_party_rule`)만 남긴다
 - **적용**: `transcript`·`has_transcript = 1`, `duration_sec` = 발화 글자 수 ÷ `master.TRANSCRIPT_CHARS_PER_SEC`(`master.CALL_DURATION_SEC`로 자름). `scenario`는 저장하지 않는다(라벨을 풀어 쓴 문장)
 
@@ -383,7 +383,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 ③ 차트 케이스 검색과 ⑤-2·⑤-3의 근거. **사실 → 서술**: 코드(5b단계)가 근거 사실을 정하고 정답은 truth 쪽, LLM(9b단계)은 그 사실을 서술만 한다 — 통화 전사(§4.1)와 같은 틀이라 결정성·캐시·건별 검증을 재사용.
 
 - **테이블**: `emr_chart_notes` — 진료(`emr_treatments`) 1건당 1행(`treatment_id`, `dx_code` 상병, `note` 본문. 실제로는 한 내원에 여러 시술이 한 기록에 묶이기도 하지만 청구 줄과 1:1로 맞추려고 단순화). `dx_code`는 시술처럼 가상 코드이고 뜻은 이름이 갖는다(`master.DIAGNOSES` → `emr_diagnoses`). 정상 줄은 시술별 허용 상병(`master.PROCEDURE_DIAGNOSES`)에서, 상병 착오 줄은 다른 시술의 허용 상병에서 뽑아 값 자체는 정상 EMR 값이다(오류 줄만의 신호가 되지 않게). **특이 여부는 `emr_chart_notes`에 두지 않는다**(정답은 `truth_chart_notes` — [[치과 AX - 평가 설계]] §6)
-- **본문 칸**: C.C(환자 말 그대로) · 소견(치아 번호·치주낭 깊이·출혈·동요도·방사선) · 상병 · 시행(시술·부위) · 내역설명(요건 근거) · 주의사항 처리 · 교육 · 다음 계획(남은 치료계획 항목 또는 다음 정기 검진).
+- **본문 칸**: C.C(환자 말 — 따옴표로 옮기거나 줄여 씀, 아래 '템플릿') · 소견(치아 번호·치주낭 깊이·출혈·치석·동요도) · 이력·상태(요건 근거) · 시행(시술·부위, 함께 한 처치) · 주의사항 처리 · 다음 계획(남은 치료계획 항목 또는 다음 정기 검진). 상병은 본문이 아니라 `dx_code`.
 - **5b단계가 정하는 사실**: 그 내원 시점에 알 수 있는 것만(실제 다음 예약 날짜 같은 미래 사실은 넣지 않음)
   - (1) 소견 수치: 위생·잇몸치료 내원만, 치주낭 깊이(mm)·출혈·치석 정도·동요도. 치주 계획을 만든 위생 내원은 소견(치주낭 깊이·출혈)을 계획과 맞게 정한다
   - (2) 주의사항 연결: 그날 시술과 관련된 주의사항(그 내원일에 보이는 것 — §2.2)을 어떻게 처리했는지("혈압 측정 후 진행", "비라텍스 장갑 사용"), 진료 중 발견이면 그 사실
@@ -473,7 +473,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 | 청구 오류 | `truth_claim_errors`(5b단계, 생성기 버그가 "심은 오류"로 위장되지 않게): 종류가 정해진 값, 상병 착오는 차트 상병이 허용 조합 밖, 추가 처치 누락은 결과가 없는 달의 급여 줄·시술 ∈ `master.SAME_DAY_EXTRA`·그 시술의 치아 후보·그날 나이에 급여·그 환자 장부 어느 진료에도 없는 치아·차트 사실 `extra`가 정답과 같음; 차트 상병이 허용 밖 ⇔ 상병 착오; `truth_claim_errors`는 창 안 급여 청구 줄에만·요건 오류 ⇔ 근거 없음·확정 월은 심사 결과와 일치(상병 사유 ⇔ 상병 착오, 요건 오류는 요건 사유로 깎인 줄만) |
 | 수납 | 환자별 시점 누적 잔액 ≥ 0; `visit` 행은 completed 예약에만; 창 안 completed마다 `visit` 정확히 1행(입력 누락은 받은 금액 0 — `truth_ledger_errors`); 장부 실수로 생긴 미수는 정산(`settlement`)되지 않음, 창 이전 내원은 수납 없음; `settlement`는 `amount_due` 0; `approval_no` 있음 ⇔ 연동일 카드 수납 중 받은 금액 > 0(번호 중복 없음, 연동 실패일 = 받은 카드 수납에 승인번호가 하나도 없는 날 — 평가 달 안 평일, 날 수 = 메타); 장부 실수는 종류별 모양(§2.4)·날짜 밀림은 다음 진료일 영업시간·평가 달에만·종류별 건수 = 메타; 장부 실수로 생긴 미수 ≤ 그 환자의 TODAY 잔액 |
 | RAG 문서 | (9단계) 문서 수 = `config` `documents`, `ax_documents` ↔ `truth_doc_meta` 1:1; 심은 사실이 본문에 있음; 비슷한 주제 문서에 짝·`avoid` 문서의 사실 없음, 타 병원 문서에 우리 병원 이름 없음; 경로 = `docs/<type>/<번호>.md`, 경로·제목에 목록 이름 없음; 최신 공지마다 옛 공지 1개, 옛 공지의 `effective_date` < 최신 ≤ TODAY, 옛 공지 < 생성 기간 시작; 청구 기준 문서에 `master.ADJUST_REASONS` 상세 사유마다 본문 절(`## 소제목`)이 정확히 1개, 그 사유의 기준이 그 절 안; 문서에 환자 이름 없음; 금지 토픽 코퍼스 전체(문서·전사·차트·문자) 미포함; (app.sqlite를 붙였을 때) 모든 청크에 출처 prefix([[치과 AX - 앱 설계]] §3) |
-| RAG 평가셋 | (`rag_qa.json`이 있을 때 — `make data`가 `truth_rag_qa`에 적재한 것을 검사) 적재본 = `rag_qa.json`; 정답 청크가 `ax_chunks`에 존재(app.sqlite를 붙였을 때); 칸 형식(유형별 도구, `expected_args` 인자는 `verify.QA_TOOL_ARGS` 안, 출처 id 형식, `answer_sql`은 데이터·차트형에만, `expect_refusal` ⇔ 거절형); 정답 출처가 있고 유형에 맞으며 방해 문서가 아님, 공지형은 최신 공지 포함; 정답 출처는 한 split에만; 힌트 사실의 같은 사실 묶음 문서가 함께 정답; 정답 문서의 방해 문서(짝)에 정답 텍스트 미포함; 데이터형 답이 쿼리로 재계산되고 ≥ 2건(답 칸의 숫자는 그 하나), 차트형 정답 = 조건 쿼리 결과이고 `verify.QA_CHART_ANSWERS` 건; QA 환자 이름 중복 0(질문의 환자 이름은 동명이인 없음, 사례형은 정답 환자 이름을 담음, 차트형은 이름 없음); 유형별 수 `verify.QA_TYPE_COUNTS`·dev/test 유형 비율 동일; 금지 토픽마다 거절형 질문 1개 |
+| RAG 평가셋 | (`rag_qa.json`이 있을 때 — `make data`가 `truth_rag_qa`에 적재한 것을 검사) 적재본 = `rag_qa.json`; 정답 청크가 `ax_chunks`에 존재(app.sqlite를 붙였을 때); 칸 형식(유형별 도구, `expected_args` 인자는 `verify.QA_TOOL_ARGS` 안, 출처 id 형식, `answer_sql`은 데이터·차트형에만, `expect_refusal` ⇔ 거절형); 정답 출처가 있고 유형에 맞으며 방해 문서가 아님, 공지형은 최신 공지 포함; 정답 출처는 한 split에만; 힌트 사실의 같은 사실 묶음 문서가 함께 정답; 정답 문서의 방해 문서(짝)에 정답 텍스트 미포함; 데이터형 답이 쿼리로 재계산되고 ≥ 2건(답 칸의 숫자는 그 하나), 차트형 정답 = 조건 쿼리 결과이고 `verify.QA_CHART_ANSWERS` 건; QA 환자 이름 중복 0(질문의 환자 이름은 동명이인 없음, 사례형은 정답 환자 이름을 담음, 차트형은 이름 없음); 데이터형 `expected_args` 값이 질문·`answer_sql`과 맞음(환자 이름은 환자 목록·질문에 있고 그 환자가 쿼리의 차트 번호, 청구 차트 번호도 같은 환자, 날짜 인자는 쿼리의 날짜 또는 그 달 LIKE); 유형별 수 `verify.QA_TYPE_COUNTS`·dev/test 유형 비율 동일; 금지 토픽마다 거절형 질문 1개 |
 | 누출 | `ax_calls`에 라벨·노이즈·카테고리 컬럼 없음; `emr_chart_notes` 컬럼은 허용 목록만(특이·디코이·요건 충족 컬럼 없음); **`call_uid`에 목적 enum 문자열 없음**; 풀 마킹에서 카테고리 추론 불가; 분류기 입력 덤프에 전사·방향 외 메타 없음(app.sqlite를 붙였을 때) |
 | 결정성 | 같은 시드 2회 → `source.sqlite`·`truth.sqlite` 각각 canonical 덤프 해시 동일. `make verify` 밖 — `tests/generator/test_generator.py` |
 | 차트 | (9b단계) 서술 줄 본문에 꼭 넣을 사실(§4.3 '9b단계 구현 결정')이 있음; 진료 기록 1건당 `emr_chart_notes`·`truth_chart_notes` 정확히 1행; 요건 줄이 §4.3 규칙대로(요건 줄만 근거 여부 보유); 요건 사실이 장부와 일치(장부에 근거 사건이 있으면 그 날짜, 없으면 '타 기관'); `truth_chart_notes.is_special` ⇔ (청구 오류 줄 ∪ 요건 줄), 서술 ⇔ 특이 ∪ 디코이, 창 이전 내원은 템플릿만; 본문에 환자 이름·정답 어휘 없음, 치아 번호·시술 표준 이름·그 내원에서 발견한 주의사항 존재; 다음 계획의 남은 항목 = 그 내원 시점에 열린 계획 항목 |
@@ -482,7 +482,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 | 통화 라벨 | (6단계) 라벨 enum·함의 플래그·`accepted_purposes` = 주 목적 + 부 주제 1개(`master.CALL_SUBTOPICS` 안)·응급 → urgent·outbound 목적·inbound 복합 ⇔ 노이즈 '주제 2개 섞임'·노이즈 대상; 상대 ↔ 환자·발신자(통화일 소아·보호자 기록 ⇔ 보호자, 처음 연락 예약은 그날 등록한 소아 아닌 환자, 그 밖의 처음 연락·보험사·업체·기타는 환자 없음·환자 번호 아님, outbound는 환자 측) |
 | 통화 사실 | (6단계) `used_fact`의 최근 진료·잔액·다음 예약·주의사항·열린 치료계획 항목(장부 실수 미수 수납 문의는 `already_paid`)이 통화 시각까지 읽은 장부와 같음; 리콜 문의는 규칙 창 안에 그 환자가 받은 리콜 문자 뒤·사실 `recall_text` = 그 문자; 경과 확인 발신 주제 = 규칙 창 안 최근 진료; `already_paid` 수납 문의 발신 ≥ 메타 건수(서로 다른 환자); 주제 시술(`topic_procedure`)은 비용이 있는 시술, 리콜 문의의 가격 주제는 기한 해(`master.recall_due_year`) 기준 다음 검진의 위생 시술, 주제가 스케일링이면 `scaling_used_this_year` ⇔ 통화 전 그 해(리콜 문의는 기한 해) 급여 스케일링(그 진료일 `master.SCALING_MIN_AGE` 이상)을 받음 |
 | 판정 풀 | (6단계) 판정 풀 크기·순번 1..P·앞 절반 dev·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
-| 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤; recall은 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한이 다음 달(다가옴)·지난달(지남)인 환자에게, 본문은 그 종류의 문구(환자당 월 1회); 이미 냈다는 답장은 balance 답장에만, 장부 실수로 생긴 미수의 balance 답장은 전부 그 문구 |
+| 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤; 예약 확정·리마인드 답장은 예약 상태와 맞음(리마인드 확인 답장은 confirmed 예약에만, 시간 변경은 그 뒤 바뀐 예약에만, confirmed 예약엔 리마인드 답장이나 예약 확인 통화); recall은 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한이 다음 달(다가옴)·지난달(지남)인 환자에게, 본문은 그 종류의 문구(환자당 월 1회); 이미 냈다는 답장은 balance 답장에만, 장부 실수로 생긴 미수의 balance 답장은 전부 그 문구 |
 | 재무 ⑧-1 | (8b단계) 실제 카드 수납 ↔ 승인 1:1(일시·금액·연동이면 승인번호 — 분할결제·취소 후 재승인·진료 외 매출 제외), 정산 입금 = 승인 합계 − 취소 − 수수료(율 내림 — 수수료 차이 제외)·입금일 = 매출일 + 정산 지연(입금 지연 제외)·입금 예정일이 TODAY 이후면 없음, 통장 입금 = 정산 입금·현금 입금(실제 현금 합계)·실제 이체(입금자 = 환자·보호자)·공단 급여비뿐, 원인별 불일치 수 = 메타, 장부 실수 ⇔ 장부 쪽 불일치 1:1(가리키는 행 = 실제 돈의 승인·이체·현금 입금), 현금 입금 1건에 장부 쪽 불일치 최대 1건, 통장·카드 쪽은 정산(지연 포함)이 TODAY 전·카드 쪽은 연동일·수수료 차이는 율 + `master.FEE_MISMATCH_RATE_DIFF`, 원인별 모양(§2.7)·관련 id 존재·split = 달 |
 | 재무 ⑧-2 | (8c단계) 출금마다 `truth_expense_matches` 1행·증빙은 정확히 한 출금에(발행처 = 거래처·발행일 ≤ 출금일), 적요·가맹점명 = 거래처, 계정 과목(이체·자동이체 = 거래처 과목, 카드 = 품목 과목), split = 평가 달, 증빙 합계 = 출금액(차이 건수 = 비율)·세금계산서 = 명세서 합계, 증빙 없음은 카드에만(건수 = 비율), 기공 명세서 줄 ↔ 창 안·TODAY가 속한 달 전의 기공 진료 1:1·단가 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
@@ -500,7 +500,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 | 영역 | 검사 |
 |---|---|
 | 치아 | 치아 단위 시술은 `'00'` 금지, 치아 단위가 아닌 시술은 `'00'`만; 소아 시술(`age_group='child'`)은 소아만 |
-| 통화 | 화자 형식; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 비율(띄어쓰기 무시) < `verify.TRANSCRIPT_LABEL_WORD_MAX`; 전사·차트 본문에 영문 라벨 값·요건 키 없음 |
+| 통화 | 화자 형식; fact 날짜·시술 별칭 substring 존재; 라벨 어휘 직접 등장 비율(띄어쓰기 무시) < `verify.TRANSCRIPT_LABEL_WORD_MAX`; 전사·차트 본문에 영문 라벨 값·요건 키 없음; 저장된 전사·서술 차트도 채우기 검증의 금지 꼴이 없음(전사 `llm_jobs.STRAY_SCRIPT`·통화별 금지 패턴, 서술 `chart.narrative_checks` 금지 패턴 — 캐시 줄을 손으로 고치거나 옛 통과 줄이 살아나면 잡는다) |
 | RAG | (`rag_qa.json` 있을 때) 거절형 답이 어느 문서에도 없음(키워드); 질문이 정답 문장을 베끼지 않음(정답 문단과 연속 `verify.QA_COPY_RUN`어절 일치 또는 정답 값 포함이면 경고) |
 
 **리포트**(허용치 없이 수치만 — 튜닝 때 눈으로 본다. 분모 정의는 `verify.report_*` docstring)

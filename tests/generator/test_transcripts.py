@@ -342,3 +342,55 @@ def test_insurer_call_hides_patient_records(conn):
     } & set(facts)
     assert "third_party_rule" in transcripts.simplify(transcripts.payload(row))["facts"]
     assert "third_party_rule" not in transcripts.payload(_row(conn, "c-0001"))["facts"]
+
+
+def test_insurer_call_gets_general_price_only(conn):
+    """보험사 통화의 가격은 일반 가격 — 환자 나이로 급여 여부를 정하거나 '올해 이미 받음'을 넣으면 진료 기록이 샌다"""
+    fact = json.loads(_row(conn, "c-0002")["used_fact"]) | {
+        "topic_procedure": "스케일링",
+        "patient": {"name": "김철수", "age": 15},
+        "scaling_used_this_year": True,
+    }
+    row = _as(
+        conn,
+        "c-0002",
+        counterpart="insurer",
+        accepted_purposes='["insurance_q"]',
+        primary_purpose="insurance_q",
+        used_fact=json.dumps(fact, ensure_ascii=False),
+    )
+    assert transcripts.payload(row)["facts"]["topic_price"] == transcripts.topic_price("스케일링")
+
+
+def test_insurer_call_does_not_require_hidden_facts(conn):
+    """보험사 통화는 숨긴 사실(예약·이미 냈다는 내원일)을 꼭 넣을 말로 요구하지 않는다 — 입력에 없어 영영 통과 못 한다"""
+    fact = json.loads(_row(conn, "c-0004")["used_fact"]) | {
+        "already_paid": {"date": "2026-11-01", "amount": 1000}
+    }
+    row = _as(
+        conn, "c-0004", counterpart="insurer", used_fact=json.dumps(fact, ensure_ascii=False)
+    )
+    assert transcripts.checks(row, llm_jobs.procedure_names(conn))["must_include"] == []
+
+
+def test_missed_text_complaint_needs_a_recent_noshow(conn):
+    """'안내 문자를 못 받아 예약을 놓침' 불만은 직전 노쇼가 있을 때만 — 없으면 기록에 없는 일을 말하게 된다. 다른 주제로"""
+    missed = next(t for t in COMPLAINT_TOPICS if "놓침" in t)
+    uid = next(
+        f"c-{n:04d}"
+        for n in range(2000)
+        if transcripts.situation(f"c-{n:04d}", "complaint") == missed
+    )
+    assert transcripts.situation(uid, "complaint", recent_noshow=True) == missed
+    other = transcripts.situation(uid, "complaint", recent_noshow=False)
+    assert other in COMPLAINT_TOPICS and other != missed
+    row = _as(
+        conn,
+        "c-0001",
+        call_uid=uid,
+        primary_purpose="complaint",
+        accepted_purposes='["complaint"]',
+    )
+    assert (
+        transcripts.payload(row)["facts"]["caller_situation"] == other
+    )  # 1번 환자는 직전 30일 노쇼 없음
