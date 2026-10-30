@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from generator import verify
+from generator import emergency, verify
 from generator.master import CLINIC_NAME, RECALL_TEMPLATES
 from tests.generator.verify_db import CTX, make_db
 
@@ -736,6 +736,14 @@ def _emergency(conn) -> None:
         "UPDATE truth.truth_call_labels SET emergency = 1, used_fact = json_set(used_fact, '$.emergency_visit',"
         ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0001\''
     )
+    # 상황은 6b 규칙대로(1번 환자는 통화 전 신경치료만 — 때운·씌운 이력 없음, 46세)
+    scene, changed = emergency.visit_scene("c-0001", 46, False, {"endo", "preventive"})
+    if changed:
+        conn.execute(
+            "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit.scene', ?)"
+            " WHERE call_uid = 'c-0001'",
+            (scene,),
+        )
 
 
 def test_emergency_visit_passes(tmp_path):

@@ -6,7 +6,7 @@ import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
-from generator import llm_jobs, transcripts
+from generator import emergency, llm_jobs, transcripts
 from generator.master import (
     BOOKING_PURPOSES,
     CALL_COUNTERPARTS,
@@ -21,8 +21,6 @@ from generator.master import (
     CALL_SUBTOPICS,
     CHECKUP_CODE,
     CLINIC_NAME,
-    EMERGENCY_AFTER_VISIT_SCENE,
-    EMERGENCY_CHILD_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_SCENES,
     EMERGENCY_TREATMENT,
@@ -462,13 +460,15 @@ def check_emergency_visits(conn, ctx):
             (r["patient_id"], call[:10], call, a["id"]),
         ).fetchone()
         p = patients[r["patient_id"]]
-        child = age_on(date.fromisoformat(p["birth_date"]), day) <= CHILD_MAX_AGE
-        want = (
-            EMERGENCY_AFTER_VISIT_SCENE
-            if visited
-            else EMERGENCY_CHILD_SCENES.get(base, base)
-            if child
-            else base
+        done = {
+            PROCEDURE[t[0]]["category"]
+            for t in conn.execute(
+                "SELECT procedure_code FROM emr_treatments WHERE patient_id = ? AND performed_at < ?",
+                (r["patient_id"], call),
+            )
+        }
+        want, _ = emergency.visit_scene(
+            r["call_uid"], age_on(date.fromisoformat(p["birth_date"]), day), bool(visited), done
         )
         start = _dt(at)
         end = start + timedelta(minutes=a["duration_min"])

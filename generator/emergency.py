@@ -29,6 +29,7 @@ from generator.master import (
     EMERGENCY_AFTER_VISIT_SCENE,
     EMERGENCY_CHILD_SCENES,
     EMERGENCY_DX,
+    EMERGENCY_HISTORY_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
     EMERGENCY_SCENES,
@@ -216,15 +217,20 @@ def scene_call_time(run) -> datetime:
     return close - timedelta(minutes=SCENE_CALL_BEFORE_CLOSE_MIN)
 
 
-def visit_scene(uid: str, age: int, visited_today: bool) -> tuple[str, bool]:
-    """응급 상황과 바꿨는지 — 해시 상황(scene), 그날 먼저 진료받고 간 뒤면 EMERGENCY_AFTER_VISIT_SCENE, 소아면
-    EMERGENCY_CHILD_SCENES로 (바꾼 상황은 emergency_visit.scene으로 7단계 caller_situation에 간다)"""
-    base = scene(uid)
+def visit_scene(uid: str, age: int, visited_today: bool, done: set) -> tuple[str, bool]:
+    """응급 상황과 바꿨는지 — 해시 상황(scene), 그날 먼저 치료받고 간 뒤면 EMERGENCY_AFTER_VISIT_SCENE, 그 시술군 이력이
+    없으면 EMERGENCY_HISTORY_SCENES의 대신 상황, 소아면 EMERGENCY_CHILD_SCENES로. done = 통화 전 진료의 시술군.
+    바꾼 상황은 emergency_visit.scene으로 7단계 caller_situation에 간다(verify도 이 함수로 확인)"""
+    base = situation = scene(uid)
     if visited_today:
         return EMERGENCY_AFTER_VISIT_SCENE, True
-    if age <= CHILD_MAX_AGE and base in EMERGENCY_CHILD_SCENES:
-        return EMERGENCY_CHILD_SCENES[base], True
-    return base, False
+    if situation in EMERGENCY_HISTORY_SCENES:
+        need, instead = EMERGENCY_HISTORY_SCENES[situation]
+        if not done & set(need):
+            situation = instead
+    if age <= CHILD_MAX_AGE:
+        situation = EMERGENCY_CHILD_SCENES.get(situation, situation)
+    return situation, situation != base
 
 
 def stage(run, rng, fake) -> None:
@@ -272,8 +278,13 @@ def stage(run, rng, fake) -> None:
             " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ?",
             (pid, c["started_at"][:10], c["started_at"]),
         ).fetchone()
+        done = {
+            PROCEDURE[code]["category"]
+            for _, code, at in history.get(pid, [])
+            if at < c["started_at"]
+        }
         situation, changed = visit_scene(
-            uid, age_on(birth[pid], call.date()), visited_today is not None
+            uid, age_on(birth[pid], call.date()), visited_today is not None, done
         )
         name, teeth = EMERGENCY_TREATMENT[situation]
         code = CODE[name]

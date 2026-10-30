@@ -3,7 +3,7 @@
 
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,7 @@ from generator import build, emergency
 from generator.calls import FMT, prev_open_day
 from generator.master import (
     EMERGENCY_AFTER_VISIT_SCENE,
-    EMERGENCY_CHILD_SCENES,
+    EMERGENCY_HISTORY_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
     EMERGENCY_TREATMENT,
@@ -19,6 +19,7 @@ from generator.master import (
     NOSHOW_TO_CANCEL,
     PROCEDURES,
     SLOT_MIN,
+    age_on,
     close_time,
 )
 from generator.paths import ROOT
@@ -26,6 +27,7 @@ from tests.generator.test_messages import HOLIDAYS
 
 CONFIG = ROOT / "config" / "generator.yaml"
 NAME = {p["code"]: p["name"] for p in PROCEDURES}
+PROCEDURE_BY_CODE = {p["code"]: p for p in PROCEDURES}
 TODAY = "2026-12-01"
 
 
@@ -162,7 +164,8 @@ def test_visit_area_matches_tooth(db):
 
 
 def test_scene_follows_same_day_visit_and_age(db):
-    """그날 먼저 진료받고 간 뒤 건 응급 통화는 그 치료와 이어진 통증(상담), 소아는 소아에게 맞는 상황 — 바꾼 상황은 사실에"""
+    """그날 먼저 치료받고 간 뒤 건 응급 통화는 그 치료와 이어진 통증(상담), 때운·씌운 이력이 없으면 대신 상황, 소아는 소아에게
+    맞는 상황 — 바꾼 상황은 사실에(emergency.visit_scene)"""
     changed = 0
     for c, a in _visits(db):
         visit = json.loads(c["used_fact"])["emergency_visit"]
@@ -171,15 +174,29 @@ def test_scene_follows_same_day_visit_and_age(db):
             " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ? AND id != ?",
             (c["patient_id"], c["started_at"][:10], c["started_at"], a["id"]),
         ).fetchone()
-        base = emergency.scene(c["call_uid"])
+        done = {
+            PROCEDURE_BY_CODE[r[0]]["category"]
+            for r in db.execute(
+                "SELECT procedure_code FROM emr_treatments WHERE patient_id = ? AND performed_at < ?",
+                (c["patient_id"], c["started_at"]),
+            )
+        }
+        p = db.execute(
+            "SELECT birth_date FROM emr_patients WHERE id = ?", (c["patient_id"],)
+        ).fetchone()
+        age = age_on(date.fromisoformat(p[0]), date.fromisoformat(c["started_at"][:10]))
+        want, did = emergency.visit_scene(c["call_uid"], age, before is not None, done)
+        assert (
+            visit.get("scene", emergency.scene(c["call_uid"])) == want
+            and ("scene" in visit) == did
+        )
         if before:
             assert (
-                visit["scene"] == EMERGENCY_AFTER_VISIT_SCENE
-                and NAME[a["planned_procedure_code"]] == "상담"
+                want == EMERGENCY_AFTER_VISIT_SCENE and NAME[a["planned_procedure_code"]] == "상담"
             )
-        elif "scene" in visit:
-            assert visit["scene"] == EMERGENCY_CHILD_SCENES[base]
-        changed += "scene" in visit
+        if want in EMERGENCY_HISTORY_SCENES:  # 이력이 있어야 하는 상황이 남았으면 그 이력이 있다
+            assert done & set(EMERGENCY_HISTORY_SCENES[want][0])
+        changed += did
     assert changed
 
 

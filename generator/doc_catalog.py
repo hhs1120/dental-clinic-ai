@@ -803,7 +803,13 @@ _DOCS: tuple[Doc, ...] = (
         "insurance_guide",
         "비급여 진료 안내",
         "보험이 적용되지 않는 진료",
-        (F("ins.uninsured", "레진·인레이·크라운·미백은 비급여다", *_UNINSURED),),
+        (
+            F(
+                "ins.uninsured",
+                "레진·인레이·크라운·미백 등은 비급여다(이것만이 아니다 — 목록 전부라고 쓰지 않는다)",
+                *_UNINSURED,
+            ),
+        ),
     ),
     Doc(
         "ins-share",

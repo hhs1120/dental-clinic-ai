@@ -394,3 +394,34 @@ def test_missed_text_complaint_needs_a_recent_noshow(conn):
     assert (
         transcripts.payload(row)["facts"]["caller_situation"] == other
     )  # 1번 환자는 직전 30일 노쇼 없음
+
+
+def test_complaint_topic_needs_history():
+    """진료 이력이 필요한 불만은 창 안 진료가 있을 때만 — 없으면 이력 없이 되는 주제, 통화일 예약이 있으면 지난 내원 날짜를 붙인다"""
+    history = [
+        f"c-{n:04d}"
+        for n in range(1, 400)
+        if transcripts.complaint_topic(f"c-{n:04d}", True, None, False, history=False)
+        not in transcripts.NO_HISTORY_TOPICS + (transcripts.MISSED_TOPIC,)
+    ]
+    assert history
+    uid = history[0]
+    assert transcripts.complaint_topic(uid, False, None, False) in transcripts.NO_HISTORY_TOPICS
+    topic = transcripts.complaint_topic(uid, False, "2026-09-15", False)
+    assert topic == transcripts.complaint_topic(uid, True, None, False, history=False)
+    assert (
+        transcripts.complaint_topic(uid, False, "2026-09-15", True)
+        == f"{topic}(지난 9월 15일 내원 때 일)"
+    )
+    assert (
+        transcripts.last_visit(
+            {"call_date": "2026-10-10", "recent_visits": [{"date": "2026-09-15"}]}
+        )
+        == "2026-09-15"
+    )
+    assert (
+        transcripts.last_visit(
+            {"call_date": "2026-12-20", "recent_visits": [{"date": "2026-09-15"}]}
+        )
+        is None
+    )

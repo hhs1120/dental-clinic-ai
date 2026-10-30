@@ -825,6 +825,14 @@ EMERGENCY_AFTER_VISIT_ONSET = "진료받고 돌아간 뒤부터"
 EMERGENCY_TREATMENT[EMERGENCY_AFTER_VISIT_SCENE] = ("상담", ())
 # 소아(AGE_BANDS child)에게 맞지 않는 상황 → 대신 쓰는 상황(씌운 치아가 빠짐 → 넘어져 흔들리는 앞니)
 EMERGENCY_CHILD_SCENES = {EMERGENCY_SCENES[6]: EMERGENCY_SCENES[2]}
+# 이력이 있어야 하는 상황 → (통화 전 그 시술군 진료가 있어야 함, 없으면 대신 쓰는 상황) — 때운 적 없는데 '때운 게 빠짐'을 지어내지 않게
+EMERGENCY_HISTORY_SCENES = {
+    EMERGENCY_SCENES[3]: (
+        ("restorative", "prosth"),
+        EMERGENCY_SCENES[1],
+    ),  # 때운 것 → 씹다 깨진 이
+    EMERGENCY_SCENES[6]: (("prosth",), EMERGENCY_SCENES[2]),  # 씌운 것 → 넘어져 흔들리는 앞니
+}
 EMERGENCY_LEAD_MIN = 30
 # 응급 내원 표시 — 통화 사실의 최근 진료·다음 예약에 붙인다. 뜻을 담은 말이라 모델이 응급 진찰을 일반 상담으로 이어 쓰지 않는다
 EMERGENCY_VISIT_MARK = "응급 내원 — 일반 상담·진료로 말하지 않는다"

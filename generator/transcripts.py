@@ -97,6 +97,28 @@ MISSED_WINDOW_DAYS = CALL_PATIENT_RULES[("complaint", "inbound")][
 ]  # 불만 통화가 보는 최근 내원 기간
 
 
+# 진료 이력이 없어도 되는 불만 — 그 밖의 불만(기다림·비용·설명·치료 뒤 불편·헛걸음)은 통화 전 MISSED_WINDOW_DAYS일 안에
+# 내원이 있어야 한다(없으면 기록에 없는 일을 지어낸다). 통화일에 그 환자 예약이 있으면 지난 내원 일임을 밝힌다(오늘 일로 읽힘)
+NO_HISTORY_TOPICS = tuple(t for t in COMPLAINT_TOPICS if "불친절" in t)
+
+
+def complaint_topic(
+    uid: str, recent_noshow: bool, last_visit: str | None, same_day: bool, history: bool = True
+) -> str:
+    """불만 주제 — 해시로 고르고 기록과 맞지 않으면 다시 고른다(맞는 통화는 그대로). last_visit = 창 안 마지막 진료일,
+    history=False면 진료 이력은 보지 않는다(사실 없이 부르는 situation)"""
+    topic = pick(uid, "topic", COMPLAINT_TOPICS)
+    if topic == MISSED_TOPIC and not recent_noshow:
+        topic = pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
+    if not history or topic in NO_HISTORY_TOPICS or topic == MISSED_TOPIC:
+        return topic
+    if last_visit is None:
+        return pick(
+            uid, "topic-nohistory", NO_HISTORY_TOPICS + ((MISSED_TOPIC,) if recent_noshow else ())
+        )
+    return f"{topic}(지난 {korean_date(last_visit)} 내원 때 일)" if same_day else topic
+
+
 def situation(uid: str, purpose: str, recent_noshow: bool = True, scene: str | None = None) -> str:
     """응급은 시작 시점 × 상황, 불만은 주제 — 문자를 못 받아 놓쳤다는 불만은 직전 노쇼가 없으면 다른 주제로(기록에 없는 일).
     scene: 6b단계가 바꾼 상황(emergency_visit.scene — 그날 진료 뒤·소아), 그날 진료 뒤면 시작 시점도 그 진료 뒤"""
@@ -113,10 +135,7 @@ def situation(uid: str, purpose: str, recent_noshow: bool = True, scene: str | N
                 tuple(o for o in EMERGENCY_ONSETS if o not in EMERGENCY_GRADUAL_ONSETS),
             )
         return f"{onset} {scene}"
-    topic = pick(uid, "topic", COMPLAINT_TOPICS)
-    if topic == MISSED_TOPIC and not recent_noshow:
-        return pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
-    return topic
+    return complaint_topic(uid, recent_noshow, None, False, history=False)
 
 
 def rows(conn) -> list[dict]:
@@ -218,12 +237,17 @@ def payload(row: dict) -> dict:
         facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
     accepted = json.loads(row["accepted_purposes"])
     if purpose := next((p for p in accepted if p in SITUATION_PURPOSES), None):
-        facts["caller_situation"] = situation(
-            row["call_uid"],
-            purpose,
-            recent_noshow=bool(row.get("recent_noshow")),
-            scene=(fact.get("emergency_visit") or {}).get("scene"),
-        )
+        if purpose == "emergency":
+            facts["caller_situation"] = situation(
+                row["call_uid"], purpose, scene=(fact.get("emergency_visit") or {}).get("scene")
+            )
+        else:
+            facts["caller_situation"] = complaint_topic(
+                row["call_uid"],
+                bool(row.get("recent_noshow")),
+                last_visit(fact),
+                (fact.get("next_appointment") or {}).get("date") == fact["call_date"],
+            )
     if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
         facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {
             "patient": {"name": fact["patient"]["name"]} if fact.get("patient") else None,
@@ -263,6 +287,15 @@ def simplify(p: dict) -> dict:
         "emergency_visit",
     )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
+
+
+def last_visit(fact: dict) -> str | None:
+    """통화 전 MISSED_WINDOW_DAYS일 안의 마지막 진료일(recent_visits) — 없으면 None"""
+    visits = fact.get("recent_visits") or []
+    if not visits:
+        return None
+    gap = date.fromisoformat(fact["call_date"]) - date.fromisoformat(visits[0]["date"])
+    return visits[0]["date"] if gap.days <= MISSED_WINDOW_DAYS else None
 
 
 def korean_date(iso: str) -> str:
