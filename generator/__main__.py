@@ -16,6 +16,11 @@ def main() -> None:
     parser.add_argument(
         "--fake-llm", action="store_true", help="LLM 단계를 가짜 게이트웨이로 (테스트)"
     )
+    parser.add_argument(
+        "--prune-llm-cache",
+        action="store_true",
+        help="생성이 끝까지 되면 이번 실행이 쓰지 않은 LLM 캐시 줄을 지운다 (make llm-prune)",
+    )
     parser.add_argument("--db", type=Path, help="경로를 직접 줄 때(테스트용)")
     parser.add_argument("--truth", type=Path)
     args = parser.parse_args()
@@ -33,7 +38,7 @@ def main() -> None:
             "llm_log": out / "llm_calls_gen.jsonl",
         }
     try:
-        generate(
+        run = generate(
             args.db or paths["source"],
             args.truth or paths["truth"],
             ROOT / "config" / "generator.yaml",
@@ -54,6 +59,9 @@ def main() -> None:
                 " 고치거나 그 건의 캐시 줄을 모두 지운 뒤 make data"
             )
         sys.exit(1)
+    if args.prune_llm_cache:
+        removed = run.state["llm"].prune()
+        print(f"LLM 캐시 정리 — 지운 줄: {removed}")
 
 
 if __name__ == "__main__":

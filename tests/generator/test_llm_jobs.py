@@ -549,3 +549,46 @@ def test_section_problems(body, problem):
     """청구 기준 절 — 소제목이 정확히 한 번, 기준 말은 그 절 안 (verify check_claim_sections와 같은 로직)"""
     got = llm_jobs.section_problems(body, [["## 가", ["90일"]], ["## 나", []]])
     assert (got == []) if problem is None else any(problem in p for p in got)
+
+
+def _cache_lines(paths):
+    return [
+        json.loads(line)
+        for line in (paths["llm_cache"] / "toy.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def test_prune_keeps_only_entries_this_run_used(paths):
+    """캐시 정리: 이번 실행이 찾아본 (건·프롬프트·입력)의 줄만 남긴다 — 입력·프롬프트가 바뀐 옛 줄은 지우고, 쓰는 항목의
+    실패 시도 줄은 남긴다(시도 번호). 빈 건이 있으면 정리하지 않는다"""
+    _export(paths, items=("a", "b"))
+    a, b = _jobs(paths)
+    _result(
+        paths,
+        "r.jsonl",
+        [
+            {"key": a["key"], "output": {"text": "사과"}, "source": "claude-code"},
+            {
+                "key": b["key"],
+                "output": {"text": "귤"},
+                "source": "claude-code",
+            },  # 실패(꼭 넣을 말 없음)
+        ],
+    )
+    llm_jobs.import_results(paths)
+    _export(paths, items=("b",))  # b 2번째 시도
+    (b2,) = _jobs(paths)
+    _result(
+        paths,
+        "r2.jsonl",
+        [{"key": b2["key"], "output": {"text": "능금"}, "source": "claude-code"}],
+    )
+    llm_jobs.import_results(paths)
+    ctx = LLMContext(paths, fake=False)
+    ctx.resolve(TOY, "a", {"item": "a", "v": 2}, CHECKS)  # a 입력이 바뀜 — 옛 a 줄은 안 쓰임
+    assert ctx.prune() is None  # 빈 건(a)이 있으면 정리하지 않음
+    assert len(_cache_lines(paths)) == 3
+    ctx = LLMContext(paths, fake=False)
+    assert ctx.resolve(TOY, "b", {"item": "b"}, CHECKS) == {"text": "능금"}
+    assert ctx.prune() == {"toy": 1}  # a 줄만 지움
+    assert [(e["item"], e["attempt"]) for e in _cache_lines(paths)] == [("b", 1), ("b", 2)]

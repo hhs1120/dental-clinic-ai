@@ -141,6 +141,9 @@ class LLMContext:
         self.prompts: dict[str, str] = {}
         self.jobs: dict[str, list[dict]] = {}
         self.exhausted: dict[str, list[str]] = defaultdict(list)  # MAX_ATTEMPTS번 실패한 건
+        self.used: dict[str, set] = defaultdict(
+            set
+        )  # 이번 실행이 찾아본 (건, 프롬프트 해시, 입력 해시) — 캐시 정리용
         self.gateway = llm.FakeGateway(_NullLog(), "generator") if fake else None
 
     def _cache(self, task: str) -> Cache:
@@ -172,6 +175,7 @@ class LLMContext:
         input_hash = _hash(
             [user_message(payload | instructions(checks)), checks]
         )  # 모델이 받는 메시지 전부
+        self.used[task.name].add((item, prompt_hash, input_hash))
         output, attempt = self._cache(task.name).find(item, prompt_hash, input_hash)
         if output is not None:
             return output
@@ -196,6 +200,22 @@ class LLMContext:
             }
         )
         return None
+
+    def prune(self) -> dict[str, int] | None:
+        """이번 실행이 찾아보지 않은 캐시 줄(프롬프트·입력이 바뀐 옛 시도)을 지운다 — 쓰는 항목의 실패 시도 줄은 남긴다
+        (시도 번호). 빈 건이나 시도를 다 쓴 건이 있으면 정리하지 않고 None. {작업: 지운 줄 수}"""
+        if self.fake or any(self.jobs.values()) or any(self.exhausted.values()):
+            return None  # 가짜 모드는 캐시를 찾아보지 않는다
+        removed = {}
+        for name, used in sorted(self.used.items()):
+            cache = self._cache(name)
+            keep = [
+                e for e in cache.entries if (e["item"], e["prompt_hash"], e["input_hash"]) in used
+            ]
+            removed[name] = len(cache.entries) - len(keep)
+            if removed[name]:
+                _write_jsonl(cache.path, sorted(keep, key=lambda e: (e["item"], e["attempt"])))
+        return removed
 
     def finish(self) -> dict[str, int]:
         """빈 건을 작업 파일로 쓰고 {작업: 건수}. 빈 건이 없는 작업은 옛 작업 파일을 지운다"""

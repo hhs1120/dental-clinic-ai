@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api wireframe
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -8,6 +8,10 @@ data:
 # LLM 단계 채우기 (generator/llm_jobs.py, 가상 데이터 생성 설계 §5.1). Claude Code는 /fill-llm-jobs
 llm-import:
 	uv run python -m generator.llm_jobs import
+
+# 이번 생성이 쓰지 않은 LLM 캐시 줄(프롬프트·입력이 바뀐 옛 시도) 지우기 — 빈 건이 없을 때만
+llm-prune:
+	PYTHONHASHSEED=0 uv run python -m generator --prune-llm-cache
 
 llm-fill-api:
 	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
