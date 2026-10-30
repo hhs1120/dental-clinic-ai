@@ -112,3 +112,15 @@ def test_dump_lists_wrong_items_in_dev_pool(conn):
     }
     assert all(d["call_uid"] in ("c-0001", "c-0002") for d in dump)
     assert "dump" not in classification.evaluate(conn, "dev")
+
+
+def test_calls_read_from_source_even_if_app_has_same_table(conn):
+    """통화는 생성 DB(source)의 ax_calls에서 — app DB에 같은 이름 표(옛 산출물)가 있어도 그걸 읽지 않는다(SQLite는 이름이
+    겹치면 main을 먼저 고른다)"""
+    # 기준은 source에서 직접 — _calls를 먼저 부르면 준비된 문장이 캐시돼 표를 만든 뒤에도 source를 가리킨다
+    want = dict(
+        conn.execute("SELECT call_uid, transcript FROM source.ax_calls WHERE source = 'generated'")
+    )
+    conn.execute("CREATE TABLE main.ax_calls AS SELECT * FROM source.ax_calls")
+    conn.execute("UPDATE main.ax_calls SET transcript = '옛 전사'")
+    assert {u: c["transcript"] for u, c in classification._calls(conn).items()} == want

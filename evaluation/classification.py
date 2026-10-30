@@ -24,7 +24,8 @@ def _calls(conn) -> dict[str, dict]:
     rows = conn.execute(
         "SELECT c.call_uid, c.in_eval_pool, c.in_blind_pool, c.transcript, l.split, "
         + ", ".join(f"l.{i}" for i in ITEMS)
-        + " FROM ax_calls c JOIN truth.truth_call_labels l ON l.call_uid = c.call_uid WHERE c.source = 'generated'"
+        + " FROM source.ax_calls c JOIN truth.truth_call_labels l ON l.call_uid = c.call_uid"
+        " WHERE c.source = 'generated'"  # source. — app DB에 같은 이름 표가 있으면 SQLite는 main을 먼저 고른다
     ).fetchall()
     return {
         r["call_uid"]: {

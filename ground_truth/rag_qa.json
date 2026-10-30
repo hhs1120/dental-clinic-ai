@@ -489,13 +489,13 @@
   "id": "case-01",
   "type": "case",
   "split": "dev",
-  "question": "남지영 님 보험사 낼 서류 부탁하셨던 거 뭐였고, 준비됐다고 알려드렸어?",
-  "answer_text": "9월 30일 전화로 보험사 제출용 진료비 세부내역서·진료확인서 요청(작년 4월 4일·4월 18일 15번 치아 치료분), 이메일로 받을 수 있는지는 확인 후 연락하기로 → 10월 2일 서류 준비 완료 문자 보냄",
+  "question": "고영일 님 교정 기록 서류 부탁하셨던 거 어떻게 됐어? 준비됐다고 연락드렸어?",
+  "answer_text": "4월 20일 전화로 보험사 제출용 진료 내역 확인서 요청(교정 기록 포함 — 교정 체크는 작년 2월까지, 마지막 내원은 작년 10월 25일 스케일링) → 4월 21일 서류 준비 완료 문자 보냄",
   "answer_doc_ids": [
-   "call:c-0448",
-   "thread:C-00744:2026-10"
+   "call:c-1020",
+   "thread:C-00795:2026-04"
   ],
-  "answer_chunk_hint": "15번",
+  "answer_chunk_hint": "교정 기록까지",
   "expected_tools": [
    "search_docs"
   ],
@@ -661,7 +661,7 @@
   "type": "case",
   "split": "test",
   "question": "하영길 님 8월에 예약 안 오셨을 때 문자 보냈어?",
-  "answer_text": "8월 25일 잇몸치료 노쇼 안내 문자 보냄(답장 없음)",
+  "answer_text": "8월 25일 잇몸치료 노쇼 안내 문자 보냄(그 문자엔 답장 없음 — 전날 리마인드엔 '확인했습니다'라고 답함)",
   "answer_doc_ids": [
    "thread:C-00360:2026-08"
   ],
@@ -797,7 +797,7 @@
   "id": "data-06",
   "type": "data",
   "split": "dev",
-  "question": "하민재 님 올해 청구 몇 건 나갔어?",
+  "question": "하민재 님 올해 진료분 청구 몇 건이야?",
   "answer_text": "5건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
@@ -931,7 +931,7 @@
   ],
   "expected_args": {
    "query_patient": {
-    "name": "오하윤"
+    "name": "황현준"
    }
   },
   "expect_refusal": false,
