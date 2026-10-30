@@ -179,7 +179,7 @@ def check_ask(command: str) -> str | None:
             or "fill-api" in tokens
             and any("llm_jobs" in t for t in tokens)
         ):
-            return "LLM API 채우기 — 과금되는 명령이라 확인한다(config/llm.yaml daily_usd_limit)"
+            return "LLM API 채우기 — 과금되는 배치라 확인한다(하루 상한 밖 — 건수는 make data가 알려 준다, 기능 정의 §7)"
         if ("evaluation.eval" in text or "evaluation/eval.py" in text) and re.search(
             r"--split[ =]test\b", text
         ):
