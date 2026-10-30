@@ -5,7 +5,7 @@
 
 import hashlib
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
@@ -50,6 +50,9 @@ INTERNAL_KEYS = (
 )  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게. 치아 '00'(전체 구강)은 None
 # 새 예약 통화의 예약은 이 통화에서 정하는 날짜 — 'appointment'로 넘기면 모델이 이미 잡힌 예약으로 읽는다
 NEW_BOOKING_NOTE = "통화 전에는 없던 예약 — 이 통화에서 처음 정하는 날짜"
+# 응급 통화의 내원(6b단계 emergency_visit) — 직원이 바로 오라고 안내하는 시각. 예약을 새로 정하는 통화가 아니다(appt_confirmed 아님)
+EMERGENCY_VISIT_NOTE = "통화 전에는 없던 내원 — 직원이 이 시각에 바로 오시라고 안내한다(그날이면 '오늘', 진료가 끝날 무렵이면 다음 진료일 아침 첫 시간)"
+WEEKDAY_NAMES = "월화수목금토일"
 # 통화 전 예약이 없는 새 예약 통화에서 쓰면 안 되는 말 — 정할 날짜를 이미 잡힌 예약처럼 말하는 꼴
 ALREADY_BOOKED = r"잡혀 있|예약(이|은)? ?있으|예약되어 있|예약돼 있"
 # 새 예약을 원하지 않는 취소 통화에서 쓰면 안 되는 말 — 직원이 새 날짜를 잡자고 하면 wants_appt로 읽힌다
@@ -174,6 +177,8 @@ def payload(row: dict) -> dict:
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
         )
+    if facts.get("emergency_visit"):
+        facts["emergency_visit"] |= {"before_call": EMERGENCY_VISIT_NOTE}
     if row["primary_purpose"] == "book" and facts.get("appointment"):
         facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
     accepted = json.loads(row["accepted_purposes"])
@@ -217,6 +222,7 @@ def simplify(p: dict) -> dict:
         "already_paid",
         "caller_situation",
         "third_party_rule",
+        "emergency_visit",
     )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
 
@@ -239,7 +245,19 @@ def must_include(fact: dict, names: dict, purpose: str) -> list[list[str]]:
         out.append(names.get(fact["topic_procedure"], [fact["topic_procedure"]]))
     if fact.get("already_paid"):
         out.append([korean_date(fact["already_paid"]["date"])])
+    if visit := fact.get("emergency_visit"):
+        out.append(visit_words(fact["call_date"], visit["date"]))
     return out
+
+
+def visit_words(call_date: str, visit_date: str) -> list[str]:
+    """응급 내원 날짜를 말하는 말(그중 하나) — 그날이면 '오늘', 다음 날이면 '내일'·날짜, 그 뒤면 날짜·요일"""
+    if visit_date == call_date:
+        return ["오늘"]
+    d = date.fromisoformat(visit_date)
+    if d - date.fromisoformat(call_date) == timedelta(days=1):
+        return ["내일", korean_date(visit_date)]
+    return [korean_date(visit_date), f"{WEEKDAY_NAMES[d.weekday()]}요일"]
 
 
 def checks(row: dict, names: dict) -> dict:

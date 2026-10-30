@@ -1333,14 +1333,14 @@
      "tooth": "00"
     },
     {
+     "date": "2025-05-30",
+     "procedure": "신경치료",
+     "tooth": "37"
+    },
+    {
      "date": "2025-04-14",
      "procedure": "단순발치",
      "tooth": "24"
-    },
-    {
-     "date": "2025-04-01",
-     "procedure": "단순발치",
-     "tooth": "13"
     }
    ],
    "balance": 9920,
@@ -2388,6 +2388,11 @@
     "sex": "F"
    },
    "recent_visits": [
+    {
+     "date": "2025-08-09",
+     "procedure": "상담",
+     "tooth": "00"
+    },
     {
      "date": "2025-03-07",
      "procedure": "구강검진",
@@ -3485,7 +3490,13 @@
    },
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12002,
+    "date": "2025-05-30",
+    "time": "09:30",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -4096,6 +4107,11 @@
    },
    "recent_visits": [
     {
+     "date": "2026-10-20",
+     "procedure": "상담",
+     "tooth": "00"
+    },
+    {
      "date": "2026-09-15",
      "procedure": "스케일링",
      "tooth": "00"
@@ -4103,11 +4119,6 @@
     {
      "date": "2025-08-27",
      "procedure": "스케일링",
-     "tooth": "00"
-    },
-    {
-     "date": "2025-08-20",
-     "procedure": "상담",
      "tooth": "00"
     }
    ],
@@ -4751,7 +4762,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12051,
+    "date": "2026-10-23",
+    "time": "11:00",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "dev"
  },
@@ -4948,7 +4965,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12010,
+    "date": "2025-09-22",
+    "time": "17:30",
+    "area": "오른쪽 아래 작은어금니"
+   }
   },
   "split": "silver"
  },
@@ -5069,7 +5092,12 @@
      "procedure": "미백",
      "tooth": "00"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12053,
+    "date": "2026-11-10",
+    "time": "11:30"
+   }
   },
   "split": "silver"
  },
@@ -5755,7 +5783,7 @@
   "has_todo": 0,
   "noise_type": null,
   "used_fact": {
-   "call_date": "2026-11-24",
+   "call_date": "2026-11-30",
    "patient": {
     "id": 2058,
     "name": "박서준",
@@ -5783,7 +5811,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12057,
+    "date": "2026-12-01",
+    "time": "10:30"
+   }
   },
   "split": "silver"
  },
@@ -6461,7 +6494,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12050,
+    "date": "2026-10-20",
+    "time": "15:30",
+    "area": "오른쪽 위 앞니"
+   }
   },
   "split": "dev"
  },
@@ -6727,7 +6766,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12027,
+    "date": "2026-03-31",
+    "time": "17:00",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -7018,7 +7063,13 @@
     "당뇨"
    ],
    "open_plan_items": [],
-   "topic_procedure": "신경치료"
+   "topic_procedure": "신경치료",
+   "emergency_visit": {
+    "appointment_id": 12024,
+    "date": "2026-02-07",
+    "time": "11:00",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -8319,7 +8370,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12033,
+    "date": "2026-04-28",
+    "time": "16:00",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -8364,7 +8421,12 @@
     "협조 어려운 소아",
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12025,
+    "date": "2026-03-13",
+    "time": "10:30"
+   }
   },
   "split": "test"
  },
@@ -10096,7 +10158,13 @@
     "남영희"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12038,
+    "date": "2026-05-23",
+    "time": "11:30",
+    "area": "왼쪽 위 앞니"
+   }
   },
   "split": "test"
  },
@@ -10461,7 +10529,12 @@
     "치과 공포"
    ],
    "open_plan_items": [],
-   "topic_procedure": "교정 월 체크"
+   "topic_procedure": "교정 월 체크",
+   "emergency_visit": {
+    "appointment_id": 12042,
+    "date": "2026-07-13",
+    "time": "16:00"
+   }
   },
   "split": "silver"
  },
@@ -12596,7 +12669,13 @@
    ],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "교정 월 체크"
+   "topic_procedure": "교정 월 체크",
+   "emergency_visit": {
+    "appointment_id": 12031,
+    "date": "2026-04-22",
+    "time": "17:00",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -13383,6 +13462,11 @@
    },
    "recent_visits": [
     {
+     "date": "2025-12-03",
+     "procedure": "신경치료",
+     "tooth": "37"
+    },
+    {
      "date": "2025-07-04",
      "procedure": "잇몸치료",
      "tooth": "00"
@@ -13701,7 +13785,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12034,
+    "date": "2026-05-01",
+    "time": "15:30"
+   }
   },
   "split": "silver"
  },
@@ -14467,7 +14556,13 @@
      "tooth": "00"
     }
    ],
-   "topic_procedure": "교정 월 체크"
+   "topic_procedure": "교정 월 체크",
+   "emergency_visit": {
+    "appointment_id": 12043,
+    "date": "2026-07-27",
+    "time": "10:00",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -15266,7 +15361,12 @@
     "안영순"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12001,
+    "date": "2025-05-24",
+    "time": "11:00"
+   }
   },
   "split": "dev"
  },
@@ -16595,7 +16695,13 @@
    ],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "불소도포"
+   "topic_procedure": "불소도포",
+   "emergency_visit": {
+    "appointment_id": 12019,
+    "date": "2025-12-06",
+    "time": "12:30",
+    "area": "오른쪽 위 앞니"
+   }
   },
   "split": "silver"
  },
@@ -16734,6 +16840,11 @@
    },
    "recent_visits": [
     {
+     "date": "2026-04-10",
+     "procedure": "상담",
+     "tooth": "00"
+    },
+    {
      "date": "2024-05-08",
      "procedure": "스케일링",
      "tooth": "00"
@@ -16743,7 +16854,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12032,
+    "date": "2026-04-27",
+    "time": "14:00",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "test"
  },
@@ -18347,7 +18464,13 @@
    "alerts": [
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12041,
+    "date": "2026-06-16",
+    "time": "15:00",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "test"
  },
@@ -20964,7 +21087,13 @@
    ],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "교정 월 체크"
+   "topic_procedure": "교정 월 체크",
+   "emergency_visit": {
+    "appointment_id": 12039,
+    "date": "2026-05-26",
+    "time": "11:00",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -23165,7 +23294,13 @@
     "강현숙"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12017,
+    "date": "2025-11-26",
+    "time": "14:30",
+    "area": "오른쪽 위 앞니"
+   }
   },
   "split": "dev"
  },
@@ -23249,6 +23384,11 @@
      "date": "2026-06-30",
      "procedure": "단순발치",
      "tooth": "45"
+    },
+    {
+     "date": "2026-03-31",
+     "procedure": "신경치료",
+     "tooth": "46"
     },
     {
      "date": "2025-11-21",
@@ -24712,7 +24852,12 @@
     "항응고제 복용"
    ],
    "open_plan_items": [],
-   "topic_procedure": "단순발치"
+   "topic_procedure": "단순발치",
+   "emergency_visit": {
+    "appointment_id": 12000,
+    "date": "2025-02-11",
+    "time": "12:30"
+   }
   },
   "split": "silver"
  },
@@ -24992,7 +25137,13 @@
    "alerts": [
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12035,
+    "date": "2026-05-06",
+    "time": "16:00",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "dev"
  },
@@ -25373,7 +25524,13 @@
    "alerts": [
     "당뇨"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12036,
+    "date": "2026-05-08",
+    "time": "12:30",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "dev"
  },
@@ -26838,7 +26995,13 @@
     "장동현"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12044,
+    "date": "2026-07-29",
+    "time": "09:30",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -27372,7 +27535,13 @@
    "alerts": [
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12045,
+    "date": "2026-08-24",
+    "time": "17:00",
+    "area": "오른쪽 아래 작은어금니"
+   }
   },
   "split": "silver"
  },
@@ -27897,7 +28066,12 @@
    "alerts": [
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12021,
+    "date": "2026-01-07",
+    "time": "16:30"
+   }
   },
   "split": "test"
  },
@@ -28157,7 +28331,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12056,
+    "date": "2026-11-21",
+    "time": "11:30"
+   }
   },
   "split": "test"
  },
@@ -28986,7 +29165,13 @@
    "alerts": [
     "고혈압"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12040,
+    "date": "2026-06-05",
+    "time": "12:30",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -29667,7 +29852,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12029,
+    "date": "2026-04-10",
+    "time": "10:30"
+   }
   },
   "split": "silver"
  },
@@ -30957,12 +31147,12 @@
      "tooth": "41"
     },
     {
-     "date": "2026-09-15",
-     "procedure": "스케일링",
+     "date": "2026-10-20",
+     "procedure": "상담",
      "tooth": "00"
     },
     {
-     "date": "2025-08-27",
+     "date": "2026-09-15",
      "procedure": "스케일링",
      "tooth": "00"
     }
@@ -31224,7 +31414,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12047,
+    "date": "2026-10-07",
+    "time": "10:30",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "dev"
  },
@@ -32382,7 +32578,13 @@
    "alerts": [
     "에피네프린 민감"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12008,
+    "date": "2025-07-28",
+    "time": "14:00",
+    "area": "오른쪽 아래 작은어금니"
+   }
   },
   "split": "silver"
  },
@@ -35070,7 +35272,13 @@
    "alerts": [
     "치과 공포"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12012,
+    "date": "2025-10-10",
+    "time": "09:30",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -35265,6 +35473,11 @@
     "sex": "M"
    },
    "recent_visits": [
+    {
+     "date": "2026-07-13",
+     "procedure": "상담",
+     "tooth": "00"
+    },
     {
      "date": "2026-07-10",
      "procedure": "교정 월 체크",
@@ -35508,7 +35721,12 @@
      "procedure": "잇몸치료",
      "tooth": "00"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12022,
+    "date": "2026-01-13",
+    "time": "14:00"
+   }
   },
   "split": "test"
  },
@@ -37095,7 +37313,12 @@
    "alerts": [
     "협조 어려운 소아"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12009,
+    "date": "2025-08-09",
+    "time": "12:30"
+   }
   },
   "split": "test"
  },
@@ -38950,7 +39173,12 @@
      "procedure": "임플란트 1차",
      "tooth": "25"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12049,
+    "date": "2026-10-20",
+    "time": "09:30"
+   }
   },
   "split": "dev"
  },
@@ -42526,7 +42754,12 @@
    "family": [],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "레진"
+   "topic_procedure": "레진",
+   "emergency_visit": {
+    "appointment_id": 12048,
+    "date": "2026-10-19",
+    "time": "14:30"
+   }
   },
   "split": "silver"
  },
@@ -43365,7 +43598,13 @@
    ],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "아말감/GI"
+   "topic_procedure": "아말감/GI",
+   "emergency_visit": {
+    "appointment_id": 12054,
+    "date": "2026-11-10",
+    "time": "14:00",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -43415,7 +43654,12 @@
     "강예지"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12014,
+    "date": "2025-11-07",
+    "time": "14:00"
+   }
   },
   "split": "test"
  },
@@ -46050,7 +46294,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12028,
+    "date": "2026-04-01",
+    "time": "15:00",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -46575,7 +46825,12 @@
     "조우진"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12011,
+    "date": "2025-09-30",
+    "time": "11:00"
+   }
   },
   "split": "dev"
  },
@@ -48749,6 +49004,11 @@
    },
    "recent_visits": [
     {
+     "date": "2026-01-16",
+     "procedure": "상담",
+     "tooth": "00"
+    },
+    {
      "date": "2025-07-22",
      "procedure": "스케일링",
      "tooth": "00"
@@ -48756,11 +49016,6 @@
     {
      "date": "2025-02-21",
      "procedure": "교정 상담",
-     "tooth": "00"
-    },
-    {
-     "date": "2024-08-12",
-     "procedure": "스케일링",
      "tooth": "00"
     }
    ],
@@ -49423,7 +49678,12 @@
    "family": [],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "스케일링"
+   "topic_procedure": "스케일링",
+   "emergency_visit": {
+    "appointment_id": 12055,
+    "date": "2026-11-11",
+    "time": "15:00"
+   }
   },
   "split": "silver"
  },
@@ -50825,6 +51085,11 @@
    },
    "recent_visits": [
     {
+     "date": "2025-05-24",
+     "procedure": "상담",
+     "tooth": "00"
+    },
+    {
      "date": "2024-03-13",
      "procedure": "스케일링",
      "tooth": "00"
@@ -51188,6 +51453,11 @@
    },
    "recent_visits": [
     {
+     "date": "2024-12-03",
+     "procedure": "아말감/GI",
+     "tooth": "47"
+    },
+    {
      "date": "2024-03-02",
      "procedure": "스케일링",
      "tooth": "00"
@@ -51407,7 +51677,13 @@
     "항응고제 복용",
     "고혈압"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12018,
+    "date": "2025-12-03",
+    "time": "09:30",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "test"
  },
@@ -52270,7 +52546,12 @@
     "이종수"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12007,
+    "date": "2025-07-14",
+    "time": "09:30"
+   }
   },
   "split": "dev"
  },
@@ -53201,7 +53482,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12016,
+    "date": "2025-11-17",
+    "time": "15:00",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "dev"
  },
@@ -55384,7 +55671,13 @@
    "family": [],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "레진"
+   "topic_procedure": "레진",
+   "emergency_visit": {
+    "appointment_id": 12003,
+    "date": "2025-05-31",
+    "time": "13:00",
+    "area": "오른쪽 위 앞니"
+   }
   },
   "split": "silver"
  },
@@ -56371,7 +56664,13 @@
    "family": [],
    "alerts": [],
    "open_plan_items": [],
-   "topic_procedure": "잇몸치료"
+   "topic_procedure": "잇몸치료",
+   "emergency_visit": {
+    "appointment_id": 12005,
+    "date": "2025-07-01",
+    "time": "17:30",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -56400,6 +56699,11 @@
    },
    "recent_visits": [
     {
+     "date": "2026-01-16",
+     "procedure": "상담",
+     "tooth": "00"
+    },
+    {
      "date": "2025-07-22",
      "procedure": "스케일링",
      "tooth": "00"
@@ -56407,11 +56711,6 @@
     {
      "date": "2025-02-21",
      "procedure": "교정 상담",
-     "tooth": "00"
-    },
-    {
-     "date": "2024-08-12",
-     "procedure": "스케일링",
      "tooth": "00"
     }
    ],
@@ -58630,7 +58929,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12004,
+    "date": "2025-06-30",
+    "time": "10:30",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -59607,8 +59912,8 @@
      "tooth": "00"
     },
     {
-     "date": "2026-01-09",
-     "procedure": "잇몸치료",
+     "date": "2026-01-13",
+     "procedure": "상담",
      "tooth": "00"
     }
    ],
@@ -60186,7 +60491,13 @@
      "procedure": "잇몸치료",
      "tooth": "00"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12020,
+    "date": "2025-12-15",
+    "time": "12:00",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "test"
  },
@@ -60941,7 +61252,13 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12037,
+    "date": "2026-05-09",
+    "time": "11:30",
+    "area": "왼쪽 위 앞니"
+   }
   },
   "split": "silver"
  },
@@ -61186,7 +61503,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12015,
+    "date": "2025-11-14",
+    "time": "09:30"
+   }
   },
   "split": "silver"
  },
@@ -62246,7 +62568,13 @@
      "procedure": "잇몸치료",
      "tooth": "00"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12052,
+    "date": "2026-11-03",
+    "time": "09:30",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "test"
  },
@@ -62369,7 +62697,13 @@
    "alerts": [
     "마취가 잘 안 됨"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12026,
+    "date": "2026-03-25",
+    "time": "15:30",
+    "area": "오른쪽 위 어금니"
+   }
   },
   "split": "dev"
  },
@@ -63527,7 +63861,13 @@
    "alerts": [
     "고혈압"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 11999,
+    "date": "2024-12-03",
+    "time": "17:00",
+    "area": "오른쪽 아래 어금니"
+   }
   },
   "split": "test"
  },
@@ -66046,7 +66386,12 @@
     }
    ],
    "balance": 0,
-   "next_appointment": null,
+   "next_appointment": {
+    "appointment_id": 12003,
+    "date": "2025-05-31",
+    "time": "13:00",
+    "procedure": "레진"
+   },
    "family": [],
    "alerts": [],
    "open_plan_items": []
@@ -67403,7 +67748,13 @@
     "이숙자"
    ],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12013,
+    "date": "2025-11-03",
+    "time": "09:30",
+    "area": "왼쪽 아래 어금니"
+   }
   },
   "split": "silver"
  },
@@ -68502,7 +68853,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12030,
+    "date": "2026-04-15",
+    "time": "16:00"
+   }
   },
   "split": "dev"
  },
@@ -68784,7 +69140,12 @@
      "procedure": "잇몸치료",
      "tooth": "00"
     }
-   ]
+   ],
+   "emergency_visit": {
+    "appointment_id": 12023,
+    "date": "2026-01-16",
+    "time": "14:00"
+   }
   },
   "split": "silver"
  },
@@ -69750,7 +70111,13 @@
    "alerts": [
     "고혈압"
    ],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12046,
+    "date": "2026-09-09",
+    "time": "17:30",
+    "area": "왼쪽 위 어금니"
+   }
   },
   "split": "silver"
  },
@@ -71355,7 +71722,12 @@
    "next_appointment": null,
    "family": [],
    "alerts": [],
-   "open_plan_items": []
+   "open_plan_items": [],
+   "emergency_visit": {
+    "appointment_id": 12006,
+    "date": "2025-07-04",
+    "time": "10:30"
+   }
   },
   "split": "dev"
  },

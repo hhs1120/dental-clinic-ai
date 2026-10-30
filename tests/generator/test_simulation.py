@@ -27,6 +27,7 @@ from generator.master import (
     age_band,
     age_on,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -67,12 +68,15 @@ def db(tmp_path_factory):
 
 
 def _appts(conn):
+    """4단계 예약 — 6b단계 응급 내원(통화로 그날 잡힌 원장 내원, test_emergency)은 뺀다"""
+    emergency = emergency_appointments(conn)
     rows = [
         dict(r)
         for r in conn.execute(
             "SELECT a.*, s.role FROM emr_appointments a"
             " JOIN emr_staff s ON s.id = a.staff_id ORDER BY a.id"
         )
+        if r["id"] not in emergency
     ]
     for r in rows:
         r["start"] = datetime.fromisoformat(r["scheduled_at"])

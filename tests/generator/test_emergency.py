@@ -1,0 +1,154 @@
+"""6b단계 응급 내원·8a단계 취소 연락 — 실제로 생성해 규칙을 본다 (가상 데이터 생성 설계 §2.6 (5)·§2.5 취소 답장).
+불변식(예약·통화·문자 대응)은 verify 필수 검사(check_emergency_visits·check_cancel_replies — tests/generator/test_records.py가 전부 돌림)"""
+
+import json
+import sqlite3
+from datetime import datetime, timedelta
+
+import pytest
+
+from generator import build, emergency
+from generator.calls import FMT, prev_open_day
+from generator.master import (
+    EMERGENCY_LEAD_MIN,
+    EMERGENCY_RESTORED_SCENES,
+    EMERGENCY_TREATMENT,
+    MESSAGE_REPLY_CANCEL,
+    NOSHOW_TO_CANCEL,
+    PROCEDURES,
+    SLOT_MIN,
+)
+from generator.paths import ROOT
+from tests.generator.test_messages import HOLIDAYS
+
+CONFIG = ROOT / "config" / "generator.yaml"
+NAME = {p["code"]: p["name"] for p in PROCEDURES}
+TODAY = "2026-12-01"
+
+
+@pytest.fixture(scope="module")
+def db(tmp_path_factory):
+    out = tmp_path_factory.mktemp("emergency")
+    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    conn = sqlite3.connect(out / "source.sqlite")
+    conn.row_factory = sqlite3.Row
+    conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    return conn
+
+
+def _visits(db):
+    rows = []
+    for c in emergency.emergency_calls(db):
+        visit = json.loads(c["used_fact"])["emergency_visit"]
+        a = dict(
+            db.execute(
+                "SELECT * FROM emr_appointments WHERE id = ?", (visit["appointment_id"],)
+            ).fetchone()
+        )
+        rows.append((c, a))
+    return rows
+
+
+def test_every_patient_emergency_call_has_visit(db):
+    rows = _visits(db)
+    assert rows and len({a["id"] for _, a in rows}) == len(rows)
+
+
+def test_visit_time_after_call_on_slot(db):
+    """통화 뒤 EMERGENCY_LEAD_MIN분이 지난 SLOT_MIN분 격자 — 대부분 그날"""
+    rows = _visits(db)
+    for c, a in rows:
+        call, start = (datetime.strptime(x, FMT) for x in (c["started_at"], a["scheduled_at"]))
+        assert start >= call + timedelta(minutes=EMERGENCY_LEAD_MIN)
+        assert start.minute % SLOT_MIN == 0
+    same_day = sum(c["started_at"][:10] == a["scheduled_at"][:10] for c, a in rows)
+    assert same_day > len(rows) / 2
+
+
+def test_procedure_follows_scene(db):
+    """처치는 상황의 시술(치아는 후보 안 — 장부에 없는 치아, 때운 것이 빠진 상황은 전에 다른 수복 시술로 때운 치아) 또는 상담"""
+    for c, a in _visits(db):
+        name, teeth = EMERGENCY_TREATMENT[emergency.scene(c["call_uid"])]
+        got = NAME[a["planned_procedure_code"]]
+        assert got in (name, "상담")
+        t = db.execute(
+            "SELECT * FROM emr_treatments WHERE appointment_id = ?", (a["id"],)
+        ).fetchone()
+        if t is None or got == "상담":
+            continue
+        assert t["tooth_no"] in teeth
+        others = db.execute(
+            "SELECT procedure_code, performed_at FROM emr_treatments WHERE patient_id = ? AND tooth_no = ?"
+            " AND id != ?",
+            (t["patient_id"], t["tooth_no"], t["id"]),
+        ).fetchall()
+        assert all(code != t["procedure_code"] for code, _ in others)  # 재시행 아님
+        if others:  # 때운 것이 빠진 상황만 — 통화 전에 다른 수복 시술로 때운 치아
+            assert emergency.scene(c["call_uid"]) in EMERGENCY_RESTORED_SCENES
+            assert any(at < c["started_at"] for _, at in others)
+
+
+def test_today_scene_call(db):
+    """TODAY 장면 — 전 진료일 진료 끝 뒤의 응급 통화 1건이 TODAY 첫 빈 시간 scheduled 내원을 잡는다(풀 밖 통화)"""
+    scene = [(c, a) for c, a in _visits(db) if a["scheduled_at"][:10] == TODAY]
+    assert len(scene) == 1
+    c, a = scene[0]
+    day = prev_open_day(datetime.strptime(TODAY, "%Y-%m-%d").date(), HOLIDAYS)
+    assert c["started_at"] == f"{day.isoformat()} {emergency.SCENE_CALL_TIME}"
+    assert a["status"] == "scheduled" and not c["in_eval_pool"] and not c["in_blind_pool"]
+
+
+def test_call_ids_follow_time(db):
+    times = [r[0] for r in db.execute("SELECT started_at FROM ax_calls ORDER BY id")]
+    assert times == sorted(times)
+
+
+def test_today_cancel_scene(db):
+    """TODAY 예약 1건 — 전날 리마인드에 취소 답장, 그 뒤 취소(그날 영업시간 안)"""
+    rows = db.execute(
+        "SELECT a.cancelled_at, m.sent_at FROM emr_appointments a JOIN emr_messages m"
+        " ON m.related_appointment_id = a.id AND m.body = ?"
+        " WHERE date(a.scheduled_at) = ? AND a.status = 'cancelled'",
+        (MESSAGE_REPLY_CANCEL, TODAY),
+    ).fetchall()
+    assert len(rows) == 1
+    cancelled, sent = rows[0]
+    assert sent < cancelled < f"{TODAY} 00:00:00"
+
+
+def test_preopen_cancels_in_last_month(db):
+    """TODAY 전 달에 개원 전 문자 당일 취소가 NOSHOW_TO_CANCEL건 이상(장면) — 모두 취소 답장 뒤"""
+    rows = db.execute(
+        "SELECT a.id, a.cancelled_at, (SELECT max(sent_at) FROM emr_messages m WHERE"
+        " m.related_appointment_id = a.id AND m.body = ?) AS reply FROM emr_appointments a"
+        " WHERE a.status = 'cancelled' AND substr(a.scheduled_at, 1, 7) = '2026-11'"
+        " AND date(a.cancelled_at) = date(a.scheduled_at) AND time(a.cancelled_at) < '09:30:00'",
+        (MESSAGE_REPLY_CANCEL,),
+    ).fetchall()
+    assert len(rows) >= NOSHOW_TO_CANCEL
+    assert all(r["reply"] and r["reply"] <= r["cancelled_at"] for r in rows)
+    noshow_msgs = db.execute(
+        "SELECT count(*) FROM emr_messages m JOIN emr_appointments a ON a.id = m.related_appointment_id"
+        " WHERE m.\"trigger\" = 'noshow' AND a.status != 'noshow'"
+    ).fetchone()[0]
+    assert noshow_msgs == 0
+
+
+def test_message_ids_follow_time(db):
+    times = [r[0] for r in db.execute("SELECT sent_at FROM emr_messages ORDER BY id")]
+    assert times == sorted(times)
+
+
+def test_visit_area_matches_tooth(db):
+    """치아 단위 처치면 통화 사실에 그 치아의 부위 말 — 사분면(1 오른쪽 위 · 2 왼쪽 위 · 3 왼쪽 아래 · 4 오른쪽 아래)"""
+    for c, a in _visits(db):
+        visit = json.loads(c["used_fact"])["emergency_visit"]
+        t = db.execute(
+            "SELECT tooth_no FROM emr_treatments WHERE appointment_id = ?", (a["id"],)
+        ).fetchone()
+        if t is None or t[0] == "00":
+            assert "area" not in visit
+        else:
+            assert visit["area"] == emergency.tooth_area(t[0])
+    assert emergency.tooth_area("26") == "왼쪽 위 어금니"
+    assert emergency.tooth_area("44") == "오른쪽 아래 작은어금니"

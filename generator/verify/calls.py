@@ -21,6 +21,8 @@ from generator.master import (
     CALL_SUBTOPICS,
     CHECKUP_CODE,
     CLINIC_NAME,
+    EMERGENCY_SCENES,
+    EMERGENCY_TREATMENT,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -37,7 +39,14 @@ from generator.master import (
     open_slots,
     recall_due_year,
 )
-from generator.verify.common import CHILD_MAX_AGE, EXAMPLES, PROCEDURE, _dt, _rows
+from generator.verify.common import (
+    CHILD_MAX_AGE,
+    EXAMPLES,
+    PROCEDURE,
+    _dt,
+    _emergency_appts,
+    _rows,
+)
 from generator.verify.records import _open_items_at, _plan_items
 from generator.verify.schedule import _prev_open_day
 
@@ -392,6 +401,79 @@ def check_booking_call_event(conn, ctx):
         {"event": k, "calls": v, "problem": "이벤트 하나에 통화 여러 건"}
         for k, v in used.items()
         if len(v) > 1
+    ]
+
+
+def check_emergency_visits(conn, ctx):
+    """응급 내원 (§2.6 (5)): 환자 측 응급 통화(emergency 플래그) ⇔ used_fact emergency_visit. 그 예약은 같은 환자·원장,
+    전화로 통화 시각에 잡힘(confirmed 아님), 통화 뒤 그날 또는 다음 진료일, 시술은 그 통화 상황의 처치(master.EMERGENCY_TREATMENT)
+    또는 상담, TODAY 전이면 completed·그날 전액 수납, 사실의 날짜·시각 = 예약, 예약 확정·리마인드 문자 없음"""
+    appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
+    doctors = {r[0] for r in conn.execute("SELECT id FROM emr_staff WHERE role = 'doctor'")}
+    code = {p["name"]: c for c, p in PROCEDURE.items()}
+    texted = {
+        r[0]
+        for r in conn.execute(
+            "SELECT related_appointment_id FROM emr_messages WHERE \"trigger\" IN ('appt_confirm', 'reminder')"
+        )
+    }
+    unpaid = {
+        r[0]
+        for r in conn.execute(
+            "SELECT appointment_id FROM emr_payments WHERE kind = 'visit' AND amount_paid < amount_due"
+        )
+    }
+    bad = []
+    for r in _calls(conn):
+        visit = r["fact"].get("emergency_visit")
+        if not (r["emergency"] and r["patient_id"] is not None):
+            if visit:
+                bad.append(
+                    {"call_uid": r["call_uid"], "problem": "응급 내원인데 환자 측 응급 통화 아님"}
+                )
+            continue
+        a = appts.get((visit or {}).get("appointment_id"))
+        if a is None:
+            bad.append(
+                {"call_uid": r["call_uid"], "problem": "환자 측 응급 통화에 응급 내원 없음"}
+            )
+            continue
+        call, at = r["started_at"], a["scheduled_at"]
+        day = date.fromisoformat(call[:10])
+        nxt = day + timedelta(days=1)
+        while not open_slots(nxt.weekday()) or nxt in ctx.holidays:
+            nxt += timedelta(days=1)
+        name, _ = EMERGENCY_TREATMENT[transcripts._pick(r["call_uid"], "scene", EMERGENCY_SCENES)]
+        problems = [
+            (a["patient_id"] != r["patient_id"], "다른 환자"),
+            (a["staff_id"] not in doctors, "원장 아님"),
+            (
+                a["booked_via"] != "phone" or a["created_at"] != call or a["confirmed"],
+                "통화 시각에 전화로 잡힌 예약 아님",
+            ),
+            (not (at > call and at[:10] in (call[:10], nxt.isoformat())), "그날·다음 진료일 아님"),
+            (
+                a["planned_procedure_code"] not in (code[name], code["상담"]),
+                "상황의 처치·상담 아님",
+            ),
+            (
+                a["status"] != ("completed" if at[:10] < ctx.today.isoformat() else "scheduled"),
+                "TODAY 전 completed·뒤 scheduled 아님",
+            ),
+            ((visit["date"], visit["time"]) != (at[:10], at[11:16]), "사실의 날짜·시각 ≠ 예약"),
+            (a["id"] in texted, "예약 확정·리마인드 문자 있음"),
+            (a["id"] in unpaid, "그날 전액 수납 아님"),
+        ]
+        bad += [
+            {"call_uid": r["call_uid"], "appointment_id": a["id"], "problem": p}
+            for failed, p in problems
+            if failed
+        ]
+    known = _emergency_appts(conn)
+    return bad + [
+        {"appointment_id": aid, "problem": "응급 내원 표시가 없는 예약을 가리킴"}
+        for aid in known
+        if aid not in appts
     ]
 
 

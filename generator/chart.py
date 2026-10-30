@@ -27,6 +27,7 @@ from generator.master import (
     CHECKUP_CODE,
     DIAGNOSES,
     DIAGNOSIS_ERROR_RATE,
+    EMERGENCY_SCENES,
     EXTRACTION_CODES,
     FULL_MOUTH,
     PERIO_LINK_DAYS,
@@ -139,6 +140,29 @@ SYMPTOM_CC = frozenset(
     )
 )
 
+
+# 응급 내원(6b단계)의 C.C — 상황(master.EMERGENCY_SCENES)마다 환자 말과 차트식으로 줄인 말. 모두 증상이라 '호소'가 자연스럽다
+EMERGENCY_CC = dict(
+    zip(
+        EMERGENCY_SCENES,
+        (
+            ("밤새 위 어금니가 너무 아파요", "위 어금니 급성 통증"),
+            ("씹다가 이가 깨졌어요", "저작 중 치아 깨짐"),
+            ("넘어져서 앞니가 흔들려요", "외상 후 앞니 흔들림"),
+            ("때운 게 빠져서 너무 시려요", "충전물 탈락·시림"),
+            ("어금니 쪽 잇몸이 붓고 고름이 나요", "어금니 잇몸 부종·배농"),
+            ("볼이 부을 정도로 아래 어금니가 아파요", "아래 어금니 통증·안면 부종"),
+            ("씌운 게 빠지고 앞니가 아파요", "보철물 탈락·통증"),
+            ("운동하다 앞니가 깨졌어요", "외상 후 앞니 깨짐"),
+        ),
+        strict=True,
+    )
+)
+CC_SHORT |= dict(EMERGENCY_CC.values())
+SYMPTOM_CC |= {cc for cc, _ in EMERGENCY_CC.values()}
+# 응급 내원 서술에 꼭 넣을 말(그중 하나)과 초안 문장
+EMERGENCY_WORDS = ("응급",)
+EMERGENCY_SENTENCE = "응급 내원."
 
 # 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
 CC_NO_EVIDENCE = {
@@ -575,6 +599,8 @@ def draft_note(f, key) -> str:
             else f"{_ro(short)} 내원."
         )
     out = [] if opener == "뒤" and x else [said]
+    if f.get("emergency"):
+        out.append(EMERGENCY_SENTENCE)
     if x:
         b = x["bleeding"]
         out.append(
@@ -648,6 +674,31 @@ def draft_note(f, key) -> str:
             )
         )
     return " ".join(out)
+
+
+def emergency_facts(uid: str, r: dict, scene: str, alerts: dict, plan_items: list) -> dict:
+    """응급 내원(6b단계)의 차트 사실 — 상황의 환자 말, 그날 보이는 관련 주의사항, 내원을 마친 시각의 남은 계획(§4.3과 같은 틀).
+    요건·오류·소견·추가 처치는 없다. 환자 말 꼴은 통화 번호로"""
+    day = r["performed_at"][:10]
+    cc = EMERGENCY_CC[scene][0]
+    return {
+        "procedure": NAME[r["code"]],
+        "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
+        "cc": cc,
+        "findings": None,
+        "requirement": None,
+        "alerts": [
+            {"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]}
+            for c, recorded, ends, _ in alerts[r["patient_id"]]
+            if recorded <= day
+            and (ends is None or day < ends)
+            and r["code"] in ALERT_TYPES[c]["procedures"]
+        ],
+        "discovered": [],
+        "plan": _plan({**r, "day": date.fromisoformat(day)}, plan_items),
+        "extra": None,
+        "emergency": True,
+    }
 
 
 def stage_notes(run, rng, fake) -> None:
@@ -737,6 +788,8 @@ def narrative_must_include(f: dict) -> list[list[str]]:
     발견한 주의사항과 새로 알게 됐다는 말·요건 수치·타 기관 이력이면 그 말·다음 계획과 계획이라는 말"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
     out.append([f["procedure"]])
+    if f.get("emergency"):
+        out.append(list(EMERGENCY_WORDS))
     if f.get("extra"):
         out += [[f"{f['extra']['tooth']}번"], [f["extra"]["procedure"]]]
     if f["findings"]:

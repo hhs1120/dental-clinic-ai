@@ -81,6 +81,17 @@ def _rows(conn, sql, *params) -> list[dict]:
     return [dict(r) for r in conn.execute(sql, params)]
 
 
+def _emergency_appts(conn) -> set[int]:
+    """응급 통화가 잡은 내원 (6b단계 used_fact emergency_visit, 생성 설계 §2.6 (5))"""
+    return {
+        r[0]
+        for r in conn.execute(
+            "SELECT json_extract(used_fact, '$.emergency_visit.appointment_id') FROM truth.truth_call_labels"
+            " WHERE json_extract(used_fact, '$.emergency_visit') IS NOT NULL"
+        )
+    }
+
+
 def _dt(s: str) -> datetime:
     return datetime.fromisoformat(s)
 

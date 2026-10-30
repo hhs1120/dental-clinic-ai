@@ -8,6 +8,7 @@ from generator.master import (
     CLINIC_NAME,
     MESSAGE_REPLIES_PAID,
     MESSAGE_REPLIES_PAID_METHOD,
+    MESSAGE_REPLY_CANCEL,
     MESSAGE_REPLY_CHANGE,
     RECALL_TEMPLATES,
 )
@@ -283,3 +284,66 @@ def test_confirm_call_counts_as_trace(tmp_path):
         " used_fact = json_set(used_fact, '$.appointment_id', 2) WHERE call_uid = 'c-0003'"
     )
     assert verify.check_appt_reply_state(conn, CTX) == []
+
+
+# 취소 답장 (§2.5, 8a단계) — fixture 7번 예약(11/24 15:00 상담, 노쇼)을 개원 전 당일 취소로 바꾼 장면
+def _preopen_cancel(conn) -> None:
+    conn.execute(
+        "UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-24 09:00:00' WHERE id = 7"
+    )
+    conn.execute("DELETE FROM emr_messages WHERE id = 4")  # 노쇼 문자
+    conn.execute(INS + "(1, 'out', '2026-11-20 11:03:00', '예약 확정', 'appt_confirm', 7)")
+
+
+def test_preopen_cancel_with_reply_passes(tmp_path):
+    conn = make_db(tmp_path)
+    _preopen_cancel(conn)
+    conn.execute(REPLY)
+    checks = (
+        verify.check_cancel_replies,
+        verify.check_cancellation_kind,
+        verify.check_reply_after_out,
+        verify.check_message_triggers,
+        verify.check_appt_reply_state,
+    )
+    assert {c.__name__: c(conn, CTX) for c in checks if c(conn, CTX)} == {}
+    assert verify.check_cancel_replies in verify.REQUIRED
+
+
+def test_day_before_cancel_by_reply_passes(tmp_path):
+    """TODAY 장면 — 5번 예약(12/01)의 전날 리마인드에 취소 답장, 그 뒤 취소. 리마인드는 취소 전에 보냈다"""
+    conn = make_db(tmp_path)
+    conn.execute(INS + "(1, 'out', '2026-11-30 09:30:00', '리마인드', 'reminder', 5)")
+    conn.execute(INS + f"(1, 'in', '2026-11-30 09:40:00', '{MESSAGE_REPLY_CANCEL}', 'reply', 5)")
+    conn.execute(
+        "UPDATE emr_appointments SET status = 'cancelled', cancelled_at = '2026-11-30 09:45:00' WHERE id = 5"
+    )
+    for check in (
+        verify.check_cancel_replies,
+        verify.check_cancellation_kind,
+        verify.check_message_triggers,
+    ):
+        assert check(conn, CTX) == [], check.__name__
+    conn.execute("DELETE FROM emr_messages WHERE body = ?", (MESSAGE_REPLY_CANCEL,))
+    assert verify.check_cancellation_kind(conn, CTX)  # 연락 없는 전날 취소
+    assert verify.check_cancel_replies(conn, CTX)
+
+
+REPLY = INS + f"(1, 'in', '2026-11-24 08:55:00', '{MESSAGE_REPLY_CANCEL}', 'reply', 7)"
+CANCEL_BREAKS = {  # 정상 답장(REPLY)을 깐 뒤 한 곳씩
+    "preopen_cancel_without_reply": f"DELETE FROM emr_messages WHERE body = '{MESSAGE_REPLY_CANCEL}'",
+    "reply_after_cancel": M
+    + "sent_at = '2026-11-24 09:10:00' WHERE direction = 'in' AND related_appointment_id = 7",
+    "reply_on_live_appt": INS
+    + f"(1, 'in', '2026-11-02 18:20:00', '{MESSAGE_REPLY_CANCEL}', 'reply', 2)",
+}
+
+
+@pytest.mark.parametrize("case", CANCEL_BREAKS)
+def test_cancel_reply_break_is_caught(tmp_path, case):
+    conn = make_db(tmp_path)
+    _preopen_cancel(conn)
+    conn.execute(REPLY)
+    assert verify.check_cancel_replies(conn, CTX) == []
+    conn.execute(CANCEL_BREAKS[case])
+    assert verify.check_cancel_replies(conn, CTX), case

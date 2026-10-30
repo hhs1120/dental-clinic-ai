@@ -423,7 +423,14 @@ def check_requirement_facts(conn, ctx):
 
 
 def check_chart_special(conn, ctx):
-    """특이 ⇔ 오류 줄 ∪ 요건 줄, 서술 ⇔ 특이 ∪ 디코이, 특이와 디코이는 겹치지 않음, 창 이전 내원은 템플릿만"""
+    """특이 ⇔ 오류 줄 ∪ 요건 줄, 서술 ⇔ 특이 ∪ 디코이 ∪ 응급 내원(§2.6 (5)), 특이와 디코이는 겹치지 않음, 창 이전 내원은 템플릿만"""
+    emergency = {
+        r[0]
+        for r in conn.execute(
+            "SELECT t.id FROM emr_treatments t WHERE t.appointment_id IN"
+            " (SELECT json_extract(used_fact, '$.emergency_visit.appointment_id') FROM truth.truth_call_labels)"
+        )
+    }
     bad = []
     for r in _chart_lines(conn, ctx):
         if r["kind"] is None:
@@ -431,7 +438,8 @@ def check_chart_special(conn, ctx):
         special = bool(r["error"]) or r["requirement"] is not None
         if (
             bool(r["is_special"]) != special
-            or (r["kind"] == "narrative") != bool(r["is_special"] or r["is_decoy"])
+            or (r["kind"] == "narrative")
+            != bool(r["is_special"] or r["is_decoy"] or r["id"] in emergency)
             or (r["is_special"] and r["is_decoy"])
             or (not r["window"] and r["kind"] != "template")
         ):

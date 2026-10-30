@@ -718,3 +718,72 @@ def test_transcript_rules_recheck_saved_text(tmp_path):
         "c-0001",
         "c-0003",
     }
+
+
+# 응급 내원 (§2.6 (5), 6b단계) — fixture 통화 c-0001(10/20 15:00, 1번 환자)을 응급으로, 그날 16:00 원장 응급 진찰(8번 예약)
+def _emergency(conn) -> None:
+    conn.execute(
+        "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, confirmed, created_at, chair_no)"
+        " VALUES (8, 1, 1, '2026-10-20 16:00:00', 30, 'treatment', 'U0019', 'completed', 'phone', 0,"
+        " '2026-10-20 15:00:00', 2)"
+    )
+    conn.execute(
+        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
+        " VALUES (1, 8, 'visit', 0, 0, '2026-10-20 16:30:00', 'card')"
+    )
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET emergency = 1, used_fact = json_set(used_fact, '$.emergency_visit',"
+        ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0001\''
+    )
+
+
+def test_emergency_visit_passes(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_emergency_visits(conn, CTX) == []  # fixture에 응급 통화 없음
+    _emergency(conn)
+    assert verify.check_emergency_visits(conn, CTX) == []
+    assert verify.check_emergency_visits in verify.REQUIRED
+
+
+EMERGENCY_BREAKS = {
+    "no_visit": "UPDATE truth.truth_call_labels SET used_fact = json_remove(used_fact, '$.emergency_visit')"
+    " WHERE call_uid = 'c-0001'",
+    "not_emergency": "UPDATE truth.truth_call_labels SET emergency = 0 WHERE call_uid = 'c-0001'",
+    "other_patient": "UPDATE emr_appointments SET patient_id = 2 WHERE id = 8",
+    "not_doctor": "UPDATE emr_appointments SET staff_id = 2 WHERE id = 8",
+    "booked_earlier": "UPDATE emr_appointments SET created_at = '2026-10-19 15:00:00' WHERE id = 8",
+    "confirmed": "UPDATE emr_appointments SET confirmed = 1 WHERE id = 8",
+    "week_later": "UPDATE emr_appointments SET scheduled_at = '2026-10-27 16:00:00' WHERE id = 8",
+    "other_procedure": "UPDATE emr_appointments SET planned_procedure_code = 'U0017' WHERE id = 8",
+    "fact_time_differs": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact,"
+    " '$.emergency_visit.time', '16:30') WHERE call_uid = 'c-0001'",
+    "texted": 'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+    " related_appointment_id) VALUES (1, 'out', '2026-10-20 15:05:00', '예약 확정', 'appt_confirm', 8)",
+    "unpaid": "UPDATE emr_payments SET amount_due = 10000 WHERE appointment_id = 8",
+}
+
+
+@pytest.mark.parametrize("case", EMERGENCY_BREAKS)
+def test_emergency_visit_break_is_caught(tmp_path, case):
+    conn = make_db(tmp_path)
+    _emergency(conn)
+    conn.execute(EMERGENCY_BREAKS[case])
+    assert verify.check_emergency_visits(conn, CTX), case
+
+
+def test_emergency_visit_may_share_day(tmp_path):
+    """응급 내원은 그날 다른 예약이 있어도 따로 온다 — 같은 날 한 번 검사에서 뺀다(응급 표시가 없으면 잡는다)"""
+    conn = make_db(tmp_path)
+    _emergency(conn)
+    conn.execute(
+        "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, created_at, chair_no)"
+        " VALUES (9, 1, 2, '2026-10-20 10:00:00', 30, 'hygiene', 'U0002', 'completed', 'phone',"
+        " '2026-10-10 10:00:00', 3)"
+    )
+    assert verify.check_patient_same_day(conn, CTX) == []
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_remove(used_fact, '$.emergency_visit')"
+    )
+    assert verify.check_patient_same_day(conn, CTX)

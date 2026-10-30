@@ -20,6 +20,7 @@ from generator.master import (
     TOOTH_CHOICES,
     UNPAID_PAID_RANGE,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
@@ -243,10 +244,21 @@ def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
     other = _open(tmp_path)
-    for table in ("emr_treatments", "emr_claims"):
-        assert [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")] == [
-            tuple(r) for r in other.execute(f"SELECT * FROM {table} ORDER BY id")
-        ], table
+    # 6b단계 응급 내원 줄은 통화(미수 환자를 고르는 통화 포함)를 따라가 뺀다
+    stage5 = {
+        "emr_treatments": "SELECT * FROM emr_treatments WHERE appointment_id NOT IN ({}) ORDER BY id",
+        "emr_claims": "SELECT * FROM emr_claims WHERE treatment_id NOT IN"
+        " (SELECT id FROM emr_treatments WHERE appointment_id IN ({})) ORDER BY id",
+    }
+    for table, sql in stage5.items():
+        rows = [
+            [
+                tuple(r)
+                for r in c.execute(sql.format(",".join(map(str, emergency_appointments(c)))))
+            ]
+            for c in (conn, other)
+        ]
+        assert rows[0] == rows[1], table
     assert [tuple(r) for r in conn.execute("SELECT * FROM emr_payments ORDER BY id")] != [
         tuple(r) for r in other.execute("SELECT * FROM emr_payments ORDER BY id")
     ]

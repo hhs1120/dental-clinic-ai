@@ -18,6 +18,7 @@ from generator.master import (
     REQUIREMENT_CUT_ERROR_SHARE,
     REQUIREMENT_ERROR_RATE,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
@@ -82,9 +83,15 @@ def test_error_diagnosis_is_another_procedures_dx(db):
 
 
 def test_decoys_stratified_by_procedure(db):
-    """디코이 수 = round(특이 × CHART_DECOY_RATIO), 시술별로 평범한 창 안 줄 수에 비례(최대 나머지 배분 ±1)"""
-    _, _, lines = db
-    window = [r for r in lines if r["window"]]
+    """디코이 수 = round(특이 × CHART_DECOY_RATIO), 시술별로 평범한 창 안 줄 수에 비례(최대 나머지 배분 ±1) — 디코이는
+    5b단계가 고르므로 6b단계 응급 내원 줄은 빼고 센다"""
+    conn, _, lines = db
+    emergency = {
+        r[0]
+        for r in conn.execute("SELECT id, appointment_id FROM emr_treatments")
+        if r[1] in emergency_appointments(conn)
+    }
+    window = [r for r in lines if r["window"] and r["id"] not in emergency]
     specials = sum(r["is_special"] for r in window)
     decoys = [r for r in window if r["is_decoy"]]
     assert len(decoys) == round(specials * CHART_DECOY_RATIO)

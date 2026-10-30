@@ -798,6 +798,30 @@ EMERGENCY_SCENES = (
     "씌운 것이 빠지고 아픈 앞니 쪽",
     "운동하다 부딪혀 깨진 앞니",
 )
+# 응급 내원 (§2.6 (5), 6b단계) — 환자 측 응급 통화(emergency 플래그)마다 원장 내원 1건: 통화 뒤 EMERGENCY_LEAD_MIN분이
+# 지난 첫 빈 슬롯(그날 자리가 없으면 다음 진료일 개원부터). 상황마다 그날 처치와 치아 후보 — 맞는 시술이 없는 상황(외상으로
+# 흔들림·보철 탈락)과 치아 단위 시술을 못 하는 나이는 상담(진찰). 치아는 장부·치료계획에 없는 치아에서 통화 번호로 고른다
+_UPPER_MOLARS = ("16", "17", "26", "27")
+_LOWER_MOLARS = ("36", "37", "46", "47")
+EMERGENCY_TREATMENT = dict(
+    zip(
+        EMERGENCY_SCENES,
+        (
+            ("신경치료", _UPPER_MOLARS),
+            ("레진", ("34", "35", "44", "45")),
+            ("상담", ()),
+            ("아말감/GI", _UPPER_MOLARS + _LOWER_MOLARS),
+            ("신경치료", _UPPER_MOLARS + _LOWER_MOLARS),
+            ("신경치료", _LOWER_MOLARS),
+            ("상담", ()),
+            ("레진", ("11", "12", "21", "22")),
+        ),
+        strict=True,
+    )
+)
+EMERGENCY_LEAD_MIN = 30
+# 때운 것이 빠진 상황 — 그 환자가 전에 다른 수복 시술로 때운 치아에서 고른다(녹취록이 그 기록을 말해도 맞게). 없으면 위 규칙대로
+EMERGENCY_RESTORED_SCENES = (EMERGENCY_SCENES[3],)
 EMERGENCY_ONSETS = ("오늘 아침부터", "어제 점심 무렵부터", "방금 전부터", "이틀 전부터 점점")
 COMPLAINT_TOPICS = (
     "예약 시간보다 오래 기다림",
@@ -849,6 +873,10 @@ RECALL_TEMPLATES = {
 # 예약 확정·리마인드 답장 — 확인 답장은 리마인드면 confirmed 예약에만, 시간 변경은 그 뒤 실제로 바뀐 예약에만(§2.5)
 MESSAGE_REPLY_OK = ("네", "확인했습니다")
 MESSAGE_REPLY_CHANGE = "시간 변경 가능할까요?"
+# 예약 취소 답장 (§2.5, 8a단계) — 개원 전·진료 끝 뒤 취소는 환자가 그 예약의 문자에 답해서 들어온다(통화가 없는 시각)
+MESSAGE_REPLY_CANCEL = "죄송한데 예약 취소해 주세요. 다시 연락드릴게요"
+# 8a단계 장면 — TODAY 전 달 노쇼 중 이만큼을 개원 전 문자 당일 취소로 바꾼다(최근 달에 그 모양이 보이게)
+NOSHOW_TO_CANCEL = 3
 # 트리거별 답장 문구 (균등 — 예약 확정·리마인드는 뽑은 뒤 예약 상태에 맞춘다)
 MESSAGE_REPLIES = {
     "appt_confirm": (*MESSAGE_REPLY_OK, MESSAGE_REPLY_CHANGE),

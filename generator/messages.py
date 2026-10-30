@@ -40,6 +40,17 @@ def _minutes(rng, lo_hi: tuple) -> timedelta:
     return timedelta(minutes=int(rng.integers(lo, hi + 1)))
 
 
+def emergency_appointments(conn) -> set[int]:
+    """응급 통화가 잡은 내원 (6b단계 emergency_visit)"""
+    return {
+        r[0]
+        for r in conn.execute(
+            "SELECT json_extract(used_fact, '$.emergency_visit.appointment_id') FROM truth.truth_call_labels"
+            " WHERE json_extract(used_fact, '$.emergency_visit') IS NOT NULL"
+        )
+    }
+
+
 def stage(run, rng, fake) -> None:
     conn, rates = run.conn, run.cfg["messages"]
     start = run.range_start.isoformat()
@@ -58,10 +69,14 @@ def stage(run, rng, fake) -> None:
     def next_open_minute(d: date) -> datetime:
         return any_minute(rng, next_open_day(d, run.holidays))
 
+    # 응급 내원(6b단계)은 통화로 바로 잡혀 예약 문자가 없다 — 난수를 쓰기 전에 건너뛰어 다른 예약의 문자가 그대로
+    emergency = emergency_appointments(conn)
     for aid, pid, at, duration, code, status, confirmed, created, cancelled in conn.execute(
         "SELECT id, patient_id, scheduled_at, duration_min, planned_procedure_code, status, confirmed, created_at,"
         " cancelled_at FROM emr_appointments ORDER BY id"
     ):
+        if aid in emergency:
+            continue
         when = datetime.strptime(at, FMT)
         fields = {"date": _day(when.date()), "time": at[11:16], "procedure": PROCEDURE_NAME[code]}
         if created >= start and rng.random() < rates["appt_confirm"]:

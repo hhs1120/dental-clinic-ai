@@ -9,11 +9,12 @@ from generator.master import (
     CHURN_MIN_DAYS,
     DOCTOR_CONCURRENCY,
     MAX_LEAD_DAYS,
+    MESSAGE_REPLY_CANCEL,
     VISIT_MIX,
     daily_cap,
     open_slots,
 )
-from generator.verify.common import _dt, _rows
+from generator.verify.common import _dt, _emergency_appts, _rows
 
 # 경고 허용치 (§5.3 경고 표)
 VISIT_MIX_TOLERANCE = 0.04
@@ -23,13 +24,18 @@ VISIT_MIX_TOLERANCE = 0.04
 
 
 def check_patient_same_day(conn, ctx):
-    """같은 환자 같은 날 예약 중복 없음 (취소 제외)"""
-    return _rows(
-        conn,
-        "SELECT patient_id, date(scheduled_at) AS day, group_concat(id) AS ids"
-        " FROM emr_appointments WHERE status != 'cancelled'"
-        " GROUP BY patient_id, day HAVING count(*) > 1",
-    )
+    """같은 환자 같은 날 예약 중복 없음 (취소 제외) — 응급 내원(§2.6 (5))은 그날 다른 예약이 있어도 따로 온다"""
+    emergency = _emergency_appts(conn)
+    return [
+        r
+        for r in _rows(
+            conn,
+            "SELECT patient_id, date(scheduled_at) AS day, group_concat(id) AS ids"
+            " FROM emr_appointments WHERE status != 'cancelled'"
+            " GROUP BY patient_id, day HAVING count(*) > 1",
+        )
+        if len([i for i in map(int, r["ids"].split(",")) if i not in emergency]) > 1
+    ]
 
 
 def _window_busy(conn, ctx, role=None) -> list[dict]:
@@ -185,14 +191,17 @@ def check_reschedule_pair(conn, ctx):
 
 
 def check_cancellation_kind(conn, ctx):
-    """취소는 변경 쌍의 원래 예약 또는 당일 취소(TODAY 이전 날짜)뿐"""
+    """취소는 변경 쌍의 원래 예약, 당일 취소(TODAY 이전 날짜), 또는 환자의 취소 답장(master.MESSAGE_REPLY_CANCEL) 뒤 취소뿐"""
     return _rows(
         conn,
         "SELECT a.id, a.scheduled_at, a.cancelled_at FROM emr_appointments a"
         " WHERE a.status = 'cancelled'"
         " AND NOT EXISTS (SELECT 1 FROM emr_appointments n WHERE n.rescheduled_from_id = a.id)"
-        " AND NOT (date(a.cancelled_at) = date(a.scheduled_at) AND date(a.scheduled_at) < ?)",
+        " AND NOT (date(a.cancelled_at) = date(a.scheduled_at) AND date(a.scheduled_at) < ?)"
+        " AND NOT EXISTS (SELECT 1 FROM emr_messages m WHERE m.related_appointment_id = a.id"
+        " AND m.direction = 'in' AND m.body = ? AND m.sent_at <= a.cancelled_at)",
         ctx.today.isoformat(),
+        MESSAGE_REPLY_CANCEL,
     )
 
 
