@@ -100,22 +100,34 @@ MISSED_WINDOW_DAYS = CALL_PATIENT_RULES[("complaint", "inbound")][
 # 진료 이력이 없어도 되는 불만 — 그 밖의 불만(기다림·비용·설명·치료 뒤 불편·헛걸음)은 통화 전 MISSED_WINDOW_DAYS일 안에
 # 내원이 있어야 한다(없으면 기록에 없는 일을 지어낸다). 통화일에 그 환자 예약이 있으면 지난 내원 일임을 밝힌다(오늘 일로 읽힘)
 NO_HISTORY_TOPICS = tuple(t for t in COMPLAINT_TOPICS if "불친절" in t)
+PHONE_ONLY_TOPIC = (
+    "전화 응대가 불친절했음"  # 진료 기록이 전혀 없는 사람 — '접수'를 쓰면 없던 내원을 지어낸다
+)
 
 
 def complaint_topic(
-    uid: str, recent_noshow: bool, last_visit: str | None, same_day: bool, history: bool = True
+    uid: str,
+    recent_noshow: bool,
+    last_visit: str | None,
+    same_day: bool,
+    history: bool = True,
+    visited: bool = True,
 ) -> str:
     """불만 주제 — 해시로 고르고 기록과 맞지 않으면 다시 고른다(맞는 통화는 그대로). last_visit = 창 안 마지막 진료일,
-    history=False면 진료 이력은 보지 않는다(사실 없이 부르는 situation)"""
+    history=False면 진료 이력은 보지 않는다(사실 없이 부르는 situation), visited=False면 진료 기록이 전혀 없다"""
     topic = pick(uid, "topic", COMPLAINT_TOPICS)
     if topic == MISSED_TOPIC and not recent_noshow:
         topic = pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
-    if not history or topic in NO_HISTORY_TOPICS or topic == MISSED_TOPIC:
+    if not history or topic == MISSED_TOPIC:
         return topic
-    if last_visit is None:
-        return pick(
+    if topic not in NO_HISTORY_TOPICS and last_visit is None:
+        topic = pick(
             uid, "topic-nohistory", NO_HISTORY_TOPICS + ((MISSED_TOPIC,) if recent_noshow else ())
         )
+    if topic == MISSED_TOPIC:
+        return topic
+    if topic in NO_HISTORY_TOPICS:
+        return topic if visited else PHONE_ONLY_TOPIC
     return f"{topic}(지난 {korean_date(last_visit)} 내원 때 일)" if same_day else topic
 
 
@@ -246,7 +258,9 @@ def payload(row: dict) -> dict:
                 row["call_uid"],
                 bool(row.get("recent_noshow")),
                 last_visit(fact),
-                (fact.get("next_appointment") or {}).get("date") == fact["call_date"],
+                (fact.get("next_appointment") or {}).get("date") == fact["call_date"]
+                and last_visit(fact) != fact["call_date"],
+                visited=bool(fact.get("recent_visits")),
             )
     if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
         facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {

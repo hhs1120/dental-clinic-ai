@@ -5,8 +5,9 @@ import json
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from functools import partial
 
-from generator import emergency, llm_jobs, transcripts
+from generator import llm_jobs, transcripts
 from generator.master import (
     BOOKING_PURPOSES,
     CALL_COUNTERPARTS,
@@ -21,6 +22,10 @@ from generator.master import (
     CALL_SUBTOPICS,
     CHECKUP_CODE,
     CLINIC_NAME,
+    COMPLAINT_TOPICS,
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_CHILD_SCENES,
+    EMERGENCY_HISTORY_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_SCENES,
     EMERGENCY_TREATMENT,
@@ -52,6 +57,8 @@ from generator.verify.common import (
 )
 from generator.verify.records import _open_items_at, _plan_items
 from generator.verify.schedule import _prev_open_day
+
+INSURANCE_PRICE_QUESTION = re.compile(r"얼마(?!나| 전)|내는 돈|내야 하는 돈")
 
 # ── 누출 ────────────────────────────────────────────────────
 
@@ -252,6 +259,78 @@ def check_transcript_speakers(conn, ctx):
     return bad
 
 
+def _count(conn, pid, t, sql, *args) -> int:
+    return conn.execute(sql, (pid, t, *args)).fetchone()[0]
+
+
+def check_complaint_situation(conn, ctx):
+    """불만 통화 입력의 주제가 기록과 맞음(§4.1 caller_situation) — 놓쳤다는 불만은 창(transcripts.MISSED_WINDOW_DAYS) 안 노쇼,
+    이력 불만은 창 안 진료, 이력 없이 되는 불만은 진료 기록이 있어야 하고 없으면 전화 응대 불만(transcripts.PHONE_ONLY_TOPIC),
+    지난 내원 날짜는 통화일에 그 환자 예약이 있을 때만. 주제는 입력(transcripts.payload)에서, 기록은 SQL로 따로 읽는다"""
+    calls = {r["call_uid"]: r for r in _calls(conn)}
+    days = f"-{transcripts.MISSED_WINDOW_DAYS} days"
+    bad = []
+    for row in transcripts.rows(conn):
+        said = transcripts.payload(row)["facts"].get("caller_situation")
+        if "complaint" not in json.loads(row["accepted_purposes"]) or said is None:
+            continue
+        c = calls[row["call_uid"]]
+        pid, t = c["patient_id"], c["started_at"]
+        topic = said.split("(지난 ")[0]
+        count = partial(_count, conn, pid, t)
+        ever = count(
+            "SELECT count(*) FROM emr_treatments WHERE patient_id = ? AND performed_at < ?"
+        )
+        recent = count(
+            "SELECT count(*) FROM emr_treatments WHERE patient_id = ? AND performed_at < ?"
+            " AND date(performed_at) >= date(?, ?)",
+            t,
+            days,
+        )
+        noshow = count(
+            "SELECT count(*) FROM emr_appointments WHERE patient_id = ? AND status = 'noshow'"
+            " AND scheduled_at < ? AND scheduled_at >= datetime(?, ?)",
+            t,
+            days,
+        )
+        today = count(
+            "SELECT count(*) FROM emr_appointments WHERE patient_id = ? AND scheduled_at > ?"
+            " AND date(scheduled_at) = date(?) AND created_at < ?"
+            " AND (cancelled_at IS NULL OR cancelled_at >= ?)",
+            t,
+            t,
+            t,
+        )
+        problem = None
+        if topic == transcripts.PHONE_ONLY_TOPIC:
+            problem = "진료 기록이 있는데 전화 응대 불만" if ever else None
+        elif topic not in COMPLAINT_TOPICS:
+            problem = "없는 주제"
+        elif topic == transcripts.MISSED_TOPIC:
+            problem = None if noshow else "창 안 노쇼 없이 놓쳤다는 불만"
+        elif topic in transcripts.NO_HISTORY_TOPICS:
+            problem = None if ever else "진료 기록 없이 접수 불만"
+        elif not recent:
+            problem = "창 안 진료 없이 이력 불만"
+        if "(지난 " in said and not today:
+            problem = "통화일 예약 없이 지난 내원 날짜"
+        if problem:
+            bad.append({"call_uid": row["call_uid"], "situation": said, "problem": problem})
+    return bad
+
+
+def check_insurance_price_question(conn, ctx):
+    """가격 문의가 아닌 보험 문의에서 환자가 금액을 직접 묻지 않음(평가 설계 §2.3 price_inquiry) — 입력에 금액이 있어 모델이
+    묻게 쓰기 쉽다 (경고)"""
+    return [
+        {"call_uid": r["call_uid"], "line": line[:60]}
+        for r in _calls(conn)
+        if "insurance_q" in r["accepted"] and not r["price_inquiry"] and r["transcript"]
+        for line in r["transcript"].splitlines()
+        if line.startswith("환자:") and INSURANCE_PRICE_QUESTION.search(line)
+    ]
+
+
 def check_transcript_rules(conn, ctx):
     """채우기 검증의 금지 꼴이 저장된 전사에도 없음 — 영문 낱말·한자(llm_jobs.STRAY_SCRIPT), 통화별 금지 패턴
     (transcripts.checks — 이미 잡힌 예약처럼 말하기·새 날짜 제안 등). 캐시 줄을 손으로 고치거나 옛 통과 줄이 살아나면 잡는다 (경고)"""
@@ -410,7 +489,7 @@ def check_booking_call_event(conn, ctx):
 def check_emergency_visits(conn, ctx):
     """응급 내원 (§2.6 (5)): 환자 측 응급 통화(emergency 플래그) ⇔ used_fact emergency_visit. 그 예약은 같은 환자·원장,
     전화로 통화 시각에 잡힘(confirmed 아님), 통화 뒤 그날 또는 다음 진료일, 시술은 그 통화 상황의 처치(master.EMERGENCY_TREATMENT)
-    또는 상담(6b단계가 바꾼 상황이면 그 상황), 통화 뒤 EMERGENCY_LEAD_MIN분 지난 SLOT_MIN분 격자·영업시간·점심 밖, TODAY 전이면
+    또는 상담(6b단계가 바꾼 상황이면 그 상황 — 그날 진료 뒤·이력·소아 규칙대로), 통화 뒤 EMERGENCY_LEAD_MIN분 지난 SLOT_MIN분 격자·영업시간 안·점심 밖, TODAY 전이면
     completed·그날 전액 수납, 사실의 날짜·시각 = 예약, 예약 확정·리마인드 문자 없음, 응급 내원 하나에 통화 1건"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
     patients = {p["id"]: p for p in _rows(conn, "SELECT id, birth_date FROM emr_patients")}
@@ -467,9 +546,13 @@ def check_emergency_visits(conn, ctx):
                 (r["patient_id"], call),
             )
         }
-        want, _ = emergency.visit_scene(
-            r["call_uid"], age_on(date.fromisoformat(p["birth_date"]), day), bool(visited), done
-        )
+        # 생성기(emergency.visit_scene)와 따로 master 상수로 계산
+        want = EMERGENCY_AFTER_VISIT_SCENE if visited else base
+        if not visited:
+            need, instead = EMERGENCY_HISTORY_SCENES.get(base, ((), base))
+            want = instead if need and not done & set(need) else base
+            if age_on(date.fromisoformat(p["birth_date"]), day) <= CHILD_MAX_AGE:
+                want = EMERGENCY_CHILD_SCENES.get(want, want)
         start = _dt(at)
         end = start + timedelta(minutes=a["duration_min"])
         close = datetime.combine(
@@ -480,7 +563,7 @@ def check_emergency_visits(conn, ctx):
             for x in HOURS["lunch"]
         ]
         problems = [
-            (scene != want, "상황이 규칙과 다름(그날 진료 뒤·소아)"),
+            (scene != want, "상황이 규칙과 다름(그날 진료 뒤·이력·소아)"),
             (a["patient_id"] != r["patient_id"], "다른 환자"),
             (a["staff_id"] not in doctors, "원장 아님"),
             (
@@ -498,7 +581,7 @@ def check_emergency_visits(conn, ctx):
                 start.time() < datetime.strptime(HOURS["open"], "%H:%M").time()
                 or end > close
                 or (start.weekday() != 5 and start < lunch[1] and end > lunch[0]),
-                "영업시간·점심 밖",
+                "영업시간 밖이거나 점심에 걸림",
             ),
             (
                 a["planned_procedure_code"] not in (code[name], code["상담"]),

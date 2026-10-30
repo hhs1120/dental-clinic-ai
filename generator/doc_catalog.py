@@ -50,6 +50,7 @@ class Doc:
     avoid: tuple[str, ...] = ()  # similar: 짝 말고도 사실 말을 쓰면 안 되는 핵심 문서(주제가 겹침)
     recurring: bool = False  # 해마다 다시 내는 공지(휴진) — 이전 값(previous)을 주지 않음
     sections: tuple[str, ...] = field(default=())  # 청구 기준: 다룰 상세 사유 키 순서
+    forbidden: tuple[str, ...] = ()  # 쓰면 안 되는 말 — 사실 일부를 목록 전부처럼 쓰지 않게
 
 
 def _won(n: int) -> str:
@@ -806,10 +807,11 @@ _DOCS: tuple[Doc, ...] = (
         (
             F(
                 "ins.uninsured",
-                "레진·인레이·크라운·미백 등은 비급여다(이것만이 아니다 — 목록 전부라고 쓰지 않는다)",
+                "레진·인레이·크라운·미백 등은 비급여다",
                 *_UNINSURED,
             ),
         ),
+        forbidden=("네 가지",),
     ),
     Doc(
         "ins-share",

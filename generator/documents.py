@@ -102,7 +102,7 @@ def checks(d: Doc) -> dict:
     c = {
         "field": "body",
         "must_include": [[w] for w in _words(d)],
-        "forbidden_words": forbidden,
+        "forbidden_words": forbidden + list(d.forbidden),
         "forbidden_patterns": llm_jobs.forbidden_patterns(),
         "length": length(d),
     }

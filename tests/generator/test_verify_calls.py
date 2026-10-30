@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from generator import emergency, verify
-from generator.master import CLINIC_NAME, RECALL_TEMPLATES
+from generator import emergency, transcripts, verify
+from generator.master import CLINIC_NAME, EMERGENCY_SCENES, RECALL_TEMPLATES
 from tests.generator.verify_db import CTX, make_db
 
 CALL_CHECKS = [
@@ -736,14 +736,13 @@ def _emergency(conn) -> None:
         "UPDATE truth.truth_call_labels SET emergency = 1, used_fact = json_set(used_fact, '$.emergency_visit',"
         ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0001\''
     )
-    # 상황은 6b 규칙대로(1번 환자는 통화 전 신경치료만 — 때운·씌운 이력 없음, 46세)
-    scene, changed = emergency.visit_scene("c-0001", 46, False, {"endo", "preventive"})
-    if changed:
-        conn.execute(
-            "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit.scene', ?)"
-            " WHERE call_uid = 'c-0001'",
-            (scene,),
-        )
+    # c-0001의 해시 상황은 '때운 것이 빠짐'인데 1번 환자는 통화 전 신경치료뿐(때운 이력 없음) — 대신 상황으로 손으로 정한다
+    assert emergency.scene("c-0001") == EMERGENCY_SCENES[3]
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit.scene', ?)"
+        " WHERE call_uid = 'c-0001'",
+        (EMERGENCY_SCENES[1],),
+    )
 
 
 def test_emergency_visit_passes(tmp_path):
@@ -774,6 +773,8 @@ EMERGENCY_BREAKS = {
     "after_close": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 18:30:00' WHERE id = 8",
     "lunch": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 13:00:00', created_at = '2026-10-20 12:00:00'"
     " WHERE id = 8",
+    "scene_without_history": "UPDATE truth.truth_call_labels SET used_fact ="
+    " json_remove(used_fact, '$.emergency_visit.scene') WHERE call_uid = 'c-0001'",
     "unknown_scene": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact,"
     " '$.emergency_visit.scene', '없는 상황') WHERE call_uid = 'c-0001'",
     "two_calls": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit',"
@@ -804,3 +805,60 @@ def test_emergency_visit_may_share_day(tmp_path):
         "UPDATE truth.truth_call_labels SET used_fact = json_remove(used_fact, '$.emergency_visit')"
     )
     assert verify.check_patient_same_day(conn, CTX)
+
+
+def _complaint_uid(want):
+    """부 주제 불만의 해시 주제가 want를 만족하는 통화 번호(call_uid를 바꿔 fixture에 쓴다)"""
+    return next(
+        f"c-{n:04d}"
+        for n in range(1, 4000)
+        if want(transcripts.complaint_topic(f"c-{n:04d}", True, None, False, history=False))
+    )
+
+
+def _use_uid(conn, uid):
+    """fixture 통화 c-0001(10/20, 1번 환자, 부 주제 불만)의 번호를 바꿔 주제를 고른다"""
+    conn.execute("UPDATE ax_calls SET call_uid = ? WHERE call_uid = 'c-0001'", (uid,))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET call_uid = ? WHERE call_uid = 'c-0001'", (uid,)
+    )
+
+
+def test_complaint_situation_passes(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_complaint_situation(conn, CTX) == []
+    assert verify.check_complaint_situation in verify.REQUIRED
+
+
+def test_complaint_history_topic_needs_recent_visit(tmp_path):
+    """이력 불만인데 창 안 진료가 없으면(최근 진료를 지움) — 입력은 사실로 만들어져 다른 주제가 되어야 하는데, 사실만 남긴 옛 줄을 잡는다"""
+    conn = make_db(tmp_path)
+    no_history = (*transcripts.NO_HISTORY_TOPICS, transcripts.MISSED_TOPIC)
+    _use_uid(conn, _complaint_uid(lambda t: t not in no_history))
+    assert verify.check_complaint_situation(conn, CTX) == []  # 10/06 진료가 창 안
+    conn.execute("UPDATE emr_treatments SET performed_at = '2026-07-01 10:00:00' WHERE id = 1")
+    assert verify.check_complaint_situation(conn, CTX)  # 사실의 최근 진료와 장부가 어긋남
+
+
+def test_phone_only_topic_needs_no_visit(tmp_path):
+    """기록이 없으면 전화 응대 불만 — 장부에 진료가 있으면 잡는다"""
+    conn = make_db(tmp_path)
+    _use_uid(conn, _complaint_uid(lambda t: t in transcripts.NO_HISTORY_TOPICS))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recent_visits', json('[]'))"
+    )
+    assert verify.check_complaint_situation(conn, CTX)
+
+
+def test_insurance_price_question_warns(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_insurance_price_question(conn, CTX) == []
+    assert verify.check_insurance_price_question in verify.WARNINGS
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET accepted_purposes = '[\"insurance_q\"]', price_inquiry = 0"
+        " WHERE call_uid = 'c-0003'"
+    )
+    conn.execute(
+        "UPDATE ax_calls SET transcript = '환자: 제가 내는 돈은 얼마예요?\n직원: 네.' WHERE call_uid = 'c-0003'"
+    )
+    assert verify.check_insurance_price_question(conn, CTX)

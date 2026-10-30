@@ -278,13 +278,13 @@ def stage(run, rng, fake) -> None:
             " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ?",
             (pid, c["started_at"][:10], c["started_at"]),
         ).fetchone()
-        done = {
+        categories = {
             PROCEDURE[code]["category"]
             for _, code, at in history.get(pid, [])
             if at < c["started_at"]
         }
         situation, changed = visit_scene(
-            uid, age_on(birth[pid], call.date()), visited_today is not None, done
+            uid, age_on(birth[pid], call.date()), visited_today is not None, categories
         )
         name, teeth = EMERGENCY_TREATMENT[situation]
         code = CODE[name]
@@ -351,6 +351,9 @@ def stage(run, rng, fake) -> None:
             " fee_total, insured_amount, patient_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (appt, pid, code, tooth, at, p["fee_total"], insured, due),
         ).lastrowid
+        history.setdefault(pid, []).append(
+            (tooth, code, at)
+        )  # 뒤 응급 통화의 이력(verify와 같은 기준)
         end = (start + timedelta(minutes=minutes)).strftime(FMT)
         method, approval = _method(uid), None  # 0원(상담)도 visit 1행 (5단계와 같다)
         if due > 0 and method == "card" and at[:10] not in failure:

@@ -14,6 +14,7 @@ from generator.master import (
     EMERGENCY_HISTORY_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
+    EMERGENCY_SCENES,
     EMERGENCY_TREATMENT,
     MESSAGE_REPLY_CANCEL,
     NOSHOW_TO_CANCEL,
@@ -222,3 +223,24 @@ def test_sudden_scene_never_gradual():
         scene = emergency.scene(uid)
         if scene in EMERGENCY_SUDDEN_SCENES:
             assert not any(text.startswith(o) for o in EMERGENCY_GRADUAL_ONSETS)
+
+
+def _uid_with(scene):
+    return next(f"c-{n:04d}" for n in range(1, 2000) if emergency.scene(f"c-{n:04d}") == scene)
+
+
+@pytest.mark.parametrize(
+    ("base", "age", "visited", "done", "want"),
+    [
+        (EMERGENCY_SCENES[0], 40, False, set(), EMERGENCY_SCENES[0]),  # 이력이 필요 없는 상황
+        (EMERGENCY_SCENES[0], 40, True, set(), EMERGENCY_AFTER_VISIT_SCENE),  # 그날 진료 뒤
+        (EMERGENCY_SCENES[3], 40, False, set(), EMERGENCY_SCENES[1]),  # 때운 적 없음 → 깨진 이
+        (EMERGENCY_SCENES[3], 40, False, {"restorative"}, EMERGENCY_SCENES[3]),
+        (EMERGENCY_SCENES[6], 40, False, {"restorative"}, EMERGENCY_SCENES[2]),  # 씌운 적 없음
+        (EMERGENCY_SCENES[6], 40, False, {"prosth"}, EMERGENCY_SCENES[6]),
+        (EMERGENCY_SCENES[6], 7, False, {"prosth"}, EMERGENCY_SCENES[2]),  # 소아
+    ],
+)
+def test_visit_scene_table(base, age, visited, done, want):
+    got, changed = emergency.visit_scene(_uid_with(base), age, visited, done)
+    assert got == want and changed == (want != base)

@@ -425,3 +425,18 @@ def test_complaint_topic_needs_history():
         )
         is None
     )
+
+
+def test_no_visit_complaint_is_phone_only():
+    """진료 기록이 전혀 없으면 '접수' 없이 전화 응대 불만 — 없던 내원을 지어내지 않게"""
+    uid = next(
+        f"c-{n:04d}"
+        for n in range(1, 400)
+        if transcripts.complaint_topic(f"c-{n:04d}", False, None, False, history=False)
+        in transcripts.NO_HISTORY_TOPICS
+    )
+    assert (
+        transcripts.complaint_topic(uid, False, None, False, visited=False)
+        == transcripts.PHONE_ONLY_TOPIC
+    )
+    assert transcripts.complaint_topic(uid, False, None, False) in transcripts.NO_HISTORY_TOPICS
