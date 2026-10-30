@@ -593,11 +593,11 @@
   "type": "case",
   "split": "test",
   "question": "임은지 님 급하게 전화하셨을 때 뭐라고 안내했지?",
-  "answer_text": "어제 점심부터 오른쪽 위 어금니(작년 10월 인레이) 때운 게 빠져 심하게 시림 → 오늘 4시에 바로 오라고 안내, 오는 동안 찬물·찬 공기 피하기, 빠진 조각 있으면 챙겨 오기",
+  "answer_text": "어제 점심쯤 오른쪽 위 어금니(작년 가을 인레이) 때운 게 빠져 심하게 시림 → 오늘 4시에 바로 오라고 안내, 빠진 조각 있으면 챙겨 오기, 그쪽으로 씹지 않기",
   "answer_doc_ids": [
    "call:c-0166"
   ],
-  "answer_chunk_hint": "챙겨 오세요",
+  "answer_chunk_hint": "챙겨 오시고",
   "expected_tools": [
    "search_docs"
   ],
