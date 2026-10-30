@@ -300,6 +300,8 @@ BREAKS = {
         ["check_qa_split_isolation"],
     ),
     "sql_mismatch": (_edit("d1", answer_text="3건"), ["check_qa_answer_sql"]),
+    # 채점(metrics.numbers_in)은 'N일'을 날짜로 보고 지운다 — 그런 정답은 맞게 답해도 채점이 못 읽는다
+    "data_answer_as_day": (_edit("d1", answer_text="2일"), ["check_qa_answer_sql"]),
     "sql_single": (_edit("d1", answer_text="1건", sql="SELECT 1"), ["check_qa_answer_sql"]),
     "sql_error": (
         _edit("d1", answer_sql="SELECT nope FROM nowhere"),

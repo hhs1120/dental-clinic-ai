@@ -94,7 +94,9 @@ def _chat_fail(q: dict, log: dict, latest: set) -> str | None:
         return "거절"  # 과잉 거절은 그 유형 정답률에 반영
     if q["type"] == "data":
         why = tool_path(calls, q["expected_tools"], q["expected_args"])
-        (value,) = numbers_in(q["answer_text"])  # verify가 숫자 하나를 보장
+        (value,) = numbers_in(
+            q["answer_text"]
+        )  # verify가 같은 함수로 숫자 하나를 보장(check_qa_answer_sql)
         return why or (None if number_match(log["answer_text"], value) else "숫자")
     cited, answers = set(log["cited_ids"]), set(q["answer_doc_ids"])
     sources = {source_id(c) for c in cited}

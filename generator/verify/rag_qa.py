@@ -5,6 +5,7 @@ import re
 import sqlite3
 from collections import Counter, defaultdict
 
+from evaluation import metrics
 from generator import llm_jobs
 from generator.verify.common import _rows
 from generator.verify.documents import _docs
@@ -341,6 +342,8 @@ def check_qa_answer_sql(conn, ctx):
                 if value < 2
                 else "answer_text 숫자가 답 하나가 아님"
                 if nums != [value]
+                else "채점이 읽는 숫자와 다름(metrics.numbers_in — 'N일' 같은 날짜 꼴은 지운다)"
+                if metrics.numbers_in(q["answer_text"]) != [value]
                 else None
             )
         else:
