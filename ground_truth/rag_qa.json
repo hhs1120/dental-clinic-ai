@@ -840,7 +840,7 @@
   "id": "data-08",
   "type": "data",
   "split": "test",
-  "question": "11월에 취소된 예약 몇 건?",
+  "question": "11월 예약 중에 취소된 거 몇 건?",
   "answer_text": "16건",
   "answer_doc_ids": [],
   "answer_chunk_hint": null,
