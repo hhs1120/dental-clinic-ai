@@ -13,10 +13,13 @@ import yaml
 from generator import (
     alerts,
     calls,
+    cancels,
     chart,
     clinic,
     demand,
     documents,
+    emergency,
+    finance,
     messages,
     patients,
     pre_window,
@@ -25,16 +28,22 @@ from generator import (
     transcripts,
 )
 from generator.llm_jobs import LLMContext
+from generator.master import (
+    LEDGER_DEBT_CALLS,
+    LEDGER_ERROR_KINDS,
+    LINK_FAILURE_DAYS,
+    RECON_MISMATCH_COUNTS,
+)
 from generator.paths import ROOT, output_paths
 from generator.seeding import stage_faker, stage_rng
 
-APP_SCHEMA = ROOT / "shared" / "schema.sql"
+SOURCE_SCHEMA = ROOT / "shared" / "source_schema.sql"
 TRUTH_SCHEMA = ROOT / "ground_truth" / "schema.sql"
 
 
 @dataclass(frozen=True)
 class Run:
-    conn: sqlite3.Connection  # app.sqlite. truth.sqlite는 `truth` 스키마로 ATTACH
+    conn: sqlite3.Connection  # source.sqlite. truth.sqlite는 `truth` 스키마로 ATTACH
     cfg: dict
     seed: int
     range_start: date  # 생성 기간 (config range)
@@ -62,8 +71,12 @@ STAGES: list = [
     ("call_slots", calls.stage_slots),
     ("call_labels", calls.stage_labels),
     ("call_pools", calls.stage_pools),
+    ("emergency_visits", emergency.stage),
     ("call_transcripts", transcripts.stage),
     ("messages", messages.stage),
+    ("cancel_replies", cancels.stage),
+    ("fin_income", finance.stage_income),
+    ("fin_expenses", finance.stage_expenses),
     ("doc_plan", documents.stage_plan),
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
@@ -97,7 +110,7 @@ def new_run(conn: sqlite3.Connection, cfg: dict) -> Run:
 
 
 def generate(
-    app_path: Path,
+    source_path: Path,
     truth_path: Path,
     config_path: Path,
     fake_llm: bool = False,
@@ -108,17 +121,17 @@ def generate(
     fake_llm: LLM 단계를 가짜 게이트웨이로(테스트). llm_paths: 캐시·작업 폴더(기본 generator/paths.py).
     rag_qa_path: 사람이 쓴 RAG 질문 JSON — 있으면 truth_rag_qa에 적재(make data만 준다. 테스트 생성은 문서·전사가 달라 넣지 않음)"""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    tmp_app, tmp_truth = (p.with_name(p.name + ".tmp") for p in (app_path, truth_path))
-    for p in (tmp_app, tmp_truth):
+    tmp_src, tmp_truth = (p.with_name(p.name + ".tmp") for p in (source_path, truth_path))
+    for p in (tmp_src, tmp_truth):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.unlink(missing_ok=True)
     # 스키마 파일의 DDL은 스키마 이름이 없어 truth는 따로 연결해 만든 뒤 ATTACH
     truth = sqlite3.connect(tmp_truth)
     truth.executescript(TRUTH_SCHEMA.read_text(encoding="utf-8"))
     truth.close()
-    conn = sqlite3.connect(tmp_app)
+    conn = sqlite3.connect(tmp_src)
     try:
-        conn.executescript(APP_SCHEMA.read_text(encoding="utf-8"))
+        conn.executescript(SOURCE_SCHEMA.read_text(encoding="utf-8"))
         conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_truth),))
         run = new_run(conn, cfg)
         run.state["llm"] = LLMContext(llm_paths or output_paths(), fake=fake_llm)
@@ -127,6 +140,7 @@ def generate(
             "INSERT INTO truth.truth_gen_meta VALUES (?, ?)",
             [
                 ("seed", str(run.seed)),
+                ("today", run.today.isoformat()),
                 ("range_start", run.range_start.isoformat()),
                 ("range_end", run.range_end.isoformat()),
                 ("call_slots", str(cfg["calls_with_transcript"])),
@@ -134,6 +148,13 @@ def generate(
                 ("blind_pool", str(cfg["blind_pool_size"])),
                 ("documents_core", str(cfg["documents"]["core"])),
                 ("documents_distractor", str(cfg["documents"]["distractor"])),
+                ("link_failure_days", str(LINK_FAILURE_DAYS)),
+                (
+                    "ledger_errors",
+                    json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
+                ),
+                ("recon_mismatches", json.dumps(RECON_MISMATCH_COUNTS)),
+                ("ledger_debt_calls", str(LEDGER_DEBT_CALLS)),
             ],
         )
         for name, stage in STAGES:
@@ -148,10 +169,10 @@ def generate(
     finally:
         conn.close()
     if missing or exhausted:
-        for p in (tmp_app, tmp_truth):
+        for p in (tmp_src, tmp_truth):
             p.unlink(missing_ok=True)
         raise LLMMissing(missing, exhausted)
-    os.replace(tmp_app, app_path)
+    os.replace(tmp_src, source_path)
     os.replace(tmp_truth, truth_path)
     write_truth_json(truth_path)
     return run

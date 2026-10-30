@@ -9,9 +9,10 @@
 창 이전 내원은 템플릿만(특이·디코이 대상 아님).
 """
 
+import hashlib
 import json
-from collections import defaultdict
-from datetime import date, datetime
+from collections import Counter, defaultdict
+from datetime import date, datetime, timedelta
 
 import numpy as np
 
@@ -26,6 +27,8 @@ from generator.master import (
     CHECKUP_CODE,
     DIAGNOSES,
     DIAGNOSIS_ERROR_RATE,
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_SCENES,
     EXTRACTION_CODES,
     FULL_MOUTH,
     PERIO_LINK_DAYS,
@@ -35,11 +38,19 @@ from generator.master import (
     REQUIREMENT_CUT_ERROR_SHARE,
     REQUIREMENT_ERROR_RATE,
     RETREATMENT_REQUIREMENT,
+    SAME_DAY_EXTRA,
+    SAME_DAY_EXTRA_RATE,
     SCALING_CODE,
     SUBMITTED_MONTHS,
+    TOOTH_CHOICES,
+    age_on,
+    insured_on,
 )
+from generator.records import open_plan_items
 
 NAME = {p["code"]: p["name"] for p in PROCEDURES}
+PROCEDURE_BY_CODE = {p["code"]: p for p in PROCEDURES}
+DURATION = {p["code"]: p["duration_min"] for p in PROCEDURES}
 CODE = {p["name"]: p["code"] for p in PROCEDURES}
 REASON_KEY = {(r["category"], r["note"]): key for key, r in ADJUST_REASONS.items()}
 PERIO_CODE = CODE["잇몸치료"]
@@ -76,6 +87,87 @@ CC = {
     }.items()
 }
 
+# C.C를 차트식으로 줄인 말 — 초안의 반쯤은 환자 말을 따옴표 대신 이 말로 쓴다(실제 차트는 줄여 쓰는 일이 많다).
+# '(으)로 내원'·'호소' 앞에 붙어도 자연스럽게, 근거 말(EVIDENCE_WORDS)은 넣지 않는다
+CC_SHORT = {
+    "잇몸에서 피가 나요": "잇몸 출혈",
+    "치석이 많이 낀 것 같아요": "치석 제거 희망",
+    "정기 검진 겸 스케일링 받으러 왔어요": "정기 검진·스케일링 희망",
+    "정기 검진 받으러 왔어요": "정기 검진 희망",
+    "특별히 불편한 곳은 없어요": "특별한 불편 없이 검진 희망",
+    "아이 충치 예방하려고 왔어요": "소아 충치 예방 희망",
+    "어금니 홈 메우려고 왔어요": "어금니 홈 메우기 희망",
+    "아이 어금니 충치를 예방하고 싶어요": "소아 어금니 충치 예방 희망",
+    "찬 거 먹으면 이가 시려요": "냉수 시 시림",
+    "이에 까만 점이 생겼어요": "치아 까만 점 발견",
+    "음식이 자꾸 껴요": "음식물 낌",
+    "밤에 이가 욱신거려요": "야간 욱신거림",
+    "씹을 때 아파요": "저작 시 통증",
+    "뜨거운 걸 먹으면 아파요": "온열 자극 시 통증",
+    "신경치료한 이를 씌우러 왔어요": "신경치료 치아 보철 희망",
+    "이가 깨졌어요": "치아 깨짐",
+    "빠진 자리를 채우고 싶어요": "결손부 수복 희망",
+    "이가 흔들려요": "치아 흔들림",
+    "부러진 이를 빼야 한대요": "부러진 치아 발치 권유",
+    "사랑니 쪽이 붓고 아파요": "사랑니 부위 부종·통증",
+    "사랑니 빼러 왔어요": "사랑니 발치 희망",
+    "빠진 자리에 임플란트를 하고 싶어요": "결손부 임플란트 희망",
+    "임플란트 마무리하러 왔어요": "임플란트 마무리 희망",
+    "치아 배열이 신경 쓰여요": "치열 고민",
+    "교정 장치 점검하러 왔어요": "교정 장치 점검",
+    "이가 누렇게 보여요": "치아 변색 고민",
+    "잇몸이 붓고 피가 나요": "잇몸 부종·출혈",
+    "잇몸이 내려간 것 같아요": "잇몸 퇴축 느낌",
+    "치료 계획을 상담받고 싶어요": "치료 계획 상담 희망",
+    "예전에 치료한 이가 신경 쓰여요": "이전 치료 치아 불편감",
+    "잇몸 상태 확인하러 왔어요": "잇몸 상태 확인 희망",
+    "아이 치아 관리 받으러 왔어요": "소아 치아 관리 희망",
+    "임플란트 치료 받으러 왔어요": "임플란트 치료 희망",
+}
+
+# 증상을 말하는 C.C — 초안이 '"…" 호소'로 쓸 수 있는 말(검진·예방·상담 희망, '~것 같아요' 같은 느낌에는 '호소'가 어색하다 —
+# 모델이 다른 말로 바꾸다 조사를 틀린다)
+SYMPTOM_CC = frozenset(
+    (
+        "잇몸에서 피가 나요",
+        *_FILLING,
+        "밤에 이가 욱신거려요",
+        "씹을 때 아파요",
+        "뜨거운 걸 먹으면 아파요",
+        "이가 깨졌어요",
+        "이가 흔들려요",
+        "사랑니 쪽이 붓고 아파요",
+        "잇몸이 붓고 피가 나요",
+    )
+)
+
+
+# 응급 내원(6b단계)의 C.C — 상황(master.EMERGENCY_SCENES)마다 환자 말과 차트식으로 줄인 말. 모두 증상이라 '호소'가 자연스럽다
+EMERGENCY_CC = dict(
+    zip(
+        EMERGENCY_SCENES,
+        (
+            ("밤새 위 어금니가 너무 아파요", "위 어금니 급성 통증"),
+            ("씹다가 이가 깨졌어요", "저작 중 치아 깨짐"),
+            ("넘어져서 앞니가 흔들려요", "외상 후 앞니 흔들림"),
+            ("때운 게 빠져서 너무 시려요", "충전물 탈락·시림"),
+            ("어금니 쪽 잇몸이 붓고 고름이 나요", "어금니 잇몸 부종·배농"),
+            ("볼이 부을 정도로 아래 어금니가 아파요", "아래 어금니 통증·안면 부종"),
+            ("씌운 게 빠지고 앞니가 아파요", "보철물 탈락·통증"),
+            ("운동하다 앞니가 깨졌어요", "외상 후 앞니 깨짐"),
+        ),
+        strict=True,
+    )
+)
+EMERGENCY_CC[EMERGENCY_AFTER_VISIT_SCENE] = (
+    "치료받은 이가 마취 풀리고 너무 아파요",
+    "치료 후 통증",
+)
+CC_SHORT |= dict(EMERGENCY_CC.values())
+SYMPTOM_CC |= {cc for cc, _ in EMERGENCY_CC.values()}
+# 응급 내원 서술에 꼭 넣을 말(그중 하나)과 초안 문장
+EMERGENCY_WORDS = ("응급",)
+EMERGENCY_SENTENCE = "응급 내원."
 
 # 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
 CC_NO_EVIDENCE = {
@@ -219,11 +311,12 @@ def _requirement_facts(
     return f
 
 
-def _findings(rng, r, requirement: dict | None) -> dict | None:
-    """소견 수치 — 위생·잇몸치료 내원만. 잇몸치료는 R03 근거가 없을 때만 치주낭 3mm 이하"""
+def _findings(rng, r, requirement: dict | None, perio_plan: bool) -> dict | None:
+    """소견 수치 — 위생·잇몸치료 내원만. 잇몸치료는 R03 근거가 없을 때만 치주낭 3mm 이하.
+    치주 계획을 만든 위생 내원(perio_plan)은 계획과 맞게 잇몸치료처럼 깊은 치주낭·출혈"""
     if r["code"] not in HYGIENE_CODES and r["code"] != PERIO_CODE:
         return None
-    perio = r["code"] == PERIO_CODE
+    perio = r["code"] == PERIO_CODE or perio_plan
     shallow = perio and requirement and requirement["key"] == "R03" and not requirement["evidence"]
     return {
         "pocket_mm": int(rng.integers(2, 4)) if shallow or not perio else int(rng.integers(4, 7)),
@@ -242,22 +335,59 @@ def _alerts(run) -> dict:
     return by_patient
 
 
-def _plan(r, course_left: dict) -> dict | None:
-    """다음 계획 — 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획), 위생 내원은 다음 정기 검진"""
-    remaining = course_left.get(r["appointment_id"])
-    if remaining:
-        return {"remaining": remaining}
+def _plan(r, plan_items: list) -> dict | None:
+    """다음 계획 — 그 내원을 마친 시각에 열린 치료계획 항목(§2.3 — 다음 예약이 잡혔는지·나중에 바뀌었는지와 무관),
+    없으면 위생 내원은 다음 정기 검진"""
+    end = datetime.fromisoformat(r["performed_at"]) + timedelta(minutes=DURATION[r["code"]])
+    items = open_plan_items(plan_items, r["patient_id"], end.strftime("%Y-%m-%d %H:%M:%S"))
+    if items:
+        return {
+            "items": [
+                i | {"tooth": None if i["tooth"] == FULL_MOUTH else i["tooth"]} for i in items
+            ]
+        }
     if r["code"] in HYGIENE_CODES:
         return {"recall_months": RECALL_CYCLE_MONTHS}
     return None
 
 
+def _extra(rng, r, teeth: set, birth: date) -> tuple[str, str] | None:
+    """추가 처치 누락의 (시술, 치아) — SAME_DAY_EXTRA 중 그날 나이에 급여이고 장부에 없는 치아 후보가 있는 시술 균등,
+    치아는 후보 중 균등 (§4.3). 후보가 없으면 None"""
+    age = age_on(birth, r["day"])
+    options = {
+        code: [t for t in TOOTH_CHOICES[code] if t not in teeth]
+        for code in sorted(SAME_DAY_EXTRA)
+        if insured_on(PROCEDURE_BY_CODE[code], age)
+    }
+    codes = [c for c, ts in options.items() if ts]
+    if not codes:
+        return None
+    code = codes[int(rng.integers(len(codes)))]
+    return code, options[code][int(rng.integers(len(options[code])))]
+
+
 def stage_facts(run, rng, fake) -> None:
     """난수를 나눈다 — 확정 월 오류(심사 결과 따라감) / 제출 월·전월 오류(⑤-2 정답) / 상병·사실(진료마다 따로 시드 —
     조건에 따라 뽑는 횟수가 달라도 다른 줄이 밀리지 않게). 심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 그대로"""
-    settled_rng, open_rng, fact_rng = rng.spawn(3)
+    settled_rng, open_rng, fact_rng, extra_rng = rng.spawn(
+        4
+    )  # 앞 셋은 추가 처치 누락을 넣기 전과 같다
+    birth = {
+        pid: date.fromisoformat(b)
+        for pid, b in run.conn.execute("SELECT id, birth_date FROM emr_patients")
+    }
+    # 환자 → 장부 진료·치료계획 항목·이미 고른 추가 처치의 치아 (추가 처치 치아는 여기 없는 것 — "남은 치료"와 겹치지 않게)
+    ledger_teeth = defaultdict(set)
+    for pid, tooth in run.conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
+        ledger_teeth[pid].add(tooth)
     fact_seed = int(fact_rng.integers(1 << 62))
-    course_left = run.state["course_left"]
+    plan_items = run.state["plan_items"]
+    for i in plan_items:
+        ledger_teeth[i["patient_id"]].add(i["tooth"])
+    perio_plans = {
+        plan.appointment_id for plan in run.state["plans"]
+    }  # 위생 내원이 만든 계획은 치주 계획
     alerts = _alerts(run)
     episode = run.state["episode"]  # 예약 → 코스. 창 이전 내원은 없음 — 예약마다 따로
     treated = defaultdict(lambda: defaultdict(list))  # 환자 → (치아, 시술) → [(진료일, 코스)]
@@ -283,6 +413,18 @@ def stage_facts(run, rng, fake) -> None:
                     error = "requirement"
                 elif open_rng.random() < DIAGNOSIS_ERROR_RATE:
                     error = "diagnosis"
+        extra = None
+        if (
+            error is None
+            and r["window"]
+            and r["claimed"]
+            and r["bucket"] != "settled"
+            and extra_rng.random() < SAME_DAY_EXTRA_RATE
+        ):
+            extra = _extra(extra_rng, r, ledger_teeth[r["patient_id"]], birth[r["patient_id"]])
+            if extra:
+                error = "omitted_extra"
+                ledger_teeth[r["patient_id"]].add(extra[1])
         rng = np.random.default_rng([fact_seed, r["id"]])
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
         dx = (
@@ -310,7 +452,12 @@ def stage_facts(run, rng, fake) -> None:
                 if requirement and not requirement["evidence"]
                 else CC[r["code"]],
             ),
-            "findings": _findings(rng, r, requirement),
+            "findings": _findings(
+                rng,
+                r,
+                requirement,
+                r["code"] in HYGIENE_CODES and r["appointment_id"] in perio_plans,
+            ),
             "requirement": requirement,
             "alerts": [
                 {"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]}
@@ -320,7 +467,8 @@ def stage_facts(run, rng, fake) -> None:
             "discovered": [
                 ALERT_TYPES[c]["label"] for c, appt in visible if appt == r["appointment_id"]
             ],
-            "plan": _plan(r, course_left),
+            "plan": _plan(r, plan_items),
+            "extra": extra and {"procedure": NAME[extra[0]], "tooth": extra[1]},
         }
         lines.append(
             {
@@ -335,14 +483,20 @@ def stage_facts(run, rng, fake) -> None:
             }
         )
         if error:
-            errors.append((r["id"], error, key if error == "requirement" else None))
+            errors.append(
+                (r["id"], error, key if error == "requirement" else None, *(extra or (None, None)))
+            )
         if r["tooth"] != FULL_MOUTH:
             treated[r["patient_id"]][(r["tooth"], r["code"])].append((r["day"], r["root"]))
         if r["code"] in EXTRACTION_CODES:
             extracted[r["patient_id"]][r["tooth"]] = r["day"]
         if r["code"] == SCALING_CODE:
             scaled[r["patient_id"]].append(r["day"])
-    run.conn.executemany("INSERT INTO truth.truth_claim_errors VALUES (?, ?, ?)", sorted(errors))
+    run.conn.executemany(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement, extra_procedure_code,"
+        " extra_tooth_no) VALUES (?, ?, ?, ?, ?)",
+        sorted(errors),
+    )
     run.state["chart"] = sorted(lines, key=lambda x: x["id"])
 
 
@@ -373,10 +527,10 @@ def _site(f) -> str:
     return f"{f['tooth']}번 치아 " if f["tooth"] else ""
 
 
-TEMPLATES = (
-    "{site}{procedure} 진행했습니다.",
-    "{cc}라고 하셔서 {site}{procedure} 시행했습니다.",
-    "{site}{procedure} 시행했습니다. 특이사항은 없습니다.",  # 주의사항이 있는 줄에는 쓰지 않음
+TEMPLATES = (  # 차트는 짧은 메모체 — '~함·~음'·명사로 끝낸다(§4.3)
+    "{site}{procedure} 진행함.",
+    '"{cc}"라며 내원, {site}{procedure} 시행함.',
+    "{site}{procedure} 시행함. 특이사항 없음.",  # 주의사항이 있는 줄에는 쓰지 않음
 )
 
 
@@ -391,10 +545,13 @@ def template_note(rng, f) -> str:
     return " ".join([note, *alerts])
 
 
-def _alert_sentences(f) -> list[str]:
-    return [f"{a['label']} 주의사항이 있어 {a['action']}." for a in f["alerts"]] + [
-        f"진료 중 확인: {label}." for label in f["discovered"]
-    ]
+def _alert_sentences(f, key=None) -> list[str]:
+    """주의사항 처리 — 서술 초안(key 있음)은 꼴을 진료 번호로 고른다, 템플릿은 한 꼴"""
+    forms = ("{label} 주의, {action}.", "{action}({label}).")
+    return [
+        (_form(f"{key}:{i}", "alert", forms) if key is not None else forms[0]).format(**a)
+        for i, a in enumerate(f["alerts"])
+    ] + [f"진료 중 {label} 새로 확인." for label in f["discovered"]]
 
 
 def _ro(word: str) -> str:
@@ -407,15 +564,66 @@ def _ago(days: int) -> str:
     return f"{days}일 전" if days < 60 else f"약 {round(days / 30)}개월 전"
 
 
-def draft_note(f) -> str:
-    """서술 초안 — 사실을 그대로 문장으로. 9b단계가 자연스러운 서술로 덮어쓴다"""
-    out = [f'"{f["cc"]}"라고 하시며 내원했습니다.']
-    if f["findings"]:
-        x = f["findings"]
-        out.append(
-            f"치주낭 깊이 {x['pocket_mm']}mm, 출혈 {'있음' if x['bleeding'] else '없음'}, 치석 {x['calculus']},"
-            f" 동요도 {x['mobility']}도로 확인했습니다."
+def plan_items(plan: dict) -> list[tuple[dict, int]]:
+    """남은 치료 — 같은 시술·치아는 한 번만(횟수와 함께, 처음 나온 순서). 같은 말을 여러 번 넣으라고 하면 모델이 '다음 내원
+    때 이어서' 같은 문장을 덧붙인다"""
+    counts = Counter((i["tooth"], i["procedure"]) for i in plan["items"])
+    seen = {}
+    for i in plan["items"]:
+        seen.setdefault((i["tooth"], i["procedure"]), i)
+    return [(i, counts[k]) for k, i in seen.items()]
+
+
+def _form(key, salt: str, options: tuple):
+    """초안 꼴 고르기 — 진료 번호 해시로(난수를 쓰지 않아 다른 결과를 바꾸지 않는다). 프롬프트에 여러 꼴을 줘도 모델은 건마다
+    따로 불려 한 꼴로 몰려서, 초안이 꼴을 정한다"""
+    return options[int(hashlib.sha256(f"{salt}:{key}".encode()).hexdigest(), 16) % len(options)]
+
+
+def draft_note(f, key) -> str:
+    """서술 초안 — 사실을 그대로 메모로. 환자 말(따옴표 또는 줄인 말)·소견·시행·주의사항·남은 계획의 꼴은 진료 번호(key)로 고른다.
+    9b단계가 이 초안을 다시 쓴다(가짜 게이트웨이면 그대로 남는다)"""
+    cc, x = f["cc"], f["findings"]
+    opener = _form(key, "cc", ("라며", "라고 하여", "뒤", "호소"))
+    if opener == "호소" and cc not in SYMPTOM_CC:
+        opener = "라며"
+    if _form(key, "quote", (True, False)):
+        said = {
+            "라며": f'"{cc}"라며 내원.',
+            "라고 하여": f'"{cc}"라고 하여 내원.',
+            "뒤": f'"{cc}"라고 함.',
+            "호소": f'"{cc}" 호소.',
+        }[opener]
+    else:  # 차트식으로 줄인 말
+        short = CC_SHORT[cc]
+        said = (
+            f"{short} 호소."
+            if opener == "호소"
+            else f"{short}."
+            if opener == "뒤"
+            else f"{_ro(short)} 내원."
         )
+    out = [] if opener == "뒤" and x else [said]
+    if f.get("emergency"):
+        out.append(EMERGENCY_SENTENCE)
+    if x:
+        b = x["bleeding"]
+        out.append(
+            _form(
+                key,
+                "findings",
+                (
+                    f"치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if b else '없음'}, 치석 {x['calculus']},"
+                    f" 동요도 {x['mobility']}도.",
+                    f"출혈 {'있고' if b else '없고'} 치주낭 {x['pocket_mm']}mm, 치석 {x['calculus']},"
+                    f" 동요도 {x['mobility']}도.",
+                    f"치석 {x['calculus']}, 치주낭 {x['pocket_mm']}mm, 출혈 {'있음' if b else '없음'},"
+                    f" 동요도 {x['mobility']}도.",
+                ),
+            )
+        )
+        if opener == "뒤":
+            out.append(said)
     req = f["requirement"]
     if req and req["key"] == "R01":
         history = (
@@ -424,31 +632,78 @@ def draft_note(f) -> str:
             else _ago(req["prev_days"])
         )
         out.append(
-            f"같은 치아에 {history} 같은 치료를 한 이력이 있습니다."
-            + (f" {_ro(req['reason'])} 다시 치료합니다." if req["reason"] else "")
+            f"같은 치아 {history} 같은 치료 이력 있음."
+            + (f" {_ro(req['reason'])} 재치료." if req["reason"] else "")
         )
     elif req and req["key"] == "R02":
-        where = "타 기관에서 " if req.get("other_clinic") else ""
-        out.append(
-            f"{where}{req['scaling_days_ago']}일 전 치석제거를 했습니다."
-            + (" 재평가 후 치주치료를 이어서 진행합니다." if req["linked"] else "")
+        done = (
+            f"타 기관에서 {req['scaling_days_ago']}일 전 치석제거 받음."
+            if req.get("other_clinic")
+            else f"{req['scaling_days_ago']}일 전 치석제거 시행함."
         )
+        out.append(done + (" 재평가 후 치주치료 이어서 진행." if req["linked"] else ""))
     elif req and req["key"] == "R04":
-        out.append(f"대상 치아는 {req['surface']}입니다.")
+        out.append(f"대상 치아 {req['surface']} 확인.")
     elif req and req["key"] == "R05" and req["impaction"]:
-        out.append(f"{req['impaction']} 상태로 골삭제 후 발치합니다.")
+        out.append(f"{req['impaction']} 상태로 골삭제 후 발치.")
     elif req and req["key"] == "R06" and req.get("extracted_days_ago"):
-        out.append(f"{_ago(req['extracted_days_ago'])} 발치한 무치악 부위입니다.")
+        out.append(f"{_ago(req['extracted_days_ago'])} 발치한 무치악 부위.")
     elif req and req["key"] == "R06" and req.get("other_clinic"):
-        out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위입니다.")
-    out.append(f"{_site(f)}{f['procedure']} 시행했습니다.")
-    out += _alert_sentences(f)
+        out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위.")
+    out.append(f"{_site(f)}{f['procedure']} {_form(key, 'done', ('시행함', '진행함'))}.")
+    if f.get("extra"):
+        out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행함.")
+    out += _alert_sentences(f, key)
     plan = f["plan"]
-    if plan and "remaining" in plan:
-        out.append(f"{plan['remaining']}회 더 내원할 예정입니다.")
+    if plan and "items" in plan:
+        items = ", ".join(
+            _site(i) + i["procedure"] + (f" {n}회" if n > 1 else "") for i, n in plan_items(plan)
+        )
+        out.append(
+            _form(
+                key,
+                "plan",
+                (
+                    f"남은 치료로 {items} 예정.",
+                    f"{items} 예정.",
+                    f"{items} 남아 있음.",
+                    f"다음 치료는 {items}.",
+                ),
+            )
+        )
     elif plan:
-        out.append(f"{plan['recall_months']}개월 후 정기 검진을 안내했습니다.")
+        n = plan["recall_months"]
+        out.append(
+            _form(
+                key, "recall", (f"{n}개월 후 정기 검진 안내함.", f"정기 검진 {n}개월 후로 안내.")
+            )
+        )
     return " ".join(out)
+
+
+def emergency_facts(uid: str, r: dict, scene: str, alerts: dict, plan_items: list) -> dict:
+    """응급 내원(6b단계)의 차트 사실 — 상황의 환자 말, 그날 보이는 관련 주의사항, 내원을 마친 시각의 남은 계획(§4.3과 같은 틀).
+    요건·오류·소견·추가 처치는 없다. 환자 말 꼴은 통화 번호로"""
+    day = r["performed_at"][:10]
+    cc = EMERGENCY_CC[scene][0]
+    return {
+        "procedure": NAME[r["code"]],
+        "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
+        "cc": cc,
+        "findings": None,
+        "requirement": None,
+        "alerts": [
+            {"label": ALERT_TYPES[c]["label"], "action": ALERT_TYPES[c]["action"]}
+            for c, recorded, ends, _ in alerts[r["patient_id"]]
+            if recorded <= day
+            and (ends is None or day < ends)
+            and r["code"] in ALERT_TYPES[c]["procedures"]
+        ],
+        "discovered": [],
+        "plan": _plan({**r, "day": date.fromisoformat(day)}, plan_items),
+        "extra": None,
+        "emergency": True,
+    }
 
 
 def stage_notes(run, rng, fake) -> None:
@@ -457,7 +712,7 @@ def stage_notes(run, rng, fake) -> None:
     notes, truth = [], []
     for x in lines:
         narrative = x["special"] or x["id"] in decoys
-        note = draft_note(x["facts"]) if narrative else template_note(rng, x["facts"])
+        note = draft_note(x["facts"], x["id"]) if narrative else template_note(rng, x["facts"])
         notes.append((x["id"], x["dx"], note))
         truth.append(
             (
@@ -495,6 +750,17 @@ def _period(days: int) -> str:
     return f"{days}일" if days < 60 else f"{round(days / 30)}개월"
 
 
+# 꼭 넣을 말 묶음(그중 하나) — 타 기관 이력(원내 이력처럼 쓰면 ⑤-3이 장부와 모순), 진료 중 발견, 남은 치료계획
+OTHER_CLINIC_WORDS = ("타 기관", "다른 치과", "타 치과")
+DISCOVERED_WORDS = ("진료 중", "새로")
+PLAN_WORDS = ("남은", "남아", "예정", "다음")
+# 차트 서술에 쓰면 안 되는 꼴 — 메모체가 아닌 끝맺음·높임말, 초안에 없는 시점(초안은 '다음 내원'을 쓰지 않는다),
+# 치아 없는 진료에 붙인 부위 말, 시행한 골삭제를 '필요'로 바꾼 말
+MEMO_STYLE_FORBIDDEN = (
+    r"니다|하시며|하셨|했다\.|다음 (내원|진료|방문)|전체 구강|전악|전반적으로|골삭제 필요"
+)
+
+
 def _requirement_words(req: dict) -> list[str]:
     """요건 수치 + 근거가 있으면 근거 말"""
     key = req["key"]
@@ -523,17 +789,32 @@ def evidence_forbidden(f: dict) -> list[str]:
 
 
 def narrative_must_include(f: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·치주낭 'Nmm'·주의사항·발견한 주의사항·요건 수치·다음 계획"""
+    """꼭 넣을 사실 — 치아 'NN번'·시술 이름(진료 기록이라 표준 이름만)·추가 처치의 치아·시술·치주낭 'Nmm'·주의사항·
+    발견한 주의사항과 새로 알게 됐다는 말·요건 수치·타 기관 이력이면 그 말·다음 계획과 계획이라는 말"""
     out = [[f"{f['tooth']}번"]] if f["tooth"] else []
     out.append([f["procedure"]])
+    if f.get("emergency"):
+        out.append(list(EMERGENCY_WORDS))
+    if f.get("extra"):
+        out += [[f"{f['extra']['tooth']}번"], [f["extra"]["procedure"]]]
     if f["findings"]:
         out.append([f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
+    if f["discovered"]:
+        out.append(list(DISCOVERED_WORDS))
     if f["requirement"]:
         out += [[w] for w in _requirement_words(f["requirement"])]
+        if f["requirement"].get("other_clinic"):
+            out.append(list(OTHER_CLINIC_WORDS))
     plan = f["plan"]
-    if plan and "remaining" in plan:
-        out.append([f"{plan['remaining']}회"])
+    if plan and "items" in plan:
+        for i, n in plan_items(plan):
+            out += (
+                ([[f"{i['tooth']}번"]] if i["tooth"] else [])
+                + [[i["procedure"]]]
+                + ([[f"{n}회"]] if n > 1 else [])
+            )
+        out.append(list(PLAN_WORDS))
     elif plan:
         out.append([f"{plan['recall_months']}개월"])
     return out
@@ -553,7 +834,7 @@ def narrative_checks(f: dict, patient_name: str) -> dict:
         "field": "note",
         "must_include": narrative_must_include(f),
         "forbidden_words": [*CHART_FORBIDDEN_WORDS, *evidence_forbidden(f), patient_name],
-        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+        "forbidden_patterns": [*llm_jobs.forbidden_patterns(), MEMO_STYLE_FORBIDDEN],
     }
 
 

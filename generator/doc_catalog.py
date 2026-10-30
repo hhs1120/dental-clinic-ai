@@ -7,7 +7,8 @@
 - 방해 문서: similar = 짝과 비슷한 주제를 다루되 skip(짝의 사실이 있는 내용)은 쓰지 않음 — 짝과 avoid 문서의 사실 말 금지 /
   external = 같은 주제를 다른 값으로(타 병원·일반)
 - 같은 사실을 담은 핵심 문서(공지와 FAQ·매뉴얼 등)는 Fact.same 묶음 키가 같다 — ③ 질문의 정답 문서를 함께 묶는 기준
-- 공지는 시행일('N월 M일')도 꼭 넣을 말. 문서를 더하거나 빼면 번호가 다시 섞이니 ③ 질문을 쓰기 전에 목록을 확정한다
+- 공지는 시행일('N월 M일')도 꼭 넣을 말. 문서를 빼면 번호가 다시 섞이니 ③ 질문을 쓰기 전에 목록을 확정한다.
+  더한 문서는 기존 번호를 두고 뒤에 붙인다 — 키를 documents.APPENDED에 더한 순서대로 넣는다
 """
 
 from dataclasses import dataclass, field, replace
@@ -16,6 +17,7 @@ from generator.master import (
     AGE_BANDS,
     CONDITIONAL_INSURED_MIN_AGE,
     HOURS,
+    ORAL_CARE_PRICES,
     PERIO_LINK_DAYS,
     PROCEDURES,
     SCALING_MIN_AGE,
@@ -48,6 +50,7 @@ class Doc:
     avoid: tuple[str, ...] = ()  # similar: 짝 말고도 사실 말을 쓰면 안 되는 핵심 문서(주제가 겹침)
     recurring: bool = False  # 해마다 다시 내는 공지(휴진) — 이전 값(previous)을 주지 않음
     sections: tuple[str, ...] = field(default=())  # 청구 기준: 다룰 상세 사유 키 순서
+    forbidden: tuple[str, ...] = ()  # 쓰면 안 되는 말 — 사실 일부를 목록 전부처럼 쓰지 않게
 
 
 def _won(n: int) -> str:
@@ -205,7 +208,7 @@ def _claim_doc(field_name: str, reasons: tuple[str, ...]) -> Doc:
 
 
 _DOCS: tuple[Doc, ...] = (
-    # ── 직원 매뉴얼 26 ──
+    # ── 직원 매뉴얼 28 ──
     Doc(
         "manual-denture-repair",
         "manual",
@@ -562,6 +565,46 @@ _DOCS: tuple[Doc, ...] = (
             F("copy.proxy", "가족이 대신 신청하면 가족관계증명서가 필요하다", "가족관계증명서"),
         ),
     ),
+    Doc(
+        "manual-oral-care-sales",
+        "manual",
+        "구강용품 판매 안내",
+        "데스크에서 파는 구강용품 가격과 판매 기록",
+        (
+            F(
+                "oralcare.prices",
+                "데스크 판매 가격은 "
+                + ", ".join(f"{n} {_won(p)}" for n, p in ORAL_CARE_PRICES.items())
+                + "이다",
+                *(_won(p) for p in ORAL_CARE_PRICES.values()),
+            ),
+            F(
+                "oralcare.record",
+                "구강용품은 데스크 카드 단말기로 결제하고 판매 대장에 적는다 — 전자차트 수납에는 들어가지 않아"
+                " 그날 카드 승인 합계가 수납보다 그만큼 많다",
+                "판매 대장",
+            ),
+        ),
+    ),
+    Doc(
+        "manual-plan-followup",
+        "manual",
+        "치료계획 후속 연락",
+        "치료계획을 세우고 예약하지 않은 환자에게 연락",
+        (
+            F(
+                "planfollow.call",
+                "치료계획을 세우고 3주가 지나도 예약하지 않은 환자에게는 상담실장이 전화로 안내한다",
+                "3주",
+                "상담실장",
+            ),
+            F(
+                "planfollow.log",
+                "두 차례 연락해도 답이 없으면 차트에 연락 기록을 남기고 다음 리콜 때 다시 안내한다",
+                "연락 기록",
+            ),
+        ),
+    ),
     # ── FAQ 10 ──
     Doc(
         "faq-hours",
@@ -761,7 +804,14 @@ _DOCS: tuple[Doc, ...] = (
         "insurance_guide",
         "비급여 진료 안내",
         "보험이 적용되지 않는 진료",
-        (F("ins.uninsured", "레진·인레이·크라운·미백은 비급여다", *_UNINSURED),),
+        (
+            F(
+                "ins.uninsured",
+                "레진·인레이·크라운·미백 등은 비급여다",
+                *_UNINSURED,
+            ),
+        ),
+        forbidden=("네 가지",),
     ),
     Doc(
         "ins-share",
@@ -796,7 +846,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "토요일 진료시간 변경",
         "토요일 진료 종료 시각",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F(
@@ -812,7 +862,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "미백 비용 변경",
         "미백 비용",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F("notice.white", f"미백 비용은 {_WHITENING}이다", _WHITENING, same="whitening.fee"),
@@ -823,7 +873,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "스케일링 본인부담 변경",
         "급여 스케일링 본인부담금",
-        effective="2025-01-01",
+        effective="2023-11-01",
         emr=True,
         facts=(
             F(
@@ -847,7 +897,7 @@ _DOCS: tuple[Doc, ...] = (
         "notice",
         "리마인드 문자 발송 시각 변경",
         "예약 리마인드 문자 발송 시각",
-        effective="2024-12-30",
+        effective="2023-10-30",
         emr=True,
         facts=(
             F(
@@ -933,8 +983,8 @@ _DOCS: tuple[Doc, ...] = (
         "추석 연휴 휴진 날짜",
         kind="old_version",
         pair="notice-chuseok",
-        effective="2025-09-22",
-        facts=(F("old.chuseok", "10월 5일부터 10월 9일까지 휴진한다", "10월 5일", "10월 9일"),),
+        effective="2024-09-02",
+        facts=(F("old.chuseok", "9월 16일부터 9월 18일까지 휴진한다", "9월 16일", "9월 18일"),),
     ),
     Doc(
         "old-seollal",
@@ -943,8 +993,8 @@ _DOCS: tuple[Doc, ...] = (
         "설 연휴 휴진 날짜",
         kind="old_version",
         pair="notice-seollal",
-        effective="2025-01-13",
-        facts=(F("old.seollal", "1월 27일부터 1월 30일까지 휴진한다", "1월 27일", "1월 30일"),),
+        effective="2024-01-29",
+        facts=(F("old.seollal", "2월 9일부터 2월 12일까지 휴진한다", "2월 9일", "2월 12일"),),
     ),
     Doc(
         "old-hours",
@@ -953,7 +1003,7 @@ _DOCS: tuple[Doc, ...] = (
         "토요일 진료 종료 시각",
         kind="old_version",
         pair="notice-hours",
-        effective="2024-03-04",
+        effective="2023-03-06",
         facts=(F("old.sat", "토요일 진료는 오후 2시까지다", "오후 2시까지"),),
     ),
     Doc(
@@ -963,7 +1013,7 @@ _DOCS: tuple[Doc, ...] = (
         "미백 비용",
         kind="old_version",
         pair="notice-whitening",
-        effective="2024-01-02",
+        effective="2023-01-02",
         facts=(F("old.white", "미백 비용은 250,000원이다", "250,000원"),),
     ),
     Doc(
@@ -973,7 +1023,7 @@ _DOCS: tuple[Doc, ...] = (
         "급여 스케일링 본인부담금",
         kind="old_version",
         pair="notice-scaling-fee",
-        effective="2024-01-01",
+        effective="2023-01-01",
         facts=(F("old.scaling", "스케일링 본인부담은 17,000원이다", "17,000원"),),
     ),
     Doc(
@@ -983,7 +1033,7 @@ _DOCS: tuple[Doc, ...] = (
         "진료 당일 무료 주차 시간",
         kind="old_version",
         pair="notice-parking",
-        effective="2025-06-02",
+        effective="2024-06-03",
         facts=(F("old.parking", "무료 주차는 1시간이다", "1시간"),),
     ),
     Doc(
@@ -993,7 +1043,7 @@ _DOCS: tuple[Doc, ...] = (
         "예약 리마인드 문자 발송 시각",
         kind="old_version",
         pair="notice-reminder",
-        effective="2024-04-01",
+        effective="2023-04-03",
         facts=(F("old.remind", "리마인드 문자는 예약 전날 오후 6시에 보낸다", "전날 오후 6시"),),
     ),
     Doc(
@@ -1003,7 +1053,7 @@ _DOCS: tuple[Doc, ...] = (
         "부도 누적 시 조치",
         kind="old_version",
         pair="notice-noshow",
-        effective="2025-03-04",
+        effective="2024-03-04",
         facts=(F("old.noshow", "부도 2회 누적 시 1개월간 전화 예약만 받는다", "2회", "1개월"),),
     ),
     Doc(
@@ -1013,7 +1063,7 @@ _DOCS: tuple[Doc, ...] = (
         "멸균 기록지 마감 시각",
         kind="old_version",
         pair="notice-sterile-log",
-        effective="2025-08-04",
+        effective="2024-08-05",
         facts=(
             F("old.sterile", "멸균 기록지는 다음 날 오전 10시까지 마감한다", "다음 날 오전 10시"),
         ),
@@ -1025,7 +1075,7 @@ _DOCS: tuple[Doc, ...] = (
         "무이자 할부 개월 수",
         kind="old_version",
         pair="notice-installment",
-        effective="2025-05-02",
+        effective="2024-05-03",
         facts=(
             F("old.install", "100만 원 이상 결제는 2개월 무이자 할부가 된다", "100만 원", "2개월"),
         ),
@@ -1037,7 +1087,7 @@ _DOCS: tuple[Doc, ...] = (
         "임플란트 보증 기간",
         kind="old_version",
         pair="notice-implant-warranty",
-        effective="2025-07-01",
+        effective="2024-07-01",
         facts=(F("old.warranty", "임플란트 보증 기간은 3년이다", "3년"),),
     ),
     Doc(
@@ -1047,7 +1097,7 @@ _DOCS: tuple[Doc, ...] = (
         "대기실 무선 인터넷 이름",
         kind="old_version",
         pair="notice-wifi",
-        effective="2025-04-07",
+        effective="2024-04-08",
         facts=(F("old.wifi", "대기실 와이파이 이름은 AX-WAITING이다", "AX-WAITING"),),
     ),
     # ── 방해: 비슷한 주제 10 (짝의 사실은 쓰지 않음) ──

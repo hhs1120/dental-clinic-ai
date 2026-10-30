@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -9,12 +9,20 @@ data:
 llm-import:
 	uv run python -m generator.llm_jobs import
 
+# 이번 생성이 쓰지 않은 LLM 캐시 줄(프롬프트·입력이 바뀐 옛 시도) 지우기 — 빈 건이 없을 때만
+llm-prune:
+	PYTHONHASHSEED=0 uv run python -m generator --prune-llm-cache
+
 llm-fill-api:
 	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
 	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT))
 
 verify:
 	uv run python -m generator.verify
+
+# 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
+wireframe:
+	uv run python docs/wireframe/export.py
 
 test:
 	uv run pytest

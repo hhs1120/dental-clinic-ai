@@ -280,8 +280,8 @@ class Gateway(_Base):
         prompt_version: str | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> str:
-        """requests: [{custom_id, system, messages, schema}] → 배치 id. 상한은 제출 전에만 본다(배치 비용은 결과에서 기록)"""
-        self._check_budget()
+        """requests: [{custom_id, system, messages, schema}] → 배치 id. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
+        보고 제출한다(기능 정의 §7). 비용은 결과에서 기록"""
         model = self.config["aliases"][alias][0]
         batch = []
         for r in requests:

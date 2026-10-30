@@ -18,8 +18,8 @@ CONFIG = ROOT / "config" / "generator.yaml"
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("alerts")
-    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
-    conn = sqlite3.connect(out / "app.sqlite")
+    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn, verify.load_ctx(CONFIG, conn)

@@ -1,4 +1,5 @@
-"""출력 경로. Makefile·verify·생성기가 같이 쓴다. 앱·평가가 보는 data/, 정답은 ground_truth/, LLM 단계 작업은 generator/llm/ 아래."""
+"""출력 경로. Makefile·verify·생성기·평가가 같이 쓴다. data/의 source.sqlite는 생성기 출력(앱은 읽기 전용으로 붙임),
+app.sqlite는 앱이 쓰는 DB(가상 데이터 생성 설계 §0). 정답은 ground_truth/, LLM 단계 작업은 generator/llm/ 아래."""
 
 from pathlib import Path
 
@@ -7,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def output_paths() -> dict[str, Path]:
     return {
+        "source": ROOT / "data" / "source.sqlite",
         "app": ROOT / "data" / "app.sqlite",
         "llm_log": ROOT / "data" / "llm_calls_gen.jsonl",
         # LLM 단계(§5.1) — 입력·출력에 라벨이 있어 앱이 읽는 data/ 밖에 둔다

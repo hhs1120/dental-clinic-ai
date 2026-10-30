@@ -11,6 +11,12 @@ import yaml
 
 from generator import build, llm_jobs, verify
 from generator.build import generate
+from generator.master import (
+    LEDGER_DEBT_CALLS,
+    LEDGER_ERROR_KINDS,
+    LINK_FAILURE_DAYS,
+    RECON_MISMATCH_COUNTS,
+)
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -49,7 +55,7 @@ def no_stages(monkeypatch):
 
 
 def _generate(tmp_path):
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     generate(app, truth, CONFIG)
     return app, truth
 
@@ -59,6 +65,7 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
     meta = dict(sqlite3.connect(truth).execute("SELECT key, value FROM truth_gen_meta"))
     assert meta == {
         "seed": str(CFG["seed"]),
+        "today": CFG["today"].isoformat(),
         "range_start": CFG["range"]["start"].isoformat(),
         "range_end": CFG["range"]["end"].isoformat(),
         "call_slots": str(CFG["calls_with_transcript"]),
@@ -66,6 +73,10 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
         "blind_pool": str(CFG["blind_pool_size"]),
         "documents_core": str(CFG["documents"]["core"]),
         "documents_distractor": str(CFG["documents"]["distractor"]),
+        "link_failure_days": str(LINK_FAILURE_DAYS),
+        "ledger_errors": json.dumps({k: RECON_MISMATCH_COUNTS[k] for k in LEDGER_ERROR_KINDS}),
+        "recon_mismatches": json.dumps(RECON_MISMATCH_COUNTS),
+        "ledger_debt_calls": str(LEDGER_DEBT_CALLS),
     }
 
 
@@ -84,7 +95,7 @@ def test_rag_qa_loaded_when_given(tmp_path, no_stages):
 
     qa = tmp_path / "rag_qa.json"
     qa.write_text(json.dumps(QA, ensure_ascii=False), encoding="utf-8")
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     generate(app, truth, CONFIG, rag_qa_path=qa)
     rows = (
         sqlite3.connect(truth)
@@ -113,8 +124,10 @@ def test_schemas_applied_to_both_dbs(tmp_path, no_stages):
         )
     }
     assert {"emr_patients", "emr_appointments", "ax_calls"} <= app_tables
-    assert {"truth_gen_meta", "truth_claims"} <= truth_tables
-    assert not any(t.startswith("truth_") for t in app_tables)  # 정답은 app.sqlite에 넣지 않는다
+    assert {"truth_gen_meta", "truth_claim_errors"} <= truth_tables
+    assert not any(
+        t.startswith("truth_") for t in app_tables
+    )  # 정답은 생성기 출력(source.sqlite)에 넣지 않는다
 
 
 def test_truth_json_written_next_to_truth_db(tmp_path, monkeypatch):
@@ -166,7 +179,7 @@ def test_truth_json_written_next_to_truth_db(tmp_path, monkeypatch):
 
 
 def test_regenerate_replaces_existing_db(tmp_path, no_stages):
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     for path in (app, truth):
         conn = sqlite3.connect(path)
         conn.execute("CREATE TABLE leftover (x)")
@@ -199,7 +212,7 @@ def test_llm_miss_exports_jobs_and_keeps_db(tmp_path, monkeypatch):
         [("toy", llm_stage), ("after", lambda run, rng, fake: seen.append("after"))],
     )
     llm = {k: tmp_path / k for k in ("llm_cache", "llm_jobs", "llm_results")}
-    app, truth = tmp_path / "app.sqlite", tmp_path / "truth.sqlite"
+    app, truth = tmp_path / "source.sqlite", tmp_path / "truth.sqlite"
     app.write_text("old")
     with pytest.raises(build.LLMMissing) as e:
         generate(app, truth, CONFIG, llm_paths=llm)
@@ -256,7 +269,7 @@ def _run_cli(out, hashseed):
             "generator",
             "--fake-llm",
             "--db",
-            str(out / "app.sqlite"),
+            str(out / "source.sqlite"),
             "--truth",
             str(out / "truth.sqlite"),
         ],
@@ -264,7 +277,7 @@ def _run_cli(out, hashseed):
         env=env,
         check=True,
     )
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return verify.canonical_hash(conn), verify.canonical_hash(conn, "truth")
 

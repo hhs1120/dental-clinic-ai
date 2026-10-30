@@ -7,7 +7,8 @@ from collections import Counter
 
 import pytest
 
-from generator import build, calls
+from generator import build, calls, verify
+from generator.calls import PROCEDURE_NAME
 from generator.master import (
     CALL_NOISE_SHARE,
     CALL_OUTBOUND_SHARE,
@@ -15,7 +16,9 @@ from generator.master import (
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
+    LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
+    SCALING_CODE,
 )
 from generator.paths import ROOT
 
@@ -48,13 +51,18 @@ def test_allocate_oversamples_rare_and_lifts_small_categories():
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
+def gen(tmp_path_factory):
     out = tmp_path_factory.mktemp("calls")
-    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
-    conn = sqlite3.connect(out / "app.sqlite")
+    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
-    return conn
+    return conn, run
+
+
+@pytest.fixture(scope="module")
+def db(gen):
+    return gen[0]
 
 
 def _labels(conn):
@@ -86,12 +94,10 @@ def test_purpose_direction_noise_follow_quota(db):
         assert len(out) == calls.quota({"o": share, "i": 1 - share}, k)["o"], purpose
         # outbound 복합 주제(구조) — noise_type 없음
         multi = [r for r in out if len(json.loads(r["accepted_purposes"])) > 1]
-        assert (
-            len(multi)
-            == calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))[
-                "m"
-            ]
-        )
+        want = calls.quota({"m": OUTBOUND_MULTI_SHARE, "s": 1 - OUTBOUND_MULTI_SHARE}, len(out))[
+            "m"
+        ]
+        assert len(multi) == want
         assert all(r["noise_type"] != "two_topics" for r in out)
 
 
@@ -137,16 +143,19 @@ def test_booking_calls_not_urgent_for_later_visit(db):
 
 
 def test_price_topic_is_not_a_past_visit(db):
-    """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약 시술이거나 지난 진료에 없는 시술.
-    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    """가격 문의의 주제 시술은 앞으로 받을 것 — 예약·다음 예약·열린 치료계획 항목 시술이거나 지난 진료에 없는 시술.
+    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다. 리콜 문의는 다음 검진(위생 시술)의 가격이라 뺀다"""
     checked = 0
-    for (fact,) in db.execute(
-        "SELECT used_fact FROM truth.truth_call_labels WHERE accepted_purposes LIKE '%price_q%'"
+    for fact, purpose in db.execute(
+        "SELECT used_fact, primary_purpose FROM truth.truth_call_labels"
+        " WHERE accepted_purposes LIKE '%price_q%'"
     ):
         f = json.loads(fact)
-        if "patient" not in f:
+        if "patient" not in f or purpose == "recall_q":
             continue
-        upcoming = {x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x}
+        upcoming = {
+            x["procedure"] for x in (f.get("appointment"), f.get("next_appointment")) if x
+        } | {i["procedure"] for i in f["open_plan_items"]}
         assert f["topic_procedure"] in upcoming or f["topic_procedure"] not in {
             v["procedure"] for v in f["recent_visits"]
         }, f
@@ -209,11 +218,51 @@ def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
             "guardian_confused": 0.02,
         },
     )
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
-    assert rows(sqlite3.connect(tmp_path / "app.sqlite")) == before
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    assert rows(sqlite3.connect(tmp_path / "source.sqlite")) == before
+
+
+SCALING = PROCEDURE_NAME[SCALING_CODE]
+
+
+def test_topic_procedures_are_priced_and_scaling_use_marked(gen):
+    """주제 시술 규칙(비용 있는 시술·리콜 문의는 위생 시술·그해 급여 스케일링 표시)을 생성 결과로 — verify가 장부로 따로
+    계산한다 (§4.1 used_fact)"""
+    conn, _ = gen
+    assert verify.check_call_topic(conn, verify.load_ctx(CONFIG, conn)) == []
+
+
+def test_recall_q_patients_awake_and_unbooked(gen):
+    """리콜 문의 환자는 통화 시점에 휴면이 아니고(휴면 환자는 새 수요가 없어 문자를 보고 걸지 않는다) 잡힌 예약이 없다
+    — 휴면일은 DB에 없어 verify가 못 본다 (§4.1 환자 고르기)"""
+    conn, run = gen
+    rows = [r for r in _labels(conn) if r["primary_purpose"] == "recall_q"]
+    assert rows
+    dormant = run.state["dormant"]
+    for r in rows:
+        fact = json.loads(r["used_fact"])
+        pid, day = fact["patient"]["id"], fact["call_date"]
+        assert not (pid in dormant and dormant[pid].isoformat() <= day), r["call_uid"]
+        assert fact.get("next_appointment") is None, r["call_uid"]
+
+
+def test_call_days_weighted_to_recent(db):
+    """통화 시각은 최근 가중(master.CALL_RECENCY_WEIGHT) — 창 뒤 절반 비중이 가중치에서 계산한 값 근처"""
+    assert verify.check_call_recency(db, verify.load_ctx(CONFIG, db)) == []
 
 
 def test_pool_split_halves(db):
     rows = [r for r in _labels(db) if r["in_eval_pool"]]
     split = Counter(r["split"] for r in rows)
     assert split["dev"] == (len(rows) + 1) // 2 and split["test"] == len(rows) // 2
+
+
+def test_ledger_debt_billing_calls(db):
+    """수납 문의 발신 중 LEDGER_DEBT_CALLS건은 장부 실수 미수 환자 — 사실에 already_paid(이미 냈다는 말, ⑧-1 근거)"""
+    rows = db.execute(
+        "SELECT l.used_fact FROM truth.truth_call_labels l JOIN ax_calls c USING (call_uid)"
+        " WHERE l.primary_purpose = 'billing_q' AND c.direction = 'outbound'"
+    ).fetchall()
+    paid = [json.loads(r[0]) for r in rows if "already_paid" in json.loads(r[0])]
+    assert len(paid) >= LEDGER_DEBT_CALLS
+    assert len({f["patient"]["id"] for f in paid}) >= LEDGER_DEBT_CALLS

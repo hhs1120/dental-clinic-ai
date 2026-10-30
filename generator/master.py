@@ -8,6 +8,11 @@ CLINIC_NAME = "클로드치과"  # 가상 병원
 # 직원 구성 (§1). (role, 인원). 진료=원장, 위생=위생사(순환), 상담=상담실장
 STAFF = [("doctor", 1), ("hygienist", 3), ("desk", 2), ("consultant", 1)]
 
+# 체어·동시 진료 운영 제약 (§1 (3)·(4)). 한 체어는 소요시간 동안 예약 1건, 위생사는 동시에 1건, 상담은 체어 없음.
+# 하루 상한을 막지 않을 만큼(체어 × 슬롯 ≥ 상한 × 평균 슬롯) — 넣은 뒤 내원 구성 경고·하루 채움 리포트(§5.3)로 확인
+CHAIRS = 5
+DOCTOR_CONCURRENCY = 3
+
 # 영업시간 (§1). emr_clinic.hours_json에 그대로 저장한다. 요일은 월=0
 HOURS = {
     "open": "09:30",
@@ -74,14 +79,24 @@ GUARDIAN_MIN_AGE_GAP = 20  # 보호자는 가족의 소아·청소년보다 이 
 PRIVATE_INSURANCE_SHARE = 0.50
 REGISTERED_FROM = date(2015, 1, 1)  # 구환 등록일 하한
 
+# 다른 치과 이용 (§2.2, ⑨ 다른 치과 추정의 정답 — truth_patient_churn). 추정값 — 리포트로 확인
+CHURN_SHARE = 0.03  # 구환 중 이탈 비율 (병행은 PARALLEL_SHARE)
+CHURN_MIN_DAYS = (
+    120  # 이탈일은 TODAY − 이 일수 이전 (리콜 무응답·노쇼·재예약 없음 흔적이 쌓일 시간)
+)
+
 # 리콜 (§2.6 (1)): 다음 기한 = 마지막 위생 내원 + RECALL_CYCLE_MONTHS개월 ± RECALL_JITTER_DAYS일
 RECALL_CYCLE_MONTHS = (
     12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
 )
 RECALL_JITTER_DAYS = 30
+# 휴면 (§2.6 (1)): 환자마다 월 이 확률로(지수분포 — 구환은 창 시작부터, 신환은 등록 다음 날부터) 휴면일이 오고, 그날부터
+# 리콜·새 치료 수요가 없다(진행 중 에피소드는 이어 감). 다른 치과로 옮긴 건 아님(⑨ 정답 아님). 신환이 계속 들어오는 만큼 빠져야
+# 긴 창에서 하루 상한에 붙지 않는다 — 하루 채움 리포트로 맞춘 값
+DORMANT_MONTHLY_RATE = 0.03
 RECALL_CYCLE = timedelta(days=round(RECALL_CYCLE_MONTHS * 365.25 / 12))
 
-# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = treatment COURSE_VISITS회, consult = 상담 1회
+# 치료 수요의 에피소드 유형 비중 (§2.6 (2)). T1 = treatment 1회, Tn = 치료계획 항목 수만큼 treatment(§2.3), consult = 상담 1회
 _EPISODE_ADULT = {"T1": 0.50, "Tn": 0.40, "consult": 0.10}
 _EPISODE_YOUNG = {"T1": 0.70, "Tn": 0.25, "consult": 0.05}
 EPISODE_MIX = {
@@ -90,11 +105,51 @@ EPISODE_MIX = {
     "adult": _EPISODE_ADULT,
     "senior": _EPISODE_ADULT,
 }
-COURSE_VISITS = (2, 4)  # 양 끝 포함
+COURSE_VISITS = (
+    2,
+    4,
+)  # 양 끝 포함 — 3단계 수요 추첨에서 Tn 여부(2회 이상)로만 쓰인다. 실제 회차는 치료계획 항목 수
 # 치아 번호가 영구치(PERMANENT_TEETH)뿐이라 영구치가 나기 전 나이에는 치료 수요가 없다 — 이 나이 미만은 위생(신환은 상담도)만
 TOOTH_TREATMENT_MIN_AGE = 6
 MIN_VISIT_AGE = 1  # 첫 등록(첫 내원) 나이 하한 — 젖니가 나기 전 영아는 등록하지 않는다
 COURSE_INTERVAL_DAYS = (7, 14)  # 코스 다음 회차 희망 간격 (양 끝 포함)
+
+# 치료계획 (§2.3·§2.6 (3)). 항목 순서 = 시술 이름 튜플(항목 2~4개). 추정값 — 리포트로 확인
+# treatment: 코스 첫 내원의 예정 시술 → 항목(항목 1 = 그 내원) / consult: 상담 내원이 만드는 계획 후보(균등) /
+# hygiene: 치주 계획을 만드는 위생 내원의 항목. 연령에 따른 급여·치아 조건은 쓰는 쪽이 본다
+PLAN_TEMPLATES = {
+    "treatment": {
+        "실란트": ("실란트", "실란트"),
+        "레진": ("레진", "레진"),
+        "아말감/GI": ("아말감/GI", "아말감/GI"),
+        "인레이": ("인레이", "인레이"),
+        "신경치료": ("신경치료", "신경치료", "크라운"),
+        "크라운": ("크라운", "크라운"),
+        "브릿지": ("브릿지", "브릿지", "브릿지"),
+        "단순발치": ("단순발치", "단순발치"),
+        "사랑니 발치": ("사랑니 발치", "사랑니 발치"),
+        "임플란트 1차": ("임플란트 1차", "임플란트 1차"),
+        "교정 월 체크": ("교정 월 체크", "교정 월 체크", "교정 월 체크", "교정 월 체크"),
+        "미백": ("미백", "미백"),
+        "잇몸치료": ("잇몸치료", "잇몸치료", "잇몸치료"),
+    },
+    "consult": {
+        "상담": (
+            ("신경치료", "크라운"),
+            ("인레이", "인레이"),
+            ("단순발치", "임플란트 1차"),
+            ("미백", "미백"),
+        ),
+        "교정 상담": (("교정 월 체크", "교정 월 체크", "교정 월 체크"),),
+    },
+    "hygiene": ("잇몸치료", "잇몸치료"),
+}
+# 수락한 계획 중 중간에 그만두는 비율(남은 항목은 열린 채) / 상담·치주 위생 계획 중 처음부터 예약하지 않는 비율.
+# 열린 계획이 ⑨ 진료계획 미예약 칩에 맞는 규모가 되게 맞춘다. 추정값 — 리포트로 확인
+PLAN_DROP_RATE = 0.10
+PLAN_UNBOOKED_RATE = 0.30
+# 성인·노인 스케일링 내원 중 치주 계획(PLAN_TEMPLATES hygiene)을 만드는 비율. 추정값 — 리포트로 확인
+PERIO_PLAN_RATE = 0.10
 
 # 신환 = 월 내원(completed)의 NEW_PATIENT_SHARE (§1). 생성 구조(schedule.new_patients)로 맞춘다
 NEW_PATIENT_SHARE = 0.12
@@ -107,11 +162,18 @@ FULL_MOUTH = "00"
 PAYMENT_METHOD_WEIGHTS = {"card": 80, "cash": 10, "transfer": 10}
 UNPAID_PAID_RANGE = (0.0, 0.7)
 
-# 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 truth_claims에만 (§2.4)
+# 9~10월처럼 전월 이전 N개월은 '제출만' — 심사 결과는 아직 없음 (§2.4)
 SUBMITTED_MONTHS = 2
 
-# 심사 결과 추첨 (§2.4). 급여 스케일링 줄은 먼저 이 비율로 타 기관 이력(연 1회 초과) 불능 — 우리 장부로는 오류가 아님
-EXTERNAL_SCALING_DENY_RATE = 0.02
+# 재심 기한 = 확정 월 청구의 심사결과 통보일(emr_claims.reviewed_at) + 이 일수 (§2.4 통보일, ⑤-3 조정 목록)
+APPEAL_DAYS = 90
+# 심사결과 통보일 = 청구 제출일(익월 1일) + 이 일수 — 청구 월마다 하루. 제출 월(SUBMITTED_MONTHS)은 TODAY에 아직
+# 결과가 없고 그 앞 달은 있도록 (verify check_reviewed_at이 범위를 본다)
+REVIEW_NOTICE_DAYS = 70
+
+# 병행(§2.2): 확정 월 창 안 급여 스케일링 줄이 있는 환자 중 이 비율 — 그 줄이 타 기관 이력(연 1회 초과)으로 불능.
+# 우리 장부로는 오류가 아님. 추정값 — 리포트로 확인
+PARALLEL_SHARE = 0.02
 # 시술군(adjust_group)별 그 밖의 줄 결과 가중(%). 임상 시술(요건 사유가 있는 시술)이 주로 깎인다.
 # 확정 월 전체로는 대략 paid 88 / adjusted 8 / denied 4
 REVIEW_OUTCOME_WEIGHTS = {
@@ -121,7 +183,7 @@ REVIEW_OUTCOME_WEIGHTS = {
 # 깎인 줄(타 기관 이력 제외)의 시술군별 사유 유형 가중(%): 요건 / 장부 밖 / 상병. ADJUST_JUDGMENT_TARGET에서 역산,
 # 판정 분포 리포트(report_adjust_judgment)로 맞춘 값
 ADJUST_TYPE_WEIGHTS = {
-    "clinical": {"requirement": 78, "documentation": 15, "diagnosis": 7},
+    "clinical": {"requirement": 78, "documentation": 8, "diagnosis": 14},
     "other": {"requirement": 0, "documentation": 88, "diagnosis": 12},
 }
 # adjusted 지급액 = claim_amount × U(범위), 10원 단위 내림
@@ -401,6 +463,16 @@ def open_slots(weekday: int) -> int:
 MAX_OPEN_SLOTS = max(open_slots(w) for w in range(7))  # 가장 긴 날의 슬롯 수
 
 
+def close_time(weekday: int) -> str:
+    """그 요일 마감 'HH:MM' — 토요일은 토요일 마감"""
+    return HOURS["saturday_close" if weekday == SATURDAY else "weekday_close"]
+
+
+def business_minutes(weekday: int) -> int:
+    """개원 ~ 그 요일 마감 분 — 통화·전화 예약·문자 같은 사건 시각을 뽑는 범위 (§2.6 사건 시각). 점심은 따지지 않는다"""
+    return _minutes(close_time(weekday)) - _minutes(HOURS["open"])
+
+
 def daily_cap(visits_per_day: int, weekday: int) -> int:
     """그 요일의 하루 비취소 예약 상한 — config visits_per_day(가장 긴 날 기준)를 슬롯 수에 비례해 내림 (§1)"""
     return visits_per_day * open_slots(weekday) // MAX_OPEN_SLOTS
@@ -560,6 +632,14 @@ REQUIREMENT_ERROR_RATE = 0.25  # 요건 줄 중 임상 요건형 오류
 DIAGNOSIS_ERROR_RATE = 0.03  # 요건 오류가 아닌 급여 줄 중 상병 착오
 # 디코이 = 특이 케이스 수 × 이 배수만큼 평범한 창 안 줄을 서술(시술별 비례 층화)
 CHART_DECOY_RATIO = 1.5
+# 추가 처치 누락 (§4.3, 5b단계): 오류가 없는 급여 내원 중 이 비율의 차트에 같은 날 다른 치아의 추가 처치를 서술하고
+# 진료 기록·청구에는 넣지 않는다(truth_claim_errors '추가 처치 누락'). 비율은 추정값 — 리포트로 확인
+SAME_DAY_EXTRA_RATE = 0.03
+# 추가 처치 시술 — 치아 단위 급여 시술, 발치 제외. 그 시술의 급여 조건(실란트는 소아)은 쓰는 쪽이 본다
+SAME_DAY_EXTRA = frozenset(_CODE_BY_NAME[n] for n in ("아말감/GI", "실란트"))
+# 계획에서 같은 시술이 이어질 때 같은 치아를 유지하는 시술(여러 회차로 한 치아를 치료) — 나머지(실란트·레진·아말감/GI 등)의
+# 같은 시술 반복은 다른 치아. 다른 시술로 넘어갈 때(신경치료 → 크라운, 발치 → 임플란트)는 늘 앞 치아 유지 (§2.3)
+SAME_TOOTH_PROCEDURES = frozenset(_CODE_BY_NAME[n] for n in ("신경치료", "크라운", "인레이"))
 CHART_FORBIDDEN_WORDS = (
     "청구 오류",
     "삭감",
@@ -588,7 +668,7 @@ CALL_PURPOSE_SHARE = {
     "reschedule": 0.15,
     "confirm": 0.08,
     "cancel": 0.06,
-    "recall": 0.08,
+    "recall_q": 0.08,
     "treatment_q": 0.10,
     "insurance_q": 0.06,
     "price_q": 0.08,
@@ -603,28 +683,33 @@ CALL_PURPOSE_SHARE = {
 BOOKING_PURPOSES = ("book", "reschedule", "cancel", "confirm")
 # outbound 비중(전체 통화 대비 %p). 목적 안 방향 할당량 = 이 값 / 목적 비중. 나머지 목적은 전부 inbound
 CALL_OUTBOUND_SHARE = {
-    "recall": 0.08,
-    "confirm": 0.04,
     "billing_q": 0.03,
-    "document_req": 0.02,
     "treatment_q": 0.03,
 }
 OUTBOUND_MULTI_SHARE = (
     0.5  # outbound 중 구조상 복합 주제(noise_type 없음) — 노이즈 '주제 2개 섞임'과 별개
 )
+# 통화 날짜 최근 가중 — 창 시작 1에서 TODAY 이 값까지 직선. 녹음은 최근 것일수록 많이 남는다(§4.1 6단계)
+CALL_RECENCY_WEIGHT = 3
+
+
+def call_day_weight(d: date, start: date, today: date) -> float:
+    """통화 날짜 d의 추첨 가중치 — start에서 1, today에서 CALL_RECENCY_WEIGHT"""
+    return 1 + (CALL_RECENCY_WEIGHT - 1) * (d - start).days / (today - start).days
+
+
 CALL_NOISE_SHARE = {
     "two_topics": 0.10,
     "interrupted": 0.08,
     "ambiguous_pain": 0.04,
     "guardian_confused": 0.03,
 }
-# 상대 분포(§4.1) — 목표가 아니라 근사(상대는 목적·환자에서 정해짐). 리포트로만 본다
 # 상대 enum. 비율은 정하지 않는다 — 예약류는 이벤트 환자, 그 밖은 CALL_COUNTERPART_WEIGHTS에서 나온다(리포트로만)
 CALL_COUNTERPARTS = ("patient", "guardian", "new_caller", "insurer", "vendor", "other")
 URGENCIES = ("urgent", "normal", "low")
 # 목적별 상대 가중(%) — 예약류 아닌 목적. side = 환자 측(통화일에 소아면 guardian, 아니면 patient). outbound는 항상 side
 CALL_COUNTERPART_WEIGHTS = {
-    "recall": {"side": 100},
+    "recall_q": {"side": 100},
     "treatment_q": {"side": 85, "new_caller": 15},
     "insurance_q": {"side": 50, "new_caller": 30, "insurer": 20},
     "price_q": {"side": 40, "new_caller": 60},
@@ -663,7 +748,7 @@ CALL_SUBTOPICS = {
     "reschedule": ("price_inquiry", "complaint"),
     "cancel": ("complaint",),
     "confirm": ("price_inquiry",),
-    "recall": ("wants_appt", "price_inquiry"),
+    "recall_q": ("wants_appt", "price_inquiry"),
     "treatment_q": ("price_inquiry", "wants_appt", "emergency"),
     "insurance_q": ("price_inquiry", "wants_appt"),
     "price_q": ("wants_appt",),
@@ -678,7 +763,7 @@ CALL_PAIN_PURPOSES = ("book", "treatment_q")  # 노이즈 '급함 애매한 통�
 PAIN_URGENT_SHARE = 0.5  # 그중 urgent (나머지 normal)
 CALL_URGENCY_WEIGHTS = {"normal": 85, "low": 15}  # emergency 플래그·애매한 통증이 아닌 통화
 APPT_CONFIRMED_SHARE = 0.7  # book·reschedule 중 appt_confirmed
-HAS_TODO_SHARE = {"confirm": 0.3, "recall": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
+HAS_TODO_SHARE = {"confirm": 0.3, "recall_q": 0.3}  # 나머지 목적은 HAS_TODO_DEFAULT
 HAS_TODO_DEFAULT = 0.8
 CALL_DURATION_SEC = (60, 180)  # 양 끝 포함 — 전사 규칙 분량(§4.1 절차 5)
 # 통화 전사 (§4.1 '7단계 구현 결정'). 발화 글자 수(화자 표시·공백 제외) ÷ 이 값 = 통화 길이(초)
@@ -701,11 +786,88 @@ CALL_LABEL_WORDS = (
     "응급",
     "불만",
 )
+# 7단계 응급·불만 통화의 상황 — 통화 번호로 하나씩 정해 입력에 넣는다(없으면 모델이 거의 모두 '어젯밤부터 오른쪽 아래
+# 어금니'·'한 시간 기다렸다'로 쓴다). 응급은 상황 × 시작 시점
+EMERGENCY_SCENES = (
+    "밤사이 갑자기 심해진 위 어금니 치통",
+    "씹다가 깨진 아래 작은어금니",
+    "넘어지면서 부딪혀 흔들리는 앞니",
+    "때운 것이 빠지고 심하게 시린 어금니",
+    "잇몸이 붓고 고름이 나오는 어금니 쪽",
+    "한쪽 볼이 부어 오른 아래 어금니 쪽",
+    "씌운 것이 빠지고 아픈 앞니 쪽",
+    "운동하다 부딪혀 깨진 앞니",
+)
+# 응급 내원 (§2.6 (5), 6b단계) — 환자 측 응급 통화(emergency 플래그)마다 원장 내원 1건: 통화 뒤 EMERGENCY_LEAD_MIN분이
+# 지난 첫 빈 슬롯(그날 자리가 없으면 다음 진료일 개원부터). 상황마다 그날 처치와 치아 후보 — 맞는 시술이 없는 상황(외상으로
+# 흔들림·보철 탈락)과 치아 단위 시술을 못 하는 나이는 상담(진찰). 치아는 장부·치료계획에 없는 치아에서 통화 번호로 고른다
+_UPPER_MOLARS = ("16", "17", "26", "27")
+_LOWER_MOLARS = ("36", "37", "46", "47")
+EMERGENCY_TREATMENT = dict(
+    zip(
+        EMERGENCY_SCENES,
+        (
+            ("신경치료", _UPPER_MOLARS),
+            ("레진", ("34", "35", "44", "45")),
+            ("상담", ()),
+            ("아말감/GI", _UPPER_MOLARS + _LOWER_MOLARS),
+            ("신경치료", _UPPER_MOLARS + _LOWER_MOLARS),
+            ("신경치료", _LOWER_MOLARS),
+            ("상담", ()),
+            ("레진", ("11", "12", "21", "22")),
+        ),
+        strict=True,
+    )
+)
+# 그날 먼저 진료를 받고 간 뒤 건 응급 통화는 이 상황(그 치료와 이어진 통증)으로 — 해시로 고른 상황이면 1시간 전 내원과 모순
+EMERGENCY_AFTER_VISIT_SCENE = "오늘 치료받은 이가 마취가 풀리면서 심하게 아픈"
+EMERGENCY_AFTER_VISIT_ONSET = "진료받고 돌아간 뒤부터"
+EMERGENCY_TREATMENT[EMERGENCY_AFTER_VISIT_SCENE] = ("상담", ())
+# 소아(AGE_BANDS child)에게 맞지 않는 상황 → 대신 쓰는 상황(씌운 치아가 빠짐 → 넘어져 흔들리는 앞니)
+EMERGENCY_CHILD_SCENES = {EMERGENCY_SCENES[6]: EMERGENCY_SCENES[2]}
+# 이력이 있어야 하는 상황 → (통화 전 그 시술군 진료가 있어야 함, 없으면 대신 쓰는 상황) — 때운 적 없는데 '때운 게 빠짐'을 지어내지 않게
+EMERGENCY_HISTORY_SCENES = {
+    EMERGENCY_SCENES[3]: (
+        ("restorative", "prosth"),
+        EMERGENCY_SCENES[1],
+    ),  # 때운 것 → 씹다 깨진 이
+    EMERGENCY_SCENES[6]: (("prosth",), EMERGENCY_SCENES[2]),  # 씌운 것 → 넘어져 흔들리는 앞니
+}
+EMERGENCY_LEAD_MIN = 30
+# 응급 내원 표시 — 통화 사실의 최근 진료·다음 예약에 붙인다. 뜻을 담은 말이라 모델이 응급 진찰을 일반 상담으로 이어 쓰지 않는다
+EMERGENCY_VISIT_MARK = "응급 내원 — 일반 상담·진료로 말하지 않는다"
+# 갑자기 빠진 상황 — 시작 시점 '점점'과 맞지 않는다(덜 빠진 것처럼 써져 차트의 '탈락'과 어긋남)
+EMERGENCY_SUDDEN_SCENES = (EMERGENCY_SCENES[3], EMERGENCY_SCENES[6])
+EMERGENCY_GRADUAL_ONSETS = ("이틀 전부터 점점",)
+# 상황별 상병 — 시술 허용 상병(PROCEDURE_DIAGNOSES) 안에서 그 상황에 맞는 것. 없으면 허용 상병의 첫 번째
+EMERGENCY_DX = {
+    EMERGENCY_SCENES[0]: "D02",  # 밤사이 치통 — 치수염
+    EMERGENCY_SCENES[4]: "D03",  # 잇몸 고름 — 근단 치주염
+    EMERGENCY_SCENES[5]: "D03",  # 볼 부음
+}
+# 때운 것이 빠진 상황 — 그 환자가 전에 다른 수복 시술로 때운 치아에서 고른다(녹취록이 그 기록을 말해도 맞게). 없으면 위 규칙대로
+EMERGENCY_RESTORED_SCENES = (EMERGENCY_SCENES[3],)
+EMERGENCY_ONSETS = ("오늘 아침부터", "어제 점심 무렵부터", "방금 전부터", "이틀 전부터 점점")
+COMPLAINT_TOPICS = (
+    "예약 시간보다 오래 기다림",
+    "치료 비용이 미리 들은 것과 다름",
+    "치료 전에 설명이 부족했음",
+    "치료받은 곳이 다시 불편함",
+    "접수·전화 응대가 불친절했음",
+    "예약이 잘못 잡혀 헛걸음함",
+    "치료 중 아프다고 했는데 그대로 진행함",
+    "안내 문자를 못 받아 예약을 놓침",
+)
+# 보험사 등 제3자 통화의 병원 규칙 — 전화로 환자 진료 내용을 알려 주지 않는다(의료법 — 환자 동의 없는 기록 제공 금지)
+THIRD_PARTY_RULE = (
+    "보험사 등 제3자에게는 전화로 환자의 진료 날짜·내용을 알려 주지 않는다. "
+    "서류는 환자 본인의 요청이나 동의서가 있어야 보낸다"
+)
 # 환자 측(예약류 아님) 환자 조건 — (목적, 방향) → (규칙, 값). 없으면 'visited'(통화일 전 completed 내원이 있음)
-# recall_due: 마지막 위생 내원 + RECALL_CYCLE < 통화일이고 그 시점 잡힌 예약 없음 / balance: 그 시점 잔액 > 0 /
+# recall_text: 통화일 값[0]~값[1]일 전(그 시각 전)에 리콜 문자를 받았고 그 시점 잡힌 예약 없음 / balance: 그 시점 잔액 > 0 /
 # recent_treatment: 통화일 값[0]~값[1]일 전에 진료(treatment) 내원 / recent_visit: 통화일 값일 안에 내원
 CALL_PATIENT_RULES = {
-    ("recall", "outbound"): ("recall_due", None),
+    ("recall_q", "inbound"): ("recall_text", (0, 7)),
     ("billing_q", "outbound"): ("balance", None),
     ("treatment_q", "outbound"): ("recent_treatment", (1, 7)),
     ("complaint", "inbound"): ("recent_visit", 30),
@@ -716,7 +878,7 @@ EVAL_RARE_SHARE = 0.6
 EVAL_MIN_PER_SPLIT = 2
 
 
-# 문자 (§2.5, 8단계). 리마인드는 리마인드 날 개원 시각(HOURS["open"])에 일괄
+# 문자 (§2.5, 8단계). 리마인드는 리마인드 날, 리콜은 그달 첫 진료일 개원 시각(HOURS["open"])에 일괄
 MESSAGE_CONFIRM_DELAY_MIN = (1, 5)  # 예약 확정 문자 = 예약을 잡은 뒤 (양 끝 포함, 분)
 MESSAGE_DELAY_MIN = (1, 30)  # 노쇼 문자(진료가 끝났을 시각 뒤)·답장(out 뒤)
 # 트리거별 본문. date = '11월 3일(화)', 리마인드도 '내일'이라 쓰지 않는다(직전 진료일이 전날이 아닐 수 있음)
@@ -727,11 +889,368 @@ MESSAGE_TEMPLATES = {
     "balance": "[{clinic}] {name}님, {date} 진료비 중 {amount}원이 미납되어 안내드립니다.",
     "doc_ready": "[{clinic}] {name}님, 요청하신 서류가 준비되었습니다. 내원하실 때 받아 가세요.",
 }
-# 트리거별 답장 문구 (균등)
+# 리콜 문자 (§2.5) — 기한(마지막 completed 위생 내원 + RECALL_CYCLE)이 다음 달인 환자에게 한 번(before, month = 기한 달),
+# 기한이 지난 다음 달에 한 번 더(after). 둘 다 그달 첫 진료일 개원 시각, 잡힌 예약이 없을 때만
+RECALL_TEMPLATES = {
+    "before": "[{clinic}] {name}님, {month}월에 정기 검진 시기가 다가와 안내드립니다. 예약은 전화로 연락 주세요.",
+    "after": "[{clinic}] {name}님, 정기 검진 시기가 지났습니다. 편하실 때 전화로 예약해 주세요.",
+}
+# 예약 확정·리마인드 답장 — 확인 답장은 리마인드면 confirmed 예약에만, 시간 변경은 그 뒤 실제로 바뀐 예약에만(§2.5)
+MESSAGE_REPLY_OK = ("네", "확인했습니다")
+MESSAGE_REPLY_CHANGE = "시간 변경 가능할까요?"
+# 예약 취소 답장 (§2.5, 8a단계) — 통화가 없는 시각의 취소(개원 전 당일 취소·장면)는 환자가 그 예약의 문자에 답해서 들어온다
+MESSAGE_REPLY_CANCEL = "죄송한데 예약 취소해 주세요. 다시 연락드릴게요"
+# 8a단계 장면 — TODAY 전 달 노쇼 중 이만큼을 개원 전 문자 당일 취소로 바꾼다(최근 달에 그 모양이 보이게)
+NOSHOW_TO_CANCEL = 3
+# 트리거별 답장 문구 (균등 — 예약 확정·리마인드는 뽑은 뒤 예약 상태에 맞춘다)
 MESSAGE_REPLIES = {
-    "appt_confirm": ("네", "확인했습니다", "시간 변경 가능할까요?"),
-    "reminder": ("네", "확인했습니다", "시간 변경 가능할까요?"),
+    "appt_confirm": (*MESSAGE_REPLY_OK, MESSAGE_REPLY_CHANGE),
+    "reminder": (*MESSAGE_REPLY_OK, MESSAGE_REPLY_CHANGE),
     "noshow": ("죄송합니다. 다시 연락드릴게요", "깜빡했어요"),
     "balance": ("다음에 갈 때 낼게요", "확인했습니다"),
     "doc_ready": ("감사합니다", "네, 들를게요"),
+    "recall": ("확인했습니다", "다음에 전화드릴게요", "요즘 바빠서요"),
 }
+# 이미 냈다는 balance 답장 (§2.5 reply(in)) — 장부 실수(입력 누락·금액 오입력, §2.4)로 생긴 미수의 답장(균등)
+MESSAGE_REPLIES_PAID = ("그날 다 냈는데요", "이미 계산했어요")
+# 결제수단을 말하는 이미 냈다는 답장 — 그 미수 내원의 실제 결제수단(장부 실수면 정답의 실제 값) 문구만 후보에 더한다
+MESSAGE_REPLIES_PAID_METHOD = {
+    "card": "카드로 결제했는데 확인 부탁드려요",
+    "cash": "현금으로 냈는데 확인 부탁드려요",
+    "transfer": "이체했는데 확인 부탁드려요",
+}
+# 수납 문의 발신 중 장부 실수 미수(§2.4) 환자에게 거는 통화 수(그 미수가 장부에 들어간 뒤 LEDGER_DEBT_CALL_DAYS일 안) — 전사에 이미 냈다는 말(already_paid, ⑧-1 근거)이 있게.
+# 균등 선택이면 장부 실수 환자가 적어 거의 안 걸린다
+LEDGER_DEBT_CALLS = 3
+LEDGER_DEBT_CALL_DAYS = 30
+# 진짜 미수의 balance 답장 중 MESSAGE_REPLIES_PAID에서 뽑는 비율(착각한 환자). 추정값 — 리포트로 확인
+PAID_REPLY_NOISE_RATE = 0.10
+
+
+# 재무 원본 fin_* (§2.7, 8b·8c단계 — ⑧). 카드사·거래처 이름은 전부 가상
+# 연동 실패일 수 — 그날은 카드 수납도 손으로 입력해 승인번호가 없다(§2.4). 장부 실수·불일치는 평가 달(recon_months)에만
+LINK_FAILURE_DAYS = 3
+# 장부 실수 종류(truth_ledger_errors.kind) — 건수는 RECON_MISMATCH_COUNTS의 같은 이름. 금액 오입력은 0 하나 빠뜨림이라
+# 이 금액 이상 수납에서만 (§2.4)
+LEDGER_ERROR_KINDS = ("entry_missing", "amount_typo", "date_shift", "method_wrong")
+AMOUNT_TYPO_MIN = 10_000
+# ⑧-1·⑧-2 평가 달 = TODAY가 속한 달 직전 RECON_MONTH_COUNT개월(recon_months). 마지막 RECON_TEST_COUNT달이
+# test(가장 최근 기간으로 시험), 나머지 dev
+RECON_MONTH_COUNT = 4
+RECON_TEST_COUNT = 2
+
+
+def recall_due_year(sent: date, kind: str, due_month: int) -> int:
+    """리콜 문자의 기한 해 — '다가옴'(before)은 다음 달, '지남'(after)은 지난달이 기한이라 해를 넘을 수 있다(§2.5)"""
+    if kind == "before" and due_month < sent.month:
+        return sent.year + 1
+    if kind == "after" and due_month > sent.month:
+        return sent.year - 1
+    return sent.year
+
+
+def recon_months(today: date) -> tuple[str, ...]:
+    """평가 달('YYYY-MM', claim_month와 같은 꼴) — TODAY가 속한 달 직전 RECON_MONTH_COUNT개월, 오래된 달부터"""
+    base = today.year * 12 + today.month - 1
+    return tuple(
+        f"{(base - k) // 12}-{(base - k) % 12 + 1:02d}" for k in range(RECON_MONTH_COUNT, 0, -1)
+    )
+
+
+def recon_test_months(today: date) -> tuple[str, ...]:
+    """평가 달 중 test — 마지막 RECON_TEST_COUNT달"""
+    return recon_months(today)[-RECON_TEST_COUNT:]
+
+
+# 카드사 (§2.7 fin_card_deposits): 이름 → 카드 수납 중 비중(%)·수수료율·정산 지연(매출일 뒤 영업일). 가상 값 — 비중·율은 추정값
+CARD_ISSUERS = {
+    "가온카드": {"weight": 35, "fee_rate": 0.0120, "settle_days": 2},
+    "다솜카드": {"weight": 30, "fee_rate": 0.0135, "settle_days": 2},
+    "라온카드": {"weight": 20, "fee_rate": 0.0110, "settle_days": 3},
+    "미르카드": {"weight": 15, "fee_rate": 0.0145, "settle_days": 3},
+}
+# 현금 입금 요일(월=0) — 그 사이 현금 합계를 한 번에 입금(주 단위 합산 입금 디코이, §2.7). 추정값
+CASH_DEPOSIT_WEEKDAYS = (0,)
+# 통장 입금의 시각·적요 (§2.7) — 카드 정산 입금 적요는 카드사 이름, 환자 이체는 입금자 이름. 가상 값
+BANK_TIMES = {
+    "card": "08:00",
+    "cash": "13:10",
+    "nhis": "10:00",
+    "transfer_out": "17:00",
+    "auto_debit": "06:00",
+}
+CASH_DEPOSIT_MEMO = "현금 입금"
+NHIS_MEMO = "국민건강보험공단"
+
+
+def bank_day(d: date, holidays) -> bool:
+    """은행 영업일 — 평일·공휴일 아님(치과 휴진 요일과 무관)"""
+    return d.weekday() < 5 and d not in holidays
+
+
+def add_bank_days(d: date, n: int, holidays) -> date:
+    """d 뒤 n번째 은행 영업일 (카드 정산 입금일 — §2.7)"""
+    while n:
+        d += timedelta(days=1)
+        n -= bank_day(d, holidays)
+    return d
+
+
+def cash_deposit_day(d: date, holidays) -> date:
+    """d에 받은 현금이 들어가는 통장 입금일 — d 뒤 첫 CASH_DEPOSIT_WEEKDAYS 요일(은행 영업일이 아니면 다음 영업일).
+    입금은 그날 아침이라 입금일 당일 현금은 다음 입금으로 간다 (§2.7)"""
+    x = d + timedelta(days=1)
+    while x.weekday() not in CASH_DEPOSIT_WEEKDAYS:
+        x += timedelta(days=1)
+    while not bank_day(x, holidays):
+        x += timedelta(days=1)
+    return x
+
+
+# 소아 환자 이체 중 입금자명이 보호자 이름인 비율(디코이, §2.7). 추정값 — 리포트로 확인
+GUARDIAN_PAYER_SHARE = 0.8
+# 정산 지연의 최대 — 장부 실수·불일치는 정산·현금 입금이 TODAY 전에 오는 날에만 (§2.7 TODAY 경계)
+MAX_SETTLE_DAYS = max(i["settle_days"] for i in CARD_ISSUERS.values())
+# 입금 지연(deposit_delay) 불일치의 늦어지는 은행 영업일 (양 끝 포함). 추정값
+DEPOSIT_DELAY_DAYS = (1, 2)
+# 수수료 차이(fee_mismatch) 불일치 — 그 정산의 수수료율이 카드사 율보다 이만큼 높다. 추정값
+FEE_MISMATCH_RATE_DIFF = 0.003
+# 분할결제·취소 후 재승인은 이 금액 이상 카드 수납에서 (분할한 두 승인이 모두 의미 있는 금액이게)
+SPLIT_MIN_AMOUNT = 20_000
+# ⑧-1 불일치 원인별 건수 (§2.7 불일치 심기, 평가 달 전체 합 65 — 손으로 입력한 수납의 장부 실수가 10% 안쪽이게). 원인 enum = 평가 설계 §5 —
+# 통장·카드 쪽은 8b가 심고, 장부 쪽은 5단계 장부 실수(§2.4)를 원인으로 연결
+RECON_MISMATCH_COUNTS = {
+    "split_payment": 6,
+    "cancel_reapprove": 6,
+    "fee_mismatch": 6,
+    "deposit_delay": 6,
+    "non_clinical_sale": 8,
+    "entry_missing": 12,
+    "amount_typo": 7,
+    "date_shift": 8,
+    "method_wrong": 6,
+}
+# 데스크 구강용품 가격표 — 진료 외 매출(non_clinical_sale)은 이 금액(여러 개면 합)의 장부 없는 카드 승인.
+# 직원 매뉴얼 '구강용품 판매 안내'(doc_catalog)가 같은 값을 쓴다. 가상 값
+ORAL_CARE_PRICES = {
+    "칫솔": 3_000,
+    "치간칫솔": 4_500,
+    "치실": 5_000,
+    "구강 세정제": 7_000,
+    "시린이 치약": 8_500,
+}
+
+# ⑧-2 계정 과목 (§2.7) — 출금 1건마다 하나
+ACCOUNTS = (
+    "재료비",
+    "외주가공비",
+    "소모품비",
+    "복리후생비",
+    "지급임차료",
+    "수도광열비",
+    "통신비",
+    "지급수수료",
+    "수선비",
+)
+# ⑧-2 거래처 (§2.7). kind는 EXPENSE_ITEMS의 키. pay: month_end_transfer(월말 이체 = 그달 증빙 합계, 1:N) /
+# card(병원 카드) / auto_debit(자동이체). per_month = 달마다 증빙(카드는 사용) 건수 범위(양 끝 포함),
+# amount = 건당 금액 범위(원, 기공소는 None — 창 안 기공 진료에서 파생). card_name = 카드 내역 가맹점명(결제대행사 표기 차이).
+# 규모 목표는 창 전체 출금 ~305·증빙 ~615 — 건수·금액 범위는 추정값, 리포트로 확인
+_VENDOR_ROWS = [
+    # (kind, 가상 이름, pay, per_month, amount, 증빙 종류, 계정 과목, card_name)
+    (
+        "material",
+        "바른덴탈상사",
+        "month_end_transfer",
+        (10, 14),
+        (50_000, 400_000),
+        ("statement", "tax_invoice"),
+        "재료비",
+        None,
+    ),
+    (
+        "material",
+        "하늘치재",
+        "month_end_transfer",
+        (10, 14),
+        (30_000, 300_000),
+        ("statement", "tax_invoice"),
+        "재료비",
+        None,
+    ),
+    (
+        "lab",
+        "온새미치과기공소",
+        "month_end_transfer",
+        (4, 5),
+        None,
+        ("statement",),
+        "외주가공비",
+        None,
+    ),
+    (
+        "shopping",
+        "모아덴탈몰",
+        "card",
+        (4, 8),
+        (20_000, 200_000),
+        ("order_email",),
+        "소모품비",
+        "페이온*모아덴탈몰",
+    ),
+    ("meal", "솔밭식당", "card", (6, 8), (30_000, 120_000), ("receipt",), "복리후생비", None),
+    ("meal", "달빛베이커리", "card", (4, 6), (10_000, 60_000), ("receipt",), "복리후생비", None),
+    (
+        "rent",
+        "한결빌딩관리",
+        "auto_debit",
+        (1, 1),
+        (3_300_000, 3_300_000),
+        ("tax_invoice",),
+        "지급임차료",
+        None,
+    ),
+    (
+        "utility",
+        "전기요금",
+        "auto_debit",
+        (1, 1),
+        (250_000, 450_000),
+        ("bill",),
+        "수도광열비",
+        None,
+    ),
+    ("utility", "수도요금", "auto_debit", (1, 1), (30_000, 60_000), ("bill",), "수도광열비", None),
+    (
+        "utility",
+        "도시가스",
+        "auto_debit",
+        (1, 1),
+        (20_000, 120_000),
+        ("bill",),
+        "수도광열비",
+        None,
+    ),
+    (
+        "telecom",
+        "이음통신",
+        "auto_debit",
+        (1, 1),
+        (60_000, 60_000),
+        ("bill",),
+        "통신비",
+        None,
+    ),
+    (
+        "telecom",
+        "새빛전화",
+        "auto_debit",
+        (1, 1),
+        (40_000, 50_000),
+        ("bill",),
+        "통신비",
+        None,
+    ),
+    (
+        "service",
+        "정도세무회계",
+        "auto_debit",
+        (1, 1),
+        (330_000, 330_000),
+        ("tax_invoice",),
+        "지급수수료",
+        None,
+    ),
+    (
+        "service",
+        "덴트차트",
+        "auto_debit",
+        (1, 1),
+        (110_000, 110_000),
+        ("bill",),
+        "지급수수료",
+        None,
+    ),
+    (
+        "service",
+        "청정의료환경",
+        "auto_debit",
+        (1, 1),
+        (88_000, 88_000),
+        ("tax_invoice",),
+        "지급수수료",
+        None,
+    ),
+    (
+        "repair",
+        "든든장비서비스",
+        "card",
+        (0, 1),
+        (80_000, 600_000),
+        ("statement",),
+        "수선비",
+        None,
+    ),
+]
+VENDORS = [
+    dict(
+        zip(
+            ("kind", "name", "pay", "per_month", "amount", "docs", "account", "card_name"),
+            row,
+            strict=True,
+        )
+    )
+    for row in _VENDOR_ROWS
+]
+# ⑧-2 증빙 품목 (§2.7 fin_expense_documents 템플릿) — 거래처 종류 → (품목, 계정 과목). 대부분 거래처의 계정 과목이고,
+# 다른 과목 품목(쇼핑몰의 간식·커피 → 복리후생비, 재료상의 소모품)은 품목을 읽어야 정해지는 계정 과목. 가상 값
+EXPENSE_ITEMS = {
+    "material": (
+        ("레진 시린지", "재료비"),
+        ("본딩제", "재료비"),
+        ("인상재", "재료비"),
+        ("마취 카트리지", "재료비"),
+        ("GI 시멘트", "재료비"),
+        ("근관 파일", "재료비"),
+        ("니트릴 장갑", "소모품비"),
+        ("석션 팁", "소모품비"),
+    ),
+    "lab": (("인레이", "외주가공비"), ("크라운", "외주가공비"), ("브릿지", "외주가공비")),
+    "shopping": (
+        ("종이컵", "소모품비"),
+        ("핸드타월", "소모품비"),
+        ("복사 용지", "소모품비"),
+        ("프린터 토너", "소모품비"),
+        ("환자용 칫솔", "소모품비"),
+        ("커피 원두", "복리후생비"),
+        ("직원 간식", "복리후생비"),
+    ),
+    "meal": (("점심 식대", "복리후생비"), ("간식", "복리후생비"), ("음료", "복리후생비")),
+    "rent": (("월 임대료", "지급임차료"), ("관리비", "지급임차료")),
+    "utility": (
+        ("전기 사용료", "수도광열비"),
+        ("수도 사용료", "수도광열비"),
+        ("가스 사용료", "수도광열비"),
+    ),
+    "telecom": (("인터넷 요금", "통신비"), ("전화 요금", "통신비")),
+    "service": (
+        ("세무 기장료", "지급수수료"),
+        ("전자차트 사용료", "지급수수료"),
+        ("의료폐기물 수거", "지급수수료"),
+    ),
+    "repair": (
+        ("유닛체어 수리", "수선비"),
+        ("석션 모터 교체", "수선비"),
+        ("핸드피스 수리", "수선비"),
+    ),
+}
+# 증빙이 있는 출금 중 출금액이 증빙 합계보다 조금 많은 비율(배송비·이전 미지급분 등), 그 차이(증빙 합계 대비, 100원 단위
+# 내림 — 최소 100원) (§2.7 어긋남)
+EXPENSE_AMOUNT_DIFF_RATE = 0.05
+EXPENSE_AMOUNT_DIFF_RANGE = (0.01, 0.05)
+# 병원 카드 사용 중 증빙이 없는 비율 — 영수증을 잃기 쉬운 카드 사용에만(이체·자동이체는 증빙이 온다). 전체 출금의 약 5%
+EXPENSE_NO_DOC_RATE = 0.08
+# 기공소 외주 단가(원) — 기공 명세서 줄 = 창 안 인레이·크라운·브릿지 진료 1건 (§2.7). 가상 값
+# 자동이체 고지서·세금계산서는 출금 며칠 전에 온다 (양 끝 포함, §2.7)
+EXPENSE_DOC_LEAD_DAYS = (3, 10)
+LAB_FEES = {"인레이": 80_000, "크라운": 150_000, "브릿지": 400_000}

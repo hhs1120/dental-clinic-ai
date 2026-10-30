@@ -6,7 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from generator import verify
+from generator import emergency, transcripts, verify
+from generator.master import CLINIC_NAME, EMERGENCY_SCENES, RECALL_TEMPLATES
 from tests.generator.verify_db import CTX, make_db
 
 CALL_CHECKS = [
@@ -229,16 +230,8 @@ BREAKS = {
         "UPDATE ax_calls SET eval_sort_order = 3 - eval_sort_order WHERE in_eval_pool = 1",
         "check_eval_pool",
     ),
-    "pool_judge_status": (
-        "UPDATE ax_calls SET judge_status = 'none' WHERE id = 4",
-        "check_eval_pool",
-    ),
-    "nonpool_pending": (
-        "UPDATE ax_calls SET judge_status = 'pending' WHERE id = 2",
-        "check_eval_pool",
-    ),
     "pool_too_big": (
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3, judge_status = 'pending' WHERE id = 2",
+        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3 WHERE id = 2",
         "check_eval_pool",
     ),
     "blind_outside_pool": (
@@ -279,14 +272,26 @@ FACT_BREAKS = {
             }
         },
     ),
-    "next_appt_cancelled": (
+    # 예약 사실은 통화 직전 상태 — 그 통화로 생기는 예약은 아직 없고, 옮기는 원래 예약은 아직 있다
+    "next_appt_made_by_call": (
         "c-0004",
         {
             "next_appointment": {
-                "appointment_id": 3,
-                "date": "2026-11-17",
+                "appointment_id": 4,
+                "date": "2026-11-18",
                 "time": "10:00",
                 "procedure": "레진",
+            }
+        },
+    ),
+    "booking_sees_own_appt": (
+        "c-0003",
+        {
+            "next_appointment": {
+                "appointment_id": 1,
+                "date": "2026-10-06",
+                "time": "10:00",
+                "procedure": "신경치료",
             }
         },
     ),
@@ -358,6 +363,10 @@ def test_confirm_call_on_reminder_day_after_message(tmp_path):
         },
         family=["김하늘"],
         alerts=["고혈압", "마취가 잘 안 됨"],
+        open_plan_items=[
+            {"procedure": "신경치료", "tooth": "26"},
+            {"procedure": "크라운", "tooth": "26"},
+        ],
         appointment={"date": "2026-11-03", "time": "10:00", "procedure": "스케일링"},
     )
     # 순서가 바뀌므로(11/02 < 10/20 아님) 행 순서 검사는 보지 않는다
@@ -405,9 +414,9 @@ def test_eval_pool_strata(tmp_path):
         pool = i <= 2
         conn.execute(
             "INSERT INTO ax_calls (id, call_uid, source, direction, started_at, duration_sec, in_eval_pool,"
-            " eval_sort_order, judge_status) VALUES (?, ?, 'generated', 'inbound', '2026-11-27 10:00:00', 150,"
-            " ?, ?, ?)",
-            (i, f"c-{i:04d}", int(pool), i if pool else None, "pending" if pool else "none"),
+            " eval_sort_order) VALUES (?, ?, 'generated', 'inbound', '2026-11-27 10:00:00', 150,"
+            " ?, ?)",
+            (i, f"c-{i:04d}", int(pool), i if pool else None),
         )
         conn.execute(
             "INSERT INTO truth.truth_call_labels VALUES (?, 'complaint', '[\"complaint\"]', 'patient',"
@@ -416,9 +425,7 @@ def test_eval_pool_strata(tmp_path):
         )
     assert verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=2))
     # 3건이면 통과(dev 2·test 1)
-    conn.execute(
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3, judge_status = 'pending' WHERE id = 3"
-    )
+    conn.execute("UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = 3 WHERE id = 3")
     conn.execute(L + "split = 'dev' WHERE call_uid = 'c-0003'")
     assert verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=3)) == []
     # dev 3·test 0이면 실패
@@ -430,9 +437,7 @@ def test_eval_pool_strata(tmp_path):
         + "primary_purpose = 'book', accepted_purposes = '[\"book\"]', complaint = 0, wants_appt = 1"
     )
     conn.execute(L + "split = 'silver' WHERE call_uid = 'c-0003'")
-    conn.execute(
-        "UPDATE ax_calls SET in_eval_pool = 0, eval_sort_order = NULL, judge_status = 'none' WHERE id = 3"
-    )
+    conn.execute("UPDATE ax_calls SET in_eval_pool = 0, eval_sort_order = NULL WHERE id = 3")
     assert any(
         v["problem"] == "split당 최소 건수 미달"
         for v in verify.check_eval_pool_strata(conn, replace(CTX, eval_pool=2))
@@ -448,10 +453,21 @@ def test_call_mix_warnings(tmp_path):
         verify.check_call_purpose_mix in verify.WARNINGS
         and verify.check_call_noise_mix in verify.WARNINGS
     )
+    # fixture는 창 앞뒤 절반에 2건씩 — 최근 가중(뒤 절반 비중 > 1/2)과 멀다
+    assert verify.check_call_recency(conn, CTX) and verify.check_call_recency in verify.WARNINGS
     report = verify.report_call_mix(conn, CTX)
     assert report["counterpart"] == {"patient": 0.5, "guardian": 0.25, "new_caller": 0.25}
     assert report["outbound"] == 0.25
     assert report["dev_n"] == {"book": 1}  # 평가 설계 §2.1 — 카테고리별 dev n
+
+
+def test_call_recency_passes_near_target(tmp_path, monkeypatch):
+    """가중치가 1(고르게)이면 기대값이 진료일 비율(≈ 1/2)이라 fixture 앞뒤 2건씩이 허용치(CALL_RECENCY_TOLERANCE) 안"""
+    from generator import master
+
+    conn = make_db(tmp_path)
+    monkeypatch.setattr(master, "CALL_RECENCY_WEIGHT", 1)
+    assert verify.check_call_recency(conn, CTX) == []
 
 
 # ── 통화 전사 (7단계, §4.1 '7단계 구현 결정') ──────────────────
@@ -506,3 +522,343 @@ def test_label_tokens_in_stored_text(tmp_path):
         ("ax_calls", "two_topics"),
         ("emr_chart_notes", "R01"),
     }
+
+
+# 이탈·리콜 문의·경과 확인 (§2.2·§4.1): 시드 c-0001 = 1번 환자 10/20 수납 문의 발신
+def test_churn_patient_calls(tmp_path):
+    """이탈일 뒤 이탈 환자의 통화는 없다 — 수납 문의(10/20)는 이탈일(10/10) 뒤라 잡히고, 이탈일이 통화 뒤면 통과"""
+    conn = make_db(tmp_path)
+    conn.execute("INSERT INTO truth.truth_patient_churn VALUES (1, 'churn', '2026-10-10')")
+    assert verify.check_churn_calls(conn, CTX)
+    conn.execute("UPDATE truth.truth_patient_churn SET churned_on = '2026-10-21'")
+    assert verify.check_churn_calls(conn, CTX) == []
+
+
+def _recall_q(conn):
+    conn.execute("UPDATE ax_calls SET direction = 'inbound' WHERE call_uid = 'c-0001'")
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'recall_q',"
+        " accepted_purposes = '[\"recall_q\"]', complaint = 0, noise_type = NULL,"
+        " used_fact = json_set(used_fact, '$.next_appointment', json('null'))"
+        " WHERE call_uid = 'c-0001'"
+    )
+
+
+@pytest.mark.parametrize(
+    "sent_at, fact_at, ok",
+    [
+        (None, "2026-10-15 09:00:00", False),  # 리콜 문자 없음
+        ("2026-10-15 09:00:00", "2026-10-15 09:00:00", True),  # 5일 전
+        ("2026-10-20 09:00:00", "2026-10-20 09:00:00", True),  # 그날 아침
+        ("2026-10-01 09:00:00", "2026-10-01 09:00:00", False),  # 19일 전 — 규칙 창 밖
+        ("2026-10-20 16:00:00", "2026-10-20 16:00:00", False),  # 통화(15:00) 뒤
+        ("2026-10-15 09:00:00", None, False),  # 사실에 받은 문자 없음
+        ("2026-10-15 09:00:00", "2026-10-14 09:00:00", False),  # 사실의 문자 ≠ 보낸 문자
+    ],
+)
+def test_recall_q_follows_recall_text(tmp_path, sent_at, fact_at, ok):
+    """리콜 문의(수신)는 통화 전 규칙 창(master.CALL_PATIENT_RULES) 안에 그 환자가 받은 리콜 문자가 있고, 사실
+    recall_text가 그 문자를 가리킨다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    if sent_at:
+        conn.execute(
+            "INSERT INTO emr_messages VALUES (9, 1, 'out', ?, ?, 'recall', NULL)",
+            (sent_at, RECALL_TEMPLATES["after"].format(clinic=CLINIC_NAME, name="김철수")),
+        )
+    if fact_at:
+        conn.execute(
+            "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recall_text',"
+            " json_object('sent_at', ?, 'kind', 'after', 'due_month', 9)) WHERE call_uid = 'c-0001'",
+            (fact_at,),
+        )
+    assert (verify.check_recall_q_calls(conn, CTX) == []) == ok
+    assert verify.check_recall_q_calls in verify.REQUIRED
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "json_set(used_fact, '$.recall_text.kind', 'before')",  # 문자는 '지남'
+        "json_set(used_fact, '$.next_appointment', json('{\"appointment_id\": 2}'))",  # 예약 있음
+    ],
+)
+def test_recall_q_fact_matches_text_and_no_booking(tmp_path, change):
+    """사실 recall_text의 다가옴/지남·기한 월은 받은 문자 본문과 같고, 그 시점 잡힌 예약이 없다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    conn.execute(
+        "INSERT INTO emr_messages VALUES (9, 1, 'out', '2026-10-15 09:00:00', ?, 'recall', NULL)",
+        (RECALL_TEMPLATES["after"].format(clinic=CLINIC_NAME, name="김철수"),),
+    )
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recall_text',"
+        " json_object('sent_at', '2026-10-15 09:00:00', 'kind', 'after', 'due_month', 9))"
+        " WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_recall_q_calls(conn, CTX) == []
+    conn.execute(
+        f"UPDATE truth.truth_call_labels SET used_fact = {change} WHERE call_uid = 'c-0001'"
+    )
+    assert verify.check_recall_q_calls(conn, CTX)
+
+
+def test_recall_q_is_inbound(tmp_path):
+    """리콜 문의는 발신 목적이 아니다 — 수신이면 통과, 발신이면 라벨 검사에 잡힌다"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    assert verify.check_call_label_values(conn, CTX) == []
+    conn.execute("UPDATE ax_calls SET direction = 'outbound' WHERE call_uid = 'c-0001'")
+    assert any(
+        v["problem"] == "outbound가 아닌 목적" for v in verify.check_call_label_values(conn, CTX)
+    )
+
+
+def _topic(conn, uid, topic, **fact):
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.topic_procedure', ?)"
+        " WHERE call_uid = ?",
+        (topic, uid),
+    )
+    for k, v in fact.items():
+        conn.execute(
+            f"UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.{k}', json(?))"
+            " WHERE call_uid = ?",
+            (json.dumps(v), uid),
+        )
+
+
+def test_call_topic_priced(tmp_path):
+    """주제 시술은 비용이 있는 시술만 — 0원(상담)은 주제가 아님 (§4.1 used_fact)"""
+    conn = make_db(tmp_path)
+    assert verify.check_call_topic(conn, CTX) == [] and verify.check_call_topic in verify.REQUIRED
+    _topic(conn, "c-0002", "상담")
+    assert verify.check_call_topic(conn, CTX)
+
+
+@pytest.mark.parametrize(
+    "started_at, flag, ok",
+    [
+        ("2026-11-20 15:00:00", True, True),  # 11/03 급여 스케일링 뒤 — 사용 표시
+        ("2026-11-20 15:00:00", False, False),
+        ("2026-10-20 15:00:00", False, True),  # 그 전 — 표시 없음
+        ("2026-10-20 15:00:00", True, False),
+    ],
+)
+def test_call_topic_scaling_used(tmp_path, started_at, flag, ok):
+    """주제가 스케일링이면 scaling_used_this_year ⇔ 통화 전 그해 급여 스케일링(19세 이상)을 받음"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE ax_calls SET started_at = ? WHERE call_uid = 'c-0001'", (started_at,))
+    conn.execute(
+        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["billing_q", "price_q"]\''
+        " WHERE call_uid = 'c-0001'"
+    )
+    _topic(conn, "c-0001", "스케일링", **({"scaling_used_this_year": True} if flag else {}))
+    assert (verify.check_call_topic(conn, CTX) == []) == ok
+
+
+@pytest.mark.parametrize("topic, ok", [("스케일링", False), ("구강검진", True), ("레진", False)])
+def test_call_topic_recall_q_hygiene(tmp_path, topic, ok):
+    """리콜 문의의 가격 주제 = 다음 검진의 위생 시술 — 성인이 기한 해에 아직이면 스케일링, 그 밖은 구강검진.
+    1번 환자는 11/03 스케일링 → 11/20의 '지남' 문자(기한 해 2026)면 구강검진"""
+    conn = make_db(tmp_path)
+    _recall_q(conn)
+    conn.execute(
+        "UPDATE ax_calls SET started_at = '2026-11-20 15:00:00' WHERE call_uid = 'c-0001'"
+    )
+    conn.execute(
+        'UPDATE truth.truth_call_labels SET accepted_purposes = \'["recall_q", "price_q"]\','
+        " price_inquiry = 1 WHERE call_uid = 'c-0001'"
+    )
+    _topic(
+        conn,
+        "c-0001",
+        topic,
+        recall_text={"sent_at": "2026-11-16 09:30:00", "kind": "after", "due_month": 10},
+    )
+    assert (verify.check_call_topic(conn, CTX) == []) == ok
+
+
+@pytest.mark.parametrize(
+    "started_at, ok", [("2026-10-08 15:00:00", True), ("2026-10-20 15:00:00", False)]
+)
+def test_followup_topic_is_recent_treatment(tmp_path, started_at, ok):
+    """경과 확인 발신의 주제 = 1~7일 전 진료(1번 환자 10/06 신경치료) — 10/20이면 창 안 진료가 없어 잡힌다"""
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE ax_calls SET started_at = ? WHERE call_uid = 'c-0001'", (started_at,))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'treatment_q',"
+        " used_fact = json_set(used_fact, '$.topic_procedure', '신경치료') WHERE call_uid = 'c-0001'"
+    )
+    assert (verify.check_followup_topic(conn, CTX) == []) == ok
+
+
+def test_already_paid_calls_lower_bound(tmp_path):
+    """메타 ledger_debt_calls만큼 already_paid 수납 문의 발신이 있어야 — 시드엔 없어 1이면 잡힌다"""
+    conn = make_db(tmp_path)
+    assert verify.check_already_paid_calls(conn, CTX) == []
+    assert verify.check_already_paid_calls(conn, replace(CTX, ledger_debt_calls=1))
+
+
+def test_transcript_rules_recheck_saved_text(tmp_path):
+    """저장된 전사에 채우기 검증의 금지 꼴(llm_jobs.STRAY_SCRIPT, transcripts.checks의 금지 패턴)이 없다 (경고) — 캐시 줄을
+    손으로 고치거나 옛 통과 줄이 살아나면 잡는다. c-0003은 통화 전 예약이 없는 새 예약 통화"""
+    conn = make_db(tmp_path)
+    assert verify.check_transcript_rules(conn, CTX) == []
+    assert verify.check_transcript_rules in verify.WARNINGS
+    conn.execute(
+        "UPDATE ax_calls SET transcript = transcript || '\n직원: 네 Processing' WHERE call_uid = 'c-0001'"
+    )
+    assert [r["call_uid"] for r in verify.check_transcript_rules(conn, CTX)] == ["c-0001"]
+    conn.execute(
+        "UPDATE ax_calls SET transcript = transcript || '\n직원: 10월 6일에 신경치료가 잡혀 있으세요.'"
+        " WHERE call_uid = 'c-0003'"
+    )
+    assert {r["call_uid"] for r in verify.check_transcript_rules(conn, CTX)} == {
+        "c-0001",
+        "c-0003",
+    }
+
+
+# 응급 내원 (§2.6 (5), 6b단계) — fixture 통화 c-0001(10/20 15:00, 1번 환자)을 응급으로, 그날 16:00 원장 응급 진찰(8번 예약)
+def _emergency(conn) -> None:
+    conn.execute(
+        "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, confirmed, created_at, chair_no)"
+        " VALUES (8, 1, 1, '2026-10-20 16:00:00', 30, 'treatment', 'U0019', 'completed', 'phone', 0,"
+        " '2026-10-20 15:00:00', 2)"
+    )
+    conn.execute(
+        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at, method)"
+        " VALUES (1, 8, 'visit', 0, 0, '2026-10-20 16:30:00', 'card')"
+    )
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET emergency = 1, used_fact = json_set(used_fact, '$.emergency_visit',"
+        ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0001\''
+    )
+    # c-0001의 해시 상황은 '때운 것이 빠짐'인데 1번 환자는 통화 전 신경치료뿐(때운 이력 없음) — 대신 상황으로 손으로 정한다
+    assert emergency.scene("c-0001") == EMERGENCY_SCENES[3]
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit.scene', ?)"
+        " WHERE call_uid = 'c-0001'",
+        (EMERGENCY_SCENES[1],),
+    )
+
+
+def test_emergency_visit_passes(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_emergency_visits(conn, CTX) == []  # fixture에 응급 통화 없음
+    _emergency(conn)
+    assert verify.check_emergency_visits(conn, CTX) == []
+    assert verify.check_emergency_visits in verify.REQUIRED
+
+
+EMERGENCY_BREAKS = {
+    "no_visit": "UPDATE truth.truth_call_labels SET used_fact = json_remove(used_fact, '$.emergency_visit')"
+    " WHERE call_uid = 'c-0001'",
+    "not_emergency": "UPDATE truth.truth_call_labels SET emergency = 0 WHERE call_uid = 'c-0001'",
+    "other_patient": "UPDATE emr_appointments SET patient_id = 2 WHERE id = 8",
+    "not_doctor": "UPDATE emr_appointments SET staff_id = 2 WHERE id = 8",
+    "booked_earlier": "UPDATE emr_appointments SET created_at = '2026-10-19 15:00:00' WHERE id = 8",
+    "confirmed": "UPDATE emr_appointments SET confirmed = 1 WHERE id = 8",
+    "week_later": "UPDATE emr_appointments SET scheduled_at = '2026-10-27 16:00:00' WHERE id = 8",
+    "other_procedure": "UPDATE emr_appointments SET planned_procedure_code = 'U0017' WHERE id = 8",
+    "fact_time_differs": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact,"
+    " '$.emergency_visit.time', '16:30') WHERE call_uid = 'c-0001'",
+    "texted": 'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+    " related_appointment_id) VALUES (1, 'out', '2026-10-20 15:05:00', '예약 확정', 'appt_confirm', 8)",
+    "unpaid": "UPDATE emr_payments SET amount_due = 10000 WHERE appointment_id = 8",
+    "too_soon": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 15:20:00' WHERE id = 8",
+    "off_grid": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 16:10:00' WHERE id = 8",
+    "after_close": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 18:30:00' WHERE id = 8",
+    "lunch": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 13:00:00', created_at = '2026-10-20 12:00:00'"
+    " WHERE id = 8",
+    "scene_without_history": "UPDATE truth.truth_call_labels SET used_fact ="
+    " json_remove(used_fact, '$.emergency_visit.scene') WHERE call_uid = 'c-0001'",
+    "unknown_scene": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact,"
+    " '$.emergency_visit.scene', '없는 상황') WHERE call_uid = 'c-0001'",
+    "two_calls": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit',"
+    ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0004\'',
+}
+
+
+@pytest.mark.parametrize("case", EMERGENCY_BREAKS)
+def test_emergency_visit_break_is_caught(tmp_path, case):
+    conn = make_db(tmp_path)
+    _emergency(conn)
+    conn.execute(EMERGENCY_BREAKS[case])
+    assert verify.check_emergency_visits(conn, CTX), case
+
+
+def test_emergency_visit_may_share_day(tmp_path):
+    """응급 내원은 그날 다른 예약이 있어도 따로 온다 — 같은 날 한 번 검사에서 뺀다(응급 표시가 없으면 잡는다)"""
+    conn = make_db(tmp_path)
+    _emergency(conn)
+    conn.execute(
+        "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, created_at, chair_no)"
+        " VALUES (9, 1, 2, '2026-10-20 10:00:00', 30, 'hygiene', 'U0002', 'completed', 'phone',"
+        " '2026-10-10 10:00:00', 3)"
+    )
+    assert verify.check_patient_same_day(conn, CTX) == []
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_remove(used_fact, '$.emergency_visit')"
+    )
+    assert verify.check_patient_same_day(conn, CTX)
+
+
+def _complaint_uid(want):
+    """부 주제 불만의 해시 주제가 want를 만족하는 통화 번호(call_uid를 바꿔 fixture에 쓴다)"""
+    return next(
+        f"c-{n:04d}"
+        for n in range(1, 4000)
+        if want(transcripts.complaint_topic(f"c-{n:04d}", True, None, False, history=False))
+    )
+
+
+def _use_uid(conn, uid):
+    """fixture 통화 c-0001(10/20, 1번 환자, 부 주제 불만)의 번호를 바꿔 주제를 고른다"""
+    conn.execute("UPDATE ax_calls SET call_uid = ? WHERE call_uid = 'c-0001'", (uid,))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET call_uid = ? WHERE call_uid = 'c-0001'", (uid,)
+    )
+
+
+def test_complaint_situation_passes(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_complaint_situation(conn, CTX) == []
+    assert verify.check_complaint_situation in verify.REQUIRED
+
+
+def test_complaint_history_topic_needs_recent_visit(tmp_path):
+    """이력 불만인데 창 안 진료가 없으면(최근 진료를 지움) — 입력은 사실로 만들어져 다른 주제가 되어야 하는데, 사실만 남긴 옛 줄을 잡는다"""
+    conn = make_db(tmp_path)
+    no_history = (*transcripts.NO_HISTORY_TOPICS, transcripts.MISSED_TOPIC)
+    _use_uid(conn, _complaint_uid(lambda t: t not in no_history))
+    assert verify.check_complaint_situation(conn, CTX) == []  # 10/06 진료가 창 안
+    conn.execute("UPDATE emr_treatments SET performed_at = '2026-07-01 10:00:00' WHERE id = 1")
+    assert verify.check_complaint_situation(conn, CTX)  # 사실의 최근 진료와 장부가 어긋남
+
+
+def test_phone_only_topic_needs_no_visit(tmp_path):
+    """기록이 없으면 전화 응대 불만 — 장부에 진료가 있으면 잡는다"""
+    conn = make_db(tmp_path)
+    _use_uid(conn, _complaint_uid(lambda t: t in transcripts.NO_HISTORY_TOPICS))
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.recent_visits', json('[]'))"
+    )
+    assert verify.check_complaint_situation(conn, CTX)
+
+
+def test_insurance_price_question_warns(tmp_path):
+    conn = make_db(tmp_path)
+    assert verify.check_insurance_price_question(conn, CTX) == []
+    assert verify.check_insurance_price_question in verify.WARNINGS
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET accepted_purposes = '[\"insurance_q\"]', price_inquiry = 0"
+        " WHERE call_uid = 'c-0003'"
+    )
+    conn.execute(
+        "UPDATE ax_calls SET transcript = '환자: 제가 내는 돈은 얼마예요?\n직원: 네.' WHERE call_uid = 'c-0003'"
+    )
+    assert verify.check_insurance_price_question(conn, CTX)

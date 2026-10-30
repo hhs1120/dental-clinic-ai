@@ -90,7 +90,10 @@ D03 = ("K", "부위·산정 내역 기재 누락")
 
 
 def _error(conn, tid, kind, requirement=None):
-    conn.execute("INSERT INTO truth.truth_claim_errors VALUES (?, ?, ?)", (tid, kind, requirement))
+    conn.execute(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (?, ?, ?)",
+        (tid, kind, requirement),
+    )
 
 
 # ── 정상 사례 (통과해야 함) ─────────────────────────────────
@@ -202,8 +205,9 @@ def test_retreatment_is_requirement_line(tmp_path):
 # ── 위반 (잡아야 함) ────────────────────────────────────────
 
 BREAKS = {
-    "plan_remaining_too_many": (
-        "UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan', json('{\"remaining\": 9}'))"
+    "plan_not_open_item": (  # 2번 환자는 계획이 없다
+        "UPDATE truth.truth_chart_notes SET facts = json_set(facts, '$.plan',"
+        ' json(\'{"items": [{"procedure": "크라운", "tooth": "26"}]}\'))'
         " WHERE treatment_id = 3",
         "check_chart_plan",
     ),
@@ -241,15 +245,15 @@ BREAKS = {
         "check_chart_dx",
     ),
     "dx_error_but_allowed": (
-        "INSERT INTO truth.truth_claim_errors VALUES (1, 'diagnosis', NULL)",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (1, 'diagnosis', NULL)",
         "check_chart_dx",
     ),
     "error_on_uninsured": (
-        "INSERT INTO truth.truth_claim_errors VALUES (3, 'diagnosis', NULL)",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (3, 'diagnosis', NULL)",
         "check_claim_errors",
     ),
     "requirement_error_without_requirement": (
-        "INSERT INTO truth.truth_claim_errors VALUES (2, 'requirement', 'R02')",
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, requirement) VALUES (2, 'requirement', 'R02')",
         "check_claim_errors",
     ),
     "unknown_requirement": (
@@ -680,3 +684,62 @@ def test_narrative_facts_required(tmp_path):
     assert verify.check_chart_narrative_facts(conn, CTX) == [
         {"treatment_id": 3, "missing": ["16번"]}
     ]
+
+
+# 추가 처치 누락(§4.3): 시드 2번 진료(1번 환자 11/03 스케일링, 11월분 pending 청구)에 같은 날 36번 아말감/GI를 차트에만.
+# 1번 환자 장부의 치아는 26번(신경치료)뿐
+EXTRA = '{"extra": {"procedure": "아말감/GI", "tooth": "36"}}'
+
+
+def _omitted(conn, code="U0006", tooth="36", tid=2, facts=EXTRA):
+    conn.execute(
+        "INSERT INTO truth.truth_claim_errors (treatment_id, kind, extra_procedure_code, extra_tooth_no)"
+        " VALUES (?, 'omitted_extra', ?, ?)",
+        (tid, code, tooth),
+    )
+    conn.execute(
+        "UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = ?", (facts, tid)
+    )
+
+
+def test_omitted_extra_valid(tmp_path):
+    conn = make_db(tmp_path)
+    _omitted(conn)
+    assert verify.check_omitted_extra(conn, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"tooth": "26", "facts": EXTRA.replace("36", "26")},  # 장부에 있는 치아
+        {
+            "code": "U0004",
+            "tooth": "36",
+            "facts": EXTRA.replace("아말감/GI", "실란트"),
+        },  # 성인 실란트는 비급여
+        {"code": "U0005", "facts": EXTRA.replace("아말감/GI", "레진")},  # 추가 처치 시술 아님
+        {"facts": EXTRA.replace("36", "37")},  # 차트 사실 ≠ 정답
+        {"tid": 3, "facts": EXTRA},  # 비급여 레진 줄(청구 없음)
+    ],
+)
+def test_omitted_extra_break(tmp_path, kwargs):
+    conn = make_db(tmp_path)
+    _omitted(conn, **kwargs)
+    assert verify.check_omitted_extra(conn, CTX)
+
+
+def test_extra_fact_without_error(tmp_path):
+    conn = make_db(tmp_path)
+    conn.execute("UPDATE truth.truth_chart_notes SET facts = ? WHERE treatment_id = 2", (EXTRA,))
+    assert verify.check_omitted_extra(conn, CTX)
+
+
+def test_chart_rules_recheck_saved_notes(tmp_path):
+    """저장된 서술 차트에 9b 검증의 금지 꼴(chart.narrative_checks의 금지 패턴 — 메모체가 아닌 끝맺음 등)이 없다 (경고)"""
+    conn = make_db(tmp_path)
+    assert verify.check_chart_rules(conn, CTX) == []
+    assert verify.check_chart_rules in verify.WARNINGS
+    conn.execute(
+        "UPDATE emr_chart_notes SET note = '16번 치아 레진 시행했습니다.' WHERE treatment_id = 3"
+    )
+    assert [r["treatment_id"] for r in verify.check_chart_rules(conn, CTX)] == [3]

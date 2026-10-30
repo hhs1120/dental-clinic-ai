@@ -228,3 +228,30 @@ def test_compare_lists_rescued_and_lost(conn):
 def test_paired_keeps_only_pass_flags(conn):
     p = rag.paired(rag.evaluate(conn, FakeApp(), "dev"))
     assert all(set(q) <= {"id", "type", "hit", "top1", "fresh", "rr", "chat_ok"} for q in p)
+
+
+def test_notices_read_from_source_even_if_app_has_same_table(conn):
+    """문서는 생성 DB(source)의 ax_documents에서 — app DB의 같은 이름 옛 표를 읽지 않는다"""
+    conn.execute("CREATE TABLE main.ax_documents AS SELECT * FROM source.ax_documents WHERE 0")
+    assert rag._latest_notices(conn)  # 빈 옛 표를 읽으면 최신 공지가 하나도 없다
+
+
+@pytest.mark.parametrize(
+    "ranked, fresh",
+    [
+        (
+            ["doc:5:0", "doc:4:0", "doc:3:0"],
+            False,
+        ),  # FAQ가 1위여도 옛 공지가 최신 공지보다 위면 실패
+        (
+            ["doc:5:0", "doc:3:0", "doc:4:0"],
+            True,
+        ),  # 최신 공지가 옛 공지보다 위 — FAQ 순위는 보지 않는다
+        (["doc:5:0"], False),  # 최신 공지가 없음
+    ],
+)
+def test_freshness_is_notice_vs_its_old_version(conn, ranked, fresh):
+    """최신성은 공지 대 그 옛 공지로만 판정 (평가 설계 §3.1·§3.2)"""
+    search = dict(SEARCH, n1={"manual_results": ranked, "case_results": []})
+    r = rag.evaluate(conn, FakeApp(search=search), "dev", parts=("retrieval",))
+    assert {x["id"]: x for x in r["questions"]}["n1"]["fresh"] is fresh

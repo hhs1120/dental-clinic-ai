@@ -26,6 +26,8 @@ from generator.master import (
     CALL_PURPOSE_SHARE,
     CALL_SUBTOPICS,
     CALL_URGENCY_WEIGHTS,
+    CHECKUP_CODE,
+    EMERGENCY_VISIT_MARK,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -33,16 +35,25 @@ from generator.master import (
     HAS_TODO_SHARE,
     HOURS,
     IMPLIED_FLAG,
+    LEDGER_DEBT_CALL_DAYS,
+    LEDGER_DEBT_CALLS,
     OUTBOUND_MULTI_SHARE,
     PAIN_URGENT_SHARE,
     PLANNED_WEIGHTS,
     PROCEDURES,
     RECALL_CYCLE,
+    SCALING_CODE,
+    SCALING_MIN_AGE,
     SUBTOPIC_PURPOSE,
     age_band,
     age_on,
+    business_minutes,
+    call_day_weight,
+    close_time,
     open_slots,
+    recall_due_year,
 )
+from generator.records import open_plan_items
 
 FMT = "%Y-%m-%d %H:%M:%S"
 CHILD_MAX_AGE = next(hi for name, _, hi, _ in AGE_BANDS if name == "child")
@@ -51,7 +62,15 @@ PRICED = sorted(p["name"] for p in PROCEDURES if p["fee_total"] > 0)  # 처음 �
 TOPIC_PURPOSES = ("price_q", "insurance_q", "treatment_q")
 OPEN = datetime.strptime(HOURS["open"], "%H:%M").time()
 CLOSE = datetime.strptime(HOURS["weekday_close"], "%H:%M").time()
-DAY_MINUTES = (datetime.combine(date.min, CLOSE) - datetime.combine(date.min, OPEN)).seconds // 60
+
+
+def any_minute(rng, d: date) -> datetime:
+    """그날 개원 ~ 그 요일 마감 사이 분 단위 시각 균등 — 통화·전화 예약 같은 사건 시각 (§2.6, 점심은 따지지 않음)"""
+    return datetime.combine(d, OPEN) + timedelta(
+        minutes=int(rng.integers(business_minutes(d.weekday())))
+    )
+
+
 MAX_DATE_TRIES = 1000
 
 
@@ -90,13 +109,81 @@ def next_open_day(d: date, holidays) -> date:
 
 
 def _in_hours(t: str) -> bool:
-    return OPEN <= datetime.strptime(t, FMT).time() < CLOSE
+    at = datetime.strptime(t, FMT)
+    return OPEN <= at.time() < datetime.strptime(close_time(at.weekday()), "%H:%M").time()
+
+
+def first_open_day(year: int, month: int, holidays) -> date:
+    """그달 첫 진료일 — 리콜 문자 날(§2.5)"""
+    d = date(year, month, 1)
+    while not open_slots(d.weekday()) or d in holidays:
+        d += timedelta(days=1)
+    return d
+
+
+def recall_targets(run) -> list[tuple[datetime, int, str, date]]:
+    """리콜 문자 대상 (그달 첫 진료일 개원 시각, 환자, before·after, 기한) — 8단계가 보내고 6단계 리콜 문의가 따른다(§2.5·§4.1).
+    그 시각에 잡힌 예약이 없고 기한(마지막 completed 위생 내원 +
+    RECALL_CYCLE)이 다음 달이면 before, 지난달이면 after"""
+    hygiene, appts = defaultdict(list), defaultdict(list)
+    for pid, at, typ, status, created, cancelled in run.conn.execute(
+        "SELECT patient_id, scheduled_at, type, status, created_at, cancelled_at FROM emr_appointments"
+    ):
+        appts[pid].append((created, at, cancelled))
+        if typ == "hygiene" and status == "completed":
+            hygiene[pid].append(at)
+    out = []
+    y, m = run.range_start.year, run.range_start.month
+    while date(y, m, 1) < run.today:
+        d = first_open_day(y, m, run.holidays)
+        t = datetime.combine(d, OPEN)
+        ts = t.strftime(FMT)
+        nxt = (y + 1, 1) if m == 12 else (y, m + 1)
+        prv = (y - 1, 12) if m == 1 else (y, m - 1)
+        if run.range_start <= d < run.today:
+            for pid in sorted(hygiene):
+                last = max((a for a in hygiene[pid] if a < ts), default=None)
+                if last is None or any(
+                    c <= ts < a and (x is None or x > ts) for c, a, x in appts[pid]
+                ):
+                    continue
+                due = datetime.strptime(last, FMT).date() + RECALL_CYCLE
+                kind = {nxt: "before", prv: "after"}.get((due.year, due.month))
+                if kind:
+                    out.append((t, pid, kind, due))
+        y, m = nxt
+    return out
 
 
 class Ledger:
     """통화 시점 장부 — 환자별 내원·예약·수납을 메모리에. 시각 비교는 ISO 문자열"""
 
-    def __init__(self, conn):
+    def __init__(
+        self,
+        conn,
+        plan_items: list,
+        churn: dict,
+        dormant: dict,
+        recall_texts: list,
+        emergency: frozenset = frozenset(),
+    ):
+        self.emergency = emergency  # 6b단계 응급 내원 예약 — 최근 진료에 응급 표시(뒤 통화가 일반 상담으로 이어 쓰지 않게)
+        self.plan_items = plan_items  # 5단계 state — 항목마다 만든·닫힌 시각
+        self.churn = churn  # 4단계 state — 이탈 환자 → 이탈일
+        self.dormant = dormant  # 4단계 state — 휴면 환자 → 휴면일
+        # 환자 → [(리콜 문자 시각, before·after, 기한)] — 8단계가 보낼 것(recall_targets)
+        self.recall_texts = defaultdict(list)
+        for t, pid, kind, due in recall_texts:
+            self.recall_texts[pid].append((t.strftime(FMT), kind, due))
+        self.ledger_debt = defaultdict(
+            list
+        )  # 환자 → [(장부 입력 시각, 실제 내원일, 실수로 생긴 미수)] (§2.4)
+        for pid, at, day, debt in conn.execute(
+            "SELECT p.patient_id, p.paid_at, date(e.true_paid_at), e.true_amount - p.amount_paid"
+            " FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+            " WHERE e.kind IN ('entry_missing', 'amount_typo') ORDER BY p.paid_at, p.id"
+        ):
+            self.ledger_debt[pid].append((at, day, debt))
         self.patients = {
             r[0]: {
                 "id": r[0],
@@ -139,11 +226,12 @@ class Ledger:
             self.by_patient[a["patient"]].append(a)
         self.treatments = defaultdict(list)
         for r in conn.execute(
-            "SELECT patient_id, performed_at, procedure_code, tooth_no FROM emr_treatments"
+            "SELECT patient_id, performed_at, procedure_code, tooth_no, appointment_id FROM emr_treatments"
             " ORDER BY performed_at, id"
         ):
             self.treatments[r[0]].append(
                 {"at": r[1], "procedure": PROCEDURE_NAME[r[2]], "tooth": r[3]}
+                | ({"emergency": EMERGENCY_VISIT_MARK} if r[4] in emergency else {})
             )
         self.payments = defaultdict(list)
         for r in conn.execute(
@@ -161,6 +249,61 @@ class Ledger:
             if p["family"] is not None:
                 self.family[p["family"]].append(p)
 
+    def gone(self, pid: int, t: str) -> bool:
+        """시각 t에 이미 이탈한 환자 (§2.2)"""
+        on = self.churn.get(pid)
+        return on is not None and on.isoformat() <= t[:10]
+
+    def asleep(self, pid: int, t: str) -> bool:
+        """시각 t에 이미 휴면인 환자 (§2.6 (1)) — 새 수요가 없어 리콜 문자를 보고 걸지 않는다"""
+        on = self.dormant.get(pid)
+        return on is not None and on.isoformat() <= t[:10]
+
+    def recent_treatment(self, pid: int, t: str) -> str | None:
+        """경과 확인 규칙 창(CALL_PATIENT_RULES treatment_q outbound) 안의 가장 최근 completed 진료 내원 시술"""
+        lo, hi = CALL_PATIENT_RULES[("treatment_q", "outbound")][1]
+        d = date.fromisoformat(t[:10])
+        recent = [
+            a
+            for a in self.by_patient[pid]
+            if a["type"] == "treatment"
+            and a["status"] == "completed"
+            and (d - timedelta(days=hi)).isoformat()
+            <= a["at"][:10]
+            <= (d - timedelta(days=lo)).isoformat()
+        ]
+        return (
+            PROCEDURE_NAME[max(recent, key=lambda a: (a["at"], a["id"]))["code"]]
+            if recent
+            else None
+        )
+
+    def recall_text(self, pid: int, t: str) -> dict | None:
+        """시각 t 전 규칙 창(CALL_PATIENT_RULES recall_q inbound) 안에 받은 가장 최근 리콜 문자 — 리콜 문의 사실"""
+        lo, hi = CALL_PATIENT_RULES[("recall_q", "inbound")][1]
+        d = date.fromisoformat(t[:10])
+        got = [
+            (at, kind, due)
+            for at, kind, due in self.recall_texts[pid]
+            if at <= t and lo <= (d - date.fromisoformat(at[:10])).days <= hi
+        ]
+        if not got:
+            return None
+        at, kind, due = max(got)
+        return {"sent_at": at, "kind": kind, "due_month": due.month}
+
+    def scaled_in(self, pid: int, year: int, t: str) -> bool:
+        """시각 t 전에 그 해 급여 스케일링(그 진료일 SCALING_MIN_AGE 이상)을 받음 — 4단계가 그해 두 번째부터 구강검진으로
+        바꾸므로 성인 스케일링 진료 = 급여 사용"""
+        name, birth = PROCEDURE_NAME[SCALING_CODE], self.patients[pid]["birth"]
+        return any(
+            x["procedure"] == name
+            and x["at"][:4] == str(year)
+            and x["at"] <= t
+            and age_on(birth, date.fromisoformat(x["at"][:10])) >= SCALING_MIN_AGE
+            for x in self.treatments[pid]
+        )
+
     def completed_before(self, pid: int, day: str) -> list[dict]:
         return [
             a for a in self.by_patient[pid] if a["status"] == "completed" and a["at"][:10] < day
@@ -170,10 +313,11 @@ class Ledger:
         return sum(owed for at, owed in self.payments[pid] if at <= t)
 
     def next_appointment(self, pid: int, t: str) -> dict | None:
+        """시각 t 직전에 잡혀 있던 가장 가까운 예약 — t에 생기는 예약은 아직 없고, t에 취소·변경되는 예약은 아직 있다"""
         live = [
             a
             for a in self.by_patient[pid]
-            if a["created"] <= t < a["at"] and (a["cancelled"] is None or a["cancelled"] > t)
+            if a["created"] < t < a["at"] and (a["cancelled"] is None or a["cancelled"] >= t)
         ]
         return min(live, key=lambda a: a["at"]) if live else None
 
@@ -185,11 +329,10 @@ class Ledger:
             return False
         kind, value = rule
         d = date.fromisoformat(day)
-        if kind == "recall_due":
-            hygiene = [a for a in visits if a["type"] == "hygiene"]
+        if kind == "recall_text":
             return (
-                bool(hygiene)
-                and date.fromisoformat(hygiene[-1]["at"][:10]) + RECALL_CYCLE < d
+                not self.asleep(pid, t)
+                and self.recall_text(pid, t) is not None
                 and self.next_appointment(pid, t) is None
             )
         if kind == "balance":
@@ -221,10 +364,15 @@ class Ledger:
             },
             "recent_visits": [
                 {"date": v["at"][:10], "procedure": v["procedure"], "tooth": v["tooth"]}
+                | ({"emergency": v["emergency"]} if v.get("emergency") else {})
                 for v in visits
             ],
             "balance": self.balance(pid, t),
-            "next_appointment": {"appointment_id": nxt["id"]} | _appt_fact(nxt) if nxt else None,
+            "next_appointment": {"appointment_id": nxt["id"]}
+            | _appt_fact(nxt)
+            | ({"emergency": EMERGENCY_VISIT_MARK} if nxt["id"] in self.emergency else {})
+            if nxt
+            else None,
             "family": [
                 m["name"]
                 for m in self.family[p["family"]]
@@ -237,6 +385,7 @@ class Ledger:
                 for rec, ends, label in self.alerts[pid]
                 if rec <= day and (ends is None or day < ends)
             ],
+            "open_plan_items": open_plan_items(self.plan_items, pid, t),
         }
 
     def is_child(self, pid: int, day: str) -> bool:
@@ -270,14 +419,19 @@ def _booking_events(led: Ledger, purpose: str, run, rng) -> list[tuple[dict, str
         return [
             (a, a["cancelled"])
             for a in appts
-            if a["status"] == "cancelled" and a["id"] not in origins and _in_hours(a["cancelled"])
+            if a["status"] == "cancelled"
+            and a["id"] not in origins
+            and _in_hours(a["cancelled"])
+            and not led.gone(a["patient"], a["cancelled"])  # 이탈 뒤 당일 취소는 연락 없이 (§2.2)
         ]
     # confirm: 리마인드 날 개원 뒤 임의 분 — 8단계가 리마인드 문자를 그 전에 보낸다
     out = []
     for a in appts:
         if a["confirmed"]:
             day = prev_open_day(date.fromisoformat(a["at"][:10]), run.holidays)
-            t = datetime.combine(day, OPEN) + timedelta(minutes=int(rng.integers(1, DAY_MINUTES)))
+            t = datetime.combine(day, OPEN) + timedelta(
+                minutes=int(rng.integers(1, business_minutes(day.weekday())))
+            )
             out.append((a, t.strftime(FMT)))
     return out
 
@@ -286,11 +440,25 @@ def _side(led: Ledger, pid: int, day: str) -> str:
     return "guardian" if led.is_child(pid, day) else "patient"
 
 
+def _recency_p(days: list, run) -> list:
+    """날짜마다 최근 가중(master.call_day_weight)을 확률로 — 예약류 이벤트·그 밖 통화일 추첨 (§4.1 6단계)"""
+    w = [call_day_weight(d, run.range_start, run.today) for d in days]
+    total = sum(w)
+    return [x / total for x in w]
+
+
 def stage_slots(run, rng, fake) -> None:
-    led = Ledger(run.conn)
+    led = Ledger(
+        run.conn,
+        run.state["plan_items"],
+        run.state["churn"],
+        run.state["dormant"],
+        recall_targets(run),
+    )
     n = run.cfg["calls_with_transcript"]
     days = [run.range_start + timedelta(days=i) for i in range((run.today - run.range_start).days)]
     days = [d for d in days if is_open(d, run.holidays)]
+    day_p = _recency_p(days, run)
     slots = []
     for purpose, k in quota(CALL_PURPOSE_SHARE, n).items():
         out_share = CALL_OUTBOUND_SHARE.get(purpose, 0) / CALL_PURPOSE_SHARE[purpose]
@@ -303,9 +471,9 @@ def stage_slots(run, rng, fake) -> None:
             events = _booking_events(led, purpose, run, rng)
             if len(events) < k:
                 raise ValueError(f"{purpose} 이벤트 {len(events)}건 < 통화 {k}건")
-            for (direction, structural), i in zip(
-                shape, rng.choice(len(events), size=k, replace=False).tolist(), strict=True
-            ):
+            event_p = _recency_p([date.fromisoformat(t[:10]) for _, t in events], run)
+            picks = rng.choice(len(events), size=k, replace=False, p=event_p).tolist()
+            for (direction, structural), i in zip(shape, picks, strict=True):
                 a, t = events[i]
                 pid = a["patient"]
                 new = purpose == "book" and led.patients[pid]["registered"] == t[:10]
@@ -332,10 +500,8 @@ def stage_slots(run, rng, fake) -> None:
             )
             rule = CALL_PATIENT_RULES.get((purpose, direction), ("visited", None))
             for _ in range(MAX_DATE_TRIES):
-                d = days[int(rng.integers(len(days)))]
-                t = (
-                    datetime.combine(d, OPEN) + timedelta(minutes=int(rng.integers(DAY_MINUTES)))
-                ).strftime(FMT)
+                d = days[int(rng.choice(len(days), p=day_p))]
+                t = any_minute(rng, d).strftime(FMT)
                 if who not in ("side", "insurer"):
                     about = None
                     break
@@ -344,6 +510,7 @@ def stage_slots(run, rng, fake) -> None:
                     for pid in led.patients
                     if led.matches(pid, rule, t)
                     and (who == "side" or led.patients[pid]["private"])
+                    and not led.gone(pid, t)  # 이탈 환자는 이탈일부터 통화 없음 (§2.2)
                 ]
                 if cands:
                     about = cands[int(rng.integers(len(cands)))]
@@ -365,6 +532,7 @@ def stage_slots(run, rng, fake) -> None:
                     "counterpart": _side(led, about, t[:10]) if side else who,
                 }
             )
+    _ledger_debt_calls(led, slots, days, rng.spawn(1)[0])
     for s in slots:
         if s["patient"] is not None:
             speaker = led.speaker(s["patient"], s["t"][:10])
@@ -372,6 +540,32 @@ def stage_slots(run, rng, fake) -> None:
         else:
             s["caller"] = (next(run.state["phones"]), fake.name())
     run.state["call_slots"], run.state["call_ledger"] = slots, led
+
+
+def _ledger_debt_calls(led, slots: list, days: list, rng) -> None:
+    """수납 문의 발신 LEDGER_DEBT_CALLS건을 장부 실수 미수 환자에게 다시 배정 — 서로 다른 환자, 통화일은 그 미수가 장부에
+    들어간 뒤 LEDGER_DEBT_CALL_DAYS일 안의 진료일(그 시각 잔액 > 0). 다른 슬롯은 그대로 (§4.1 환자 고르기)"""
+    rule = CALL_PATIENT_RULES[("billing_q", "outbound")]
+    billing = [s for s in slots if s["purpose"] == "billing_q" and s["direction"] == "outbound"]
+    patients = sorted(led.ledger_debt)
+    targets = rng.permutation(len(billing)).tolist()[:LEDGER_DEBT_CALLS]
+    for k in rng.permutation(len(patients)).tolist():
+        if not targets:
+            break
+        pid = patients[k]
+        entered = led.ledger_debt[pid][0][0]
+        start = datetime.strptime(entered, FMT).date()
+        options = [d for d in days if start < d <= start + timedelta(days=LEDGER_DEBT_CALL_DAYS)]
+        for d in [options[int(i)] for i in rng.permutation(len(options))]:
+            t = any_minute(rng, d).strftime(FMT)
+            if led.matches(pid, rule, t) and not led.gone(pid, t):
+                s = billing[targets.pop()]
+                s.update(t=t, patient=pid, about=pid, counterpart=_side(led, pid, t[:10]))
+                break
+    if targets:
+        raise ValueError(
+            f"장부 실수 미수 수납 문의 {LEDGER_DEBT_CALLS - len(targets)}건 < {LEDGER_DEBT_CALLS}건"
+        )
 
 
 def _noise_eligible(s: dict, noise: str) -> bool:
@@ -408,41 +602,90 @@ def _used_fact(rng, led: Ledger, s: dict) -> dict:
             fact["appointment"] |= {"from_date": orig["at"][:10], "from_time": orig["at"][11:16]}
     if s["about"] is not None:
         fact |= led.facts(s["about"], s["t"])
+        if s["purpose"] == "recall_q":
+            fact["recall_text"] = led.recall_text(
+                s["about"], s["t"]
+            )  # 받은 문자 — 월을 지어내지 않게
+        debts = [d for d in led.ledger_debt[s["about"]] if d[0] <= s["t"]]
+        if s["purpose"] == "billing_q" and s["direction"] == "outbound" and debts:
+            _, day, debt = debts[-1]  # 수납 문의 미수가 장부 실수 — 이미 냈다는 말 (⑧-1 근거)
+            fact["already_paid"] = {"date": day, "amount": debt}
     if (
         s["purpose"] in TOPIC_PURPOSES or "price_q" in s["accepted"]
     ):  # 부 주제 가격 문의도 무엇의 가격인지
-        if (
-            a is not None and fact["appointment"]["procedure"] in PRICED
-        ):  # 0원(상담 등)이면 아래 후보에서
-            fact["topic_procedure"] = fact["appointment"]["procedure"]
-            return fact
-        if s["about"] is not None:
-            nxt = fact["next_appointment"]
-            known = sorted(
-                {v["procedure"] for v in fact["recent_visits"]}
-                | ({nxt["procedure"]} if nxt else set())
-            )
-        else:
-            known = []
-        pool = known or PRICED
-        topic = pool[int(rng.integers(len(pool)))]
-        if (
-            s["about"] is not None
-            and "price_q" in s["accepted"]
-            and topic not in (upcoming := _upcoming(fact))
-        ):
-            # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
-            topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
-        fact["topic_procedure"] = topic
+        fact["topic_procedure"] = _topic(rng, led, s, fact)
+        if fact["topic_procedure"] == PROCEDURE_NAME[SCALING_CODE] and s["about"] is not None:
+            if led.scaled_in(s["about"], _topic_year(s, fact), s["t"]):
+                fact["scaling_used_this_year"] = (
+                    True  # 연 1회 급여를 이미 씀 — 가격은 비급여로 (§2.4)
+                )
     return fact
 
 
+def _topic_year(s: dict, fact: dict) -> int:
+    """급여 연 1회를 따지는 해 — 리콜 문의는 받은 문자의 기한 해(12월에 받은 '1월 검진' 문자면 새해), 그 밖은 통화한 해"""
+    text = fact.get("recall_text")
+    if s["purpose"] == "recall_q" and text:
+        sent = date.fromisoformat(text["sent_at"][:10])
+        return recall_due_year(sent, text["kind"], text["due_month"])
+    return int(s["t"][:4])
+
+
+def _topic(rng, led: Ledger, s: dict, fact: dict) -> str:
+    """주제 시술 (§4.1 used_fact) — 비용이 있는 시술(PRICED)만"""
+    a = s["appointment"]
+    if (
+        a is not None and fact["appointment"]["procedure"] in PRICED
+    ):  # 0원(상담 등)이면 아래 후보에서
+        return fact["appointment"]["procedure"]
+    if (
+        (s["purpose"], s["direction"]) == ("treatment_q", "outbound")
+        and "price_q" not in s["accepted"]
+        and s["about"] is not None
+    ):
+        return led.recent_treatment(s["about"], s["t"])  # 경과 확인 = 며칠 전 진료
+    if s["purpose"] == "recall_q":
+        # 검진 문자를 보고 묻는 가격 = 다음 검진의 위생 시술 — 성인은 기한 해에 아직이면 스케일링, 그 밖은 구강검진
+        adult = fact["patient"]["age"] >= SCALING_MIN_AGE
+        if adult and not led.scaled_in(s["about"], _topic_year(s, fact), s["t"]):
+            return PROCEDURE_NAME[SCALING_CODE]
+        return PROCEDURE_NAME[CHECKUP_CODE]
+    if s["about"] is not None:
+        nxt = fact["next_appointment"]
+        known = _plan_topics(fact) or sorted(
+            (
+                {v["procedure"] for v in fact["recent_visits"]}
+                | ({nxt["procedure"]} if nxt else set())
+            )
+            & set(PRICED)
+        )
+    else:
+        known = []
+    pool = known or PRICED
+    topic = pool[int(rng.integers(len(pool)))]
+    if (
+        s["about"] is not None
+        and "price_q" in s["accepted"]
+        and topic not in (upcoming := _upcoming(fact))
+    ):
+        # 가격 문의는 앞으로 받을 시술로 — 전역 난수를 더 쓰지 않고 통화마다 정해진 자리에서 고른다(다른 통화가 밀리지 않게)
+        topic = upcoming[zlib.crc32(f"{s['t']}|{s['about']}".encode()) % len(upcoming)]
+    return topic
+
+
+def _plan_topics(fact: dict) -> list[str]:
+    """환자 측 주제 후보 1순위 — 열린 치료계획 항목의 시술(비용이 있는 것, §4.1 used_fact)"""
+    return sorted({i["procedure"] for i in fact["open_plan_items"]} & set(PRICED))
+
+
 def _upcoming(fact: dict) -> list[str]:
-    """가격 문의 주제 후보 — 앞으로 받을 시술: 다음 예약 시술, 없으면 그 나이의 치료 시술 중 지난 진료에 없는 것.
-    지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
+    """가격 문의 주제 후보 — 앞으로 받을 시술: 다음 예약 시술, 없으면 열린 치료계획 항목, 없으면 그 나이의 치료 시술 중
+    지난 진료에 없는 것. 지난 진료면 '그때 얼마였죠?'(수납 문의)로 쓰여 라벨과 대화가 어긋난다"""
     nxt = fact["next_appointment"]
     if nxt and nxt["procedure"] in PRICED:
         return [nxt["procedure"]]
+    if planned := _plan_topics(fact):
+        return planned
     done = {v["procedure"] for v in fact["recent_visits"]}
     band = age_band(fact["patient"]["age"])
     return [
@@ -506,6 +749,10 @@ def stage_labels(run, rng, fake) -> None:
             accepted=[purpose] + ([SUBTOPIC_PURPOSE[sub]] if sub else []),
         )
         s["fact"] = _used_fact(rng, led, s)
+        if s["fact"].get("already_paid"):
+            s["flags"]["has_todo"] = (
+                1  # 이미 냈다는 말 — 직원이 기록을 다시 확인할 일이 남는다(추첨 뒤 덮어씀)
+            )
     order = sorted(range(len(slots)), key=lambda i: slots[i]["t"])
     width = max(4, len(str(len(slots))))
     calls, labels = [], []
@@ -586,7 +833,7 @@ def stage_pools(run, rng, fake) -> None:
     ]
     split = {uid: "dev" for uid in dev} | {uid: "test" for uid in test}
     conn.executemany(
-        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ?, judge_status = 'pending' WHERE call_uid = ?",
+        "UPDATE ax_calls SET in_eval_pool = 1, eval_sort_order = ? WHERE call_uid = ?",
         [(i, uid) for i, uid in enumerate(pool, start=1)],
     )
     conn.executemany(

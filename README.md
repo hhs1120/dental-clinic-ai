@@ -37,21 +37,21 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 
 | 명령 | 설명 |
 |---|---|
-| `make data` | 가상 데이터 생성 (`data/app.sqlite`, 정답은 `ground_truth/truth.sqlite`) |
+| `make data` | 가상 데이터 생성 (`data/source.sqlite`, 정답은 `ground_truth/truth.sqlite`) |
 | `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 
 ## 구조
 
 ```
-docs/          설계 문서 (기능 정의 · 가상 데이터 생성 설계 · 앱 설계 · 평가 설계 · 전환의 의미 · 프로젝트 소개)
+docs/          설계 문서 (기능 정의 · 가상 데이터 생성 설계 · 앱 설계 · 평가 설계 · 전환의 의미 · 프로젝트 소개 · 개발자 소개)
 config/        생성기 설정 (시드, 기간·건수, 공휴일, 금지 토픽), LLM 게이트웨이 설정 (llm.yaml — 별칭·단가·일일 상한)
 generator/     데이터 생성기 + verify
 shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트
 ground_truth/  정답지 (앱은 참조하지 않음)
-data/          생성 결과 (app.sqlite — FTS5·벡터 포함)
+data/          생성 결과 (source.sqlite — 생성기 출력, app.sqlite — 앱 테이블·FTS5·벡터)
 backend/       FastAPI (예정)
 frontend/      Next.js (예정)
-tests/         generator/ 생성기·verify 테스트, shared/ 게이트웨이 테스트, 앱 테스트는 backend/ (예정). 정답 격리 검사는 tests/ 바로 아래
+tests/         generator/ 생성기·verify 테스트, shared/ 게이트웨이 테스트, evaluation/ 평가 테스트, 앱 테스트는 backend/ (예정). 정답 격리 검사는 tests/ 바로 아래
 ```

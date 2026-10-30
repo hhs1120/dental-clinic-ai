@@ -3,8 +3,9 @@
 통과한 전사는 ax_calls에 넣고 길이를 발화 글자 수로 다시 계산한다. 시나리오는 저장하지 않는다(라벨을 풀어 쓴 문장).
 """
 
+import hashlib
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from generator import llm_jobs
 from generator.llm_jobs import Task
@@ -13,13 +14,24 @@ from generator.master import (
     CALL_DURATION_SEC,
     CALL_FLAGS,
     CALL_LABEL_WORDS,
+    CALL_PATIENT_RULES,
     CLINIC_NAME,
+    COMPLAINT_TOPICS,
     CONDITIONAL_INSURED_MIN_AGE,
+    EMERGENCY_AFTER_VISIT_ONSET,
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_GRADUAL_ONSETS,
+    EMERGENCY_ONSETS,
+    EMERGENCY_SCENES,
+    EMERGENCY_SUDDEN_SCENES,
     FULL_MOUTH,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
+    SCALING_CODE,
     SCALING_MIN_AGE,
+    THIRD_PARTY_RULE,
     TRANSCRIPT_CHARS_PER_SEC,
+    insured_on,
 )
 
 SPEAKERS = ["환자:", "직원:"]
@@ -40,11 +52,118 @@ INTERNAL_KEYS = (
     "appointment_id",
     "id",
 )  # 사실에서 빼는 내부 번호 — 대화에 차트 번호·id가 새지 않게. 치아 '00'(전체 구강)은 None
+# 새 예약 통화의 예약은 이 통화에서 정하는 날짜 — 'appointment'로 넘기면 모델이 이미 잡힌 예약으로 읽는다
+NEW_BOOKING_NOTE = "통화 전에는 없던 예약 — 이 통화에서 처음 정하는 날짜"
+# 응급 통화의 내원(6b단계 emergency_visit) — 직원이 바로 오라고 안내하는 시각. 예약을 새로 정하는 통화가 아니다(appt_confirmed 아님)
+EMERGENCY_VISIT_NOTE = (
+    "통화 전에는 없던 내원 — 직원이 오늘 이 시각에 바로 오시라고 정해서 안내한다. 시간을 제안하거나 맞추지 않고,"
+    " 바뀌면 다시 연락하겠다는 말도 하지 않는다"
+)
+# 다음 진료일까지 진료 없는 날이 이어지면(휴진·연휴) 덧붙이는 말 — 며칠 뒤 내원을 설명하게
+EMERGENCY_GAP_DAYS = 2
+EMERGENCY_GAP_NOTE = " 그 사이 진료 없는 날(휴진·연휴)이 이어져 며칠 뒤라는 것도 말한다"
+# 다음 진료일 내원 — 그날 자리가 없어 다음 진료일 오전의 가장 이른 빈 시간. 시각을 제안·조율하면 예약 잡기로 읽힌다
+EMERGENCY_NEXT_DAY_NOTE = (
+    "통화 전에는 없던 내원 — 오늘은 진료가 끝나 가서, 직원이 다음 진료일의 이 시각(그날 오전 비어 있는 가장 이른 시간)에"
+    " 오시라고 정해서 알려 준다. 시간을 제안하거나 맞추지 않고('어떠세요?'·'괜찮으세요?' 없이), 다시 연락해 확정하지도 않는다."
+    " '첫 시간'·'제일 먼저'라고 하지 않는다"
+)
+WEEKDAY_NAMES = "월화수목금토일"
+# 통화 전 예약이 없는 새 예약 통화에서 쓰면 안 되는 말 — 정할 날짜를 이미 잡힌 예약처럼 말하는 꼴
+ALREADY_BOOKED = r"잡혀 있|예약(이|은)? ?있으|예약되어 있|예약돼 있"
+# 새 예약을 원하지 않는 취소 통화에서 쓰면 안 되는 말 — 직원이 새 날짜를 잡자고 하면 wants_appt로 읽힌다
+REBOOK_OFFER = (  # 직원 줄만 — 환자가 '다시 잡을 생각은 없어요'라고 하는 것·직원의 '잡지 않고'는 괜찮다
+    r"(?m)^직원:(?![^\n]*잡지 않)[^\n]*(새 ?(일정|날짜|예약)|다시 (잡|예약)|"
+    r"일정(을)? (다시 )?(여쭤|맞춰|상의|잡)|(편하신|원하시는) (날|시간|요일))"
+)
+SITUATION_PURPOSES = (
+    "emergency",
+    "complaint",
+)  # 상황(caller_situation)을 입력에 넣는 목적 — 부 주제 포함
+THIRD_PARTY = ("insurer",)  # 진료 기록을 넘기지 않는 상대 — 이름과 병원 규칙만
+THIRD_PARTY_KEEP = ("call_date", "topic_procedure", "topic_price", "caller")
+
+
+def pick(uid: str, salt: str, options: tuple):
+    """통화 번호로 고르기 — 난수를 쓰지 않아 다른 단계·통화의 결과를 바꾸지 않는다"""
+    return options[int(hashlib.sha256(f"{salt}:{uid}".encode()).hexdigest(), 16) % len(options)]
+
+
+MISSED_TOPIC = next(
+    t for t in COMPLAINT_TOPICS if "놓침" in t
+)  # 직전 노쇼가 있어야 말이 되는 불만
+MISSED_WINDOW_DAYS = CALL_PATIENT_RULES[("complaint", "inbound")][
+    1
+]  # 불만 통화가 보는 최근 내원 기간
+
+
+# 진료 이력이 없어도 되는 불만 — 그 밖의 불만(기다림·비용·설명·치료 뒤 불편·헛걸음)은 통화 전 MISSED_WINDOW_DAYS일 안에
+# 내원이 있어야 한다(없으면 기록에 없는 일을 지어낸다). 통화일에 그 환자 예약이 있으면 지난 내원 일임을 밝힌다(오늘 일로 읽힘)
+NO_HISTORY_TOPICS = tuple(t for t in COMPLAINT_TOPICS if "불친절" in t)
+PHONE_ONLY_TOPIC = (
+    "전화 응대가 불친절했음"  # 진료 기록이 전혀 없는 사람 — '접수'를 쓰면 없던 내원을 지어낸다
+)
+
+
+def complaint_topic(
+    uid: str,
+    recent_noshow: bool,
+    last_visit: str | None,
+    same_day: bool,
+    history: bool = True,
+    visited: bool = True,
+) -> str:
+    """불만 주제 — 해시로 고르고 기록과 맞지 않으면 다시 고른다(맞는 통화는 그대로). last_visit = 창 안 마지막 진료일,
+    history=False면 진료 이력은 보지 않는다(사실 없이 부르는 situation), visited=False면 진료 기록이 전혀 없다"""
+    topic = pick(uid, "topic", COMPLAINT_TOPICS)
+    if topic == MISSED_TOPIC and not recent_noshow:
+        topic = pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
+    if not history or topic == MISSED_TOPIC:
+        return topic
+    if topic not in NO_HISTORY_TOPICS and last_visit is None:
+        topic = pick(
+            uid, "topic-nohistory", NO_HISTORY_TOPICS + ((MISSED_TOPIC,) if recent_noshow else ())
+        )
+    if topic == MISSED_TOPIC:
+        return topic
+    if topic in NO_HISTORY_TOPICS:
+        return topic if visited else PHONE_ONLY_TOPIC
+    return f"{topic}(지난 {korean_date(last_visit)} 내원 때 일)" if same_day else topic
+
+
+def situation(uid: str, purpose: str, recent_noshow: bool = True, scene: str | None = None) -> str:
+    """응급은 시작 시점 × 상황, 불만은 주제 — 문자를 못 받아 놓쳤다는 불만은 직전 노쇼가 없으면 다른 주제로(기록에 없는 일).
+    scene: 6b단계가 바꾼 상황(emergency_visit.scene — 그날 진료 뒤·소아), 그날 진료 뒤면 시작 시점도 그 진료 뒤"""
+    if purpose == "emergency":
+        if scene == EMERGENCY_AFTER_VISIT_SCENE:
+            return f"{EMERGENCY_AFTER_VISIT_ONSET} {scene}"
+        scene = scene or pick(uid, "scene", EMERGENCY_SCENES)
+        onset = pick(uid, "onset", EMERGENCY_ONSETS)
+        if scene in EMERGENCY_SUDDEN_SCENES and onset in EMERGENCY_GRADUAL_ONSETS:
+            # 갑자기 빠진 상황엔 '점점'을 쓰지 않는다 — 그 경우만 다시 골라 다른 통화는 그대로
+            onset = pick(
+                uid,
+                "onset-sudden",
+                tuple(o for o in EMERGENCY_ONSETS if o not in EMERGENCY_GRADUAL_ONSETS),
+            )
+        return f"{onset} {scene}"
+    return complaint_topic(uid, recent_noshow, None, False, history=False)
 
 
 def rows(conn) -> list[dict]:
     cur = conn.execute(
-        "SELECT c.id, c.call_uid, c.direction, l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+        "SELECT c.id, c.call_uid, c.direction, c.caller_name,"
+        # 말하는 사람의 성별 — 보호자 통화는 그 환자의 보호자, 그 밖은 환자 본인(이름이 같을 때 — 처음 연락·보험사 등은
+        # 환자 측이 아니라 기록이 없다). 상대로 고르므로 아이와 보호자 이름이 같아도 어긋나지 않는다
+        " CASE WHEN l.counterpart = 'guardian' THEN (SELECT g.sex FROM emr_patients p"
+        " JOIN emr_patients g ON g.id = p.guardian_patient_id WHERE p.id = c.patient_id)"
+        " ELSE (SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name)"
+        " END AS caller_sex,"
+        # 통화 전 MISSED_WINDOW_DAYS일 안의 노쇼 — 문자를 못 받아 놓쳤다는 불만의 근거
+        " (SELECT count(*) FROM emr_appointments a WHERE a.patient_id = c.patient_id AND a.status = 'noshow'"
+        f" AND a.scheduled_at < c.started_at AND a.scheduled_at >= datetime(c.started_at, '-{MISSED_WINDOW_DAYS} days'))"
+        " AS recent_noshow,"
+        " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
         " WHERE c.source = 'generated' ORDER BY c.id"
     )
     cols = [d[0] for d in cur.description]
@@ -76,10 +195,15 @@ _AGE_RULE = {
 }
 
 
-def topic_price(name: str) -> dict:
-    """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천)"""
+def topic_price(name: str, age: int | None = None, scaling_used: bool = False) -> dict:
+    """시술 비용·급여 — master 수가·본인부담률·적용 연령(문서 doc_catalog와 같은 원천). 환자 나이를 알면 그 나이에 급여인지
+    (master.insured_on — 적용 연령 밖이면 비급여 가격), 모르면(처음 연락) 급여 시술인지로. 그해 급여 스케일링을 이미 받았으면
+    (scaling_used) 스케일링은 비급여 가격(연 1회, §2.4)"""
     p = _PROC[name]
-    out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": p["is_insured"] != "no"}
+    insured = insured_on(p, age) if age is not None else p["is_insured"] != "no"
+    out = {"procedure": name, "total": f"{p['fee_total']:,}원", "insured": insured}
+    if insured and scaling_used and p["code"] == SCALING_CODE:
+        return out | {"insured": False, "insured_limit": "연 1회 — 올해 이미 받음"}
     if out["insured"]:
         out["patient_pays"] = f"{round(p['fee_total'] * p['patient_share_rate']):,}원"
         if p["age_group"] in _AGE_RULE:
@@ -93,11 +217,56 @@ def payload(row: dict) -> dict:
     if set(json.loads(row["accepted_purposes"])) & set(PRICE_PURPOSES) and fact.get(
         "topic_procedure"
     ):  # 부 주제 포함
-        facts["topic_price"] = topic_price(fact["topic_procedure"])
-    if "recall" in json.loads(row["accepted_purposes"]):
+        facts["topic_price"] = (
+            topic_price(
+                fact["topic_procedure"]
+            )  # 제3자에게는 일반 가격 — 나이·이력으로 정하면 진료 기록이 샌다
+            if row["counterpart"] in THIRD_PARTY
+            else topic_price(
+                fact["topic_procedure"],
+                (fact.get("patient") or {}).get("age"),
+                bool(fact.get("scaling_used_this_year")),
+            )
+        )
+    # 말하는 사람(보호자·보험사 직원 등) — 이름을 지어내지 않게. 환자 기록이 있으면 성별도('엄마/아빠'가 어긋나지 않게)
+    facts["caller"] = {"name": row["caller_name"]} | (
+        {"sex": row["caller_sex"]} if row["caller_sex"] else {}
+    )
+    if "recall_q" in json.loads(row["accepted_purposes"]):
         facts["recall_months"] = (
             RECALL_CYCLE_MONTHS  # 정기 검진 주기 — 없으면 모델이 상식('6개월')을 지어낸다
         )
+    if facts.get("emergency_visit"):
+        visit = facts["emergency_visit"]
+        visit.pop("scene", None)  # 상황은 caller_situation으로
+        gap = (date.fromisoformat(visit["date"]) - date.fromisoformat(fact["call_date"])).days
+        visit["before_call"] = (
+            EMERGENCY_VISIT_NOTE
+            if gap == 0
+            else EMERGENCY_NEXT_DAY_NOTE + (EMERGENCY_GAP_NOTE if gap > EMERGENCY_GAP_DAYS else "")
+        )
+    if row["primary_purpose"] == "book" and facts.get("appointment"):
+        facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}
+    accepted = json.loads(row["accepted_purposes"])
+    if purpose := next((p for p in accepted if p in SITUATION_PURPOSES), None):
+        if purpose == "emergency":
+            facts["caller_situation"] = situation(
+                row["call_uid"], purpose, scene=(fact.get("emergency_visit") or {}).get("scene")
+            )
+        else:
+            facts["caller_situation"] = complaint_topic(
+                row["call_uid"],
+                bool(row.get("recent_noshow")),
+                last_visit(fact),
+                (fact.get("next_appointment") or {}).get("date") == fact["call_date"]
+                and last_visit(fact) != fact["call_date"],
+                visited=bool(fact.get("recent_visits")),
+            )
+    if row["counterpart"] in THIRD_PARTY:  # 제3자에게 진료 기록이 새지 않게 — 환자 이름만
+        facts = {k: v for k, v in facts.items() if k in THIRD_PARTY_KEEP} | {
+            "patient": {"name": fact["patient"]["name"]} if fact.get("patient") else None,
+            "third_party_rule": THIRD_PARTY_RULE,
+        }
     return {
         "clinic": CLINIC_NAME,
         "direction": row["direction"],
@@ -115,9 +284,32 @@ def payload(row: dict) -> dict:
 
 
 def simplify(p: dict) -> dict:
-    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술)만"""
-    keep = ("call_date", "appointment", "topic_procedure", "topic_price")
+    """llm_jobs.SIMPLIFY_AFTER번 실패한 뒤 — 사실은 꼭 넣을 것(날짜·예약·주제 시술과 그 가격)과 ⑧-1 근거(이미 냈다)·
+    리콜 주기·받은 리콜 문자·말하는 사람·통화 상황·제3자 규칙만"""
+    keep = (
+        "call_date",
+        "appointment",
+        "new_booking",
+        "topic_procedure",
+        "topic_price",
+        "recall_months",
+        "recall_text",
+        "caller",
+        "already_paid",
+        "caller_situation",
+        "third_party_rule",
+        "emergency_visit",
+    )
     return p | {"facts": {k: v for k, v in p["facts"].items() if k in keep}}
+
+
+def last_visit(fact: dict) -> str | None:
+    """통화 전 MISSED_WINDOW_DAYS일 안의 마지막 진료일(recent_visits) — 없으면 None"""
+    visits = fact.get("recent_visits") or []
+    if not visits:
+        return None
+    gap = date.fromisoformat(fact["call_date"]) - date.fromisoformat(visits[0]["date"])
+    return visits[0]["date"] if gap.days <= MISSED_WINDOW_DAYS else None
 
 
 def korean_date(iso: str) -> str:
@@ -125,26 +317,48 @@ def korean_date(iso: str) -> str:
     return f"{d.month}월 {d.day}일"
 
 
-def must_include(fact: dict, names: dict) -> list[list[str]]:
-    """꼭 넣을 사실 — 예약 날짜(변경은 원래 날짜도)·주제 시술(이름 또는 별칭)"""
+def must_include(fact: dict, names: dict, purpose: str) -> list[list[str]]:
+    """꼭 넣을 사실 — 예약 날짜(예약 변경 통화는 원래 날짜도 — 변경으로 생긴 예약의 확인·취소 통화에 넣으면 변경 통화처럼
+    읽힌다)·주제 시술(이름 또는 별칭)·⑧-1 근거(이미 냈다는 내원일)"""
     out = []
     appt = fact.get("appointment")
     if appt:
         out.append([korean_date(appt["date"])])
-        if "from_date" in appt:
+        if "from_date" in appt and purpose == "reschedule":
             out.append([korean_date(appt["from_date"])])
     if fact.get("topic_procedure"):
         out.append(names.get(fact["topic_procedure"], [fact["topic_procedure"]]))
+    if fact.get("already_paid"):
+        out.append([korean_date(fact["already_paid"]["date"])])
+    if visit := fact.get("emergency_visit"):
+        out.append(visit_words(fact["call_date"], visit["date"]))
     return out
+
+
+def visit_words(call_date: str, visit_date: str) -> list[str]:
+    """응급 내원 날짜를 말하는 말(그중 하나) — 그날이면 '오늘', 다음 날이면 '내일'·날짜, 그 뒤면 날짜·요일"""
+    if visit_date == call_date:
+        return ["오늘"]
+    d = date.fromisoformat(visit_date)
+    if d - date.fromisoformat(call_date) == timedelta(days=1):
+        return ["내일", korean_date(visit_date)]
+    return [korean_date(visit_date), f"{WEEKDAY_NAMES[d.weekday()]}요일"]
 
 
 def checks(row: dict, names: dict) -> dict:
     lo, hi = CALL_DURATION_SEC
+    fact = json.loads(row["used_fact"])
+    if row["counterpart"] in THIRD_PARTY:  # 입력에서 숨긴 사실은 요구하지 않는다
+        fact = {k: v for k, v in fact.items() if k in THIRD_PARTY_KEEP}
+    new_only = row["primary_purpose"] == "book" and not fact.get("next_appointment")
+    no_rebook = row["primary_purpose"] == "cancel" and not row["wants_appt"]
     return {
         "field": "transcript",
-        "must_include": must_include(json.loads(row["used_fact"]), names),
+        "must_include": must_include(fact, names, row["primary_purpose"]),
         "forbidden_words": list(CALL_LABEL_WORDS),
-        "forbidden_patterns": llm_jobs.forbidden_patterns(),
+        "forbidden_patterns": llm_jobs.forbidden_patterns()
+        + ([ALREADY_BOOKED] if new_only else [])
+        + ([REBOOK_OFFER] if no_rebook else []),
         "speakers": SPEAKERS,
         "length": [round(lo * TRANSCRIPT_CHARS_PER_SEC), round(hi * TRANSCRIPT_CHARS_PER_SEC)],
     }

@@ -1,6 +1,6 @@
--- app.sqlite 스키마 (emr_* / ax_*). 컬럼·enum·인덱스의 원본 — 생성기와 앱이 같이 쓴다.
--- 의미·생성 규칙: emr_*·생성기 적재 ax_*(ax_calls·ax_documents)는 docs/치과 AX - 가상 데이터 생성 설계.md §2·§3,
---                나머지 ax_*는 docs/치과 AX - 앱 설계.md
+-- source.sqlite 스키마 — 생성기 출력(emr_* / 생성기가 적재하는 ax_calls·ax_documents). 컬럼·enum·인덱스의 원본.
+-- 생성기만 쓰고 앱은 읽기 전용으로 ATTACH한다(가상 데이터 생성 설계 §0). 의미·생성 규칙은 그 문서 §2·§3.
+-- 앱이 쓰는 테이블은 shared/app_schema.sql
 -- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
 -- 시각은 naive KST ISO 문자열('2026-07-03 10:30:00'), 날짜는 'YYYY-MM-DD'
 
@@ -85,7 +85,28 @@ CREATE TABLE emr_appointments (
     booked_via             TEXT NOT NULL CHECK (booked_via IN ('phone', 'desk')),  -- 예약 경로. desk = 내원 종료 때 데스크에서 잡은 다음 회차
     confirmed              INTEGER NOT NULL DEFAULT 0,
     created_at             TEXT NOT NULL,
-    cancelled_at           TEXT
+    cancelled_at           TEXT,
+    chair_no               INTEGER,  -- 체어 번호(§1). 상담은 NULL
+    plan_item_id           INTEGER REFERENCES emr_treatment_plan_items(id)  -- 이 예약이 이행하는 치료계획 항목. 위생·리콜은 NULL
+);
+
+-- 치료계획(§2.3). 만든 날·만든 예약 + 항목. 완료 시각은 항목의 completed 예약에서 파생
+CREATE TABLE emr_treatment_plans (
+    id                     INTEGER PRIMARY KEY,
+    patient_id             INTEGER NOT NULL REFERENCES emr_patients(id),
+    created_at             TEXT NOT NULL,
+    created_appointment_id INTEGER NOT NULL REFERENCES emr_appointments(id)
+);
+
+CREATE TABLE emr_treatment_plan_items (
+    id             INTEGER PRIMARY KEY,
+    plan_id        INTEGER NOT NULL REFERENCES emr_treatment_plans(id),
+    seq            INTEGER NOT NULL,
+    procedure_code TEXT NOT NULL REFERENCES emr_procedures(code),
+    tooth_no       TEXT NOT NULL,  -- 치아 단위가 아닌 시술은 '00'
+    est_fee        INTEGER NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('open', 'done', 'replaced')),
+    UNIQUE (plan_id, seq)
 );
 
 CREATE TABLE emr_treatments (
@@ -108,7 +129,8 @@ CREATE TABLE emr_payments (
     amount_due     INTEGER NOT NULL,
     amount_paid    INTEGER NOT NULL,
     paid_at        TEXT NOT NULL,
-    method         TEXT NOT NULL CHECK (method IN ('card', 'cash', 'transfer'))
+    method         TEXT NOT NULL CHECK (method IN ('card', 'cash', 'transfer')),
+    approval_no    TEXT  -- 연동 단말기 카드 승인번호(§2.4). 손으로 입력한 수납은 NULL
 );
 
 CREATE TABLE emr_claims (
@@ -125,7 +147,8 @@ CREATE TABLE emr_claims (
     status         TEXT NOT NULL CHECK (status IN ('pending', 'submitted', 'paid', 'adjusted', 'denied')),
     paid_amount    INTEGER,
     adjust_code    TEXT,  -- 심평원 조정 사유 범주 문자(B·C·AK·M 등 — master.ADJUST_REASONS)
-    adjust_note    TEXT   -- 일반사유 서술(상세 사유 템플릿)
+    adjust_note    TEXT,  -- 일반사유 서술(상세 사유 템플릿)
+    reviewed_at    TEXT   -- 심사결과 통보일(확정 월만, §2.4). 재심 기한 = + master.APPEAL_DAYS
 );
 
 -- 차트 상병 정의 (§4.3). 가상 코드 — 시술별 허용 상병은 master.PROCEDURE_DIAGNOSES에만
@@ -150,19 +173,75 @@ CREATE TABLE emr_messages (
     sent_at                TEXT NOT NULL,
     body                   TEXT NOT NULL,
     "trigger"              TEXT NOT NULL CHECK ("trigger" IN ('appt_confirm', 'reminder', 'noshow',
-                               'balance', 'doc_ready', 'reply', 'other')),
+                               'balance', 'doc_ready', 'recall', 'reply', 'other')),
     related_appointment_id INTEGER REFERENCES emr_appointments(id)
 );
 
 CREATE INDEX ix_appt_sched_status  ON emr_appointments(scheduled_at, status);
 CREATE INDEX ix_appt_patient_sched ON emr_appointments(patient_id, scheduled_at);
 CREATE INDEX ix_appt_staff_sched   ON emr_appointments(staff_id, scheduled_at);
+CREATE INDEX ix_appt_chair_sched   ON emr_appointments(chair_no, scheduled_at);
+CREATE INDEX ix_plan_items_plan    ON emr_treatment_plan_items(plan_id);
 CREATE INDEX ix_treat_patient_proc ON emr_treatments(patient_id, procedure_code);
 CREATE INDEX ix_treat_appt         ON emr_treatments(appointment_id);
 CREATE INDEX ix_pay_patient        ON emr_payments(patient_id);
 CREATE UNIQUE INDEX ux_claims_match_key ON emr_claims(chart_no, service_date, procedure_code, tooth_no);
 CREATE INDEX ix_claims_month       ON emr_claims(claim_month);
 CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
+
+-- ── fin_* (§2.7) — 재무 원본: 금융기관 내역·회계 증빙 ───────────────────────
+
+-- 가맹점 카드 승인·취소. 취소 행은 cancel_of = 원승인번호, 금액은 음수 아님(취소 여부로 구분)
+CREATE TABLE fin_card_sales (
+    id          INTEGER PRIMARY KEY,
+    approved_at TEXT NOT NULL,
+    issuer      TEXT NOT NULL,  -- master.CARD_ISSUERS
+    amount      INTEGER NOT NULL,
+    approval_no TEXT NOT NULL,
+    cancel_of   TEXT  -- 취소면 원승인번호
+);
+
+-- 카드사 정산 입금. (카드사, 매출일)마다 1행
+CREATE TABLE fin_card_deposits (
+    id           INTEGER PRIMARY KEY,
+    deposited_on TEXT NOT NULL,
+    issuer       TEXT NOT NULL,
+    sales_date   TEXT NOT NULL,
+    sales_total  INTEGER NOT NULL,
+    fee          INTEGER NOT NULL,
+    amount       INTEGER NOT NULL,
+    UNIQUE (issuer, sales_date)
+);
+
+-- 병원 통장 입출금. 적요(memo)는 입금자명·거래처·종류
+CREATE TABLE fin_bank_transactions (
+    id          INTEGER PRIMARY KEY,
+    occurred_at TEXT NOT NULL,
+    direction   TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+    amount      INTEGER NOT NULL,
+    memo        TEXT NOT NULL
+);
+
+-- 병원 명의 카드 사용(⑧-2). merchant = 카드 내역에 찍힌 가맹점명
+CREATE TABLE fin_card_expenses (
+    id       INTEGER PRIMARY KEY,
+    used_at  TEXT NOT NULL,
+    merchant TEXT NOT NULL,
+    amount   INTEGER NOT NULL
+);
+
+-- 회계 증빙(⑧-2) — 코드 템플릿 본문
+CREATE TABLE fin_expense_documents (
+    id        INTEGER PRIMARY KEY,
+    kind      TEXT NOT NULL CHECK (kind IN ('statement', 'tax_invoice', 'order_email', 'receipt', 'bill')),
+    issuer    TEXT NOT NULL,
+    issued_on TEXT NOT NULL,
+    amount    INTEGER NOT NULL,
+    body      TEXT NOT NULL
+);
+
+CREATE INDEX ix_card_sales_at   ON fin_card_sales(approved_at);
+CREATE INDEX ix_bank_tx_at      ON fin_bank_transactions(occurred_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
 -- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.
@@ -173,7 +252,7 @@ CREATE INDEX ix_msg_patient_sent   ON emr_messages(patient_id, sent_at);
 CREATE TABLE ax_calls (
     id               INTEGER PRIMARY KEY,
     call_uid         TEXT NOT NULL UNIQUE,  -- 'c-0481' 시드 셔플 순번
-    source           TEXT NOT NULL CHECK (source IN ('generated', 'pasted', 'sample_audio', 'uploaded')),
+    source           TEXT NOT NULL CHECK (source IN ('generated')),  -- 붙여넣은 통화는 앱 DB(앱 설계 §1)
     patient_id       INTEGER REFERENCES emr_patients(id),
     caller_phone     TEXT,
     caller_name      TEXT,
@@ -181,17 +260,13 @@ CREATE TABLE ax_calls (
     started_at       TEXT NOT NULL,
     duration_sec     INTEGER NOT NULL,
     has_transcript   INTEGER NOT NULL DEFAULT 0,
-    audio_path       TEXT,
     transcript       TEXT,
     in_eval_pool     INTEGER NOT NULL DEFAULT 0,
     eval_sort_order  INTEGER,
-    judge_status     TEXT NOT NULL DEFAULT 'none' CHECK (judge_status IN ('none', 'pending', 'skipped', 'done')),
     in_blind_pool    INTEGER NOT NULL DEFAULT 0,
-    blind_sort_order INTEGER,
-    indexed_at       TEXT
+    blind_sort_order INTEGER
 );
 
-CREATE INDEX ix_calls_judge   ON ax_calls(judge_status, eval_sort_order);
 CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
 
@@ -205,55 +280,4 @@ CREATE TABLE ax_documents (
     effective_date TEXT,
     path           TEXT NOT NULL,
     body           TEXT NOT NULL
-);
-
--- ── 앱이 쓰는 ax_* (앱 설계 §1·§2). eval.py가 읽는 칸 ─────────────────
--- labels JSON = 9항목 {primary_purpose, counterpart, urgency, emergency, complaint, price_inquiry, wants_appt,
--- appt_confirmed, has_todo}(enum은 generator/master.py CALL_*), 플래그는 0/1
-
--- LLM 게이트웨이 호출 1건 = 1행. fallback_used면 평가 집계에서 제외 (평가 설계 §1 원칙 5)
-CREATE TABLE ax_llm_calls (
-    id            INTEGER PRIMARY KEY,
-    task          TEXT NOT NULL,
-    model_alias   TEXT NOT NULL,
-    model_actual  TEXT NOT NULL,
-    prompt_version TEXT,
-    fallback_used INTEGER NOT NULL DEFAULT 0,
-    ok            INTEGER NOT NULL,
-    is_eval       INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT NOT NULL
-);
-
-CREATE TABLE ax_call_classifications (
-    id             INTEGER PRIMARY KEY,
-    call_id        INTEGER NOT NULL REFERENCES ax_calls(id),
-    model_alias    TEXT NOT NULL,
-    model_actual   TEXT NOT NULL,
-    prompt_version TEXT NOT NULL,
-    status         TEXT NOT NULL CHECK (status IN ('ok', 'failed')),
-    labels         TEXT,
-    summary        TEXT,
-    todo           TEXT,
-    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
-    UNIQUE (call_id, model_alias, prompt_version)
-);
-
--- 사람 판정. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
-CREATE TABLE ax_judgments (
-    id        INTEGER PRIMARY KEY,
-    call_id   INTEGER NOT NULL UNIQUE REFERENCES ax_calls(id),
-    labels    TEXT NOT NULL,
-    judged_by TEXT NOT NULL,
-    judged_at TEXT NOT NULL
-);
-
--- 블라인드 투표 (평가 설계 §2.4). 좌·우 = 화면 배치
-CREATE TABLE ax_blind_votes (
-    id                       INTEGER PRIMARY KEY,
-    left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),
-    right_classification_id  INTEGER NOT NULL REFERENCES ax_call_classifications(id),
-    choice                   TEXT NOT NULL CHECK (choice IN ('left', 'right', 'tie', 'both_wrong')),
-    voted_by                 TEXT NOT NULL,
-    voted_at                 TEXT NOT NULL,
-    UNIQUE (left_classification_id, right_classification_id)
 );

@@ -2,7 +2,7 @@
 
 import sqlite3
 from collections import Counter, defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 import yaml
@@ -15,10 +15,12 @@ from generator.master import (
     IMPLANT_CODE,
     PAYMENT_METHOD_WEIGHTS,
     PROCEDURES,
+    SAME_TOOTH_PROCEDURES,
     SCALING_CODE,
     TOOTH_CHOICES,
     UNPAID_PAID_RANGE,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
@@ -27,7 +29,7 @@ TOOTH_LEVEL = {p["code"] for p in PROCEDURES if p["is_tooth_level"]}
 
 
 def _open(out):
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -36,7 +38,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("records")
-    run = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     return conn, verify.load_ctx(CONFIG, conn), run
 
@@ -73,8 +75,9 @@ def test_treatment_is_planned_procedure(db):
 
 
 def test_course_keeps_tooth(db):
-    """코스(같은 수요의 연속 내원) 안에서는 치아 단위 시술이 같은 치아 — 그 시술의 후보에 있고 치아 수명 규칙상
-    쓸 수 있을 때: 발치·임플란트 치아는 자연치 시술 불가, 임플란트 1차는 발치했거나 이력 없는 치아만 (§2.1)"""
+    """코스(치료계획) 안의 다음 내원 치아 — 다른 시술로 넘어가거나 이어서 치료하는 시술(SAME_TOOTH_PROCEDURES)의 반복이면
+    앞 내원 치아(그 시술의 후보에 있고 치아 수명 규칙상 쓸 수 있을 때: 발치·임플란트 치아는 자연치 시술 불가, 임플란트 1차는
+    발치했거나 이력 없는 치아만), 그 밖의 같은 시술 반복(실란트·레진 등)은 다른 치아 (§2.1·§2.3)"""
     conn, _, run = db
     episode = run.state["episode"]  # 예약 id → 에피소드 번호 (4단계)
     rows = _rows(
@@ -102,16 +105,17 @@ def test_course_keeps_tooth(db):
     multi = [c for c in courses.values() if len(c) > 1]
     assert multi
     for course in multi:
-        first = course[0]["tooth_no"]
-        for r in course[1:]:
+        for prev, r in zip(course, course[1:], strict=False):
+            code, last = r["procedure_code"], prev["tooth_no"]
+            if code == prev["procedure_code"] and code not in SAME_TOOTH_PROCEDURES:
+                assert r["tooth_no"] != last, course
+                continue
             ext, imp, hist = r["before"]
-            usable = first not in imp and (
-                (first in ext or first not in hist)
-                if r["procedure_code"] == IMPLANT_CODE
-                else first not in ext
+            usable = last not in imp and (
+                (last in ext or last not in hist) if code == IMPLANT_CODE else last not in ext
             )
-            if first in TOOTH_CHOICES[r["procedure_code"]] and usable:
-                assert r["tooth_no"] == first, course
+            if last in TOOTH_CHOICES[code] and usable:
+                assert r["tooth_no"] == last, course
 
 
 def test_unpaid_and_settlement(db):
@@ -134,20 +138,24 @@ def test_unpaid_and_settlement(db):
     assert settlements and all(
         r["status"] == "completed" and r["amount_paid"] > 0 for r in settlements
     )
-    # 정산 행은 내원 종료 시각 — 같은 예약의 visit 행과 같은 시각
-    paid_at = {
-        r["appointment_id"]: r["paid_at"]
-        for r in _rows(conn, "SELECT * FROM emr_payments WHERE kind = 'visit'")
+    # 정산 행은 그 예약의 내원 종료 시각 (visit 행은 장부 실수 날짜 밀림이면 다음 진료일이라 예약에서 계산)
+    end = {
+        r["id"]: (
+            datetime.fromisoformat(r["scheduled_at"]) + timedelta(minutes=r["duration_min"])
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        for r in _rows(conn, "SELECT id, scheduled_at, duration_min FROM emr_appointments")
     }
-    assert all(r["paid_at"] == paid_at[r["appointment_id"]] for r in settlements)
+    assert all(r["paid_at"] == end[r["appointment_id"]] for r in settlements)
 
 
 def test_visit_paid_at_is_end_of_visit(db):
+    """visit 수납 시각 = 내원 종료 — 장부 실수 날짜 밀림만 다음 진료일 (check_ledger_errors가 본다)"""
     conn, _, _ = db
     for r in _rows(
         conn,
         "SELECT p.paid_at, a.scheduled_at, a.duration_min FROM emr_payments p"
-        " JOIN emr_appointments a ON a.id = p.appointment_id WHERE p.kind = 'visit'",
+        " JOIN emr_appointments a ON a.id = p.appointment_id WHERE p.kind = 'visit' AND p.id NOT IN"
+        " (SELECT payment_id FROM truth.truth_ledger_errors WHERE kind = 'date_shift')",
     ):
         assert (
             datetime.fromisoformat(r["paid_at"]) - datetime.fromisoformat(r["scheduled_at"])
@@ -223,9 +231,9 @@ def test_pre_window_treatment_and_claim(db):
     )
     assert pre and all(r["tooth_no"] == FULL_MOUTH for r in pre)
     claimed = [r for r in pre if r["status"] is not None]
-    assert claimed and all(
-        r["procedure_code"] == SCALING_CODE and r["status"] == "paid" for r in claimed
-    )
+    assert all(r["procedure_code"] == SCALING_CODE and r["status"] == "paid" for r in claimed)
+    # 창이 TODAY 앞 해에 시작하면 창 이전 내원이 모두 앞 해라 청구가 없다
+    assert bool(claimed) == (ctx.range_start.year == ctx.today.year)
 
 
 def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
@@ -234,12 +242,23 @@ def test_review_and_teeth_independent_of_payment_params(db, tmp_path):
     cfg = {**CFG, "unpaid_rate": 0.5}
     path = tmp_path / "generator.yaml"
     path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", path, fake_llm=True)
     other = _open(tmp_path)
-    for table in ("emr_treatments", "emr_claims"):
-        assert [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")] == [
-            tuple(r) for r in other.execute(f"SELECT * FROM {table} ORDER BY id")
-        ], table
+    # 6b단계 응급 내원 줄은 통화(미수 환자를 고르는 통화 포함)를 따라가 뺀다
+    stage5 = {
+        "emr_treatments": "SELECT * FROM emr_treatments WHERE appointment_id NOT IN ({}) ORDER BY id",
+        "emr_claims": "SELECT * FROM emr_claims WHERE treatment_id NOT IN"
+        " (SELECT id FROM emr_treatments WHERE appointment_id IN ({})) ORDER BY id",
+    }
+    for table, sql in stage5.items():
+        rows = [
+            [
+                tuple(r)
+                for r in c.execute(sql.format(",".join(map(str, emergency_appointments(c)))))
+            ]
+            for c in (conn, other)
+        ]
+        assert rows[0] == rows[1], table
     assert [tuple(r) for r in conn.execute("SELECT * FROM emr_payments ORDER BY id")] != [
         tuple(r) for r in other.execute("SELECT * FROM emr_payments ORDER BY id")
     ]

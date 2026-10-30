@@ -3,12 +3,13 @@
 
 import json
 import math
+import re
 import sqlite3
 from collections import Counter
 
 import pytest
 
-from generator import build, chart, verify
+from generator import build, chart, llm_jobs, verify
 from generator.master import (
     CHART_DECOY_RATIO,
     CHART_FORBIDDEN_WORDS,
@@ -17,6 +18,7 @@ from generator.master import (
     REQUIREMENT_CUT_ERROR_SHARE,
     REQUIREMENT_ERROR_RATE,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 
 CONFIG = ROOT / "config" / "generator.yaml"
@@ -24,7 +26,7 @@ RUN = {}  # db 픽스처의 생성 실행(run.state — 4단계 에피소드)
 
 
 def _open(out):
-    conn = sqlite3.connect(out / "app.sqlite")
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -33,7 +35,7 @@ def _open(out):
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("chart")
-    RUN["run"] = build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    RUN["run"] = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -81,9 +83,15 @@ def test_error_diagnosis_is_another_procedures_dx(db):
 
 
 def test_decoys_stratified_by_procedure(db):
-    """디코이 수 = round(특이 × CHART_DECOY_RATIO), 시술별로 평범한 창 안 줄 수에 비례(최대 나머지 배분 ±1)"""
-    _, _, lines = db
-    window = [r for r in lines if r["window"]]
+    """디코이 수 = round(특이 × CHART_DECOY_RATIO), 시술별로 평범한 창 안 줄 수에 비례(최대 나머지 배분 ±1) — 디코이는
+    5b단계가 고르므로 6b단계 응급 내원 줄은 빼고 센다"""
+    conn, _, lines = db
+    emergency = {
+        r[0]
+        for r in conn.execute("SELECT id, appointment_id FROM emr_treatments")
+        if r[1] in emergency_appointments(conn)
+    }
+    window = [r for r in lines if r["window"] and r["id"] not in emergency]
     specials = sum(r["is_special"] for r in window)
     decoys = [r for r in window if r["is_decoy"]]
     assert len(decoys) == round(specials * CHART_DECOY_RATIO)
@@ -129,7 +137,7 @@ def test_errors_independent_of_decoy_ratio(db, tmp_path, monkeypatch):
     """디코이 배수를 바꿔도 오류·상병·요건은 그대로 — 사실(chart_facts)과 본문(chart_notes) 난수를 나눈다 (§5.1)"""
     conn, _, _ = db
     monkeypatch.setattr(chart, "CHART_DECOY_RATIO", 1.0)
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     for sql in (
         "SELECT * FROM truth.truth_claim_errors ORDER BY treatment_id",
@@ -157,7 +165,7 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
             "other": {"requirement": 0, "documentation": 50, "diagnosis": 50},
         },
     )
-    build.generate(tmp_path / "app.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     other = _open(tmp_path)
     open_months = "SELECT treatment_id FROM emr_claims WHERE status IN ('submitted', 'pending')"
     for sql in (
@@ -173,19 +181,27 @@ def test_open_month_errors_independent_of_review(db, tmp_path, monkeypatch):
     ]  # 심사 결과는 바뀜
 
 
-def test_plan_remaining_is_course_visits_left(db):
-    """다음 계획의 남은 내원 = 그 내원을 마친 시점의 코스 남은 횟수(4단계 치료 계획) — 다음 예약이 잡혔는지·나중에
-    바뀌었는지와 무관 (§4.3)"""
+def test_plan_is_open_items_at_visit_end(db):
+    """다음 계획 = 그 내원을 마친 시각에 열린 치료계획 항목(§2.3·§4.3 (5)) — 코스 첫 내원은 남은 항목이 있고,
+    치주 계획을 만든 위생 내원은 잇몸치료 항목과 깊은 치주낭"""
     conn, _, _ = db
-    left = RUN["run"].state["course_left"]
+    plans = RUN["run"].state["plans"]
+    perio = {plan.appointment_id for plan in plans}
     got = Counter()
-    for tid, appt_id, facts in conn.execute(
-        "SELECT t.id, t.appointment_id, n.facts FROM emr_treatments t JOIN truth.truth_chart_notes n ON n.treatment_id = t.id"
+    for code, appt_id, facts in conn.execute(
+        "SELECT t.procedure_code, t.appointment_id, n.facts FROM emr_treatments t"
+        " JOIN truth.truth_chart_notes n ON n.treatment_id = t.id WHERE n.kind = 'narrative'"
     ):
-        plan = json.loads(facts)["plan"] or {}
-        assert plan.get("remaining", 0) == left.get(appt_id, 0), (tid, plan)
-        got[plan.get("remaining", 0)] += 1
-    assert got[1] and got[2]  # 코스 첫 회차는 2회 이상 남는다
+        f = json.loads(facts)
+        if f["plan"] and "items" in f["plan"]:
+            got["items"] += 1
+        if code in chart.HYGIENE_CODES and appt_id in perio:
+            assert "잇몸치료" in [i["procedure"] for i in f["plan"]["items"]], (
+                f
+            )  # 앞선 계획의 열린 항목도 함께
+            assert f["findings"]["pocket_mm"] >= 4, f
+            got["perio"] += 1
+    assert got["items"] and got["perio"]
 
 
 def test_courses_recorded_in_truth(db):
@@ -234,13 +250,80 @@ def test_no_evidence_lines_get_neutral_cc(db):
 
 
 def test_draft_sentences(db):
-    """초안 문장: 조사 처리('2차 우식으로'), 주의사항이 있으면 '특이사항은 없습니다' 템플릿을 쓰지 않음"""
+    """초안 문장: 조사 처리('2차 우식으로'), 주의사항이 있으면 '특이사항 없음' 템플릿을 쓰지 않음"""
     conn, _, _ = db
     notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
     assert not any("우식로" in n for n in notes)
-    assert not any(
-        "특이사항은 없습니다" in n and ("주의사항" in n or "진료 중" in n) for n in notes
+    assert not any("특이사항 없음" in n and (" 주의, " in n or "진료 중" in n) for n in notes)
+
+
+def test_notes_are_memo_style(db):
+    """차트는 짧은 메모체 — '~함·~음'·명사로 끝내고 '~습니다'·높임말('하시며')을 쓰지 않는다(템플릿·초안 모두)"""
+    conn, _, _ = db
+    notes = [r[0] for r in conn.execute("SELECT note FROM emr_chart_notes")]
+    assert notes and not any(re.search(r"니다|하시며|하셔서|했다\.", n) for n in notes)
+
+
+def test_draft_merges_repeated_plan_items():
+    """같은 시술이 계획에 여러 번이면 'N회'로 한 번만 — 같은 말을 여러 번 넣으라고 하면 모델이 문장을 덧붙인다"""
+    f = FACTS | {"plan": {"items": [{"procedure": "잇몸치료", "tooth": None}] * 2}}
+    draft = chart.draft_note(f, 1)
+    assert "잇몸치료 2회" in draft and draft.count("잇몸치료") == 2  # 오늘 시술 + 남은 치료(2회)
+    must = chart.narrative_must_include(f)
+    assert must[-3:] == [["잇몸치료"], ["2회"], list(chart.PLAN_WORDS)]
+
+
+def test_drafts_vary_by_visit():
+    """초안 꼴(환자 말·소견·시행·주의사항·남은 계획)은 진료 번호 해시로 고른다 — 프롬프트에 여러 꼴을 줘도 모델은 건마다
+    따로 불려 한 꼴로 몰린다. 같은 진료는 늘 같은 초안, '호소'는 증상인 환자 말에만"""
+    drafts = [chart.draft_note(FACTS, tid) for tid in range(200)]
+    assert chart.draft_note(FACTS, 7) == chart.draft_note(FACTS, 7)
+    openers = {d.split(".")[0].split('"', 2)[2] for d in drafts if d.startswith('"')}
+    assert len(openers) >= 2 and any(not d.startswith('"') for d in drafts)  # 소견 뒤에 환자 말
+    assert (
+        len({re.search(r"남은|남아|예정|다음", d.split("시행함")[-1]).group(0) for d in drafts})
+        >= 3
     )
+    calm = FACTS | {"cc": "정기 검진 받으러 왔어요"}
+    assert not any("호소" in chart.draft_note(calm, tid) for tid in range(200))
+    sore = FACTS | {"cc": "잇몸이 붓고 피가 나요"}
+    assert any("호소" in chart.draft_note(sore, tid) for tid in range(200))  # 증상
+    assert not any("호소" in d for d in drafts)  # '잇몸이 내려간 것 같아요' — 느낌이라 호소 아님
+
+
+def test_drafts_quote_or_shorten_the_patient():
+    """환자 말은 진료 번호로 반쯤은 따옴표, 반쯤은 차트식으로 줄인 말(CC_SHORT) — 모든 C.C에 줄인 말이 있고, 줄인 말은
+    근거 말을 품지 않는다(근거 없는 줄의 C.C도 줄여 쓰므로)"""
+    every = {c for ccs in chart.CC.values() for c in ccs} | {
+        c for ccs in chart.CC_NO_EVIDENCE.values() for c in ccs
+    }
+    assert every <= set(chart.CC_SHORT)
+    evidence = [w for ws in chart.EVIDENCE_WORDS.values() for w in ws]
+    assert not [s for s in chart.CC_SHORT.values() if any(w in s for w in evidence)]
+    drafts = [chart.draft_note(FACTS, tid) for tid in range(400)]
+    quoted = sum(f'"{FACTS["cc"]}"' in d for d in drafts)
+    assert 0.35 < quoted / len(drafts) < 0.65
+    short = chart.CC_SHORT[FACTS["cc"]]
+    assert all(short in d for d in drafts if f'"{FACTS["cc"]}"' not in d)
+
+
+@pytest.mark.parametrize(
+    "note, hit",
+    [
+        ("잇몸치료 시행했습니다.", True),
+        ('"이가 시려요"라고 하시며 내원.', True),
+        ("레진 시행했다.", True),
+        ("다음 내원 때 이어서 진행.", True),
+        ("전악 스케일링 시행함.", True),  # 치아 없는 진료에 부위 말
+        ("부분 매복 상태로 골삭제 필요하여 발치 시행함.", True),  # 시행한 골삭제를 필요로
+        ('"이가 시려요"라며 내원. 26번 치아 레진 시행함. 남은 치료로 크라운 예정.', False),
+    ],
+)
+def test_memo_style_is_checked(note, hit):
+    """서술 검증이 메모체가 아닌 끝맺음·높임말·초안에 없는 시점을 걸러 다시 쓰게 한다"""
+    checks = chart.narrative_checks(FACTS | {"plan": None}, "홍길동")
+    assert chart.MEMO_STYLE_FORBIDDEN in checks["forbidden_patterns"]
+    assert bool(re.search(chart.MEMO_STYLE_FORBIDDEN, note)) is hit
 
 
 # ── 9b단계 차트 서술 작업 (§4.3 '9b단계 구현 결정') ────────────
@@ -250,7 +333,7 @@ FACTS = {
     "cc": "잇몸이 내려간 것 같아요",
     "discovered": ["마취가 잘 안 됨"],
     "findings": {"bleeding": True, "calculus": "많음", "mobility": 0, "pocket_mm": 6},
-    "plan": {"remaining": 2},
+    "plan": {"items": [{"procedure": "잇몸치료", "tooth": None}]},
     "procedure": "잇몸치료",
     "tooth": None,
     "requirement": {"key": "R02", "evidence": True, "scaling_days_ago": 14, "linked": True},
@@ -265,9 +348,11 @@ def test_narrative_must_include_facts():
         ["6mm"],
         ["고혈압"],
         ["마취가 잘 안 됨"],
+        list(chart.DISCOVERED_WORDS),  # 진료 중 새로 알게 됐다는 말
         ["14일"],
         ["재평가"],
-        ["2회"],
+        ["잇몸치료"],
+        list(chart.PLAN_WORDS),  # 남은 치료가 그날 시술과 같아도 계획 문장이 빠지지 않게
     ]  # 근거 말
     tooth = {
         **FACTS,
@@ -289,7 +374,11 @@ def test_narrative_must_include_facts():
             "edentulous_months": 5,
         },
     }
-    assert chart.narrative_must_include(other)[-2:] == [["5개월"], ["무치악"]]
+    assert chart.narrative_must_include(other)[-3:] == [
+        ["5개월"],
+        ["무치악"],
+        list(chart.OTHER_CLINIC_WORDS),
+    ]  # 타 기관 이력은 그 말이 있어야 원내 이력으로 읽히지 않는다
     sealant = {
         **tooth,
         "requirement": {
@@ -339,10 +428,10 @@ def test_narrative_stage_fake_keeps_draft(db, tmp_path):
     """가짜 게이트웨이면 초안이 그대로 남는다 — db 픽스처(가짜 모드 생성)의 서술 줄 본문 = 초안"""
     conn, _, _ = db
     row = conn.execute(
-        "SELECT n.note, t.facts FROM emr_chart_notes n JOIN truth.truth_chart_notes t USING (treatment_id)"
-        " WHERE t.kind = 'narrative' LIMIT 1"
+        "SELECT n.treatment_id, n.note, t.facts FROM emr_chart_notes n"
+        " JOIN truth.truth_chart_notes t USING (treatment_id) WHERE t.kind = 'narrative' LIMIT 1"
     ).fetchone()
-    assert row["note"] == chart.draft_note(json.loads(row["facts"]))
+    assert row["note"] == chart.draft_note(json.loads(row["facts"]), row["treatment_id"])
 
 
 def test_narrative_payload_hides_requirement_key_and_evidence():
@@ -377,7 +466,7 @@ def test_narrative_stage_exports_then_applies_cache(tmp_path):
     ]
     assert job["item"] == "3" and job["checks"]["must_include"] == [["16번"], ["레진"]]
     assert "김하늘" in job["checks"]["forbidden_words"]  # 3번 진료 환자 이름
-    note = "16번 치아에 까만 점이 보여 레진 충전을 시행했습니다."
+    note = "16번 치아 까만 점 보여 레진 충전 시행함."
     paths["llm_results"].mkdir()
     (paths["llm_results"] / "chart.jsonl").write_text(
         json.dumps(
@@ -397,3 +486,39 @@ def test_narrative_stage_exports_then_applies_cache(tmp_path):
         conn.execute("SELECT note FROM emr_chart_notes WHERE treatment_id = 3").fetchone()[0]
         == note
     )
+
+
+def test_narrative_drafts_pass_their_checks(db):
+    """서술 줄의 초안(draft_note)은 그 줄의 9b 검증(꼭 넣을 사실·금지 어휘)을 그대로 통과한다 — 초안에서 빠진 사실이 있으면
+    LLM이 영영 통과 못 하는 건이 생긴다 (§4.3 '9b단계 구현 결정')"""
+    conn, _, _ = db
+    names = {
+        tid: name
+        for tid, name in conn.execute(
+            "SELECT t.id, p.name FROM emr_treatments t JOIN emr_patients p ON p.id = t.patient_id"
+        )
+    }
+    narratives = [
+        x
+        for x in RUN["run"].state["chart"]
+        if x["id"]
+        in {
+            r[0]
+            for r in conn.execute(
+                "SELECT treatment_id FROM truth.truth_chart_notes WHERE kind = 'narrative'"
+            )
+        }
+    ]
+    assert narratives
+    failed = {
+        x["id"]: problems
+        for x in narratives
+        if (
+            problems := llm_jobs.problems(
+                chart.NARRATIVE_SCHEMA,
+                chart.narrative_checks(x["facts"], names[x["id"]]),
+                {"note": chart.draft_note(x["facts"], x["id"])},
+            )
+        )
+    }
+    assert failed == {}

@@ -50,12 +50,33 @@ def _questions(conn, split: str) -> list[dict]:
     ]
 
 
+def _notice_pairs(conn) -> dict[str, str]:
+    """최신 공지 → 그 옛 공지 — 최신성 채점(공지 대 그 옛 공지로만, 평가 설계 §3.1)"""
+    return {
+        f"doc:{r[0]}": f"doc:{r[1]}"
+        for r in conn.execute(
+            "SELECT d.id, m.supersedes_doc_id FROM source.ax_documents d"
+            " JOIN truth.truth_doc_meta m ON m.doc_id = d.id"
+            " WHERE d.type = 'notice' AND m.supersedes_doc_id IS NOT NULL"
+        )
+    }
+
+
+def _fresh(ranked: list[str], answers: list[str], pairs: dict) -> bool:
+    """정답 최신 공지가 그 옛 공지보다 위(옛 공지가 없거나 아래) — FAQ 등 다른 정답 문서의 순위는 보지 않는다"""
+    for doc in (d for d in answers if d in pairs):
+        new, old = first_hit_rank(ranked, {doc}), first_hit_rank(ranked, {pairs[doc]})
+        if new is not None and (old is None or new < old):
+            return True
+    return False
+
+
 def _latest_notices(conn) -> set[str]:
     """옛 공지를 대체한 최신 공지 — 공지형 인용은 이걸 인용해야 통과"""
     return {
         f"doc:{r[0]}"
         for r in conn.execute(
-            "SELECT d.id FROM ax_documents d JOIN truth.truth_doc_meta m ON m.doc_id = d.id"
+            "SELECT d.id FROM source.ax_documents d JOIN truth.truth_doc_meta m ON m.doc_id = d.id"
             " WHERE d.type = 'notice' AND m.supersedes_doc_id IS NOT NULL"
         )
     }
@@ -73,7 +94,9 @@ def _chat_fail(q: dict, log: dict, latest: set) -> str | None:
         return "거절"  # 과잉 거절은 그 유형 정답률에 반영
     if q["type"] == "data":
         why = tool_path(calls, q["expected_tools"], q["expected_args"])
-        (value,) = numbers_in(q["answer_text"])  # verify가 숫자 하나를 보장
+        (value,) = numbers_in(
+            q["answer_text"]
+        )  # verify가 같은 함수로 숫자 하나를 보장(check_qa_answer_sql)
         return why or (None if number_match(log["answer_text"], value) else "숫자")
     cited, answers = set(log["cited_ids"]), set(q["answer_doc_ids"])
     sources = {source_id(c) for c in cited}
@@ -96,7 +119,7 @@ def _rate(qs: list[dict], field: str) -> dict:
 
 def evaluate(conn, app: RagApp, split: str, condition: str | None = None, parts=PARTS) -> dict:
     """parts = 돌릴 묶음(PARTS 부분집합). 안 돌린 묶음의 지표는 None"""
-    latest = _latest_notices(conn)
+    latest, pairs = _latest_notices(conn), _notice_pairs(conn)
     out_q = []
     for q in _questions(conn, split):
         r = {"id": q["id"], "type": q["type"], "question": q["question"]}
@@ -105,7 +128,7 @@ def evaluate(conn, app: RagApp, split: str, condition: str | None = None, parts=
             rank = first_hit_rank(ranked, set(q["answer_doc_ids"]))
             r.update(rank=rank, hit=rank is not None, rr=1 / rank if rank else 0.0, top1=rank == 1)
             if q["type"] == "notice":
-                r["fresh"] = rank == 1  # 1위 청크가 정답 문서(옛 공지가 아님)
+                r["fresh"] = _fresh(ranked, q["answer_doc_ids"], pairs)
         if "chat" in parts and q["type"] != "chart":
             r["chat_fail"] = _chat_fail(q, app.chat(q["question"], q["id"], condition), latest)
             r["chat_ok"] = r["chat_fail"] is None

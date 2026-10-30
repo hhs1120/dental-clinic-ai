@@ -16,6 +16,9 @@ from generator.master import (
     MESSAGE_CONFIRM_DELAY_MIN,
     MESSAGE_DELAY_MIN,
     MESSAGE_REPLIES,
+    MESSAGE_REPLIES_PAID,
+    MESSAGE_REPLIES_PAID_METHOD,
+    MESSAGE_REPLY_CANCEL,
 )
 from generator.paths import ROOT
 
@@ -30,8 +33,8 @@ HOLIDAYS = frozenset(
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("messages")
-    build.generate(out / "app.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
-    conn = sqlite3.connect(out / "app.sqlite")
+    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+    conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return conn
@@ -67,9 +70,22 @@ def test_reply_delay_and_phrases(db):
         " (SELECT max(o.sent_at) FROM emr_messages o WHERE o.direction = 'out'"
         " AND o.patient_id = i.patient_id AND o.related_appointment_id IS i.related_appointment_id"
         " AND o.sent_at < i.sent_at) AS out_at FROM emr_messages i WHERE i.direction = 'in'"
+        " AND i.body != ?",  # 취소 답장(8a단계)은 test_emergency
+        (MESSAGE_REPLY_CANCEL,),
     ).fetchall()
     assert replies
-    assert all(r["body"] in MESSAGE_REPLIES[r["trig"]] for r in replies)
+    assert all(
+        r["body"] in MESSAGE_REPLIES[r["trig"]]
+        or (
+            r["trig"] == "balance"
+            and (
+                r["body"] in MESSAGE_REPLIES_PAID
+                or r["body"] in MESSAGE_REPLIES_PAID_METHOD.values()
+            )
+        )  # 이미 냈다는 답(§2.5)
+        for r in replies
+    )
+    assert {r["trig"] for r in replies} >= {"recall", "balance"}
     assert all(lo <= _minutes(r["out_at"], r["sent_at"]) <= hi for r in replies)
 
 

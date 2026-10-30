@@ -27,6 +27,10 @@ from pathlib import Path
 
 GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
     "generator/llm/cache/",
+    "generator/llm/jobs/",
+    "generator/llm/results/",
+    "data/llm_calls_gen.jsonl",
+    "data/source.sqlite",
     "data/app.sqlite",
     "ground_truth/truth.sqlite",
     "ground_truth/call_labels.json",
@@ -34,8 +38,8 @@ GENERATED = (  # 저장소 기준 경로 — 디렉터리는 끝에 /
 )
 # 고친 뒤 캐시 미스 확인을 알릴 파일 — 생성 결과를 바꾸지 않는 생성기 파일은 뺀다
 STAGE_FILES = re.compile(
-    r"generator/(?!verify\.py|paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
-    r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/schema\.sql"
+    r"generator/(?!paths\.py|__main__\.py|__init__\.py)[^/]+\.py|prompts/gen_[^/]+\.md"
+    r"|config/(?:generator\.yaml|holidays\.json|forbidden_topics\.json)|shared/source_schema\.sql"
 )
 READONLY_GIT = {
     "status",
@@ -175,7 +179,7 @@ def check_ask(command: str) -> str | None:
             or "fill-api" in tokens
             and any("llm_jobs" in t for t in tokens)
         ):
-            return "LLM API 채우기 — 과금되는 명령이라 확인한다(config/llm.yaml daily_usd_limit)"
+            return "LLM API 채우기 — 과금되는 배치라 확인한다(하루 상한 밖 — 건수는 make data가 알려 준다, 기능 정의 §7)"
         if ("evaluation.eval" in text or "evaluation/eval.py" in text) and re.search(
             r"--split[ =]test\b", text
         ):
@@ -286,14 +290,32 @@ def _readonly_problem(tokens: list[str], cwd: Path) -> str | None:
         t == "--reports-dir" or t.startswith("--reports-dir=") for t in tokens
     ):
         return "eval.py는 --reports-dir로 임시 폴더를 줘야 한다(기본은 저장소 reports/)"
-    runs_generator = (
-        "generator" in tokens
-        and "-m" in tokens
+    # 생성기·LLM 작업 명령(python -m generator…·generator/*.py 실행) — 파이썬으로 돌릴 때만(cat·grep 같은 읽기는 아님)
+    module = next((tokens[i + 1] for i, t in enumerate(tokens[:-1]) if t == "-m"), "")
+    runs_python = any(n.startswith("python") for n in names)
+    runs_generator = runs_python and (
+        module.split(".")[0] == "generator"
         or any(t.startswith("generator/") and t.endswith(".py") for t in tokens)
     )
-    if runs_generator and "generator.verify" not in tokens and "generator/verify.py" not in tokens:
-        return "생성기는 DB를 다시 쓴다(make data 금지)"
+    verify_only = module == "generator.verify" or any(
+        t.startswith("generator/verify/") for t in tokens
+    )
+    elsewhere = module == "generator" and all(  # 저장소 밖에 생성 — DB·작업 파일이 그 옆으로 간다
+        _flag_outside(tokens, flag, cwd) for flag in ("--db", "--truth")
+    )
+    if runs_generator and not verify_only and not elsewhere:
+        return "생성기·LLM 작업 명령은 DB·작업·캐시를 쓴다(make data 금지 — 생성은 --db·--truth를 임시 폴더로)"
     return None
+
+
+def _flag_outside(tokens: list[str], flag: str, cwd: Path) -> bool:
+    """--flag 값(--flag=x 또는 --flag x)이 있고 저장소 밖인지"""
+    for i, t in enumerate(tokens):
+        if t.startswith(flag + "="):
+            return not _in_repo(t.split("=", 1)[1], cwd)
+        if t == flag and i + 1 < len(tokens):
+            return not _in_repo(tokens[i + 1], cwd)
+    return False
 
 
 def check_post_edit(path: str) -> str | None:

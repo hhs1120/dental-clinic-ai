@@ -2,26 +2,7 @@
 -- 정의: docs/치과 AX - 평가 설계.md §6. 생성 규칙: 가상 데이터 생성 설계 §2.4
 -- 테이블은 그 단계를 구현할 때 추가한다
 
--- 9~10월 청구 심사 결과 + 장부에 없는 심사결과 줄(extra_in_claim_review). 심사결과 슬롯 착수 때 채움 — 그 전에는 비어 있음
-CREATE TABLE truth_claims (
-    id             INTEGER PRIMARY KEY,
-    claim_id       INTEGER UNIQUE,  -- app.sqlite emr_claims.id (다른 DB라 FK 없음). extra_in_claim_review는 NULL
-    chart_no       TEXT NOT NULL,
-    service_date   TEXT NOT NULL,
-    procedure_code TEXT NOT NULL,
-    tooth_no       TEXT NOT NULL,
-    claim_amount   INTEGER NOT NULL,
-    outcome        TEXT NOT NULL CHECK (outcome IN ('paid_full', 'adjusted', 'denied',
-                       'missing_in_claim_review', 'extra_in_claim_review')),
-    paid_amount    INTEGER,
-    adjust_code    TEXT,
-    adjust_note    TEXT,
-    CHECK ((outcome = 'extra_in_claim_review') = (claim_id IS NULL))
-);
-
-CREATE UNIQUE INDEX ux_truth_claims_match_key ON truth_claims(chart_no, service_date, procedure_code, tooth_no);
-
--- 생성 설정 기록 (seed·range_start·range_end·call_slots·eval_pool·blind_pool·documents_core·documents_distractor). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
+-- 생성 설정 기록 (키 목록은 generator/build.py — 기간·통화·문서 건수·연동 실패일 수·장부 실수·불일치 건수). verify가 검사하는 DB의 기간·건수를 여기서 읽는다
 -- (verify 테스트 DB는 config와 값이 다름).
 -- 생성 시각은 넣지 않는다 (같은 시드 2회 해시 비교)
 CREATE TABLE truth_gen_meta (
@@ -40,7 +21,7 @@ CREATE TABLE truth_appointment_courses (
 );
 
 CREATE TABLE truth_chart_notes (
-    treatment_id     INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
+    treatment_id     INTEGER PRIMARY KEY,  -- source.sqlite emr_treatments.id
     kind             TEXT NOT NULL CHECK (kind IN ('template', 'narrative')),
     is_special       INTEGER NOT NULL,
     requirement      TEXT,
@@ -51,17 +32,60 @@ CREATE TABLE truth_chart_notes (
 
 -- 청구 오류 정답 (5b단계, 생성 설계 §2.4·§4.3). 진료 1건당 최대 1개. requirement는 임상 요건형 오류의 요건 사유 키
 CREATE TABLE truth_claim_errors (
-    treatment_id INTEGER PRIMARY KEY,  -- app.sqlite emr_treatments.id
-    kind         TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement')),
-    requirement  TEXT,
-    CHECK ((kind = 'requirement') = (requirement IS NOT NULL))
+    treatment_id         INTEGER PRIMARY KEY,  -- source.sqlite emr_treatments.id
+    kind                 TEXT NOT NULL CHECK (kind IN ('diagnosis', 'requirement', 'omitted_extra')),
+    requirement          TEXT,
+    extra_procedure_code TEXT,  -- 추가 처치 누락(omitted_extra): 차트에만 있는 처치
+    extra_tooth_no       TEXT,
+    CHECK ((kind = 'requirement') = (requirement IS NOT NULL)),
+    CHECK ((kind = 'omitted_extra') = (extra_procedure_code IS NOT NULL AND extra_tooth_no IS NOT NULL))
+);
+
+-- 다른 치과 이용(⑨ 정답, 가상 데이터 생성 설계 §2.2). churn = 이탈(이탈일부터 응하지 않음), parallel = 병행
+CREATE TABLE truth_patient_churn (
+    patient_id INTEGER PRIMARY KEY,  -- source.sqlite emr_patients.id
+    kind       TEXT NOT NULL CHECK (kind IN ('churn', 'parallel')),
+    churned_on TEXT,
+    CHECK ((kind = 'churn') = (churned_on IS NOT NULL))
+);
+
+-- 장부 실수(⑧-1 장부 쪽 원인, §2.4). payment_id = 실수가 들어간 수납 행, 실제 값은 true_*
+CREATE TABLE truth_ledger_errors (
+    id             INTEGER PRIMARY KEY,
+    kind           TEXT NOT NULL CHECK (kind IN ('entry_missing', 'amount_typo', 'date_shift', 'method_wrong')),
+    payment_id     INTEGER NOT NULL,  -- source.sqlite emr_payments.id
+    true_amount    INTEGER NOT NULL,
+    true_paid_at   TEXT NOT NULL,
+    true_method    TEXT NOT NULL CHECK (true_method IN ('card', 'cash', 'transfer'))
+);
+
+-- ⑧-1 불일치 정답(§2.7). fin_ids·payment_ids = JSON 배열
+CREATE TABLE truth_recon_mismatches (
+    id              INTEGER PRIMARY KEY,
+    occurred_on     TEXT NOT NULL,
+    cause           TEXT NOT NULL CHECK (cause IN ('split_payment', 'cancel_reapprove', 'fee_mismatch', 'deposit_delay',
+                        'non_clinical_sale', 'entry_missing', 'amount_typo', 'date_shift', 'method_wrong')),
+    fin_ids         TEXT NOT NULL,  -- [{"table": "fin_card_sales", "id": 12}, ...]
+    payment_ids     TEXT NOT NULL,
+    split           TEXT NOT NULL CHECK (split IN ('dev', 'test')),
+    ledger_error_id INTEGER REFERENCES truth_ledger_errors(id)
+);
+
+-- ⑧-2 출금 → 정답 증빙·계정 과목(§2.7). document_ids = JSON 배열(비면 증빙 없음)
+CREATE TABLE truth_expense_matches (
+    outflow_table TEXT NOT NULL CHECK (outflow_table IN ('fin_bank_transactions', 'fin_card_expenses')),
+    outflow_id    INTEGER NOT NULL,
+    document_ids  TEXT NOT NULL,
+    account       TEXT NOT NULL,  -- master.ACCOUNTS
+    split         TEXT CHECK (split IN ('dev', 'test')),  -- 평가 달(master.recon_months) 밖은 NULL
+    PRIMARY KEY (outflow_table, outflow_id)
 );
 
 -- 통화 골드 라벨 (6단계, 평가 설계 §6). 목적·상대·급함·노이즈 enum은 master.CALL_*.
 -- accepted_purposes = [주 목적, 부 주제 목적](JSON), noise_type NULL = 노이즈 없음,
 -- used_fact = 통화 시점 사실(JSON — 예약류는 appointment_id), split = 판정 풀 dev/test, 나머지 silver
 CREATE TABLE truth_call_labels (
-    call_uid          TEXT PRIMARY KEY,  -- app.sqlite ax_calls.call_uid
+    call_uid          TEXT PRIMARY KEY,  -- source.sqlite ax_calls.call_uid
     primary_purpose   TEXT NOT NULL,
     accepted_purposes TEXT NOT NULL,
     counterpart       TEXT NOT NULL,
@@ -83,7 +107,7 @@ CREATE TABLE truth_call_labels (
 -- planted_facts = 심은 사실 JSON [{id, text, words[], reason, same}] — words는 본문에 그대로 있는 말,
 -- 청구 기준 절은 reason(master.ADJUST_REASONS 키)과 소제목('## …'), same = 같은 사실 묶음 키(문서끼리 같은 사실)
 CREATE TABLE truth_doc_meta (
-    doc_id            INTEGER PRIMARY KEY,  -- app.sqlite ax_documents.id
+    doc_id            INTEGER PRIMARY KEY,  -- source.sqlite ax_documents.id
     doc_key           TEXT NOT NULL UNIQUE,  -- generator/doc_catalog.py
     kind              TEXT NOT NULL CHECK (kind IN ('core', 'old_version', 'similar', 'external')),
     is_distractor     INTEGER NOT NULL,
@@ -95,10 +119,10 @@ CREATE TABLE truth_doc_meta (
 );
 
 -- RAG 질문 70개 (평가 설계 §3.1, 사람이 생성 후 작성). 원본은 ground_truth/rag_qa.json — make data가 적재한다.
--- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.id>' /
+-- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.call_uid>' /
 -- 'thread:<chart_no>:<YYYY-MM>' / 'chart:<emr_treatments.id>' (청크 id에서 끝 순번을 뗀 것 — 앱 설계 §3).
 -- answer_chunk_hint = 정답 문단을 가리키는 심은 사실 id(truth_doc_meta.planted_facts.id) 또는 본문 구절, 거절형은 답이 있다면 나올 말.
--- answer_sql = 정답 재계산 쿼리(app.sqlite + truth ATTACH) — 데이터형은 답 숫자 한 칸, 차트형은 treatment_id 목록
+-- answer_sql = 정답 재계산 쿼리(source.sqlite + truth ATTACH) — 데이터형은 답 숫자 한 칸, 차트형은 treatment_id 목록
 CREATE TABLE truth_rag_qa (
     id                TEXT PRIMARY KEY,
     type              TEXT NOT NULL CHECK (type IN ('manual', 'notice', 'case', 'data', 'chart', 'refusal')),

@@ -4,8 +4,9 @@
   uv run python -m evaluation.eval --split test --section classification|retrieval|chat [--prompt-version v2] [--condition …] [--force]
   → reports/eval_<split>_<condition>_<시각>.md + 같은 이름 .json(make gate가 읽음) + reports/eval_runs.jsonl 1줄
 
+- DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
-  backend/eval_hooks.py의 make_app(db_path)) — 앱이 없으면 RAG 절은 건너뛴다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
+  backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛴다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
 - test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 검색·조건 / 챗·조건), 이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
@@ -184,6 +185,15 @@ def run(
             )
         )
         fewshot = {v: fewshot_uids(prompts_dir / "classify" / f"{v}.md") for v in versions}
+        test_uids = {
+            r[0]
+            for r in conn.execute(
+                "SELECT call_uid FROM truth.truth_call_labels WHERE split = 'test'"
+            )
+        }
+        leaked = sorted(u for uids in fewshot.values() for u in uids if u in test_uids)
+        if leaked:  # test 통화를 프롬프트 예시로 쓰면 test 점수가 새는 셈 — 평가 설계 §2.1
+            raise EvalRefused(f"few-shot에 test 통화가 있음: {', '.join(leaked)}")
         result["classification"] = classification.evaluate(
             conn, split, versions, fewshot, dump=dev
         )
@@ -397,8 +407,8 @@ def _num(x) -> str:
     return "—" if x is None else f"{x:.3f}"
 
 
-def load_app(db: Path) -> rag.RagApp | None:
-    """앱의 평가 훅 backend/eval_hooks.py의 make_app(db_path) — eval.py가 채점하는 DB를 앱도 읽게. 훅 모듈이 없으면(앱 착수 전)
+def load_app(db: Path, source: Path) -> rag.RagApp | None:
+    """앱의 평가 훅 backend/eval_hooks.py의 make_app(app_db, source_db) — eval.py가 채점하는 DB를 앱도 읽게. 훅 모듈이 없으면(앱 착수 전)
     None, 훅 안의 의존성이 없으면 그대로 오류(RAG가 조용히 빠진 리포트를 막음)"""
     try:
         from backend.eval_hooks import make_app  # noqa: PLC0415 — 앱이 생긴 뒤에만 있는 모듈
@@ -406,7 +416,7 @@ def load_app(db: Path) -> rag.RagApp | None:
         if e.name in ("backend", "backend.eval_hooks"):
             return None
         raise
-    return make_app(db)
+    return make_app(db, source)
 
 
 def main(argv=None) -> int:
@@ -423,24 +433,27 @@ def main(argv=None) -> int:
     parser.add_argument("--prompt-version", help="분류 버전 하나만. 없으면 분류가 있는 버전 전부")
     parser.add_argument("--condition", help="검색·챗 조건(예: reranker=off) — 기본 조건과 짝 비교")
     parser.add_argument("--force", action="store_true", help="같은 조건의 test를 다시 돌림")
-    parser.add_argument("--db", type=Path)
+    parser.add_argument("--db", type=Path, help="app.sqlite")
+    parser.add_argument("--source", type=Path, help="source.sqlite(생성기 출력)")
     parser.add_argument("--truth", type=Path)
     parser.add_argument("--reports-dir", type=Path, default=REPORTS)
     args = parser.parse_args(argv)
     paths = output_paths()
-    db, truth = args.db or paths["app"], args.truth or paths["truth"]
-    for p in (db, truth):
+    db, source = args.db or paths["app"], args.source or paths["source"]
+    truth = args.truth or paths["truth"]
+    for p in (db, source, truth):
         if not p.exists():
             print(f"DB 없음: {p} — make data 먼저")
             return 1
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
+    conn.execute("ATTACH DATABASE ? AS source", (f"file:{source}?mode=ro",))
     conn.execute("ATTACH DATABASE ? AS truth", (f"file:{truth}?mode=ro",))
     try:
         out = run(
             conn,
             reports_dir=args.reports_dir,
-            app=load_app(db),
+            app=load_app(db, source),
             split=args.split,
             section=args.section,
             retrieval_only=args.retrieval_only,

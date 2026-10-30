@@ -1,7 +1,8 @@
 """9단계 RAG 문서 — ax_documents·truth_doc_meta (가상 데이터 생성 설계 §4.2 '9단계 구현 결정').
 두 단계, 9b(차트 서술)와 같은 틀:
 - doc_plan(코드): doc_catalog 표로 문서·정답을 쓰고, 본문에는 사실을 그대로 옮긴 초안을 넣는다(가짜 게이트웨이면 남음).
-  문서 번호는 시드 셔플, 경로는 번호 — 표 순서(핵심 → 방해)나 표 이름(sim-·old-)이 app.sqlite에 드러나지 않게
+  문서 번호는 시드 셔플, 경로는 번호 — 표 순서(핵심 → 방해)나 표 이름(sim-·old-)이 source.sqlite에 드러나지 않게.
+  나중에 더한 문서(APPENDED)는 셔플에서 빼고 뒤 번호를 붙인다 — 기존 번호(캐시·③ 질문 정답)를 그대로 둔다
 - documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실·청구 기준 소제목 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
   건 id는 문서 번호(작업 파일에도 표 이름이 없게)
 """
@@ -25,6 +26,8 @@ SCHEMA = {
     "additionalProperties": False,
 }
 TASK = Task(name="document", prompt="gen_document", schema=SCHEMA, store=("body",), fake=False)
+# 목록에 나중에 더한 문서 키 — 더한 순서대로 셔플된 번호 뒤에 붙인다(§4.2 '저장'). 문서를 더할 때 여기에도 뒤에 넣는다
+APPENDED = ("manual-oral-care-sales", "manual-plan-followup")
 
 
 def version(d: Doc) -> str:
@@ -99,7 +102,7 @@ def checks(d: Doc) -> dict:
     c = {
         "field": "body",
         "must_include": [[w] for w in _words(d)],
-        "forbidden_words": forbidden,
+        "forbidden_words": forbidden + list(d.forbidden),
         "forbidden_patterns": llm_jobs.forbidden_patterns(),
         "length": length(d),
     }
@@ -122,9 +125,9 @@ def checks(d: Doc) -> dict:
 
 
 def stage_plan(run, rng, fake) -> None:
-    ids = {
-        CATALOG[i].key: n for n, i in enumerate(rng.permutation(len(CATALOG)).tolist(), start=1)
-    }
+    base = [d for d in CATALOG if d.key not in APPENDED]
+    ids = {base[i].key: n for n, i in enumerate(rng.permutation(len(base)).tolist(), start=1)}
+    ids |= {key: len(base) + n for n, key in enumerate(APPENDED, start=1)}
     old_of = {d.pair: d.key for d in CATALOG if d.kind == "old_version"}
     docs, meta = [], []
     for d in CATALOG:

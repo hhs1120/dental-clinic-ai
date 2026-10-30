@@ -197,6 +197,17 @@ def test_prompt_version_filter_and_fewshot(conn, reports, tmp_path):
     assert data["classification"]["versions"]["v1"]["excluded"]["fewshot"] == 1
 
 
+def test_fewshot_from_test_split_refused(conn, reports, tmp_path):
+    """few-shot 예시에 test 통화(c-0003)를 쓰면 평가를 거부한다 — test 점수가 샌다"""
+    prompts = tmp_path / "prompts"
+    (prompts / "classify").mkdir(parents=True)
+    (prompts / "classify" / "v1.md").write_text(
+        "---\nfewshot_call_uids: [c-0003]\n---\n분류하라", encoding="utf-8"
+    )
+    with pytest.raises(EvalRefused, match="test 통화"):
+        _run(conn, reports, split="dev", prompt_version="v1", prompts_dir=prompts)
+
+
 @pytest.mark.parametrize(
     "text, uids",
     [
@@ -241,11 +252,18 @@ def test_markdown_cells_escaped(conn, reports):
 
 def _db_files(conn, tmp_path):
     conn.commit()
-    return ["--db", str(tmp_path / "app.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
+    return [
+        "--db",
+        str(tmp_path / "app.sqlite"),
+        "--source",
+        str(tmp_path / "source.sqlite"),
+        "--truth",
+        str(tmp_path / "truth.sqlite"),
+    ]
 
 
 def test_main_exit_codes(conn, tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(ev, "load_app", lambda db: FakeApp())
+    monkeypatch.setattr(ev, "load_app", lambda db, source: FakeApp())
     args = _db_files(conn, tmp_path) + ["--reports-dir", str(tmp_path / "out")]
     assert ev.main(["--split", "dev"] + args) == 0
     assert ev.main(["--split", "test", "--section", "retrieval"] + args) == 0
@@ -257,9 +275,9 @@ def test_main_exit_codes(conn, tmp_path, monkeypatch, capsys):
 
 def test_main_passes_db_to_app(conn, tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(ev, "load_app", lambda db: seen.append(db))
+    monkeypatch.setattr(ev, "load_app", lambda db, source: seen.append((db, source)))
     ev.main(["--split", "dev", "--reports-dir", str(tmp_path / "out")] + _db_files(conn, tmp_path))
-    assert seen == [tmp_path / "app.sqlite"]
+    assert seen == [(tmp_path / "app.sqlite", tmp_path / "source.sqlite")]
 
 
 @pytest.fixture
@@ -275,14 +293,14 @@ def fake_backend(tmp_path, monkeypatch):
 
 
 def test_load_app_none_without_hooks(fake_backend):
-    assert ev.load_app("x.sqlite") is None  # backend는 있지만 eval_hooks가 없음
+    assert ev.load_app("x.sqlite", "s.sqlite") is None  # backend는 있지만 eval_hooks가 없음
 
 
 def test_load_app_passes_db(fake_backend):
     (fake_backend / "eval_hooks.py").write_text(
-        "def make_app(db):\n    return ('app', db)\n", encoding="utf-8"
+        "def make_app(db, source):\n    return ('app', db, source)\n", encoding="utf-8"
     )
-    assert ev.load_app("x.sqlite") == ("app", "x.sqlite")
+    assert ev.load_app("x.sqlite", "s.sqlite") == ("app", "x.sqlite", "s.sqlite")
 
 
 def test_load_app_dependency_error_propagates(fake_backend):
@@ -291,4 +309,4 @@ def test_load_app_dependency_error_propagates(fake_backend):
         "import not_installed_dependency_xyz\n", encoding="utf-8"
     )
     with pytest.raises(ModuleNotFoundError):
-        ev.load_app("x.sqlite")
+        ev.load_app("x.sqlite", "s.sqlite")

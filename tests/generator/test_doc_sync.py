@@ -6,7 +6,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-from generator import chart, documents, llm_jobs, master, verify
+from evaluation import metrics
+from generator import (
+    calls,
+    chart,
+    documents,
+    emergency,
+    finance,
+    llm_jobs,
+    master,
+    transcripts,
+    verify,
+)
 from generator.master import VISIT_MIX
 from shared import llm
 
@@ -63,20 +74,31 @@ def test_target_table_matches_code(name):
 
 
 def test_named_constants_exist():
-    """문서가 `master.X`·`verify.X`·`llm_jobs.X`·`documents.X`·`chart.X`로 가리키는 이름은 코드에 실제로 있어야 한다"""
-    text = _doc()
+    """설계 문서 전부와 CLAUDE.md가 `모듈.X`로 가리키는 이름은 코드에 실제로 있어야 한다 — 이름이 바뀌면 문서 참조가 낡는다.
+    `messages.X`는 config 키(`config` `messages.balance`)라 여기서 보지 않는다"""
     modules = {
         "master": master,
         "verify": verify,
         "llm_jobs": llm_jobs,
         "documents": documents,
         "chart": chart,
+        "calls": calls,
+        "finance": finance,
+        "metrics": metrics,
+        "transcripts": transcripts,
+        "emergency": emergency,
     }
-    missing = [
-        f"{mod}.{name}"
-        for mod, name in re.findall(r"`(master|verify|llm_jobs|documents|chart)\.(\w+)`", text)
-        if name not in PENDING and not hasattr(modules[mod], name)
-    ]
+    pattern = re.compile(rf"`({'|'.join(modules)})\.(\w+)`")
+    texts = [p.read_text(encoding="utf-8") for p in sorted((ROOT / "docs").glob("*.md"))]
+    texts.append((ROOT / "CLAUDE.md").read_text(encoding="utf-8"))
+    missing = sorted(
+        {
+            f"{mod}.{name}"
+            for text in texts
+            for mod, name in pattern.findall(text)
+            if name not in PENDING and not hasattr(modules[mod], name)
+        }
+    )
     assert not missing, missing
 
 
@@ -179,7 +201,7 @@ _PURPOSE_LABEL = {
     "예약 변경": "reschedule",
     "예약 확인": "confirm",
     "예약 취소": "cancel",
-    "리콜·안내 전화": "recall",
+    "리콜 문의": "recall_q",
     "치료 문의": "treatment_q",
     "보험 문의": "insurance_q",
     "가격·비용 문의": "price_q",
@@ -205,10 +227,7 @@ _NOISE_LABEL = {
     "보호자가 정보 헷갈림": "guardian_confused",
 }
 _OUTBOUND_LABEL = {
-    "리콜·안내": "recall",
-    "예약 확인": "confirm",
     "수납 문의": "billing_q",
-    "서류 요청": "document_req",
     "치료 문의(경과 확인)": "treatment_q",
 }
 
@@ -288,16 +307,23 @@ def test_call_urgency_and_flag_lines_match_code():
     ]
     assert master.HAS_TODO_SHARE == {
         "confirm": master.HAS_TODO_SHARE["confirm"],
-        "recall": master.HAS_TODO_SHARE["confirm"],
+        "recall_q": master.HAS_TODO_SHARE["confirm"],
     }
     implied = dict(re.findall(r"`(\w+)`→(\w+)", flags))
     assert implied == master.IMPLIED_FLAG
 
 
-def test_call_mix_warning_row_matches_code():
-    row = next(r for key, r in _target_rows().items() if key.startswith("통화 목적·노이즈"))
+@pytest.mark.parametrize(
+    "name, tolerance",
+    [
+        ("통화 목적·노이즈", verify.CALL_MIX_TOLERANCE),
+        ("통화 최근 가중", verify.CALL_RECENCY_TOLERANCE),
+    ],
+)
+def test_call_mix_warning_row_matches_code(name, tolerance):
+    row = next(r for key, r in _target_rows().items() if key.startswith(name))
     assert list(_labeled_percents(row[2].replace("%p", "%")).values()) == pytest.approx(
-        [verify.CALL_MIX_TOLERANCE]
+        [tolerance]
     )
 
 
@@ -335,6 +361,12 @@ _DOC_ROW = {
     "유사 주제 무답": ("similar", None),
     "타 병원·일반": ("external", None),
 }
+
+
+def test_prep_sheet_days_match_feature_doc():
+    """준비표 날짜 탭 '최근 N일 + 오늘' — 기능 정의 ④의 숫자 = verify.PREP_SHEET_DAYS(잔액 있음 리포트의 범위)"""
+    doc = (ROOT / "docs" / "치과 AX - 기능 정의.md").read_text(encoding="utf-8")
+    assert re.findall(r"최근 (\d+)일 \+ 오늘", doc) == [str(verify.PREP_SHEET_DAYS)]
 
 
 def test_rag_document_rows_match_catalog():

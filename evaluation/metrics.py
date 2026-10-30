@@ -43,7 +43,7 @@ def macro_accuracy(rows: list[tuple]) -> float | None:
 
 
 def source_id(chunk_id: str) -> str:
-    """청크 id → 출처 id (앱 설계 §3 — 'doc:12:3' → 'doc:12', 'call:481:0' → 'call:481'. 스레드·차트는 청크 = 출처)"""
+    """청크 id → 출처 id (앱 설계 §3 — 'doc:12:3' → 'doc:12', 'call:c-0481:0' → 'call:c-0481'. 스레드·차트는 청크 = 출처)"""
     parts = chunk_id.split(":")
     return ":".join(parts[:2]) if parts[0] in ("doc", "call") and len(parts) == 3 else chunk_id
 

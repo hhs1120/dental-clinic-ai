@@ -11,6 +11,7 @@ import yaml
 from generator import build, schedule, verify
 from generator.master import (
     CHECKUP_CODE,
+    CHURN_SHARE,
     COURSE_INTERVAL_DAYS,
     FAMILY_SIZE,
     GUARDIAN_MIN_AGE_GAP,
@@ -26,6 +27,7 @@ from generator.master import (
     age_band,
     age_on,
 )
+from generator.messages import emergency_appointments
 from generator.paths import ROOT
 from generator.seeding import stage_faker, stage_rng
 
@@ -49,13 +51,15 @@ APPOINTMENT_CHECKS = [
     verify.check_reschedule_pair,
     verify.check_fake_phone,
     verify.check_pre_window_visit,
+    verify.check_churn_date,
+    verify.check_churn_after,
 ]
 
 
 @pytest.fixture(scope="module")
 def db(tmp_path_factory):
     out = tmp_path_factory.mktemp("sim")
-    app, truth = out / "app.sqlite", out / "truth.sqlite"
+    app, truth = out / "source.sqlite", out / "truth.sqlite"
     run = build.generate(app, truth, CONFIG, fake_llm=True)
     conn = sqlite3.connect(app)
     conn.row_factory = sqlite3.Row
@@ -64,12 +68,15 @@ def db(tmp_path_factory):
 
 
 def _appts(conn):
+    """4단계 예약 — 6b단계 응급 내원(통화로 그날 잡힌 원장 내원, test_emergency)은 뺀다"""
+    emergency = emergency_appointments(conn)
     rows = [
         dict(r)
         for r in conn.execute(
             "SELECT a.*, s.role FROM emr_appointments a"
             " JOIN emr_staff s ON s.id = a.staff_id ORDER BY a.id"
         )
+        if r["id"] not in emergency
     ]
     for r in rows:
         r["start"] = datetime.fromisoformat(r["scheduled_at"])
@@ -109,9 +116,7 @@ def test_staff_role_and_duration(db):
     assert all(ROLE[r["type"]] == r["role"] for r in rows)
     assert all(r["duration_min"] == DURATION[r["planned_procedure_code"]] for r in rows)
     hygienists = Counter(r["staff_id"] for r in rows if r["type"] == "hygiene")
-    assert (
-        len(hygienists) == 3 and max(hygienists.values()) - min(hygienists.values()) <= 1
-    )  # 순환
+    assert len(hygienists) == 3  # 그 시각에 비어 있는 위생사 중 균등
 
 
 def test_planned_procedure_fits_age(db):
@@ -137,10 +142,10 @@ def test_planned_procedure_fits_age(db):
 
 def test_planned_code_hygiene_scaling_rule():
     run = build.new_run(sqlite3.connect(":memory:"), CFG)
-    run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:3]:
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0))
+    sim = schedule.Sim(run, np.random.default_rng(0), {}, np.random.default_rng(1))
     on = date(2026, 9, 1)
     adult = schedule.Patient(0, date(1980, 1, 1), [], None, None)
     assert sim.planned_code(adult, "hygiene", on) == SCALING_CODE
@@ -317,6 +322,28 @@ def test_lapsed_patients_skip_first_recall(db):
     assert seen and all(first[pid]["type"] != "hygiene" for pid in seen)
 
 
+def test_dormant_patients_start_no_new_demand(db):
+    """휴면(DORMANT_MONTHLY_RATE): 휴면일부터 리콜·새 치료 수요 없음 — 그날 이후 전화로 시작하는 에피소드가 없다
+    (진행 중 에피소드에서 이어지는 치료계획 코스 — 데스크에서 못 잡아 다음 날 전화로 잡아도 — 는 이어 감, §2.6 (1))"""
+    conn, _, run = db
+    dormant = run.state["dormant"]
+    assert dormant
+    first = {}
+    for r in _appts(conn):
+        ep = run.state["episode"].get(r["id"])
+        if ep is not None:
+            first.setdefault(ep, r)
+    late = [
+        r
+        for r in first.values()
+        if r["patient_id"] in dormant
+        and r["booked_via"] == "phone"
+        and r["plan_item_id"] is None
+        and r["created"].date() >= dormant[r["patient_id"]]
+    ]
+    assert late == []
+
+
 def test_phone_lead_spreads_early_days(db):
     """시작 직후 수요가 첫날에 몰리지 않음 — 첫 진료일 예약은 리드 1일 이상이라 0, 첫 MAX_LEAD_DAYS 안에 분산"""
     conn, ctx, _ = db
@@ -357,10 +384,10 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
     """창 이전 급여 스케일링은 그해를 연 1회 이력에 넣는다 — 같은 해 창 안 위생 내원은 구강검진 (§2.6 (1)).
     리콜 12개월이라 생성 데이터에는 같은 해 재방문이 거의 없어 Sim 상태로 본다"""
     run = build.new_run(sqlite3.connect(":memory:"), CFG)
-    run.conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    run.conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     for name, fn in build.STAGES[:4]:  # master·patients·demand·pre_window
         fn(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
-    sim = schedule.Sim(run, np.random.default_rng(0))
+    sim = schedule.Sim(run, np.random.default_rng(0), {}, np.random.default_rng(1))
     visits = run.state["pre_window"]
     scaled = [
         p
@@ -374,3 +401,19 @@ def test_pre_window_scaling_counts_toward_yearly_limit():
         year = visits[p.id]["start"].year
         assert year in p.scaling_years
         assert sim.planned_code(p, "hygiene", date(year, 12, 31)) == CHECKUP_CODE
+
+
+def test_churn_and_parallel_counts(db):
+    """이탈 = 구환의 CHURN_SHARE, 병행은 한 명 이상(타 기관 이력 줄 — 필수 검사가 짝을 본다). 이탈 환자의 이탈일 뒤
+    예약은 노쇼·당일 취소로 남아 흔적이 된다 (§2.2)"""
+    conn, ctx, run = db
+    kinds = dict(
+        conn.execute("SELECT kind, count(*) FROM truth.truth_patient_churn GROUP BY kind")
+    )
+    assert kinds["churn"] == round(CHURN_SHARE * CFG["returning_patients"])
+    assert kinds["parallel"] >= 1
+    missed = conn.execute(
+        "SELECT count(*) FROM emr_appointments a JOIN truth.truth_patient_churn c USING (patient_id)"
+        " WHERE c.kind = 'churn' AND date(a.scheduled_at) >= c.churned_on"
+    ).fetchone()[0]
+    assert missed

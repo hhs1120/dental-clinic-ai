@@ -93,7 +93,7 @@ def test_notice_versions():
 
 
 def test_holiday_notices_match_config():
-    """휴진 공지(옛 버전 포함)의 휴진 날짜는 config 공휴일 — 창 이전 내원이 걸치는 2025년도"""
+    """휴진 공지(옛 버전 포함)의 휴진 날짜는 config 공휴일 — 창 이전 내원·옛 공지 시행일이 걸치는 해도"""
     for key in ("notice-chuseok", "notice-seollal", "old-chuseok", "old-seollal"):
         d0 = BY_KEY[key]
         year = int(d0.effective[:4])

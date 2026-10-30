@@ -41,7 +41,7 @@ START = CFG["range"]["start"]
 def _new_run():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.executescript(build.APP_SCHEMA.read_text(encoding="utf-8"))
+    conn.executescript(build.SOURCE_SCHEMA.read_text(encoding="utf-8"))
     return build.new_run(conn, CFG)
 
 
