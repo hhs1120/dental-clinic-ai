@@ -21,9 +21,9 @@ TODAY = date.fromisoformat(
 CALLS_FROM = (TODAY - timedelta(days=47)).isoformat()  # 통화 목록 — 최근 약 7주
 RECON_FROM = (TODAY - timedelta(days=122)).isoformat()[:8] + "01"  # 재무 대조 — 최근 4개월
 ADJUST_FROM = (TODAY - timedelta(days=183)).isoformat()[:7]  # 청구 점검 — 최근 6개월
-c = sqlite3.connect(f"{ROOT}/data/source.sqlite")
+c = sqlite3.connect(f"file:{ROOT}/data/source.sqlite?mode=ro", uri=True)  # 읽기만
 c.row_factory = sqlite3.Row
-c.execute(f"ATTACH '{ROOT}/ground_truth/truth.sqlite' AS truth")
+c.execute(f"ATTACH 'file:{ROOT}/ground_truth/truth.sqlite?mode=ro' AS truth")
 
 
 def rows(sql, *p):
@@ -237,7 +237,8 @@ for d in days:
 calls = []
 for r in rows(
     "SELECT c.*, l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
-    " WHERE c.started_at >= ? ORDER BY c.started_at DESC",
+    # silver만 — 판정 풀(dev·test) 통화에 골드 라벨을 보이면 사람 판정이 오염된다(평가 설계 §1)
+    " WHERE c.started_at >= ? AND l.split = 'silver' ORDER BY c.started_at DESC",
     CALLS_FROM,
 ):
     f = json.loads(r["used_fact"])
@@ -300,6 +301,7 @@ ask_examples = [
     {"q": x["question"], "a": x["answer_text"], "sources": x["answer_doc_ids"], "type": x["type"]}
     for x in qa
     if x["type"] in ("manual", "notice", "data", "refusal")
+    and x["split"] == "dev"  # test 문항은 보이지 않는다
 ][:24]
 
 # ── EMR: 오늘·준비표 환자 + 통화 환자 ──

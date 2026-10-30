@@ -111,7 +111,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 ### 7.1 LLM (원본은 여기)
 
 - **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b단계의 API 채우기도 경유). Anthropic 공식 SDK를 직접 쓴다(프로바이더가 Anthropic 하나라 LiteLLM 같은 변환 계층을 두지 않음)
-- **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 오류·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 호출하지 않음). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
+- **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 오류·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch 제출은 보지 않는다 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
 - **구조화 출력**: JSON 스키마(`output_config.format`)
 - **기록**: 호출 1건 = 기록 1행 — 생성기는 jsonl, 앱은 `ax_llm_calls`(앱 착수 때)
 - **Batch**(생성기 API 채우기): 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다
