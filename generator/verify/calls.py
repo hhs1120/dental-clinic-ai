@@ -21,9 +21,12 @@ from generator.master import (
     CALL_SUBTOPICS,
     CHECKUP_CODE,
     CLINIC_NAME,
+    EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_CHILD_SCENES,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_SCENES,
     EMERGENCY_TREATMENT,
+    EMERGENCY_VISIT_MARK,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -412,6 +415,7 @@ def check_emergency_visits(conn, ctx):
     또는 상담(6b단계가 바꾼 상황이면 그 상황), 통화 뒤 EMERGENCY_LEAD_MIN분 지난 SLOT_MIN분 격자·영업시간·점심 밖, TODAY 전이면
     completed·그날 전액 수납, 사실의 날짜·시각 = 예약, 예약 확정·리마인드 문자 없음, 응급 내원 하나에 통화 1건"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
+    patients = {p["id"]: p for p in _rows(conn, "SELECT id, birth_date FROM emr_patients")}
     doctors = {r[0] for r in conn.execute("SELECT id FROM emr_staff WHERE role = 'doctor'")}
     code = {p["name"]: c for c, p in PROCEDURE.items()}
     texted = {
@@ -446,8 +450,26 @@ def check_emergency_visits(conn, ctx):
         nxt = day + timedelta(days=1)
         while not open_slots(nxt.weekday()) or nxt in ctx.holidays:
             nxt += timedelta(days=1)
-        scene = visit.get("scene") or transcripts.pick(r["call_uid"], "scene", EMERGENCY_SCENES)
+        base = transcripts.pick(r["call_uid"], "scene", EMERGENCY_SCENES)
+        scene = visit.get("scene") or base
+        if scene not in EMERGENCY_TREATMENT:
+            bad.append({"call_uid": r["call_uid"], "problem": f"없는 응급 상황: {scene}"})
+            continue
         name, _ = EMERGENCY_TREATMENT[scene]
+        visited = conn.execute(
+            "SELECT 1 FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
+            " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ? AND id != ?",
+            (r["patient_id"], call[:10], call, a["id"]),
+        ).fetchone()
+        p = patients[r["patient_id"]]
+        child = age_on(date.fromisoformat(p["birth_date"]), day) <= CHILD_MAX_AGE
+        want = (
+            EMERGENCY_AFTER_VISIT_SCENE
+            if visited
+            else EMERGENCY_CHILD_SCENES.get(base, base)
+            if child
+            else base
+        )
         start = _dt(at)
         end = start + timedelta(minutes=a["duration_min"])
         close = datetime.combine(
@@ -458,6 +480,7 @@ def check_emergency_visits(conn, ctx):
             for x in HOURS["lunch"]
         ]
         problems = [
+            (scene != want, "상황이 규칙과 다름(그날 진료 뒤·소아)"),
             (a["patient_id"] != r["patient_id"], "다른 환자"),
             (a["staff_id"] not in doctors, "원장 아님"),
             (
@@ -562,18 +585,17 @@ def check_call_counterpart(conn, ctx):
     return bad
 
 
-def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict]) -> dict:
+def _facts_at(conn, pid: int, t: str, birth: str, items: list[dict], emergency: set) -> dict:
     """통화 시각 t 시점의 사실 — 생성기와 따로 계산 (§4.1 절차 2: created_at·performed_at·paid_at ≤ t).
-    items = _plan_items (열린 치료계획 항목)"""
+    items = _plan_items (열린 치료계획 항목), emergency = 응급 내원 예약(최근 진료에 응급 표시)"""
     day = t[:10]
-    emergency = _emergency_appts(conn)
     visits = [
         {
             "date": v["performed_at"][:10],
             "procedure": PROCEDURE[v["procedure_code"]]["name"],
             "tooth": v["tooth_no"],
         }
-        | ({"emergency": True} if v["appointment_id"] in emergency else {})
+        | ({"emergency": EMERGENCY_VISIT_MARK} if v["appointment_id"] in emergency else {})
         for v in _rows(
             conn,
             "SELECT performed_at, procedure_code, tooth_no, appointment_id FROM emr_treatments"
@@ -649,6 +671,7 @@ def check_call_facts_as_of(conn, ctx):
         )
     }
     items = _plan_items(conn)
+    emergency = _emergency_appts(conn)
     bad = []
     for r in _calls(conn):
         f, t = r["fact"], r["started_at"]
@@ -670,7 +693,7 @@ def check_call_facts_as_of(conn, ctx):
         if r["patient_id"] is not None and pid != r["patient_id"] or pid not in patients:
             bad.append({"call_uid": r["call_uid"], "problem": "사실의 환자 ≠ 통화 환자"})
             continue
-        want = _facts_at(conn, pid, t, patients[pid]["birth_date"], items)
+        want = _facts_at(conn, pid, t, patients[pid]["birth_date"], items, emergency)
         want["already_paid"] = (
             _already_paid(conn, pid, t)
             if r["primary_purpose"] == "billing_q" and r["direction"] == "outbound"

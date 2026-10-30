@@ -3,7 +3,7 @@
 통화 번호 해시로 고른다.
 - 통화 고르기·시각: emergency 플래그 통화 중 환자가 있는 것. 그날 통화 뒤 master.EMERGENCY_LEAD_MIN분이 지난 첫 빈 슬롯
   (원장 동시 진료·체어·점심·마감), 자리가 없으면 다음 진료일 개원부터. TODAY 전 진료일 늦은 통화 1건(장면)은 그 통화를 진료 끝
-  뒤로 옮겨 TODAY 첫 시간 예약(scheduled)으로 — TODAY 준비표·오늘 화면에 보인다
+  무렵(scene_call_time)으로 옮겨 TODAY 오전 빈 시간 예약(scheduled)으로 — TODAY 준비표·오늘 화면에 보인다
 - 처치: master.EMERGENCY_TREATMENT(상황 → 시술·치아 후보), 치아는 장부·치료계획에 없는 치아. 그날 전액 수납, 급여면 청구 1줄
   (확정 월은 paid), 차트는 응급 서술(9b가 덮어씀)
 - 통화 사실: 응급 통화에 emergency_visit(그 내원), 그 환자의 뒤 통화는 장부가 바뀐 만큼 사실을 다시 계산
@@ -28,6 +28,7 @@ from generator.master import (
     DOCTOR_CONCURRENCY,
     EMERGENCY_AFTER_VISIT_SCENE,
     EMERGENCY_CHILD_SCENES,
+    EMERGENCY_DX,
     EMERGENCY_LEAD_MIN,
     EMERGENCY_RESTORED_SCENES,
     EMERGENCY_SCENES,
@@ -268,7 +269,7 @@ def stage(run, rng, fake) -> None:
         call = datetime.strptime(c["started_at"], FMT)
         visited_today = conn.execute(
             "SELECT 1 FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
-            " AND date(scheduled_at) = ? AND scheduled_at < ?",
+            " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ?",
             (pid, c["started_at"][:10], c["started_at"]),
         ).fetchone()
         situation, changed = visit_scene(
@@ -351,9 +352,8 @@ def stage(run, rng, fake) -> None:
             " method, approval_no) VALUES (?, ?, 'visit', ?, ?, ?, ?, ?)",
             (pid, appt, due, due, end, method, approval),
         )
-        if (
-            insured
-        ):  # 5단계와 같은 청구 월 규칙(records.claim_bucket) — 확정 월은 paid(오류를 심지 않는다)
+        # 5단계와 같은 청구 월 규칙(records.claim_bucket) — 확정 월은 paid(오류를 심지 않는다)
+        if insured:
             month = at[:7]
             bucket = records.claim_bucket(run.today, month)
             status = "paid" if bucket == "settled" else bucket
@@ -392,9 +392,10 @@ def stage(run, rng, fake) -> None:
             run.state["plan_items"],
         )
         allowed = sorted(PROCEDURE_DIAGNOSES[code])
+        dx = EMERGENCY_DX.get(situation)
         conn.execute(
             "INSERT INTO emr_chart_notes (treatment_id, dx_code, note) VALUES (?, ?, ?)",
-            (tid, allowed[_hash(uid, "dx") % len(allowed)], chart.draft_note(facts, tid)),
+            (tid, dx if dx in allowed else allowed[0], chart.draft_note(facts, tid)),
         )
         conn.execute(
             "INSERT INTO truth.truth_chart_notes VALUES (?, 'narrative', 0, NULL, NULL, 0, ?)",
@@ -440,8 +441,11 @@ def _refresh_facts(run, calls: list[dict], visits: dict) -> None:
             "topic_procedure"
         ) != led.recent_treatment(pid, t):
             raise ValueError(f"{uid}: 응급 내원이 경과 확인 통화의 최근 진료를 바꾼다")
-        if "recall_text" in fact and fact["recall_text"] != led.recall_text(pid, t):
-            raise ValueError(f"{uid}: 응급 내원이 리콜 문의 통화의 받은 문자를 바꾼다")
+        if "recall_text" in fact and (
+            fact["recall_text"] != led.recall_text(pid, t)
+            or (led.next_appointment(pid, t) is not None and not fact.get("next_appointment"))
+        ):
+            raise ValueError(f"{uid}: 응급 내원이 리콜 문의 통화의 받은 문자·잡힌 예약을 바꾼다")
         new = fact | {"call_date": t[:10]} | led.facts(pid, t)
         if uid in visits:
             new["emergency_visit"] = visits[uid]

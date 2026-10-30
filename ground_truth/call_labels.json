@@ -1336,7 +1336,7 @@
      "date": "2025-05-30",
      "procedure": "신경치료",
      "tooth": "37",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-04-14",
@@ -2393,7 +2393,7 @@
      "date": "2025-08-09",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-03-07",
@@ -4112,7 +4112,7 @@
      "date": "2026-10-20",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2026-09-15",
@@ -13469,7 +13469,7 @@
      "date": "2025-12-03",
      "procedure": "신경치료",
      "tooth": "37",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-07-04",
@@ -16848,7 +16848,7 @@
      "date": "2026-04-10",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2024-05-08",
@@ -23395,7 +23395,7 @@
      "date": "2026-03-31",
      "procedure": "신경치료",
      "tooth": "46",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-11-21",
@@ -31157,7 +31157,7 @@
      "date": "2026-10-20",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2026-09-15",
@@ -35485,7 +35485,7 @@
      "date": "2026-07-13",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2026-07-10",
@@ -49018,7 +49018,7 @@
      "date": "2026-01-16",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-07-22",
@@ -51100,7 +51100,7 @@
      "date": "2025-05-24",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2024-03-13",
@@ -51469,7 +51469,7 @@
      "date": "2024-12-03",
      "procedure": "아말감/GI",
      "tooth": "47",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2024-03-02",
@@ -56716,7 +56716,7 @@
      "date": "2026-01-16",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     },
     {
      "date": "2025-07-22",
@@ -59930,7 +59930,7 @@
      "date": "2026-01-13",
      "procedure": "상담",
      "tooth": "00",
-     "emergency": true
+     "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
     }
    ],
    "balance": 6820,
@@ -66407,7 +66407,7 @@
     "date": "2025-05-31",
     "time": "13:00",
     "procedure": "상담",
-    "emergency": true
+    "emergency": "응급 내원 — 일반 상담·진료로 말하지 않는다"
    },
    "family": [],
    "alerts": [],

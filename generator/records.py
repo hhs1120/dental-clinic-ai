@@ -482,7 +482,7 @@ def stage_claims(run, rng, fake) -> None:
     def settled(served: date) -> bool:
         return (
             served >= run.range_start
-            and months_before(run.today, served.strftime("%Y-%m")) > 1 + SUBMITTED_MONTHS
+            and claim_bucket(run.today, served.strftime("%Y-%m")) == "settled"
         )
 
     first_scaling: dict[int, int] = {}  # 병행 후보 환자 → 그 첫 줄(진료 id)

@@ -826,6 +826,17 @@ EMERGENCY_TREATMENT[EMERGENCY_AFTER_VISIT_SCENE] = ("상담", ())
 # 소아(AGE_BANDS child)에게 맞지 않는 상황 → 대신 쓰는 상황(씌운 치아가 빠짐 → 넘어져 흔들리는 앞니)
 EMERGENCY_CHILD_SCENES = {EMERGENCY_SCENES[6]: EMERGENCY_SCENES[2]}
 EMERGENCY_LEAD_MIN = 30
+# 응급 내원 표시 — 통화 사실의 최근 진료·다음 예약에 붙인다. 뜻을 담은 말이라 모델이 응급 진찰을 일반 상담으로 이어 쓰지 않는다
+EMERGENCY_VISIT_MARK = "응급 내원 — 일반 상담·진료로 말하지 않는다"
+# 갑자기 빠진 상황 — 시작 시점 '점점'과 맞지 않는다(덜 빠진 것처럼 써져 차트의 '탈락'과 어긋남)
+EMERGENCY_SUDDEN_SCENES = (EMERGENCY_SCENES[3], EMERGENCY_SCENES[6])
+EMERGENCY_GRADUAL_ONSETS = ("이틀 전부터 점점",)
+# 상황별 상병 — 시술 허용 상병(PROCEDURE_DIAGNOSES) 안에서 그 상황에 맞는 것. 없으면 허용 상병의 첫 번째
+EMERGENCY_DX = {
+    EMERGENCY_SCENES[0]: "D02",  # 밤사이 치통 — 치수염
+    EMERGENCY_SCENES[4]: "D03",  # 잇몸 고름 — 근단 치주염
+    EMERGENCY_SCENES[5]: "D03",  # 볼 부음
+}
 # 때운 것이 빠진 상황 — 그 환자가 전에 다른 수복 시술로 때운 치아에서 고른다(녹취록이 그 기록을 말해도 맞게). 없으면 위 규칙대로
 EMERGENCY_RESTORED_SCENES = (EMERGENCY_SCENES[3],)
 EMERGENCY_ONSETS = ("오늘 아침부터", "어제 점심 무렵부터", "방금 전부터", "이틀 전부터 점점")

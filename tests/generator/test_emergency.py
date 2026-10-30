@@ -19,6 +19,7 @@ from generator.master import (
     NOSHOW_TO_CANCEL,
     PROCEDURES,
     SLOT_MIN,
+    close_time,
 )
 from generator.paths import ROOT
 from tests.generator.test_messages import HOLIDAYS
@@ -70,7 +71,8 @@ def test_visit_time_after_call_on_slot(db):
 def test_procedure_follows_scene(db):
     """처치는 상황의 시술(치아는 후보 안 — 장부에 없는 치아, 때운 것이 빠진 상황은 전에 다른 수복 시술로 때운 치아) 또는 상담"""
     for c, a in _visits(db):
-        name, teeth = EMERGENCY_TREATMENT[emergency.scene(c["call_uid"])]
+        visit = json.loads(c["used_fact"])["emergency_visit"]
+        name, teeth = EMERGENCY_TREATMENT[visit.get("scene") or emergency.scene(c["call_uid"])]
         got = NAME[a["planned_procedure_code"]]
         assert got in (name, "상담")
         t = db.execute(
@@ -91,13 +93,15 @@ def test_procedure_follows_scene(db):
 
 
 def test_today_scene_call(db):
-    """TODAY 장면 — 전 진료일 진료 끝 뒤의 응급 통화 1건이 TODAY 첫 빈 시간 scheduled 내원을 잡는다(풀 밖 통화)"""
+    """TODAY 장면 — 전 진료일 진료 끝 무렵(마감 − SCENE_CALL_BEFORE_CLOSE_MIN)의 응급 통화 1건이 TODAY 오전 빈 시간
+    scheduled 내원을 잡는다(풀 밖 통화)"""
     scene = [(c, a) for c, a in _visits(db) if a["scheduled_at"][:10] == TODAY]
     assert len(scene) == 1
     c, a = scene[0]
     day = prev_open_day(datetime.strptime(TODAY, "%Y-%m-%d").date(), HOLIDAYS)
-    assert c["started_at"][:10] == day.isoformat()
-    assert c["started_at"][11:] > "17:00:00"  # 진료 끝 무렵(평일 마감 전)
+    close = datetime.combine(day, datetime.strptime(close_time(day.weekday()), "%H:%M").time())
+    want = close - timedelta(minutes=emergency.SCENE_CALL_BEFORE_CLOSE_MIN)
+    assert c["started_at"] == want.strftime(FMT)
     assert a["status"] == "scheduled" and not c["in_eval_pool"] and not c["in_blind_pool"]
 
 
@@ -164,7 +168,7 @@ def test_scene_follows_same_day_visit_and_age(db):
         visit = json.loads(c["used_fact"])["emergency_visit"]
         before = db.execute(
             "SELECT 1 FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
-            " AND date(scheduled_at) = ? AND scheduled_at < ? AND id != ?",
+            " AND type = 'treatment' AND date(scheduled_at) = ? AND scheduled_at < ? AND id != ?",
             (c["patient_id"], c["started_at"][:10], c["started_at"], a["id"]),
         ).fetchone()
         base = emergency.scene(c["call_uid"])
@@ -188,3 +192,16 @@ def test_recent_visits_mark_emergency(db):
         if v.get("emergency")
     ]
     assert marks
+
+
+def test_sudden_scene_never_gradual():
+    """갑자기 빠진 상황엔 시작 시점 '점점'을 쓰지 않는다 — 다른 상황은 해시 그대로"""
+    from generator import transcripts
+    from generator.master import EMERGENCY_GRADUAL_ONSETS, EMERGENCY_SUDDEN_SCENES
+
+    for i in range(1, 400):
+        uid = f"c-{i:04d}"
+        text = transcripts.situation(uid, "emergency")
+        scene = emergency.scene(uid)
+        if scene in EMERGENCY_SUDDEN_SCENES:
+            assert not any(text.startswith(o) for o in EMERGENCY_GRADUAL_ONSETS)

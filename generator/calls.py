@@ -27,6 +27,7 @@ from generator.master import (
     CALL_SUBTOPICS,
     CALL_URGENCY_WEIGHTS,
     CHECKUP_CODE,
+    EMERGENCY_VISIT_MARK,
     EVAL_MIN_PER_SPLIT,
     EVAL_RARE_PURPOSES,
     EVAL_RARE_SHARE,
@@ -112,6 +113,14 @@ def _in_hours(t: str) -> bool:
     return OPEN <= at.time() < datetime.strptime(close_time(at.weekday()), "%H:%M").time()
 
 
+def first_open_day(year: int, month: int, holidays) -> date:
+    """그달 첫 진료일 — 리콜 문자 날(§2.5)"""
+    d = date(year, month, 1)
+    while not open_slots(d.weekday()) or d in holidays:
+        d += timedelta(days=1)
+    return d
+
+
 def recall_targets(run) -> list[tuple[datetime, int, str, date]]:
     """리콜 문자 대상 (그달 첫 진료일 개원 시각, 환자, before·after, 기한) — 8단계가 보내고 6단계 리콜 문의가 따른다(§2.5·§4.1).
     그 시각에 잡힌 예약이 없고 기한(마지막 completed 위생 내원 +
@@ -126,9 +135,7 @@ def recall_targets(run) -> list[tuple[datetime, int, str, date]]:
     out = []
     y, m = run.range_start.year, run.range_start.month
     while date(y, m, 1) < run.today:
-        d = date(y, m, 1)
-        while not open_slots(d.weekday()) or d in run.holidays:
-            d += timedelta(days=1)
+        d = first_open_day(y, m, run.holidays)
         t = datetime.combine(d, OPEN)
         ts = t.strftime(FMT)
         nxt = (y + 1, 1) if m == 12 else (y, m + 1)
@@ -224,7 +231,7 @@ class Ledger:
         ):
             self.treatments[r[0]].append(
                 {"at": r[1], "procedure": PROCEDURE_NAME[r[2]], "tooth": r[3]}
-                | ({"emergency": True} if r[4] in emergency else {})
+                | ({"emergency": EMERGENCY_VISIT_MARK} if r[4] in emergency else {})
             )
         self.payments = defaultdict(list)
         for r in conn.execute(
@@ -357,13 +364,13 @@ class Ledger:
             },
             "recent_visits": [
                 {"date": v["at"][:10], "procedure": v["procedure"], "tooth": v["tooth"]}
-                | ({"emergency": True} if v.get("emergency") else {})
+                | ({"emergency": v["emergency"]} if v.get("emergency") else {})
                 for v in visits
             ],
             "balance": self.balance(pid, t),
             "next_appointment": {"appointment_id": nxt["id"]}
             | _appt_fact(nxt)
-            | ({"emergency": True} if nxt["id"] in self.emergency else {})
+            | ({"emergency": EMERGENCY_VISIT_MARK} if nxt["id"] in self.emergency else {})
             if nxt
             else None,
             "family": [

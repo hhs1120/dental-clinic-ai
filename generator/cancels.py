@@ -10,13 +10,12 @@
 import hashlib
 from datetime import date, datetime, timedelta
 
-from generator.calls import FMT, OPEN
+from generator.calls import FMT, OPEN, first_open_day
 from generator.master import (
     MESSAGE_DELAY_MIN,
     MESSAGE_REPLY_CANCEL,
     NOSHOW_TO_CANCEL,
     SAMEDAY_CANCEL_LEAD_MIN,
-    open_slots,
 )
 from generator.messages import emergency_appointments
 
@@ -63,7 +62,8 @@ def _noshow_scenes(conn, run, skip: set) -> list[int]:
         " AND c.started_at >= date(a.scheduled_at))",
         (_prev_month(run.today),),
     ).fetchall()
-    first = _first_open_day(run, _prev_month(run.today))
+    y, m = map(int, _prev_month(run.today).split("-"))
+    first = first_open_day(y, m, run.holidays).isoformat()
     pool = sorted(
         (r[0] for r in rows if r[0] not in skip and r[1] != first),
         key=lambda a: _hash(a, "noshow"),
@@ -143,9 +143,8 @@ def stage(run, rng, fake) -> None:
             " AND sent_at < ?",
             (aid, cancelled),
         ).fetchone()[0]
-        if (
-            last is None
-        ):  # 창 안 예약은 예약 확정 문자(config messages.appt_confirm)가 있다 — 비율을 낮추면 여기서 멈춘다
+        # 창 안 예약은 예약 확정 문자(config messages.appt_confirm)가 있다 — 비율을 낮추면 여기서 멈춘다
+        if last is None:
             raise ValueError(f"개원 전 취소 {aid}: 답장할 문자 없음")
         at = datetime.strptime(cancelled, FMT) - timedelta(minutes=1 + aid % REPLY_LEAD_MAX_MIN)
         replies.append((aid, max(at, datetime.strptime(last, FMT) + timedelta(minutes=1))))
@@ -156,13 +155,6 @@ def stage(run, rng, fake) -> None:
         [(patient[a], t.strftime(FMT), MESSAGE_REPLY_CANCEL, a) for a, t in replies],
     )
     _renumber_messages(conn)
-
-
-def _first_open_day(run, month: str) -> str:
-    d = date.fromisoformat(f"{month}-01")
-    while not open_slots(d.weekday()) or d in run.holidays:
-        d += timedelta(days=1)
-    return d.isoformat()
 
 
 def _renumber_messages(conn) -> None:

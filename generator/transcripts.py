@@ -20,8 +20,10 @@ from generator.master import (
     CONDITIONAL_INSURED_MIN_AGE,
     EMERGENCY_AFTER_VISIT_ONSET,
     EMERGENCY_AFTER_VISIT_SCENE,
+    EMERGENCY_GRADUAL_ONSETS,
     EMERGENCY_ONSETS,
     EMERGENCY_SCENES,
+    EMERGENCY_SUDDEN_SCENES,
     FULL_MOUTH,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
@@ -53,7 +55,13 @@ INTERNAL_KEYS = (
 # 새 예약 통화의 예약은 이 통화에서 정하는 날짜 — 'appointment'로 넘기면 모델이 이미 잡힌 예약으로 읽는다
 NEW_BOOKING_NOTE = "통화 전에는 없던 예약 — 이 통화에서 처음 정하는 날짜"
 # 응급 통화의 내원(6b단계 emergency_visit) — 직원이 바로 오라고 안내하는 시각. 예약을 새로 정하는 통화가 아니다(appt_confirmed 아님)
-EMERGENCY_VISIT_NOTE = "통화 전에는 없던 내원 — 직원이 이 시각에 바로 오시라고 안내한다(그날이면 '오늘', 진료가 끝날 무렵이면 다음 진료일 아침 첫 시간)"
+EMERGENCY_VISIT_NOTE = (
+    "통화 전에는 없던 내원 — 직원이 오늘 이 시각에 바로 오시라고 정해서 안내한다. 시간을 제안하거나 맞추지 않고,"
+    " 바뀌면 다시 연락하겠다는 말도 하지 않는다"
+)
+# 다음 진료일까지 진료 없는 날이 이어지면(휴진·연휴) 덧붙이는 말 — 며칠 뒤 내원을 설명하게
+EMERGENCY_GAP_DAYS = 2
+EMERGENCY_GAP_NOTE = " 그 사이 진료 없는 날(휴진·연휴)이 이어져 며칠 뒤라는 것도 말한다"
 # 다음 진료일 내원 — 그날 자리가 없어 다음 진료일 오전의 가장 이른 빈 시간. 시각을 제안·조율하면 예약 잡기로 읽힌다
 EMERGENCY_NEXT_DAY_NOTE = (
     "통화 전에는 없던 내원 — 오늘은 진료가 끝나 가서, 직원이 다음 진료일의 이 시각(그날 오전 비어 있는 가장 이른 시간)에"
@@ -95,7 +103,16 @@ def situation(uid: str, purpose: str, recent_noshow: bool = True, scene: str | N
     if purpose == "emergency":
         if scene == EMERGENCY_AFTER_VISIT_SCENE:
             return f"{EMERGENCY_AFTER_VISIT_ONSET} {scene}"
-        return f"{pick(uid, 'onset', EMERGENCY_ONSETS)} {scene or pick(uid, 'scene', EMERGENCY_SCENES)}"
+        scene = scene or pick(uid, "scene", EMERGENCY_SCENES)
+        onset = pick(uid, "onset", EMERGENCY_ONSETS)
+        if scene in EMERGENCY_SUDDEN_SCENES and onset in EMERGENCY_GRADUAL_ONSETS:
+            # 갑자기 빠진 상황엔 '점점'을 쓰지 않는다 — 그 경우만 다시 골라 다른 통화는 그대로
+            onset = pick(
+                uid,
+                "onset-sudden",
+                tuple(o for o in EMERGENCY_ONSETS if o not in EMERGENCY_GRADUAL_ONSETS),
+            )
+        return f"{onset} {scene}"
     topic = pick(uid, "topic", COMPLAINT_TOPICS)
     if topic == MISSED_TOPIC and not recent_noshow:
         return pick(uid, "topic-other", tuple(t for t in COMPLAINT_TOPICS if t != MISSED_TOPIC))
@@ -191,8 +208,11 @@ def payload(row: dict) -> dict:
     if facts.get("emergency_visit"):
         visit = facts["emergency_visit"]
         visit.pop("scene", None)  # 상황은 caller_situation으로
+        gap = (date.fromisoformat(visit["date"]) - date.fromisoformat(fact["call_date"])).days
         visit["before_call"] = (
-            EMERGENCY_VISIT_NOTE if visit["date"] == fact["call_date"] else EMERGENCY_NEXT_DAY_NOTE
+            EMERGENCY_VISIT_NOTE
+            if gap == 0
+            else EMERGENCY_NEXT_DAY_NOTE + (EMERGENCY_GAP_NOTE if gap > EMERGENCY_GAP_DAYS else "")
         )
     if row["primary_purpose"] == "book" and facts.get("appointment"):
         facts["new_booking"] = facts.pop("appointment") | {"before_call": NEW_BOOKING_NOTE}

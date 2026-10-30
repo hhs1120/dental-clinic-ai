@@ -764,6 +764,10 @@ EMERGENCY_BREAKS = {
     "too_soon": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 15:20:00' WHERE id = 8",
     "off_grid": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 16:10:00' WHERE id = 8",
     "after_close": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 18:30:00' WHERE id = 8",
+    "lunch": "UPDATE emr_appointments SET scheduled_at = '2026-10-20 13:00:00', created_at = '2026-10-20 12:00:00'"
+    " WHERE id = 8",
+    "unknown_scene": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact,"
+    " '$.emergency_visit.scene', '없는 상황') WHERE call_uid = 'c-0001'",
     "two_calls": "UPDATE truth.truth_call_labels SET used_fact = json_set(used_fact, '$.emergency_visit',"
     ' json(\'{"appointment_id": 8, "date": "2026-10-20", "time": "16:00"}\')) WHERE call_uid = \'c-0004\'',
 }
