@@ -231,6 +231,7 @@ tags:
 | `truth_ledger_errors` | 생성기(5단계) | 장부 실수 → 종류, 실수가 들어간 수납 id(입력 누락은 받은 금액이 0인 visit 행), 실제 값(금액·일시·결제수단). ⑧-1 장부 쪽 원인의 근거 |
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |
+| `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문 50개. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune` |
 | `truth_call_actions` | 생성기(평가 전용 단계) | ① 통화 → 기대 처리 enum. 목적·`has_todo`·`used_fact`에서 코드로 파생, 앱 입력 없음 |
 | `truth_scenarios` | 생성기(평가 전용 단계) | ⑥·운영 평가 시나리오 → 심은 이상·정답 원인·대상 환자, split. 시나리오 DB는 `evaluation/scenarios/`(정답 없음) |
 

@@ -27,7 +27,7 @@ tags:
 | 데이터 검사 | `make verify` — 생성 규칙을 코드로 검사(`check_*` 함수, 검사를 생성 코드보다 먼저 씀) | 완성 |
 | LLM 게이트웨이 | Anthropic 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭(`gen`·`classify`·`chat`) | 완성 |
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
-| 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커, 임베딩(모델은 비교 후 확정) | 색인·검색 구현, 모델 비교 중 |
+| 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커 Voyage `rerank-3`, 임베딩 Voyage `voyage-4` | 색인·검색 구현 |
 | 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어 구현, 나머지 설계 완료 |
 | 앱 프론트 | Next.js · TypeScript strict · ESLint · Prettier, 화면은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 와이어프레임 완료 |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |

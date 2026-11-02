@@ -12,8 +12,8 @@ from backend.harness.tools import Tool
 from backend.vector_store import VectorStore
 from shared.clinic import Clinic
 
-DEFAULT_EMBEDDING = "voyage-4"  # 임시 — 확정은 앱 설계 §8
-DEFAULT_RERANKER = "haiku"  # 임시 — 확정은 앱 설계 §8
+DEFAULT_EMBEDDING = "voyage-4"
+DEFAULT_RERANKER = "rerank-3"
 CONDITION_KEYS = ("embedding", "reranker")
 POOL = 50  # 키워드·벡터 각각에서 가져오는 수
 CANDIDATES = 25  # 버킷마다 리랭커로 가는 수
