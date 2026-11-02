@@ -55,6 +55,30 @@ def test_injected_store_leaves_app_db_untouched(conn, paths, tmp_path, clock):
     other.close()
 
 
+@pytest.mark.parametrize("flag", [False, True])
+def test_llm_log_marks_eval_calls(conn, flag):
+    log = SqliteLlmLog(conn, flag)
+    log.write(
+        {
+            "at": "2026-11-02T01:00:00",
+            "task": "t",
+            "alias": "a",
+            "model": "m",
+            "prompt_version": None,
+            "fallback_used": False,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+            "latency_ms": 0,
+            "ok": True,
+            "error": None,
+            "ref_type": None,
+            "ref_id": None,
+        }
+    )
+    assert conn.execute("SELECT is_eval FROM ax_llm_calls").fetchone()[0] == int(flag)
+
+
 def test_llm_log_sums_cost_per_day(conn):
     log = SqliteLlmLog(conn)
     for at, cost in (("2026-11-02T01:00:00", 0.5), ("2026-11-01T23:00:00", 9.0)):

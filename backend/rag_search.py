@@ -4,9 +4,12 @@
 import logging
 import re
 import sqlite3
+from datetime import date
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from backend.embeddings import API_RETRIES, API_TIMEOUT
 from backend.harness.loop import external
 from backend.harness.tools import Tool
 from backend.vector_store import VectorStore
@@ -44,6 +47,19 @@ class RerankFailed(RuntimeError):
     """리랭커가 답하지 못함 — 합친 순서로 넘어간다"""
 
 
+class MissingVectors(RuntimeError):
+    """벡터가 없는 청크가 있다 — 키워드로만 돌면서 조용히 품질이 떨어지지 않게 막는다"""
+
+
+def fuse(rankings: list[list[str]]) -> list[str]:
+    """RRF — 여러 순위 목록을 하나로 합친다"""
+    scores = {}
+    for ranked in rankings:
+        for rank, chunk_id in enumerate(ranked, 1):
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (RRF_K + rank)
+    return sorted(scores, key=lambda i: (-scores[i], i))
+
+
 def fts_query(text: str) -> str:
     """질의 측 `원본어절* OR 조사제거어절*` (앱 설계 §3). 어절을 따옴표로 묶어 FTS 문법을 막는다"""
     terms = []
@@ -72,7 +88,7 @@ def parse_condition(condition: str | None) -> dict:
 def voyage_rerank(model: str):
     import voyageai  # noqa: PLC0415 — 키 없는 테스트가 SDK를 띄우지 않게
 
-    client = voyageai.Client()
+    client = voyageai.Client(max_retries=API_RETRIES, timeout=API_TIMEOUT)
 
     def rerank(query: str, chunks: list[dict]) -> list[dict]:
         result = client.rerank(query, [c["text"] for c in chunks], model=model)
@@ -101,6 +117,7 @@ def haiku_rerank(gateway):
         rest = [n for n in range(1, len(chunks) + 1) if n not in picked]
         return [chunks[n - 1] for n in [*picked, *rest]]
 
+    rerank.writes_log = True  # 호출 기록을 DB에 쓴다 — 도구 트랜잭션 안에서 쓰지 못한다
     return rerank
 
 
@@ -110,6 +127,13 @@ class Searcher:
         self.vectors = VectorStore(conn, embedder.model)
         self.rerank_failures = 0
         self.replaced_by = self._replacements()
+        missing = conn.execute(
+            "SELECT COUNT(*) FROM ax_chunks c LEFT JOIN ax_chunk_vectors v"
+            " ON v.chunk_id = c.id AND v.model = ? WHERE v.chunk_id IS NULL",
+            (embedder.model,),
+        ).fetchone()[0]
+        if missing:
+            raise MissingVectors(f"{embedder.model} 벡터 없는 청크 {missing}개 — make index 먼저")
 
     def _replacements(self) -> dict:
         """옛 공지 → 같은 제목의 최신 공지. 옛 값이 답이 되지 않게 코드로 정한다(앱 설계 §3)"""
@@ -126,21 +150,20 @@ class Searcher:
         return out
 
     def latest_first(self, chunks: list[dict]) -> list[dict]:
-        """옛 공지 청크를 후보에 있는 최신 공지 청크 뒤로 옮긴다"""
+        """옛 공지 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다"""
 
         def doc(chunk):
             kind, *rest = chunk["id"].split(":")
             return int(rest[0]) if kind == "doc" else None
 
-        present = {doc(c) for c in chunks}
-        out, waiting = [], {}
+        out = []
         for c in chunks:
-            new = self.replaced_by.get(doc(c))
-            if new is not None and new in present and not any(doc(x) == new for x in out):
-                waiting.setdefault(new, []).append(c)
+            if c in out:
                 continue
+            new = self.replaced_by.get(doc(c))
+            if new is not None and not any(doc(x) == new for x in out):
+                out += [x for x in chunks if doc(x) == new][:1]
             out.append(c)
-            out += waiting.pop(doc(c), [])
         return out
 
     def _where(self, kinds, date_from, date_to, chart_no) -> tuple[str, list]:
@@ -171,11 +194,7 @@ class Searcher:
                     [match, *args, POOL],
                 )
             ]
-        scores = {}
-        for ranked in (keyword, self.vectors.query(vector, (where, args), POOL)):
-            for rank, chunk_id in enumerate(ranked, 1):
-                scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (RRF_K + rank)
-        ids = sorted(scores, key=lambda i: (-scores[i], i))[:CANDIDATES]
+        ids = fuse([keyword, self.vectors.query(vector, (where, args), POOL)])[:CANDIDATES]
         if not ids:
             return []
         rows = {
@@ -215,15 +234,18 @@ class Searcher:
 
 
 class SearchArgs(BaseModel):
-    query: str
-    source_types: list[str] | None = None
-    date_from: str | None = None
-    date_to: str | None = None
+    query: str = Field(min_length=1)
+    source_types: list[Literal["document", "call", "message_thread", "chart_note"]] | None = None
+    date_from: date | None = None
+    date_to: date | None = None
     patient_chart_no: str | None = None
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=CANDIDATES)
 
 
 def search_tool(searcher: Searcher) -> Tool:
+    if getattr(searcher.reranker, "writes_log", False):
+        raise ValueError("LLM 리랭커는 도구 안에서 쓰지 못한다 — 호출 기록이 도구 트랜잭션을 깬다")
+
     def run(ctx, args):
         found = searcher.search(**args)
         return {
@@ -235,7 +257,9 @@ def search_tool(searcher: Searcher) -> Tool:
 
     return Tool(
         "search_docs",
-        "절차·규정·공지·지난 통화·문자·차트 기록을 찾는다. 건수·목록은 query_* 도구를 쓴다.",
+        "절차·규정·공지·지난 통화·문자·차트 기록을 찾는다. 건수·목록은 query_* 도구를 쓴다."
+        f" 날짜는 YYYY-MM-DD, 오늘은 {searcher.clinic.today.isoformat()}."
+        " 날짜 필터를 주면 시행일 없는 문서는 빠지고, 환자 필터를 주면 환자 기록만 찾는다.",
         SearchArgs,
         run,
     )

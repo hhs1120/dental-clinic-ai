@@ -316,3 +316,37 @@ def test_load_app_dependency_error_propagates(fake_backend):
     )
     with pytest.raises(ModuleNotFoundError):
         ev.load_app("x.sqlite", "s.sqlite")
+
+
+class NoChatApp(FakeApp):
+    supports_chat = False
+    notes = []
+
+    def warnings(self):
+        return self.notes
+
+
+def test_dev_skips_chat_when_app_has_no_chat(conn, reports):
+    app = NoChatApp()
+    out = _run(conn, reports, split="dev", app=app)
+    assert out["report_path"].exists() and not [c for c in app.calls if c[0] == "chat"]
+
+
+def test_test_chat_section_is_refused_without_chat(conn, reports):
+    with pytest.raises(EvalRefused, match="챗"):
+        _run(conn, reports, split="test", section="chat", app=NoChatApp())
+
+
+def test_test_with_app_warning_is_refused_and_keeps_chance(conn, reports):
+    app = NoChatApp()
+    app.notes = ["리랭커 실패 1회"]
+    with pytest.raises(EvalRefused, match="리랭커"):
+        _run(conn, reports, split="test", section="retrieval", app=app)
+    assert not (reports / "eval_runs.jsonl").exists()
+
+
+def test_dev_report_shows_app_warning(conn, reports):
+    app = NoChatApp()
+    app.notes = ["리랭커 실패 1회"]
+    out = _run(conn, reports, split="dev", retrieval_only=True, app=app)
+    assert "리랭커 실패 1회" in out["report_path"].read_text(encoding="utf-8")

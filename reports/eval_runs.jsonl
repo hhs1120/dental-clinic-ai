@@ -12,3 +12,4 @@
 {"split": "dev", "section": "all", "condition": "embedding=text-embedding-3-small,reranker=haiku", "prompt_version": "all", "started_at": "2026-11-02T20:33:23", "report_path": "eval_dev_embedding-text-embedding-3-small-reranker-haiku_20261102-203323.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T22:28:53", "report_path": "eval_dev_base_20261102-222853.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T22:37:28", "report_path": "eval_dev_base_20261102-223728.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T23:10:57", "report_path": "eval_dev_base_20261102-231057.md"}

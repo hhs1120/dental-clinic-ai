@@ -146,7 +146,7 @@ def _summary(clinic: Clinic, conn, p: dict) -> dict:
     scaling = conn.execute(
         "SELECT EXISTS (SELECT 1 FROM source.emr_claims c JOIN source.emr_procedures r"
         " ON r.code = c.procedure_code WHERE c.patient_id = ? AND r.name = ?"
-        " AND substr(c.service_date, 1, 4) = ? AND c.status != 'denied')",
+        " AND substr(c.service_date, 1, 4) = ?)",
         (p["id"], SCALING, today[:4]),
     ).fetchone()[0]
     return {

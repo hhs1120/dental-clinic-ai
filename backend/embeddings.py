@@ -7,6 +7,8 @@ import re
 import numpy as np
 
 BATCH = 100
+API_TIMEOUT = 30.0  # 초 — 외부 호출이 멈춰 실행 잠금을 넘기지 않게
+API_RETRIES = 3
 
 
 class FakeEmbedder:
@@ -31,7 +33,7 @@ class OpenAIEmbedder:
     def __init__(self, model: str):
         from openai import OpenAI  # noqa: PLC0415 — 키 없는 테스트가 SDK를 띄우지 않게
 
-        self.model, self.client = model, OpenAI()
+        self.model, self.client = model, OpenAI(timeout=API_TIMEOUT, max_retries=API_RETRIES)
 
     def embed(self, texts: list[str], kind: str) -> list[np.ndarray]:
         data = self.client.embeddings.create(model=self.model, input=texts).data
@@ -42,7 +44,8 @@ class VoyageEmbedder:
     def __init__(self, model: str):
         import voyageai  # noqa: PLC0415
 
-        self.model, self.client = model, voyageai.Client()
+        self.model = model
+        self.client = voyageai.Client(max_retries=API_RETRIES, timeout=API_TIMEOUT)
 
     def embed(self, texts: list[str], kind: str) -> list[np.ndarray]:
         result = self.client.embed(texts, model=self.model, input_type=kind)

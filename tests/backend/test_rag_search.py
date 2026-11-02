@@ -3,13 +3,16 @@
 from datetime import date
 
 import pytest
+from pydantic import ValidationError
 
 from backend import db
 from backend.embeddings import FakeEmbedder
 from backend.rag_search import (
+    MissingVectors,
     RerankFailed,
     Searcher,
     fts_query,
+    fuse,
     haiku_rerank,
     parse_condition,
     search_tool,
@@ -233,10 +236,10 @@ def notices(*ids):
     return [{"id": i} for i in ids]
 
 
-def test_old_notice_goes_behind_its_replacement(conn):
+def test_replacement_takes_the_place_of_old_notice(conn):
     s = Searcher(conn, CLINIC, FakeEmbedder())
     got = s.latest_first(notices("doc:101:0", "doc:109:0", "doc:102:0", "doc:102:1"))
-    assert [c["id"] for c in got] == ["doc:109:0", "doc:102:0", "doc:101:0", "doc:102:1"]
+    assert [c["id"] for c in got] == ["doc:102:0", "doc:101:0", "doc:109:0", "doc:102:1"]
 
 
 def test_old_notice_stays_when_replacement_is_not_a_candidate(conn):
@@ -271,4 +274,67 @@ def test_search_applies_latest_first_after_reranker(paths):
     first_old = lambda query, chunks: sorted(chunks, key=lambda c: c["id"])  # noqa: E731
     r = Searcher(conn, CLINIC, e, first_old).search("휴진")
     assert [c["id"] for c in r["manual_results"]] == ["doc:102:0", "doc:101:0"]
+    conn.close()
+
+
+def test_fuse_prefers_chunk_in_both_lists():
+    assert fuse([["a", "b"], ["c", "b"]])[0] == "b"
+
+
+def test_fuse_rank_matters():
+    assert fuse([["a", "b", "c"]]) == ["a", "b", "c"]
+
+
+def test_missing_vectors_are_refused(paths):
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    add(conn, "doc:1:0", "document", "틀니 수리")
+    with pytest.raises(MissingVectors):
+        Searcher(conn, CLINIC, FakeEmbedder())
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"query": ""},
+        {"query": "q", "source_types": ["documents"]},
+        {"query": "q", "date_from": "2026-11"},
+        {"query": "q", "top_k": -1},
+        {"query": "q", "top_k": 26},
+    ],
+)
+def test_search_args_are_validated(conn, bad):
+    tool = search_tool(Searcher(conn, CLINIC, FakeEmbedder()))
+    with pytest.raises(ValidationError):
+        tool.args.model_validate(bad)
+
+
+def test_search_tool_description_has_today(conn):
+    assert "2026-12-01" in search_tool(Searcher(conn, CLINIC, FakeEmbedder())).description
+
+
+def test_llm_reranker_is_refused_for_tool(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder(), haiku_rerank(Gw(result({"order": []}))))
+    with pytest.raises(ValueError):
+        search_tool(s)
+
+
+def test_app_reports_rerank_failures(paths):
+    from backend.eval_hooks import App
+
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    add(conn, "doc:1:0", "document", "틀니")
+    VectorStore(conn, "fake").upsert(["doc:1:0"], FakeEmbedder().embed(["틀니"], "document"))
+    conn.commit()
+    app = App(conn, embedder_for=lambda model: FakeEmbedder())
+    assert app.supports_chat is False and app.warnings() == []
+
+    def boom(query, chunks):
+        raise RuntimeError("장애")
+
+    app._reranker = lambda name: boom
+    app.search("틀니", "reranker=x")
+    assert "리랭커 실패 1회" in app.warnings()[0]
     conn.close()

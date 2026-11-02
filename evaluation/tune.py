@@ -99,6 +99,7 @@ def main(argv=None) -> int:
     qs = questions(conn)
     measured = measure(conn, app, args.condition, args.repeat, qs)
     text = render(measured, args.condition, len(qs))
+    text += "".join(f"\n**경고**: {w}" for w in getattr(app, "warnings", list)())
     path = REPORTS / f"tune_{datetime.now():%Y%m%d-%H%M%S}.md"
     path.write_text(text, encoding="utf-8")
     print(text)

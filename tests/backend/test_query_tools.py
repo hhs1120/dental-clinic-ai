@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -35,17 +36,21 @@ def clinic(tmp_path):
             duration_min, is_tooth_level) VALUES
             ('U0001', '스케일링', 'preventive', 'yes', 50000, 0.3, 30, 0),
             ('U0005', '레진', 'restorative', 'no', 100000, 1.0, 30, 1);
-        INSERT INTO emr_families VALUES (1, '김');
+        INSERT INTO emr_families VALUES (1, '김'), (2, '정');
         INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, family_id,
             registered_at, recall_cycle_months) VALUES
             (1, 'C-00001', '김철수', '1980-01-01', 'M', '010-1', 1, '2020-01-01', 12),
             (2, 'C-00002', '김영희', '1982-01-01', 'F', '010-2', 1, '2020-01-01', 12),
             (3, 'C-00003', '김철수', '1990-01-01', 'M', '010-3', NULL, '2020-01-01', 12),
-            (4, 'C-00004', '이신환', '2000-01-01', 'F', '010-4', NULL, '2026-11-20', 12);
+            (4, 'C-00004', '이신환', '2000-01-01', 'F', '010-4', NULL, '2026-11-20', 12),
+            (5, 'C-00005', '정시작', '2001-01-01', 'F', '010-5', 2, '2026-01-01', 12),
+            (6, 'C-00006', '정기한', '2002-01-01', 'M', '010-6', 2, '2020-01-01', 12),
+            (7, 'C-00007', '최기록', '2003-01-01', 'M', '010-7', NULL, '2020-01-01', 12);
         INSERT INTO emr_patient_alerts (id, patient_id, code, source, recorded_at, ends_at) VALUES
             (1, 1, 'A', 'intake', '2026-01-01', NULL),
             (2, 1, 'B', 'intake', '2026-01-01', '2026-12-01'),
-            (3, 1, 'C', 'intake', '2026-12-02', NULL);
+            (3, 1, 'C', 'intake', '2026-12-02', NULL),
+            (4, 7, 'A', 'intake', '2026-12-01', NULL);
         INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,
             planned_procedure_code, status, rescheduled_from_id, booked_via, created_at) VALUES
             (1, 1, 1, '2026-11-02 10:00:00', 30, 'hygiene', 'U0001', 'completed', NULL, 'phone', 'x'),
@@ -55,10 +60,18 @@ def clinic(tmp_path):
             (5, 1, 1, '2026-12-03 09:30:00', 30, 'treatment', 'U0005', 'scheduled', NULL, 'phone', 'x'),
             (6, 3, 1, '2026-12-01 11:00:00', 30, 'hygiene', 'U0001', 'cancelled', NULL, 'phone', 'x'),
             (7, 3, 1, '2026-12-01 14:00:00', 30, 'hygiene', 'U0001', 'scheduled', 6, 'phone', 'x'),
-            (8, 4, 1, '2026-12-01 15:00:00', 30, 'hygiene', 'U0001', 'cancelled', NULL, 'phone', 'x');
+            (8, 4, 1, '2026-12-01 15:00:00', 30, 'hygiene', 'U0001', 'cancelled', NULL, 'phone', 'x'),
+            (9, 6, 1, '2025-12-01 10:00:00', 30, 'hygiene', 'U0001', 'completed', NULL, 'phone', 'x'),
+            (10, 6, 1, '2026-06-01 10:00:00', 30, 'treatment', 'U0005', 'completed', NULL, 'phone', 'x'),
+            (11, 6, 1, '2026-07-01 10:00:00', 30, 'hygiene', 'U0001', 'noshow', NULL, 'phone', 'x'),
+            (12, 7, 1, '2026-11-30 10:00:00', 30, 'treatment', 'U0005', 'scheduled', NULL, 'phone', 'x'),
+            (13, 7, 1, '2026-12-02 10:00:00', 30, 'treatment', 'U0005', 'cancelled', NULL, 'phone', 'x'),
+            (14, 7, 1, '2026-12-04 10:00:00', 30, 'hygiene', 'U0001', 'scheduled', NULL, 'phone', 'x'),
+            (15, 7, 1, '2026-12-01 16:00:00', 30, 'hygiene', 'U0001', 'scheduled', NULL, 'phone', 'x');
         INSERT INTO emr_payments (id, patient_id, kind, amount_due, amount_paid, paid_at, method) VALUES
             (1, 1, 'visit', 30000, 10000, '2026-11-02 10:30:00', 'card'),
-            (2, 3, 'visit', 5000, 0, '2026-12-02 10:00:00', 'card');
+            (2, 3, 'visit', 5000, 0, '2026-12-02 10:00:00', 'card'),
+            (3, 7, 'visit', 7000, 0, '2026-12-01 09:00:00', 'card');
         INSERT INTO emr_treatment_plans VALUES (1, 1, 'x', 2);
         INSERT INTO emr_treatment_plan_items VALUES
             (1, 1, 1, 'U0005', '16', 100000, 'open'),
@@ -71,7 +84,9 @@ def clinic(tmp_path):
             (2, 2, 2, 'C-00002', '00', '2025-01', '2025-01-02', 'U0001', 35000, 'paid', 35000,
              NULL, NULL, '2025-02-01'),
             (3, 3, 3, 'C-00003', '00', '2026-11', '2026-11-03', 'U0001', 35000, 'pending', NULL,
-             NULL, NULL, NULL);
+             NULL, NULL, NULL),
+            (4, 4, 4, 'C-00004', '00', '2026-10', '2026-10-05', 'U0001', 35000, 'denied', 0,
+             'C', '연 1회 초과', '2026-10-25');
         """
     )
     s.commit()
@@ -95,9 +110,9 @@ def run(conn, tool_name, **args):
 
 def test_schedule_counts_all_rows_and_separates_rescheduled(clinic):
     r = run(clinic, "query_schedule", date_from="2026-12-01", date_to="2026-12-01")
-    assert r["count"] == 4
-    assert r["by_status"] == {"scheduled": 2, "cancelled": 1, "rescheduled": 1}
-    assert r["by_type"] == {"treatment": 1, "hygiene": 3}
+    assert r["count"] == 5
+    assert r["by_status"] == {"scheduled": 3, "cancelled": 1, "rescheduled": 1}
+    assert r["by_type"] == {"treatment": 1, "hygiene": 4}
 
 
 def test_schedule_summary_comes_first_so_truncation_keeps_it(clinic):
@@ -320,3 +335,72 @@ def test_load_clinic_reads_config():
 
     c = load_clinic()
     assert c.today == date(2026, 12, 1) and c.range_start == date(2024, 12, 1)
+
+
+def test_same_day_payment_is_not_opening_balance(clinic):
+    assert run(clinic, "query_patient", chart_no="C-00007")["summary"]["balance"] == 0
+    r = run(
+        clinic,
+        "query_schedule",
+        date_from="2026-12-01",
+        date_to="2026-12-01",
+        has_unpaid_balance=True,
+    )
+    assert "C-00007" not in {a["chart_no"] for a in r["appointments"]}
+
+
+def test_no_unpaid_filter_keeps_zero_balance(clinic):
+    r = run(
+        clinic,
+        "query_schedule",
+        date_from="2026-12-01",
+        date_to="2026-12-01",
+        has_unpaid_balance=False,
+    )
+    charts = {a["chart_no"] for a in r["appointments"]}
+    assert "C-00007" in charts and "C-00001" not in charts
+
+
+def test_registered_on_range_start_is_new(clinic):
+    tool = {t.name: t for t in query_tools(replace(CLINIC, range_start=date(2026, 11, 20)))}[
+        "query_schedule"
+    ]
+    args = tool.args.model_validate(
+        {"date_from": "2026-12-01", "date_to": "2026-12-01", "is_new_patient": True}
+    ).model_dump(mode="json")
+    assert {a["chart_no"] for a in tool.fn(Ctx(clinic), args)["appointments"]} == {"C-00004"}
+
+
+def test_alert_recorded_today_is_visible(clinic):
+    s = run(clinic, "query_patient", chart_no="C-00007")["summary"]
+    assert [a["label"] for a in s["alerts"]] == ["항응고제"]
+
+
+def test_recall_due_today_is_not_overdue_and_counts_only_completed_hygiene(clinic):
+    """정기한: 마지막 완료 위생 2025-12-01 + 365일 = 기준일. 치료 완료·위생 노쇼는 세지 않는다"""
+    s = run(clinic, "query_patient", chart_no="C-00005")["summary"]
+    assert s["family_recall"] == [
+        {"chart_no": "C-00006", "name": "정기한", "last_hygiene": "2025-12-01", "overdue": False}
+    ]
+
+
+def test_next_appointment_skips_past_and_cancelled(clinic):
+    s = run(clinic, "query_patient", chart_no="C-00007")["summary"]
+    assert s["next_appointment"]["scheduled_at"] == "2026-12-01 16:00:00"
+
+
+def test_denied_claim_shows_result_and_counts_as_used(clinic):
+    r = run(clinic, "query_claims", status="denied")
+    assert r["claims"][0]["adjust_note"] == "연 1회 초과"
+    s = run(clinic, "query_patient", chart_no="C-00004")["summary"]
+    assert s["scaling_claimed_this_year"] is True
+
+
+def test_blocked_refuse_does_not_end_run(clinic):
+    r = ToolRegistry()
+    for t in query_tools(CLINIC):
+        r.register(t)
+    spec = AgentSpec("챗", "chat", "t", "v1", lambda v: "s", tuple(r.tools), 6, 1.0)
+    gw = Script(call(("refuse", {"reason": "없는값"})), answer("이어서"))
+    out = Runner(spec, gw, RunStore(clinic), r, owner="t").start("q", "질문")
+    assert out.result == "이어서" and len(gw.calls) == 2

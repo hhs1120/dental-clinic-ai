@@ -152,6 +152,9 @@ def run(
             raise AlreadyRun(
                 f"test {section}({_key(section, cond, pv)})은 이미 돌렸다 — 다시 돌리려면 --force (평가 설계 §1 원칙 2)"
             )
+    has_chat = app is None or getattr(app, "supports_chat", True)
+    if section == "chat" and not has_chat:
+        raise EvalRefused("챗이 없는 앱 — ③ 챗 착수 뒤에 돌린다")
     started = datetime.now()
     do_cls = dev or section == "classification"
     parts = (
@@ -161,6 +164,7 @@ def run(
         if section != "classification"
         else ()
     )
+    parts = tuple(p for p in parts if p != "chat" or has_chat)
     result = {
         "split": split,
         "section": section or "all",
@@ -208,6 +212,9 @@ def run(
             r["compare"] = (
                 {"metrics": rag.compare(base, rag.paired(r))["metrics"]} if base else None
             )
+        r["warnings"] = getattr(app, "warnings", list)()
+        if not dev and r["warnings"]:  # 이력에 쓰기 전에 — test 1회 기회를 소진하지 않게
+            raise EvalRefused(f"앱 경고가 있어 test를 인정하지 않는다: {'; '.join(r['warnings'])}")
         if not dev:
             r["paired"] = rag.paired(r)
             r.pop("questions")
@@ -348,6 +355,7 @@ def _render_rag(r: dict | None) -> list[str]:
     out = ["## ③ RAG", ""]
     if r is None:
         return out + ["앱 없음 — 건너뜀(앱 착수 후 backend가 rag.RagApp의 search·chat을 구현)", ""]
+    out += [f"**경고**: {w}" for w in r.get("warnings", [])]
     s, ch = r["retrieval"], r["chart"]
     if s:
         out += [

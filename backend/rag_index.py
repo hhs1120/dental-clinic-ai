@@ -5,25 +5,25 @@ import argparse
 import json
 import re
 import sqlite3
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 from backend import db
 from backend.embeddings import BATCH, make_embedder
 from backend.vector_store import VectorStore
 
-MIN_CHARS = 300
 MAX_CHARS = 500
 OVERLAP = 50
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTION = {"inbound": "수신", "outbound": "발신"}
 _HEADER = re.compile(r"^#{1,6}\s+(.+)$", re.M)
 _MONTHS = re.compile(r"(\d+)개월")
-_DAYS_AGO = re.compile(r"(\d+)일 전")
+_DAYS_AGO = re.compile(r"(?<!월 )(?<!월)(?<!\d)(\d+)일 전")
 QUADRANT = {"1": "오른쪽 위", "2": "왼쪽 위", "3": "왼쪽 아래", "4": "오른쪽 아래"}
-QUADRANT |= {"5": "오른쪽 위", "6": "왼쪽 위", "7": "왼쪽 아래", "8": "오른쪽 아래"}  # 유치
 TOOTH_KIND = {"1": "앞니", "2": "앞니", "3": "송곳니", "4": "작은어금니", "5": "작은어금니"}
 TOOTH_KIND |= {"6": "어금니", "7": "어금니", "8": "사랑니"}
+# 다른 시술을 뜻하는 말 중 차트에서 이미 시행한 일로만 쓰이는 것. 별칭을 넓히면 받지 않은 시술이 붙는다
+NOTE_SYNONYMS = {"치석제거": "스케일링"}
 
 
 def split_text(text: str) -> list[str]:
@@ -53,7 +53,7 @@ def _sections(title: str, body: str) -> list[tuple[str, str]]:
     marks = list(_HEADER.finditer(body))
     if not marks:
         return [(title, body)]
-    out = []
+    out = [(title, body[: marks[0].start()])]
     for m, end in zip(marks, [*(x.start() for x in marks[1:]), len(body)], strict=True):
         out.append((m.group(1).strip(), body[m.end() : end]))
     return out
@@ -64,12 +64,13 @@ def _documents(conn) -> list[dict]:
     for d in conn.execute("SELECT * FROM source.ax_documents ORDER BY id"):
         n = 0
         for section, text in _sections(d["title"], d["body"]):
+            prefix = d["title"] if section == d["title"] else f"{d['title']} > {section}"
             for piece in split_text(text):
                 out.append(
                     {
                         "id": f"doc:{d['id']}:{n}",
                         "source_type": "document",
-                        "text": f"{d['title']} > {section}\n{piece}",
+                        "text": f"{prefix}\n{piece}",
                         "chart_no": None,
                         "event_date": d["effective_date"],
                         "doc_type": d["type"],
@@ -155,42 +156,37 @@ def _period_terms(note: str) -> list[str]:
     return out
 
 
-def _name_terms(note: str, names: list[tuple]) -> list[str]:
-    """시술 이름과 별칭 중 하나가 서술에 있으면 나머지를 띄어쓰기 없이 더한다.
-    여러 시술이 함께 쓰는 별칭은 어느 시술인지 알 수 없어 찾는 말로 쓰지 않는다"""
+def _name_terms(note: str, aliases: list[str]) -> list[str]:
+    """그 차트 시술의 별칭과 정해 둔 동의어만 더한다. 서술에 나온 다른 시술 이름은 따라가지 않는다"""
     compact = note.replace(" ", "")
-    groups = [[w.replace(" ", "") for w in (name, *aliases)] for name, aliases in names]
-    shared = Counter(w for words in groups for w in words[1:])
-    out = []
-    for words in groups:
-        if any(w in compact and shared[w] < 2 for w in words):
-            out += [w for w in words if w not in compact]
-    return out
+    words = [w.replace(" ", "") for w in aliases]
+    words += [to for word, to in NOTE_SYNONYMS.items() if word in compact]
+    return [w for w in words if w not in compact]
 
 
-def chart_terms(note: str, tooth_no: str, names: list[tuple]) -> list[str]:
+def chart_terms(note: str, tooth_no: str, aliases: list[str]) -> list[str]:
     """차트 서술과 다르게 말할 표현 (앱 설계 §3). 값에 기대는 일반 규칙만 둔다"""
     return list(
-        dict.fromkeys([*tooth_terms(tooth_no), *_period_terms(note), *_name_terms(note, names)])
+        dict.fromkeys([*tooth_terms(tooth_no), *_period_terms(note), *_name_terms(note, aliases)])
     )
 
 
-def _chart_text(r, names: list[tuple]) -> str:
-    terms = chart_terms(r["note"], r["tooth_no"], names)
+def _chart_text(r, aliases: dict) -> str:
+    terms = chart_terms(r["note"], r["tooth_no"], aliases[r["procedure"]])
     tail = f" ({' '.join(terms)})" if terms else ""
     return f"[차트 {r['chart_no']} | {r['day']} | {r['procedure']}] {r['note']}{tail}"
 
 
 def _charts(conn) -> list[dict]:
-    names = [
-        (r["name"], json.loads(r["aliases"]))
+    aliases = {
+        r["name"]: json.loads(r["aliases"])
         for r in conn.execute("SELECT name, aliases FROM source.emr_procedures")
-    ]
+    }
     return [
         {
             "id": f"chart:{r['treatment_id']}",
             "source_type": "chart_note",
-            "text": _chart_text(r, names),
+            "text": _chart_text(r, aliases),
             "chart_no": r["chart_no"],
             "event_date": r["day"],
             "doc_type": None,

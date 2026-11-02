@@ -19,6 +19,8 @@ from shared.clinic import load_clinic
 
 
 class App:
+    supports_chat = False  # ③ 챗 착수 때 켠다
+
     def __init__(self, conn, embedder_for=make_embedder):
         self.conn, self.embedder_for = conn, embedder_for
         self.clinic = load_clinic()
@@ -41,6 +43,14 @@ class App:
                 self.conn, self.clinic, self.embedder_for(key[0]), self._reranker(key[1])
             )
         return self.searchers[key]
+
+    def warnings(self) -> list[str]:
+        """평가 수치를 믿기 어렵게 만든 일 — 리포트에 남고 test는 거절된다"""
+        return [
+            f"리랭커 실패 {s.rerank_failures}회 ({'·'.join(key)})"
+            for key, s in self.searchers.items()
+            if s.rerank_failures
+        ]
 
     def search(self, question: str, condition: str | None = None) -> dict:
         found = self._searcher(condition).search(question, top_k=CANDIDATES)

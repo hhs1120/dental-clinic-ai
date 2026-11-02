@@ -345,7 +345,9 @@ tags:
 
 - [ ] 운영 에이전트 착수 시 — 부모가 재개될 때 끝나지 않은 자식을 함께 잇는 처리(앱 설계 §3b 재개)
 - [ ] `make nightly` 착수 시 — 결정적 예외로 `running`에 남는 실행의 재개 횟수 상한, 비용 기록 전에 죽은 호출을 `ax_llm_calls`로 맞추기, 재개 때 `result_limit` 고정 여부와 도구별 상한
-- [ ] `query_*` 도구 착수 시 — `sqlite3.Row`가 `default=str`로 문자열이 되는 것 막기. `ax_llm_calls`의 입력 덤프 경로 칸과 `ref_type` 목록(`agent_run` 포함) 정하기
+- [ ] ③ 챗 착수 시 — `ax_llm_calls`의 입력 덤프 경로 칸과 `ref_type` 목록(`agent_run` 포함), 호출 상한에 걸린 `refuse`의 처리, 범위 조건 차트 조회 도구, `rerank-3`이 옛 공지로 답하지 않는지 확인
+- [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
+- [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
 - [ ] 착수 순서 — 문서 색인·`query_*` 도구 → ①·② + 판정기·개선 에이전트 → ③ 챗·④ → 슬롯 → 운영 에이전트
 - [ ] 평가 정답 추가 — `truth_call_actions`·시나리오 DB·`truth_scenarios`(verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다. ① 후속 규칙 기준선은 `truth_call_actions`와 같은 파생을 쓰지 않는다(같으면 기준선이 만점)
