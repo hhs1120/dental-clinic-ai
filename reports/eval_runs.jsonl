@@ -6,3 +6,7 @@
 {"split": "dev", "section": "all", "condition": "embedding=voyage-4", "prompt_version": "all", "started_at": "2026-11-02T18:41:42", "report_path": "eval_dev_embedding-voyage-4_20261102-184142.md"}
 {"split": "dev", "section": "all", "condition": "embedding=voyage-4,reranker=rerank-3", "prompt_version": "all", "started_at": "2026-11-02T18:42:13", "report_path": "eval_dev_embedding-voyage-4-reranker-rerank-3_20261102-184213.md"}
 {"split": "dev", "section": "all", "condition": "embedding=voyage-4,reranker=haiku", "prompt_version": "all", "started_at": "2026-11-02T18:42:58", "report_path": "eval_dev_embedding-voyage-4-reranker-haiku_20261102-184258.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T20:28:03", "report_path": "eval_dev_base_20261102-202803.md"}
+{"split": "dev", "section": "all", "condition": "embedding=voyage-4,reranker=off", "prompt_version": "all", "started_at": "2026-11-02T20:29:34", "report_path": "eval_dev_embedding-voyage-4-reranker-off_20261102-202934.md"}
+{"split": "dev", "section": "all", "condition": "embedding=voyage-4,reranker=rerank-3", "prompt_version": "all", "started_at": "2026-11-02T20:31:21", "report_path": "eval_dev_embedding-voyage-4-reranker-rerank-3_20261102-203121.md"}
+{"split": "dev", "section": "all", "condition": "embedding=text-embedding-3-small,reranker=haiku", "prompt_version": "all", "started_at": "2026-11-02T20:33:23", "report_path": "eval_dev_embedding-text-embedding-3-small-reranker-haiku_20261102-203323.md"}

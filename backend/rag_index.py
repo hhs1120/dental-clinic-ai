@@ -2,6 +2,7 @@
 벡터는 없는 청크만 계산하며 배치마다 커밋한다 — 끊겨도 다시 돌리면 이어 간다."""
 
 import argparse
+import json
 import re
 import sqlite3
 from collections import defaultdict
@@ -17,6 +18,12 @@ OVERLAP = 50
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTION = {"inbound": "수신", "outbound": "발신"}
 _HEADER = re.compile(r"^#{1,6}\s+(.+)$", re.M)
+_MONTHS = re.compile(r"(\d+)개월")
+_DAYS_AGO = re.compile(r"(\d+)일 전")
+QUADRANT = {"1": "오른쪽 위", "2": "왼쪽 위", "3": "왼쪽 아래", "4": "오른쪽 아래"}
+QUADRANT |= {"5": "오른쪽 위", "6": "왼쪽 위", "7": "왼쪽 아래", "8": "오른쪽 아래"}  # 유치
+TOOTH_KIND = {"1": "앞니", "2": "앞니", "3": "송곳니", "4": "작은어금니", "5": "작은어금니"}
+TOOTH_KIND |= {"6": "어금니", "7": "어금니", "8": "사랑니"}
 
 
 def split_text(text: str) -> list[str]:
@@ -126,18 +133,68 @@ def _threads(conn) -> list[dict]:
     return out
 
 
+def tooth_terms(tooth_no: str) -> list[str]:
+    """치아 번호(FDI) → 부위 말. 차트에는 번호만 있어 말로 찾지 못한다"""
+    if tooth_no[0] not in QUADRANT or tooth_no[1] not in TOOTH_KIND:
+        return []
+    return [QUADRANT[tooth_no[0]], TOOTH_KIND[tooth_no[1]]]
+
+
+def _period_terms(note: str) -> list[str]:
+    out = []
+    for m in _MONTHS.findall(note):
+        years, rest = divmod(int(m), 12)
+        if years:
+            out.append(
+                f"{years}년 반" if rest == 6 else f"{years}년" + (f" {rest}개월" if rest else "")
+            )
+    for d in _DAYS_AGO.findall(note):
+        weeks, rest = divmod(int(d), 7)
+        if weeks and not rest:
+            out += [f"{weeks}주 전", *(["일주일 전"] if weeks == 1 else [])]
+    return out
+
+
+def _name_terms(note: str, names: list[tuple]) -> list[str]:
+    """시술 이름과 별칭 중 하나가 서술에 있으면 나머지를 띄어쓰기 없이 더한다"""
+    compact = note.replace(" ", "")
+    out = []
+    for name, aliases in names:
+        words = [w.replace(" ", "") for w in (name, *aliases)]
+        if any(w in compact for w in words):
+            out += [w for w in words if w not in compact]
+    return out
+
+
+def chart_terms(note: str, tooth_no: str, names: list[tuple]) -> list[str]:
+    """차트 서술과 다르게 말할 표현 (앱 설계 §3). 값에 기대는 일반 규칙만 둔다"""
+    return list(
+        dict.fromkeys([*tooth_terms(tooth_no), *_period_terms(note), *_name_terms(note, names)])
+    )
+
+
+def _chart_text(r, names: list[tuple]) -> str:
+    terms = chart_terms(r["note"], r["tooth_no"], names)
+    tail = f" ({' '.join(terms)})" if terms else ""
+    return f"[차트 {r['chart_no']} | {r['day']} | {r['procedure']}] {r['note']}{tail}"
+
+
 def _charts(conn) -> list[dict]:
+    names = [
+        (r["name"], json.loads(r["aliases"]))
+        for r in conn.execute("SELECT name, aliases FROM source.emr_procedures")
+    ]
     return [
         {
             "id": f"chart:{r['treatment_id']}",
             "source_type": "chart_note",
-            "text": f"[차트 {r['chart_no']} | {r['day']} | {r['procedure']}] {r['note']}",
+            "text": _chart_text(r, names),
             "chart_no": r["chart_no"],
             "event_date": r["day"],
             "doc_type": None,
         }
         for r in conn.execute(
-            "SELECT n.treatment_id, n.note, p.chart_no, date(t.performed_at) AS day,"
+            "SELECT n.treatment_id, n.note, t.tooth_no, p.chart_no, date(t.performed_at) AS day,"
             " r.name AS procedure FROM source.emr_chart_notes n"
             " JOIN source.emr_treatments t ON t.id = n.treatment_id"
             " JOIN source.emr_patients p ON p.id = t.patient_id"

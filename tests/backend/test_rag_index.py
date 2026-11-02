@@ -9,7 +9,7 @@ import pytest
 
 from backend import db
 from backend.embeddings import FakeEmbedder
-from backend.rag_index import MAX_CHARS, OVERLAP, build_index, split_text
+from backend.rag_index import MAX_CHARS, OVERLAP, build_index, chart_terms, split_text, tooth_terms
 from backend.vector_store import VectorStore
 from shared.clinic import Clinic
 
@@ -143,7 +143,7 @@ def test_thread_is_one_chunk_per_patient_month(conn):
 def test_chart_has_no_patient_name(conn):
     build_index(conn, FakeEmbedder())
     c = chunk(conn, "chart:7")
-    assert c["text"] == "[차트 C-00001 | 2026-07-03 | 스케일링] 치석 제거함"
+    assert c["text"] == "[차트 C-00001 | 2026-07-03 | 스케일링] 치석 제거함"  # 보강할 말 없음
     assert "김철수" not in c["text"] and c["chart_no"] == "C-00001"
 
 
@@ -197,3 +197,57 @@ def test_vector_store_sees_upsert_after_cache(conn):
     store.query(np.ones(8, dtype="float32"), None, 1)
     store.upsert(["chart:7"], [np.ones(8, dtype="float32")])
     assert store.query(np.ones(8, dtype="float32"), None, 1) == ["chart:7"]
+
+
+@pytest.mark.parametrize(
+    "tooth, want",
+    [
+        ("43", ["오른쪽 아래", "송곳니"]),
+        ("11", ["오른쪽 위", "앞니"]),
+        ("26", ["왼쪽 위", "어금니"]),
+        ("35", ["왼쪽 아래", "작은어금니"]),
+        ("48", ["오른쪽 아래", "사랑니"]),
+        ("00", []),
+    ],
+)
+def test_tooth_number_becomes_position(tooth, want):
+    assert tooth_terms(tooth) == want
+
+
+NAMES = [("스케일링", ["치석 제거"]), ("레진", [])]
+
+
+@pytest.mark.parametrize(
+    "note, want",
+    [
+        ("타 기관에서 발치 후 12개월 지난 부위", ["1년"]),
+        ("약 18개월 전 치료 이력", ["1년 반"]),
+        ("약 20개월 전 치료 이력", ["1년 8개월"]),
+        ("약 3개월 전 치료", []),
+        ("7일 전 발치한 부위", ["1주 전", "일주일 전"]),
+        ("14일 전 발치", ["2주 전"]),
+        ("4일 전 치석제거 시행", ["스케일링"]),
+        ("스케일링 시행함", ["치석제거"]),
+        ("레진 시행함", []),
+    ],
+)
+def test_note_gets_other_expressions(note, want):
+    assert chart_terms(note, "00", NAMES) == want
+
+
+def test_terms_are_deduplicated():
+    assert chart_terms("12개월 전과 12개월 뒤", "00", NAMES) == ["1년"]
+
+
+def test_chart_chunk_ends_with_terms(conn, tmp_path):
+    s = sqlite3.connect(tmp_path / "s.sqlite")
+    s.execute("UPDATE emr_chart_notes SET note = '12개월 지난 부위'")
+    s.execute("UPDATE emr_treatments SET tooth_no = '43'")
+    s.commit()
+    s.close()
+    build_index(conn, FakeEmbedder())
+    c = chunk(conn, "chart:7")
+    assert (
+        c["text"]
+        == "[차트 C-00001 | 2026-07-03 | 스케일링] 12개월 지난 부위 (오른쪽 아래 송곳니 1년)"
+    )
