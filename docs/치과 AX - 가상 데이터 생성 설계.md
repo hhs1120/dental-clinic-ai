@@ -476,6 +476,11 @@ make data [FAKE_LLM=1]
   3. `make llm-import` — 통과한 건은 캐시에 출처(모델 또는 `claude-code`)·프롬프트 버전과 함께 넣고, 실패한 건은 캐시에 실패로 남아 시도 번호를 올려 다음 작업에 다시 나온다. `llm_jobs.MAX_ATTEMPTS`번 실패하면 더 내보내지 않고 `make data`가 멈춘다 — 사람이 프롬프트·캐시를 손본다
   4. 다시 `make data`
 
+**평가 전용 단계**: `make data` 뒤 따로 돈다(`make scenarios`). LLM을 쓰지 않고 `source.sqlite`를 읽기만 하며 기존 `emr_*`·`fin_*`·정답 행은 바꾸지 않는다. 단계 이름마다 독립 시드.
+- **처리 정답**: 통화 골드에서 `truth_call_actions`를 파생한다
+- **시나리오**: `source.sqlite` 복사본에 이상과 지시문이 섞인 비정형 텍스트를 심어 `evaluation/scenarios/`에 두고, 정답은 `truth_scenarios`에 쓴다. 앱의 `data/`와 섞지 않는다
+- 검사를 먼저 쓴다 — 기존 테이블 해시가 그대로인지, 시나리오 DB가 정답 칸을 갖지 않는지
+
 ### 5.2 정답 출력 `ground_truth/`
 
 DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않음). 테이블 정의와 채우는 쪽은 [[치과 AX - 평가 설계]] §6. verify는 config가 아니라 검사하는 DB의 `truth_gen_meta`(기준일·기간·건수 — 키는 `generator/build.py`)를 읽는다(verify 테스트 DB `tests/generator/verify_db.py`는 값이 config와 다름).
