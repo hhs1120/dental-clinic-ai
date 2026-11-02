@@ -1,4 +1,4 @@
--- app.sqlite 스키마 — 앱이 쓰는 ax_*(앱 설계 §1·§2). 생성 데이터는 source.sqlite(shared/source_schema.sql)를 읽기 전용으로 붙여 읽는다.
+-- app.sqlite 스키마 — 앱이 쓰는 ax_*(앱 설계 §1·§2·§3b·§6). 생성 데이터는 source.sqlite(shared/source_schema.sql)를 읽기 전용으로 붙여 읽는다.
 -- 생성 통화는 call_uid로 가리킨다 — 붙인 DB로는 외래 키를 걸 수 없다(앱 설계 §1)
 -- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
 -- 시각은 naive KST ISO 문자열('2026-07-03 10:30:00'), 날짜는 'YYYY-MM-DD'
@@ -17,7 +17,14 @@ CREATE TABLE ax_llm_calls (
     fallback_used INTEGER NOT NULL DEFAULT 0,
     ok            INTEGER NOT NULL,
     is_eval       INTEGER NOT NULL DEFAULT 0,
-    created_at    TEXT NOT NULL
+    created_at    TEXT NOT NULL,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL DEFAULT 0,  -- 일일 상한이 읽는다
+    latency_ms    INTEGER NOT NULL DEFAULT 0,
+    error         TEXT,
+    ref_type      TEXT,
+    ref_id        TEXT
 );
 
 CREATE TABLE ax_call_classifications (
@@ -53,4 +60,70 @@ CREATE TABLE ax_blind_votes (
     voted_by                 TEXT NOT NULL,
     voted_at                 TEXT NOT NULL,
     UNIQUE (left_classification_id, right_classification_id)
+);
+
+-- ── 에이전트 하네스 (앱 설계 §3b) ─────────────────────────────────────────
+
+CREATE TABLE ax_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL  -- JSON
+);
+
+CREATE TABLE ax_agent_runs (
+    id             INTEGER PRIMARY KEY,
+    agent          TEXT NOT NULL,
+    target         TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('running', 'done', 'handed_off', 'failed')),
+    reason         TEXT,  -- 사람에게 넘긴 이유·실패 이유
+    result         TEXT,  -- 모델의 마지막 답
+    prompt_version TEXT NOT NULL,  -- 재개해도 처음 값
+    parent_run_id  INTEGER REFERENCES ax_agent_runs(id),  -- 운영 에이전트가 부른 경우
+    model_calls    INTEGER NOT NULL DEFAULT 0,  -- 재개해도 누적
+    tool_calls     INTEGER NOT NULL DEFAULT 0,
+    cost_usd       REAL NOT NULL DEFAULT 0,
+    locked_by      TEXT,
+    heartbeat_at   TEXT,
+    started_at     TEXT NOT NULL,
+    finished_at    TEXT
+);
+-- 같은 대상의 실행은 겹치지 않는다
+CREATE UNIQUE INDEX ax_agent_runs_one_running ON ax_agent_runs (agent, target) WHERE status = 'running';
+
+CREATE TABLE ax_agent_steps (
+    id          INTEGER PRIMARY KEY,
+    run_id      INTEGER NOT NULL REFERENCES ax_agent_runs(id),
+    seq         INTEGER NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('input', 'model', 'tool')),
+    tool_use_id TEXT,
+    tool        TEXT,
+    args        TEXT,  -- 정규화된 인자 JSON
+    response    TEXT,  -- 모델 응답 JSON
+    result      TEXT,  -- 모델이 받은 도구 결과 전체 JSON(재개용)
+    raw_result  TEXT,  -- 실행 뒤 막힌 건의 원래 결과 JSON(재생용)
+    hook_status TEXT CHECK (hook_status IN ('pass', 'blocked')),
+    rule_id     TEXT,  -- 막은 규칙
+    is_error    INTEGER NOT NULL DEFAULT 0,
+    truncated   INTEGER NOT NULL DEFAULT 0,  -- 모델에 줄 때 잘렸는지
+    created_at  TEXT NOT NULL,
+    UNIQUE (run_id, seq)
+);
+
+CREATE TABLE ax_auto_actions (
+    id          INTEGER PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    target      TEXT NOT NULL,
+    period      TEXT NOT NULL DEFAULT '',  -- 반복되는 일은 기간이 키
+    result      TEXT NOT NULL,  -- 결과값 JSON
+    reason      TEXT NOT NULL,
+    run_id      INTEGER,  -- 코드 경로면 NULL. 실행 기록은 다시 만들므로 외래 키 없음(앱 설계 §7.3)
+    reverted_by TEXT,
+    reverted_at TEXT,
+    created_at  TEXT NOT NULL,
+    UNIQUE (kind, target, period)
+);
+
+-- 규칙 id별 차단 누계 — 실행 기록을 다시 만들어도 남는다(앱 설계 §7.3)
+CREATE TABLE ax_rule_counts (
+    rule_id TEXT PRIMARY KEY,
+    blocked INTEGER NOT NULL DEFAULT 0
 );

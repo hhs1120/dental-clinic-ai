@@ -2,13 +2,13 @@
 설정은 config/llm.yaml: 별칭 → 모델 순서, 모델별 단가, 일일 비용 상한.
 - 폴백: 일시 오류(연결·408·409·429·5xx — SDK 재시도를 다 쓴 뒤)나 거절이면 다음 모델로. 그 밖의 오류(400 등),
   잘린 응답(stop_reason이 end_turn 아님), JSON 파싱 실패는 다른 모델로 가도 같아 거기서 실패
-- 호출 1건 = 기록 1행(시도한 모델 전부의 토큰·비용 합, 예외가 나도 남김). 생성기는 JsonlLog, 앱은 착수 때 ax_llm_calls
+- 호출 1건 = 기록 1행(시도한 모델 전부의 토큰·비용 합, 예외가 나도 남김). 생성기는 JsonlLog, 앱은 ax_llm_calls(backend/harness/store.py SqliteLlmLog)
 - 그날 쓴 돈이 범위(generator/runtime)의 상한 이상이면 호출하지 않고 BudgetExceeded. 확인과 호출 사이 시차로
   동시 호출 수 × 1건 비용만큼 넘을 수 있다(허용)
 - FakeGateway는 같은 인터페이스로 입력 해시에서 결정적 응답 — 테스트·CI·fixture용(과금 없음)
 - Batch(생성기 API 채우기): 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
   결과 1건 = 기록 1행. 처리 안 된 건(오류·취소·만료)은 기록하지 않고 None
-의존성: anthropic은 지금 generator 그룹 — 앱 착수 때 backend 그룹에도 추가
+의존성: anthropic은 generator·backend 그룹
 """
 
 import hashlib
@@ -54,6 +54,9 @@ class LLMResult:
     cost_usd: float
     latency_ms: int
     error: str | None = None  # 실패 이유, 성공이면 앞 시도의 폴백 원인
+    stop_reason: str | None = None
+    tool_calls: tuple = ()  # 도구 호출 {id, name, input}
+    content: list | None = None  # 다음 턴에 그대로 넘길 assistant 블록(글·도구 호출)
 
 
 class JsonlLog:
@@ -87,6 +90,17 @@ class JsonlLog:
             if self._spent is None:
                 self._spent = self._load()
             return self._spent[(day.isoformat(), scope)]
+
+
+def _blocks(content) -> list[dict]:
+    """응답의 글·도구 호출 블록을 JSON으로 저장할 수 있는 dict로"""
+    out = []
+    for b in content:
+        if b.type == "text":
+            out.append({"type": "text", "text": b.text})
+        elif b.type == "tool_use":
+            out.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+    return out
 
 
 def _output_config(schema: dict | None, effort: str | None) -> dict | None:
@@ -161,12 +175,14 @@ class Gateway(_Base):
             ) / 1e6
         return tokens_in, tokens_out, cost, any(it.type == "fallback_message" for it in attempts)
 
-    def _call(self, model: str, system, messages, max_tokens, output_config):
+    def _call(self, model: str, system, messages, max_tokens, output_config, tools=None):
         params = {"model": model, "max_tokens": max_tokens, "messages": messages}
         if system is not None:
             params["system"] = system
         if output_config is not None:
             params["output_config"] = output_config
+        if tools:
+            params["tools"] = tools
         if self.config["models"][model].get("server_fallback"):
             return self.client.beta.messages.create(
                 betas=[SERVER_FALLBACK_BETA], fallbacks="default", **params
@@ -185,6 +201,7 @@ class Gateway(_Base):
         effort: str | None = None,
         prompt_version: str | None = None,
         ref: tuple | None = None,
+        tools: list | None = None,
     ) -> LLMResult:
         chain = self.config["aliases"][alias]
         self._check_budget()
@@ -199,7 +216,7 @@ class Gateway(_Base):
             "server_fallback": False,
         }
 
-        def finish(ok: bool, text: str = "", data=None) -> LLMResult:
+        def finish(ok: bool, text: str = "", data=None, response=None) -> LLMResult:
             errors = "; ".join(state["errors"]) or None
             return LLMResult(
                 ok,
@@ -212,6 +229,13 @@ class Gateway(_Base):
                 state["cost"],
                 int((time.monotonic() - start) * 1000),
                 errors,
+                response.stop_reason if response else None,
+                tuple(
+                    {"id": b.id, "name": b.name, "input": b.input}
+                    for b in (response.content if response else [])
+                    if b.type == "tool_use"
+                ),
+                _blocks(response.content) if response else None,
             )
 
         result = None
@@ -219,7 +243,9 @@ class Gateway(_Base):
             for model in chain:
                 state["model"] = model
                 try:
-                    response = self._call(model, system, messages, max_tokens, output_config)
+                    response = self._call(
+                        model, system, messages, max_tokens, output_config, tools
+                    )
                 except anthropic.APIConnectionError as e:  # 타임아웃 포함
                     state["errors"].append(f"{model}: {type(e).__name__}")
                     continue
@@ -241,19 +267,20 @@ class Gateway(_Base):
                 if response.stop_reason == "refusal":
                     state["errors"].append(f"{model}: refusal")
                     continue
-                if response.stop_reason != "end_turn":
+                done = ("end_turn", "tool_use") if tools else ("end_turn",)
+                if response.stop_reason not in done:
                     state["errors"].append(f"{model}: stop_reason {response.stop_reason}")
                     break
                 text = "".join(b.text for b in response.content if b.type == "text")
-                if schema is None:
-                    result = finish(True, text)
+                if schema is None or response.stop_reason == "tool_use":
+                    result = finish(True, text, response=response)
                     break
                 try:
                     data = json.loads(text)
                 except json.JSONDecodeError:
                     state["errors"].append(f"{model}: JSON 파싱 실패")
                     break
-                result = finish(True, text, data)
+                result = finish(True, text, data, response)
                 break
             if result is None:
                 result = finish(False)
@@ -424,6 +451,7 @@ class FakeGateway(_Base):
         effort: str | None = None,
         prompt_version: str | None = None,
         ref: tuple | None = None,
+        tools: list | None = None,
     ) -> LLMResult:
         seed = hashlib.sha256(
             json.dumps(
@@ -436,6 +464,18 @@ class FakeGateway(_Base):
             if schema is not None
             else f"가짜 응답 {seed[:12]}"
         )
-        result = LLMResult(True, text, data, "fake", False, 0, 0, 0.0, 0)
+        result = LLMResult(
+            True,
+            text,
+            data,
+            "fake",
+            False,
+            0,
+            0,
+            0.0,
+            0,
+            stop_reason="end_turn",
+            content=[{"type": "text", "text": text}],
+        )
         self._record(alias, task, prompt_version, ref, result)
         return result

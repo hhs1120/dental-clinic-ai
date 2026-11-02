@@ -507,3 +507,66 @@ def test_batch_submit_ignores_daily_limit(tmp_path):
     gw = _gateway(tmp_path, BatchClient())
     gw.log.write({"at": NOW.isoformat(), "scope": "generator", "cost_usd": 1.0})
     assert gw.submit_batch("gen", [], task="toy")
+
+
+TOOLS = [{"name": "query_patient", "description": "환자 조회", "input_schema": {"type": "object"}}]
+
+
+def _tool_message(model="model-b", **usage):
+    """모델이 도구를 부른 응답 — stop_reason tool_use, 글과 도구 호출이 함께 온다"""
+    message = _message(model=model, **usage).model_dump()
+    message["stop_reason"] = "tool_use"
+    message["content"] = [
+        {"type": "text", "text": "조회합니다"},
+        {"type": "tool_use", "id": "t1", "name": "query_patient", "input": {"chart_no": "C-1"}},
+    ]
+    return Message.model_validate(message)
+
+
+def test_tool_use_stop_is_success_and_returns_calls_and_content(tmp_path):
+    client = StubClient(_tool_message())
+    result = _gateway(tmp_path, client).complete("solo", task="t", messages=MSGS, tools=TOOLS)
+    assert result.ok and result.stop_reason == "tool_use" and result.text == "조회합니다"
+    assert result.tool_calls == (
+        {"id": "t1", "name": "query_patient", "input": {"chart_no": "C-1"}},
+    )
+    assert result.content == [
+        {"type": "text", "text": "조회합니다"},
+        {"type": "tool_use", "id": "t1", "name": "query_patient", "input": {"chart_no": "C-1"}},
+    ]
+    assert client.calls[0][1]["tools"] == TOOLS
+
+
+def test_no_tools_argument_is_not_sent(tmp_path):
+    client = StubClient(_message())
+    result = _gateway(tmp_path, client).complete("solo", task="t", messages=MSGS)
+    assert "tools" not in client.calls[0][1]
+    assert result.stop_reason == "end_turn" and result.tool_calls == ()
+
+
+def test_tool_use_without_tools_is_still_failure(tmp_path):
+    """도구를 주지 않았는데 tool_use로 끝나면 비정상 — 기존 호출자는 성공으로 받으면 안 된다"""
+    result = _gateway(tmp_path, StubClient(_tool_message())).complete(
+        "solo", task="t", messages=MSGS
+    )
+    assert not result.ok and "stop_reason tool_use" in result.error
+
+
+def test_fake_gateway_accepts_tools_and_ends_turn(tmp_path):
+    fake = llm.FakeGateway(llm.JsonlLog(tmp_path / "calls.jsonl"), scope="runtime")
+    result = fake.complete("chat", task="t", messages=MSGS, tools=TOOLS)
+    assert result.ok and result.stop_reason == "end_turn" and result.tool_calls == ()
+
+
+def test_tool_use_with_schema_skips_json_parse(tmp_path):
+    client = StubClient(_tool_message())
+    result = _gateway(tmp_path, client).complete(
+        "solo", task="t", messages=MSGS, tools=TOOLS, schema={"type": "object"}
+    )
+    assert result.ok and result.data is None and result.tool_calls
+
+
+def test_tools_are_sent_to_fallback_model(tmp_path):
+    client = StubClient(_status_error(anthropic.InternalServerError, 500), _tool_message())
+    result = _gateway(tmp_path, client).complete("gen", task="t", messages=MSGS, tools=TOOLS)
+    assert result.ok and result.fallback_used and client.calls[1][1]["tools"] == TOOLS

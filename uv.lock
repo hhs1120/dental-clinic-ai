@@ -60,9 +60,14 @@ wheels = [
 name = "dental-clinic-ai"
 version = "0.1.0"
 source = { virtual = "." }
-default-groups = ["dev", "generator"]
+default-groups = ["backend", "dev", "generator"]
 
 [package.dev-dependencies]
+backend = [
+    { name = "anthropic" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -78,6 +83,11 @@ generator = [
 [package.metadata]
 
 [package.metadata.requires-dev]
+backend = [
+    { name = "anthropic", specifier = ">=2.3.0" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
 dev = [
     { name = "pytest" },
     { name = "ruff", specifier = "==0.16.10" },

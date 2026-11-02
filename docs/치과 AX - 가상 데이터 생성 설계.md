@@ -422,7 +422,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 추가 처치 누락 줄: 5b가 결과가 없는 달(제출 월·전월 — 확정 월 오류는 심사 결과에서만)의 **오류가 없는** 급여 내원 일부(`master.SAME_DAY_EXTRA_RATE`)를 골라 차트에 같은 날 다른 치아의 추가 처치(`master.SAME_DAY_EXTRA` — 발치는 넣지 않음)를 서술하고, 진료 기록·청구에는 넣지 않는다 — `truth_claim_errors` 종류 '추가 처치 누락'. 추가 처치 치아는 그 환자 장부의 진료·치료계획 항목·다른 추가 처치에 나오지 않는 치아이고("남은 치료"와 겹치지 않게), 그 시술의 급여 조건(나이 등)을 지킨다
   - 창 이전 내원: 템플릿 1행만(LLM 서술·디코이·특이 케이스 대상 아님)
 - **응급 내원**(6b단계, §2.6 (5)): 서술 1행(특이·디코이 아님) — C.C는 상황별 환자 말 `chart.EMERGENCY_CC`(줄인 말·'호소' 가능), 사실은 그날 보이는 관련 주의사항과 다음 계획만(요건·오류·소견·추가 처치 없음), 초안·서술에 응급 내원이라는 말(`chart.EMERGENCY_WORDS`). 상병은 상황별 `master.EMERGENCY_DX`(없거나 그 시술 허용 상병 밖이면 허용 상병의 첫 번째)
-- **요건 줄**: 임상 요건 = 요건 사유(`master.ADJUST_REASONS`의 requirement 유형)와 1:1 — 차트에 그 사유의 근거가 있는지가 기준이라 ⑤-3 판정과 바로 이어진다. 나이처럼 정형으로 판정되는 요건은 서술 대상 아님 (출처 후보 조사는 repo 밖 Obsidian 노트 `치과 AX - 심평원 청구 조사`)
+- **요건 줄**: 임상 요건 = 요건 사유(`master.ADJUST_REASONS`의 requirement 유형)와 1:1 — 차트에 그 사유의 근거가 있는지가 기준이라 ⑤-3 판정과 바로 이어진다. 나이처럼 정형으로 판정되는 요건은 서술 대상 아님
   - `master.CHART_REQUIREMENT` 시술(잇몸치료·실란트·사랑니 발치·급여 임플란트)의 창 안 급여 줄은 항상. 잇몸치료는 직전 `master.PERIO_LINK_DAYS`일 안에 치석제거가 있으면 R02 치주치료 연결, 아니면 R03 소견
   - 아말감/GI·신경치료는 같은 치아에 같은 시술을 **다른 코스에서** 다시 할 때만(`master.RETREATMENT_REQUIREMENT` — 신경치료 뒤 충전 같은 같은 치아의 다음 단계 치료와 코스 안 반복은 이어지는 치료라 재시행이 아니다). 코스는 4단계 수요 에피소드(노쇼 뒤 재예약 포함)이고 정답 DB `truth_appointment_courses`에 남긴다(앱은 `plan_item_id`로 계획 항목만 본다)
   - 확정 월에 요건 사유로 깎인 줄은 그 사유가 요건이다. 확정 월 R01로 깎인 줄이 '타 기관' 이력이면 장부에 같은 치아·같은 시술이 없어야 한다(verify)
@@ -549,4 +549,4 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 
 ### 5.4 기술 선택
 
-Python · Faker(ko_KR) · numpy 시드(lock 파일 커밋 — Faker 버전이 이름 결정성에 영향). DB 시각은 naive KST, `emr_*`는 TODAY 기준. LLM은 `shared/` 게이트웨이(앱 설계 §7).
+Python · Faker(ko_KR) · numpy 시드(lock 파일은 `CLAUDE.md` 명령). DB 시각은 naive KST, `emr_*`는 TODAY 기준. LLM은 `shared/` 게이트웨이(앱 설계 §7).
