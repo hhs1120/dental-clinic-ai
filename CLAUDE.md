@@ -1,6 +1,6 @@
 # dental-clinic-ai (치과 AX)
 
-동네 치과 AX 포트폴리오 프로젝트. 가상 데이터(미니 EMR + 통화·문서·문자 + 정답)로 통화 분류·사람 판정·RAG 챗·진료 준비표를 구현한다.
+동네 치과 AX 포트폴리오 프로젝트. 가상 데이터(미니 EMR + 통화·문서·문자 + 정답)로 통화 분류·판정과 자동 개선·RAG 챗·진료 준비표와 업무 에이전트를 구현한다.
 
 ## 설계 문서
 규칙·절차의 원본 — 코드와 어긋나면 문서를 먼저 확인한다. 단 **값**(숫자·enum·컬럼·인덱스)은 `generator/master.py`·`shared/source_schema.sql`·`shared/app_schema.sql`·`ground_truth/schema.sql`·`config/generator.yaml`이 원본이고(verify 허용치·기준값은 `generator/verify/`, 채점 상수는 `evaluation/metrics.py`) 문서는 이름으로 가리킨다.
@@ -12,17 +12,19 @@
 - `docs/치과 AX - 전환의 의미.md` — 전환 전후 업무 변화 (배경, 구현 스펙 아님)
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 - `docs/치과 AX - 개발자 소개.md` — 팀원 모집용: 기술 스택·데이터 규모·기능별 AI·독립 과제·포트폴리오에 남는 것 (구현 스펙 아님)
-- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML, 구현 스펙 아님). 데이터는 `make wireframe`
+- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 기준은 `index-v2.html`(앱 설계 §9), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`) · `evaluation/` eval.py·자동 개선·시나리오 DB
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
-- `backend/` FastAPI · `frontend/` Next.js (개발 단계에서 세팅)
+- `backend/` FastAPI·에이전트 하네스(`backend/harness/`) · `frontend/` Next.js (개발 단계에서 세팅)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
 
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`를 import하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
 - 정답은 `data/`(source.sqlite·app.sqlite)에 한 줄도 넣지 않는다
+- 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트의 실행 기록은 골드가 들어 있어 `app.sqlite`에 쓰지 않고, 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만 한다(평가 설계 §2.7)
+- 앱의 도구 설명·도구 권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보와 재현 테스트까지만 만들고 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
 - 테이블 접두어는 현실의 소속 시스템 기준: `emr_` 전자차트 원본(진료·수납·청구·차트·문자) · `fin_` 재무 원본(금융기관 내역·회계 증빙) · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다. 상세는 가상 데이터 생성 설계 §0
 - 시드 고정(`config/generator.yaml`) — 같은 시드 → 같은 결과. 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다 — 단계를 추가해도 기존 결과가 바뀌지 않게, 가상 데이터 생성 설계 §5.1)
 - 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않는다. 추가 데이터는 새 테이블로. 상태를 **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인을 마친다
