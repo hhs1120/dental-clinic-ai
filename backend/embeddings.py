@@ -8,7 +8,7 @@ import numpy as np
 
 BATCH = 100
 API_TIMEOUT = 30.0  # 초 — 외부 호출이 멈춰 실행 잠금을 넘기지 않게
-API_RETRIES = 3
+API_RETRIES = 3  # OpenAI는 재시도 횟수, Voyage는 총 시도 횟수
 
 
 class FakeEmbedder:

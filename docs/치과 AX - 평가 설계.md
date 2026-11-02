@@ -29,7 +29,7 @@ tags:
 
 1. **정답은 앱 DB 밖**(`CLAUDE.md` 절대 규칙). 평가 스크립트만 `truth.sqlite`를 `ATTACH`해 조인
 2. **튜닝 셋 ≠ 보고 셋.** 튜닝 중 본 항목이 보고 수치에 섞이지 않게
-   - 모든 평가셋은 dev/test로 나눔. 튜닝·`make gate`·CI는 `--split dev`만
+   - 모든 평가셋은 dev/test로 나눔. `make gate`·CI는 `--split dev`만, 튜닝은 dev와 §6 `tune_qa.json`만
    - **test는 데모 직전 묶음마다 1회**(묶음·이력·`--force`는 §7). 사람이 실행하고 자동 개선 루프는 test를 읽지 않는다
    - 골드로 재는 지표(모델 vs 골드)도 같다 — dev는 test 판정 풀 통화를 뺀 녹취록(비풀 + dev 풀), test는 **test 판정 풀만**(역확률 가중). dev 골드는 희귀 카테고리가 test로 빠져 실제보다 적으므로 역확률 가중(§2.2)을 주 수치로, 비가중을 보조로 병기한다
 3. **절대값보다 조건 간 차이.** 합성 데이터라 절대 수치는 높게 나옴. README의 주 지표는 "리랭커 on/off", "프롬프트 v1→vN" 같은 차이
@@ -136,7 +136,7 @@ tags:
 | 유형 | 수 | 예 | 정답 | 채점 |
 |---|---|---|---|---|
 | 매뉴얼형 | 18 | "노쇼 3회면 어떻게?", "실손 서류 발급 절차?" | 매뉴얼·FAQ 문단 | Hit@5, MRR |
-| 공지형 | 10 | "스케일링 비용 언제 바뀌었어?", "추석 휴진?" | 최신 공지(옛 버전은 방해) | Hit@5 + **Top-1이 최신 버전** |
+| 공지형 | 10 | "스케일링 비용 언제 바뀌었어?", "추석 휴진?" | 최신 공지(옛 버전은 방해) | Hit@5 + **최신성**(§3.3) |
 | 사례형 | 12 | "김○○ 지난번에 뭐 물어봤지?", "리마인드 문자 갔었나?" | 통화 녹취록·문자 스레드 | Hit@5 |
 | 데이터형 | 12 | "내일 잔액 있는 환자 몇 명?", "오늘 취소 몇 건?" | `query_*` 도구 | 도구 선택 + `expected_args` + 숫자 일치 |
 | 차트형 | 10 | "치석제거 뒤 치주치료로 이어진 환자는 간격·상병을 어떻게 적었지?" | 조건에 맞는 차트 기록 **여럿**(`answer_doc_ids`에 `chart:<treatment_id>` 전부 — `truth_chart_notes`·`emr_chart_notes`로 조건 SQL을 돌려 채움) | Hit@5(정답 중 하나), MRR |
@@ -175,7 +175,7 @@ tags:
 
 **검색 지표의 순위**: Hit@5·MRR·Top-1·최신성(차트 Hit@5·MRR 포함)은 eval.py가 **질문 원문으로 검색기를 직접 한 번** 호출한 결과로 센다 — 챗은 검색어를 바꿔 여러 번 검색해 순위가 하나로 정해지지 않고, 이렇게 해야 `--retrieval-only`와 같은 정의가 된다. 순위는 정답 출처의 버킷 목록 안에서(문서 → `manual_results`, 통화·스레드·차트 → `case_results` — 앱 설계 §3). 청크가 정답인지는 청크의 출처 id(문서·통화는 끝 순번을 뗀 것, 스레드·차트는 청크 = 출처 — `evaluation/metrics.py` `source_id`)가 `answer_doc_ids`에 있는지로 본다. 인용 정확도·도구 선택·환각 억제는 eval.py가 부른 챗의 반환값(도구 호출·`retrieved_ids`·답변·`cited_ids` — 앱이 `ax_search_logs`에 쓰는 행과 같은 내용, 형식은 `evaluation/rag.py`)으로 센다.
 
-**`--retrieval-only`**: 답변 LLM 없이 검색 지표만 계산 — 리랭커 on/off, 하이브리드 vs 벡터만 비교는 전부 이 모드(답변 비용 없음).
+**`--retrieval-only`**: 답변 LLM 없이 검색 지표만 계산 — 조건 비교는 전부 이 모드(답변 LLM 비용 없음).
 
 **조건 비교**: 같은 문항 paired 비교 — 분수(`14/20 → 17/20`) + 유의성 한 줄 + 구제/손실 문항과 원인(예: "옛 공지 배제는 리랭커가 구제"). 출력 범위는 §7 `--condition`. **숫자보다 구제/손실 분석이 설득력의 본체.**
 
@@ -231,7 +231,7 @@ tags:
 | `truth_ledger_errors` | 생성기(5단계) | 장부 실수 → 종류, 실수가 들어간 수납 id(입력 누락은 받은 금액이 0인 visit 행), 실제 값(금액·일시·결제수단). ⑧-1 장부 쪽 원인의 근거 |
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |
-| `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문 50개. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune` |
+| `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune --condition …`(여러 번) |
 | `truth_call_actions` | 생성기(평가 전용 단계) | ① 통화 → 기대 처리 enum. 목적·`has_todo`·`used_fact`에서 코드로 파생, 앱 입력 없음 |
 | `truth_scenarios` | 생성기(평가 전용 단계) | ⑥·운영 평가 시나리오 → 심은 이상·정답 원인·대상 환자, split. 시나리오 DB는 `evaluation/scenarios/`(정답 없음) |
 
@@ -257,8 +257,8 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - 판정기·교차검증·자동 처리 값은 `eval.py`가 낸다(§2.5·§2.6·§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
-- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류·판정·교차검증·자동 처리는 `--prompt-version` 하나, RAG는 검색·챗 중 하나와 조건 하나). 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). dev는 묶음 제한 없이 전부
-- **`--condition`**: 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다)
+- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류·판정·교차검증·자동 처리는 `--prompt-version` 하나, RAG는 검색·챗 중 하나와 조건 하나). 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
+- **`--condition`**: `embedding=<모델>,reranker=<off·haiku·rerank-…>` 형식이고 빠진 키는 기본값이다(`backend/rag_search.py` `parse_condition`). 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다)
 - **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
 - **few-shot 예시 제외**: 예시는 사람이 판정한 dev 건에서만 고르고, 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`)의 예시 `call_uid`를 dev 집계와 관문 모수에서 뺀다. 자동 개선은 few-shot을 추가하지 않는다
 

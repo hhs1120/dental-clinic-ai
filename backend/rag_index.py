@@ -165,7 +165,7 @@ def _name_terms(note: str, aliases: list[str]) -> list[str]:
 
 
 def chart_terms(note: str, tooth_no: str, aliases: list[str]) -> list[str]:
-    """차트 서술과 다르게 말할 표현 (앱 설계 §3). 값에 기대는 일반 규칙만 둔다"""
+    """차트 서술과 다르게 말할 표현 (앱 설계 §3)"""
     return list(
         dict.fromkeys([*tooth_terms(tooth_no), *_period_terms(note), *_name_terms(note, aliases)])
     )

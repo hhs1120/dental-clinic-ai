@@ -6,7 +6,7 @@
 
 - DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
-  backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛴다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
+  backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛰고, 앱 경고(rag 색인·리랭커)가 있으면 test를 거절한다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
 - test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 검색·조건 / 챗·조건), 이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
@@ -213,6 +213,7 @@ def run(
                 {"metrics": rag.compare(base, rag.paired(r))["metrics"]} if base else None
             )
         r["warnings"] = getattr(app, "warnings", list)()
+        r["chat_skipped"] = not has_chat and not retrieval_only
         if not dev and r["warnings"]:  # 이력에 쓰기 전에 — test 1회 기회를 소진하지 않게
             raise EvalRefused(f"앱 경고가 있어 test를 인정하지 않는다: {'; '.join(r['warnings'])}")
         if not dev:
@@ -355,7 +356,10 @@ def _render_rag(r: dict | None) -> list[str]:
     out = ["## ③ RAG", ""]
     if r is None:
         return out + ["앱 없음 — 건너뜀(앱 착수 후 backend가 rag.RagApp의 search·chat을 구현)", ""]
-    out += [f"**경고**: {w}" for w in r.get("warnings", [])]
+    for w in r.get("warnings", []):
+        out += [f"**경고**: {w}", ""]
+    if r.get("chat_skipped"):
+        out += ["챗 건너뜀 — 앱에 챗이 아직 없다", ""]
     s, ch = r["retrieval"], r["chart"]
     if s:
         out += [
@@ -472,7 +476,7 @@ def main(argv=None) -> int:
     except AlreadyRun as e:
         print(e)
         return 2
-    except EvalRefused as e:
+    except (EvalRefused, ValueError) as e:  # 앱이 조건·색인을 거절 — 이력에 남지 않는다
         print(e)
         return 1
     print(f"리포트: {out['report_path']}")

@@ -46,7 +46,8 @@ class App:
 
     def warnings(self) -> list[str]:
         """평가 수치를 믿기 어렵게 만든 일 — 리포트에 남고 test는 거절된다"""
-        return [
+        empty = not self.conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone()
+        return ["색인 비어 있음 — make index 먼저"] * empty + [
             f"리랭커 실패 {s.rerank_failures}회 ({'·'.join(key)})"
             for key, s in self.searchers.items()
             if s.rerank_failures

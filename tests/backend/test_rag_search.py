@@ -282,7 +282,7 @@ def test_fuse_prefers_chunk_in_both_lists():
 
 
 def test_fuse_rank_matters():
-    assert fuse([["a", "b", "c"]]) == ["a", "b", "c"]
+    assert fuse([["c", "b", "a"]]) == ["c", "b", "a"]
 
 
 def test_missing_vectors_are_refused(paths):
@@ -300,6 +300,8 @@ def test_missing_vectors_are_refused(paths):
         {"query": ""},
         {"query": "q", "source_types": ["documents"]},
         {"query": "q", "date_from": "2026-11"},
+        {"query": "q", "date_to": "2026-11"},
+        {"query": "q", "top_k": 0},
         {"query": "q", "top_k": -1},
         {"query": "q", "top_k": 26},
     ],
@@ -334,7 +336,54 @@ def test_app_reports_rerank_failures(paths):
     def boom(query, chunks):
         raise RuntimeError("장애")
 
+    app.search("틀니", "reranker=off")
+    assert app.warnings() == []  # 성공한 검색 뒤에도 경고가 없다
+
     app._reranker = lambda name: boom
     app.search("틀니", "reranker=x")
     assert "리랭커 실패 1회" in app.warnings()[0]
     conn.close()
+
+
+def test_vectors_of_other_model_do_not_count(paths):
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    add(conn, "doc:1:0", "document", "틀니")
+    VectorStore(conn, "다른 모델").upsert(["doc:1:0"], FakeEmbedder().embed(["틀니"], "document"))
+    with pytest.raises(MissingVectors):
+        Searcher(conn, CLINIC, FakeEmbedder())
+    conn.close()
+
+
+def test_new_notice_already_first_stays_once(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder())
+    got = s.latest_first(notices("doc:102:0", "doc:101:0"))
+    assert [c["id"] for c in got] == ["doc:102:0", "doc:101:0"]
+
+
+def test_empty_index_is_a_warning(paths):
+    from backend.eval_hooks import App
+
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    app = App(conn, embedder_for=lambda model: FakeEmbedder())
+    assert "색인 비어 있음" in app.warnings()[0]
+    conn.close()
+
+
+def test_api_clients_get_timeout_and_retries(monkeypatch):
+    import openai
+    import voyageai
+
+    from backend.embeddings import API_RETRIES, API_TIMEOUT, OpenAIEmbedder, VoyageEmbedder
+
+    seen = []
+
+    def spy(**kwargs):
+        seen.append(kwargs)
+
+    monkeypatch.setattr(openai, "OpenAI", spy)
+    monkeypatch.setattr(voyageai, "Client", spy)
+    OpenAIEmbedder("m")
+    VoyageEmbedder("m")
+    assert seen == [{"timeout": API_TIMEOUT, "max_retries": API_RETRIES}] * 2

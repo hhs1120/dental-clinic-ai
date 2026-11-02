@@ -211,7 +211,7 @@ tags:
 - `POST /chat`(SSE 진행 + 최종 답변) → `ax_search_logs`
 - `GET /documents` / `GET /documents/{id}`. `GET /doc-drafts` / `POST /doc-drafts/{id}/publish`. 문서 초안 입력은 `ax_search_logs`, 오늘 화면은 `GET /today`
 - 도구 5개(시그니처는 앱 설계 §3): `search_docs`, `query_patient`, `query_schedule`, `query_claims`, `refuse`
-- `make index` / `eval.py --split dev [--retrieval-only]` · `--split test --section …`([[치과 AX - 평가 설계]] §7)
+- `make index`(인자는 앱 설계 §3) / `eval.py --split dev [--retrieval-only]` · `--split test --section …`([[치과 AX - 평가 설계]] §7)
 
 **완료 기준**
 - `eval.py --split dev` exit 0 + 리포트
@@ -310,7 +310,8 @@ tags:
 | ① 전체 1회 | `config` `calls_with_transcript` | 경량 $0.5~1.5 / 상위 $8~15 |
 | ① 튜닝 판정 풀 × 5~10회 (경량) | `config` `eval_pool_size` × 5~10 | $0.3~1 |
 | ③ 답변 평가 dev(`verify.QA_TYPE_COUNTS` 합의 절반) × 3~5회 + test 1회 | 420~630 | $5~14 |
-| ③ 검색 실험 (`--retrieval-only`) | 0 | $0 |
+| ③ 색인 (`make index`) 1회 | 청크 전체(임베딩) | [[치과 AX - AI 실험 기록]] §1 |
+| ③ 검색 실험 (`--retrieval-only`) | 답변 LLM 0 — 조건에 따라 임베딩·리랭커 호출 | [[치과 AX - AI 실험 기록]] §1·§3 |
 | ④ 하루치(최대 `config` `visits_per_day`명) × 재생성 20회 | ~500 | $2~5 |
 
 ## 8. 최종 산출물
@@ -345,11 +346,11 @@ tags:
 
 - [ ] 운영 에이전트 착수 시 — 부모가 재개될 때 끝나지 않은 자식을 함께 잇는 처리(앱 설계 §3b 재개)
 - [ ] `make nightly` 착수 시 — 결정적 예외로 `running`에 남는 실행의 재개 횟수 상한, 비용 기록 전에 죽은 호출을 `ax_llm_calls`로 맞추기, 재개 때 `result_limit` 고정 여부와 도구별 상한
-- [ ] ③ 챗 착수 시 — `ax_llm_calls`의 입력 덤프 경로 칸과 `ref_type` 목록(`agent_run` 포함), 호출 상한에 걸린 `refuse`의 처리, 범위 조건 차트 조회 도구, `rerank-3`이 옛 공지로 답하지 않는지 확인
+- [ ] ③ 챗 착수 시 — `ax_llm_calls`의 입력 덤프 경로 칸과 `ref_type` 목록(`agent_run` 포함), 호출 상한에 걸린 `refuse`의 처리, 범위 조건 차트 조회 도구, 챗이 옛 공지 값으로 답하지 않는지 확인, 호출 상한 상수, 차트 괄호를 LLM에 보일지, Voyage 비용을 `ax_llm_calls`·`daily_usd_limit`에 넣을지, `doc_type` 필터 사용 여부, `query_tools`의 상수를 `master` 경로로(앱 설계 §8)
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
-- [ ] 착수 순서 — 문서 색인·`query_*` 도구 → ①·② + 판정기·개선 에이전트 → ③ 챗·④ → 슬롯 → 운영 에이전트
+- [ ] 착수 순서 — ①·② + 판정기·개선 에이전트 → ③ 챗·④ → 슬롯 → 운영 에이전트
 - [ ] 평가 정답 추가 — `truth_call_actions`·시나리오 DB·`truth_scenarios`(verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다. ① 후속 규칙 기준선은 `truth_call_actions`와 같은 파생을 쓰지 않는다(같으면 기준선이 만점)
 - [ ] 자동 개선 착수 시 — 비풀 층화 분할 상수, 관문 값, 반복 상한, 표본 비율을 첫 실행 전에 고정([[치과 AX - 평가 설계]] §2.3·§2.7)
 - [ ] 모델 B 착수 시 — A의 최종 구성과 다른 모델로 고정한다. 프로바이더가 하나라 같아지면 교차검증 수치를 보고하지 않는다

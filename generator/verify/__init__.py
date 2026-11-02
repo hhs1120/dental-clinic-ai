@@ -7,7 +7,7 @@
 문자(8단계)·취소 연락(8a)·재무(8b 수입·8c 지출)·RAG 문서(9단계)·
 RAG 질문(truth_rag_qa 있을 때) 필수 검사 + 분포·치아·통화 분포·전사·RAG 질문 경고 + 리포트.
 §5.3 중 아직 없는 것(해당 단계 구현 때 추가). 청크 검사는 구현 전까지 [SKIP]으로 출력:
-  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.source_*), 청크 prefix·정답 청크가 ax_chunks에 존재(app.sqlite를 붙였을 때 — --app),
+  필수 — 다형 참조(ax_llm_calls.ref_*·ax_chunks.id의 출처), 청크 prefix·정답 청크가 ax_chunks에 존재(app.sqlite를 붙였을 때 — --app),
          누출(분류기 입력 덤프 — 풀 순번·call_uid 셔플은 tests/generator/test_calls.py, 행 순서는 check_call_row_order)
 결정성 2회 비교는 make verify가 아니라 tests/generator/test_generator.py — canonical_hash로, 두 번은 서로 다른
 PYTHONHASHSEED(0과 1)로 (같은 값이면 set 순회 순서에 기댄 버그가 가려짐)

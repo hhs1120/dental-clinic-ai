@@ -350,3 +350,31 @@ def test_dev_report_shows_app_warning(conn, reports):
     app.notes = ["리랭커 실패 1회"]
     out = _run(conn, reports, split="dev", retrieval_only=True, app=app)
     assert "리랭커 실패 1회" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_dev_report_says_chat_was_skipped(conn, reports):
+    out = _run(conn, reports, split="dev", app=NoChatApp())
+    assert "챗 건너뜀" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_main_reports_app_refusal_without_traceback(conn, tmp_path, monkeypatch, capsys):
+    from evaluation.eval import main
+
+    for name in ("app.sqlite", "source.sqlite", "truth.sqlite"):
+        (tmp_path / name).touch()
+    monkeypatch.setattr(
+        ev, "load_app", lambda db, source: (_ for _ in ()).throw(ValueError("벡터 없는 청크"))
+    )
+    code = main(
+        [
+            "--split",
+            "dev",
+            "--db",
+            str(tmp_path / "app.sqlite"),
+            "--source",
+            str(tmp_path / "source.sqlite"),
+            "--truth",
+            str(tmp_path / "truth.sqlite"),
+        ]
+    )
+    assert code != 0 and "벡터 없는 청크" in capsys.readouterr().out

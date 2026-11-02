@@ -47,7 +47,7 @@ class RerankFailed(RuntimeError):
     """리랭커가 답하지 못함 — 합친 순서로 넘어간다"""
 
 
-class MissingVectors(RuntimeError):
+class MissingVectors(ValueError):
     """벡터가 없는 청크가 있다 — 키워드로만 돌면서 조용히 품질이 떨어지지 않게 막는다"""
 
 

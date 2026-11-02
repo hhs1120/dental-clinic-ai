@@ -492,7 +492,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 **필수**(실패 시 중단. `planned_procedure_code`·`tooth_no` 값 있음과 대조 키 유일은 스키마(NOT NULL·UNIQUE)가 보장해 검사하지 않음)
 | 영역 | 검사 |
 |---|---|
-| 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.source_*`)는 타입별 조인(app.sqlite를 붙였을 때) |
+| 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.id`의 출처)는 타입별 조인(app.sqlite를 붙였을 때) |
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date`·`recorded_at`·`reviewed_at` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). `fin_*` 날짜 칸 ≤ TODAY; 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 나이 | 치아 단위 시술은 시술일 `master.TOOTH_TREATMENT_MIN_AGE`세 이상; 등록일 `master.MIN_VISIT_AGE`세 이상 |
 | 충돌·운영 제약 | 같은 환자 같은 날 중복 없음(응급 내원 제외); 같은 체어 시간 겹침 없음, 위생사 동시 1건, 원장 동시 ≤ `master.DOCTOR_CONCURRENCY`(창 안 비취소 예약 — 창 이전 내원은 체어·담당만 균등으로 두고 제외), 상담은 체어 없음·그 밖은 체어 1~`master.CHAIRS`(④ 체어 보기가 의존 — §1 (1)·(2)는 생성 코드가 보장해 검사하지 않음) |
