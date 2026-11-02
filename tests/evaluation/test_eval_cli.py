@@ -282,14 +282,20 @@ def test_main_passes_db_to_app(conn, tmp_path, monkeypatch):
 
 @pytest.fixture
 def fake_backend(tmp_path, monkeypatch):
-    """임시 backend 패키지 — 테스트 뒤 sys.modules에서 지운다"""
+    """임시 backend 패키지 — 진짜 backend를 잠시 내리고 테스트 뒤 돌려놓는다"""
     pkg = tmp_path / "pkgs" / "backend"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path / "pkgs"))
+
+    def loaded():
+        return [m for m in sys.modules if m == "backend" or m.startswith("backend.")]
+
+    real = {name: sys.modules.pop(name) for name in loaded()}
     yield pkg
-    for name in [m for m in sys.modules if m == "backend" or m.startswith("backend.")]:
+    for name in loaded():
         del sys.modules[name]
+    sys.modules.update(real)
 
 
 def test_load_app_none_without_hooks(fake_backend):
@@ -310,3 +316,65 @@ def test_load_app_dependency_error_propagates(fake_backend):
     )
     with pytest.raises(ModuleNotFoundError):
         ev.load_app("x.sqlite", "s.sqlite")
+
+
+class NoChatApp(FakeApp):
+    supports_chat = False
+    notes = []
+
+    def warnings(self):
+        return self.notes
+
+
+def test_dev_skips_chat_when_app_has_no_chat(conn, reports):
+    app = NoChatApp()
+    out = _run(conn, reports, split="dev", app=app)
+    assert out["report_path"].exists() and not [c for c in app.calls if c[0] == "chat"]
+
+
+def test_test_chat_section_is_refused_without_chat(conn, reports):
+    with pytest.raises(EvalRefused, match="챗"):
+        _run(conn, reports, split="test", section="chat", app=NoChatApp())
+
+
+def test_test_with_app_warning_is_refused_and_keeps_chance(conn, reports):
+    app = NoChatApp()
+    app.notes = ["리랭커 실패 1회"]
+    with pytest.raises(EvalRefused, match="리랭커"):
+        _run(conn, reports, split="test", section="retrieval", app=app)
+    assert not (reports / "eval_runs.jsonl").exists()
+
+
+def test_dev_report_shows_app_warning(conn, reports):
+    app = NoChatApp()
+    app.notes = ["리랭커 실패 1회"]
+    out = _run(conn, reports, split="dev", retrieval_only=True, app=app)
+    assert "리랭커 실패 1회" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_dev_report_says_chat_was_skipped(conn, reports):
+    out = _run(conn, reports, split="dev", app=NoChatApp())
+    assert "챗 건너뜀" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_main_reports_app_refusal_without_traceback(conn, tmp_path, monkeypatch, capsys):
+    from evaluation.eval import main
+
+    for name in ("app.sqlite", "source.sqlite", "truth.sqlite"):
+        (tmp_path / name).touch()
+    monkeypatch.setattr(
+        ev, "load_app", lambda db, source: (_ for _ in ()).throw(ValueError("벡터 없는 청크"))
+    )
+    code = main(
+        [
+            "--split",
+            "dev",
+            "--db",
+            str(tmp_path / "app.sqlite"),
+            "--source",
+            str(tmp_path / "source.sqlite"),
+            "--truth",
+            str(tmp_path / "truth.sqlite"),
+        ]
+    )
+    assert code != 0 and "벡터 없는 청크" in capsys.readouterr().out

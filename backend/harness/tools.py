@@ -15,6 +15,7 @@ class Tool:
     # LLM을 부르지 않는다(호출 기록이 커밋해 쓰기와 단계 기록이 갈라진다). LLM이 필요한 일은 도구 밖에서 한다
     fn: Callable
     writes: bool = False  # ax_ 테이블에 쓰는 도구. False인데 쓰면 롤백하고 막는다
+    ends_run: Callable | None = None  # 인자 → 종료 사유. 있으면 호출하고 바로 실행을 끝낸다
 
     def schema(self) -> dict:
         return {

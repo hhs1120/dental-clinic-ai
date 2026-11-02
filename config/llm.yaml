@@ -4,6 +4,7 @@ aliases:
   gen: [claude-sonnet-5-5, claude-sonnet-5]        # 생성기 7·9·9b
   classify: [claude-haiku-5-5, claude-sonnet-5-5]  # ① 분류·요약
   chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
+  rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
 models:
   claude-sonnet-5-5: { input: 2.00, output: 10.00, cache_read: 0.20, server_fallback: true }

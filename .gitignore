@@ -13,6 +13,7 @@ ground_truth/*.sqlite
 docs/wireframe/data.json
 # 평가 리포트 — dev(튜닝용, 매번 나옴)는 커밋하지 않는다. test 리포트와 실행 이력(eval_runs.jsonl)은 커밋
 reports/eval_dev_*
+reports/tune_*
 # 개선 에이전트 실행 기록 — 골드가 들어 있다
 evaluation/runs/
 

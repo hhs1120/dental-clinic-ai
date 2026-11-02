@@ -1,0 +1,884 @@
+[
+ {
+  "id": "tune-manual-01",
+  "type": "manual",
+  "split": "tune",
+  "question": "단종된 임플란트 부품 주문하면 며칠이나 걸려요?",
+  "answer_text": "대리점 재고를 먼저 확인해 주문하며, 주문 후 입고까지 2주가 걸린다.",
+  "answer_doc_ids": [
+   "doc:29"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-02",
+  "type": "manual",
+  "split": "tune",
+  "question": "틀니 수리 맡기는 동안 쓸 틀니 빌려 달라는데 해 드려도 돼요?",
+  "answer_text": "수리 기간에는 임시 틀니를 빌려주지 않는다.",
+  "answer_doc_ids": [
+   "doc:66"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-03",
+  "type": "manual",
+  "split": "tune",
+  "question": "마취제 재고 어떤 것부터 꺼내 써요?",
+  "answer_text": "유효기간이 3개월 남은 것부터 먼저 쓴다.",
+  "answer_doc_ids": [
+   "doc:5"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-04",
+  "type": "manual",
+  "split": "tune",
+  "question": "멸균 파우치에 싸 둔 기구 며칠 지나면 다시 돌려야 해요?",
+  "answer_text": "멸균 포장한 기구는 30일 안에 쓰고, 지나면 다시 포장해 멸균한다.",
+  "answer_doc_ids": [
+   "doc:22"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-05",
+  "type": "manual",
+  "split": "tune",
+  "question": "주사바늘 통 어디까지 차면 바꿔요?",
+  "answer_text": "내용물이 용기의 4분의 3 정도 차면 새 용기로 교체한다.",
+  "answer_doc_ids": [
+   "doc:53"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-06",
+  "type": "manual",
+  "split": "tune",
+  "question": "기공소 기사님 몇 시에 가지러 와요?",
+  "answer_text": "기공소 수거는 매일 오후 5시다.",
+  "answer_doc_ids": [
+   "doc:46"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-07",
+  "type": "manual",
+  "split": "tune",
+  "question": "마감하는데 카드랑 현금이 프로그램 금액이랑 안 맞아요. 어떻게 해요?",
+  "answer_text": "차이 내역을 일계표 비고란에 적고 원장에게 보고한다.",
+  "answer_doc_ids": [
+   "doc:52"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-08",
+  "type": "manual",
+  "split": "tune",
+  "question": "카드 승인 합계가 차트 수납보다 많이 나오는데 오류 아닌가요?",
+  "answer_text": "구강용품 판매액만큼 승인 합계가 많게 나오는 것은 정상이며 판매 대장 합계와 맞춰 본다.",
+  "answer_doc_ids": [
+   "doc:92"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-09",
+  "type": "manual",
+  "split": "tune",
+  "question": "치료계획 세우고 예약 안 잡는 분은 언제 누가 연락해요?",
+  "answer_text": "치료계획 후 3주가 지나도 예약이 없으면 상담실장이 연락한다.",
+  "answer_doc_ids": [
+   "doc:93"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-10",
+  "type": "manual",
+  "split": "tune",
+  "question": "씌운 지 얼마 안 된 크라운이 빠졌다는데 재부착비 받아요?",
+  "answer_text": "크라운을 씌운 날부터 1년 안에 빠졌으면 비용을 받지 않고 다시 붙인다.",
+  "answer_doc_ids": [
+   "doc:60"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-11",
+  "type": "manual",
+  "split": "tune",
+  "question": "딸이 어머니 엑스레이 CD 받으러 왔는데 뭐 받아야 돼요?",
+  "answer_text": "가족이 대신 신청하면 신청서와 신분증 확인에 더해 가족관계증명서가 필요하다.",
+  "answer_doc_ids": [
+   "doc:85"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-12",
+  "type": "manual",
+  "split": "tune",
+  "question": "가족이 실손 서류 대신 떼러 왔는데 뭘 확인해요?",
+  "answer_text": "대리 발급은 위임장과 신분증 사본이 필요하고 하나라도 없으면 내주지 않는다.",
+  "answer_doc_ids": [
+   "doc:39"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-13",
+  "type": "manual",
+  "split": "tune",
+  "question": "보험사라면서 환자 치료 날짜를 전화로 묻는데 알려 줘도 돼요?",
+  "answer_text": "환자 동의가 확인되지 않으면 진료 여부조차 말하지 않고 담당자 회신으로 안내한다.",
+  "answer_doc_ids": [
+   "doc:59"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-14",
+  "type": "manual",
+  "split": "tune",
+  "question": "사랑니 수술 동의서 서명받은 건 어떻게 보관해요?",
+  "answer_text": "서명본을 스캔해 차트에 첨부하고 정상적으로 열리는지 확인한다.",
+  "answer_doc_ids": [
+   "doc:69"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-15",
+  "type": "manual",
+  "split": "tune",
+  "question": "스케일링 하고 며칠 안에 잇몸치료 들어가면 이어진 진료로 봐요?",
+  "answer_text": "치석제거 후 90일 이내 치주치료는 이어진 진료로 본다.",
+  "answer_doc_ids": [
+   "doc:26",
+   "doc:91"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-16",
+  "type": "manual",
+  "split": "tune",
+  "question": "실란트 보험 몇 살까지 돼요?",
+  "answer_text": "만 12세 이하가 건강보험 대상이다.",
+  "answer_doc_ids": [
+   "doc:61",
+   "doc:64",
+   "doc:16"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-17",
+  "type": "manual",
+  "split": "tune",
+  "question": "인레이 보험 돼요?",
+  "answer_text": "인레이는 건강보험이 적용되지 않는 비급여다.",
+  "answer_doc_ids": [
+   "doc:42"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-18",
+  "type": "manual",
+  "split": "tune",
+  "question": "신경치료 중간에 임시로 때운 게 떨어졌다는데 다음 예약까지 기다리라고 해요?",
+  "answer_text": "기다리지 말고 바로 치과로 연락하도록 안내한다.",
+  "answer_doc_ids": [
+   "doc:10"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-19",
+  "type": "manual",
+  "split": "tune",
+  "question": "임플란트 수술한 날 빨대는 언제부터 써도 돼요?",
+  "answer_text": "수술 후 24시간 동안은 빨대와 흡연을 삼간다.",
+  "answer_doc_ids": [
+   "doc:73"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-manual-20",
+  "type": "manual",
+  "split": "tune",
+  "question": "틀니 삶아서 소독해도 되냐고 물어보시는데요",
+  "answer_text": "끓는 물이나 가열 소독은 틀니를 휘게 할 수 있어 하지 않도록 안내한다.",
+  "answer_doc_ids": [
+   "doc:3"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-01",
+  "type": "notice",
+  "split": "tune",
+  "question": "가장 최근 설 휴진 날짜가 어떻게 돼요?",
+  "answer_text": "2월 16일부터 2월 18일까지 휴진한다.",
+  "answer_doc_ids": [
+   "doc:7"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-02",
+  "type": "notice",
+  "split": "tune",
+  "question": "대기실 와이파이 지금 이름 뭐예요?",
+  "answer_text": "대기실 와이파이 이름은 AXDENTAL-GUEST다.",
+  "answer_doc_ids": [
+   "doc:31"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-03",
+  "type": "notice",
+  "split": "tune",
+  "question": "진료 당일 주차 지금 몇 시간 공짜예요?",
+  "answer_text": "진료 당일 2시간까지 무료다.",
+  "answer_doc_ids": [
+   "doc:40",
+   "doc:15"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-04",
+  "type": "notice",
+  "split": "tune",
+  "question": "미백 지금 얼마 받아요?",
+  "answer_text": "치아 미백 비용은 300,000원이다.",
+  "answer_doc_ids": [
+   "doc:20",
+   "doc:83"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-05",
+  "type": "notice",
+  "split": "tune",
+  "question": "보험 스케일링 지금 본인부담 얼마예요?",
+  "answer_text": "급여 스케일링 본인부담금은 18,000원이다.",
+  "answer_doc_ids": [
+   "doc:36",
+   "doc:71"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-06",
+  "type": "notice",
+  "split": "tune",
+  "question": "연락 없이 안 오시는 분 몇 번 쌓이면 전화로만 예약받아요?",
+  "answer_text": "예약 부도가 3회 쌓이면 전화 예약만 받는다.",
+  "answer_doc_ids": [
+   "doc:75",
+   "doc:67"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-07",
+  "type": "notice",
+  "split": "tune",
+  "question": "부도 쌓인 분 전화로만 예약받는 기간 지금 몇 달이에요?",
+  "answer_text": "전화 예약만 받는 기간은 3개월이다.",
+  "answer_doc_ids": [
+   "doc:75",
+   "doc:67"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-08",
+  "type": "notice",
+  "split": "tune",
+  "question": "무료 주차 받으려면 차 빼기 전에 어디 들러야 해요?",
+  "answer_text": "출차 전에 접수 데스크에서 주차 확인을 받는다.",
+  "answer_doc_ids": [
+   "doc:40"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-09",
+  "type": "notice",
+  "split": "tune",
+  "question": "설 휴진일에 예약 잡혀 있던 분은 어떻게 해요?",
+  "answer_text": "원내에서 일정 조정을 위해 따로 연락하며, 연락처가 바뀌었으면 접수처에 알리도록 한다.",
+  "answer_doc_ids": [
+   "doc:7"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-10",
+  "type": "notice",
+  "split": "tune",
+  "question": "예전 와이파이로 붙던 분이 새 이름 안 보인다는데 뭐라고 해요?",
+  "answer_text": "와이파이를 껐다 켜 보고, 그래도 안 되면 접수 데스크에 문의하도록 안내한다.",
+  "answer_doc_ids": [
+   "doc:31"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-11",
+  "type": "notice",
+  "split": "tune",
+  "question": "전화로만 예약되는 분이 창구에서 바로 잡아 달라시는데 돼요?",
+  "answer_text": "전화 예약만 받는 기간에는 온라인이나 현장에서 새 예약을 잡을 수 없다.",
+  "answer_doc_ids": [
+   "doc:75"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-notice-12",
+  "type": "notice",
+  "split": "tune",
+  "question": "스케일링 바뀐 본인부담은 언제 진료분부터 적용이에요?",
+  "answer_text": "2023년 11월 1일 진료분부터 적용한다.",
+  "answer_doc_ids": [
+   "doc:36"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-01",
+  "type": "chart",
+  "split": "tune",
+  "question": "임신 중인 환자한테 크라운 진행한 차트 찾아 주세요",
+  "answer_text": "시술 크라운 + 임신 중 주의 문구",
+  "answer_doc_ids": [
+   "chart:7654",
+   "chart:7806"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-02",
+  "type": "chart",
+  "split": "tune",
+  "question": "고름 때문에 응급으로 왔는데 치료 없이 상담만 하고 간 케이스 있었죠?",
+  "answer_text": "시술 상담 + 고름 호소",
+  "answer_doc_ids": [
+   "chart:10410"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-03",
+  "type": "chart",
+  "split": "tune",
+  "question": "충전물 탈락으로 응급 내원한 환자 차트요",
+  "answer_text": "충전물 탈락 + 응급 내원",
+  "answer_doc_ids": [
+   "chart:10443"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-04",
+  "type": "chart",
+  "split": "tune",
+  "question": "마취하고 실신한 적 있는 크라운 환자 누구였죠?",
+  "answer_text": "시술 크라운 + 마취 후 실신 이력",
+  "answer_doc_ids": [
+   "chart:10166",
+   "chart:10290",
+   "chart:10353",
+   "chart:6677"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-05",
+  "type": "chart",
+  "split": "tune",
+  "question": "라텍스 알레르기 있는 임플란트 1차 환자 차트 보여 주세요",
+  "answer_text": "시술 임플란트 1차 + 라텍스 알레르기",
+  "answer_doc_ids": [
+   "chart:5024",
+   "chart:5177"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-06",
+  "type": "chart",
+  "split": "tune",
+  "question": "38번 완전 매복 사랑니 뺀 폐소공포증 환자 차트 있어요?",
+  "answer_text": "시행 치아 38번 + 완전 매복 + 폐소공포증",
+  "answer_doc_ids": [
+   "chart:1915",
+   "chart:2116",
+   "chart:5856"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-07",
+  "type": "chart",
+  "split": "tune",
+  "question": "오른쪽 아래 사랑니가 완전히 묻혀 있어서 뼈 깎고 뺐는데 페니실린 안 맞는 분 누구죠?",
+  "answer_text": "시행 치아 48번 + 완전 매복(골삭제) + 페니실린 알레르기",
+  "answer_doc_ids": [
+   "chart:2424",
+   "chart:9031"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-08",
+  "type": "chart",
+  "split": "tune",
+  "question": "왼쪽 위 사랑니 뺀 환자 중에 혈당 챙겨야 하는 분 있었나요?",
+  "answer_text": "시행 치아 28번 + 당뇨",
+  "answer_doc_ids": [
+   "chart:1895"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-09",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 치과에서 뽑은 지 1년 된 자리에 오른쪽 아래 픽스처 심은 케이스 찾아 주세요",
+  "answer_text": "임플란트 1차 + 타 기관 발치 후 12개월 + 시행 치아 4x",
+  "answer_doc_ids": [
+   "chart:2630",
+   "chart:7458"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-10",
+  "type": "chart",
+  "split": "tune",
+  "question": "왼쪽 위 치아를 딱 2년 전에 다른 데서 떼웠는데 또 떼운 분 차트요",
+  "answer_text": "아말감/GI + 타 기관 약 24개월 전 같은 치료 + 시행 치아 2x",
+  "answer_doc_ids": [
+   "chart:2431",
+   "chart:5538"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-11",
+  "type": "chart",
+  "split": "tune",
+  "question": "1년 전 다른 치과에서 근관치료한 왼쪽 위 치아, 썩어서 다시 근관치료한 환자 있죠?",
+  "answer_text": "신경치료 + 타 기관 약 12개월 전 + 시행 치아 2x + 2차 우식",
+  "answer_doc_ids": [
+   "chart:5259"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-12",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 치과에서 딱 두 달 전에 스케일링 받고 온 잇몸치료 환자들 뽑아 주세요",
+  "answer_text": "잇몸치료 + 타 기관 치석제거 60일 전",
+  "answer_doc_ids": [
+   "chart:1866",
+   "chart:4163",
+   "chart:6750",
+   "chart:7374",
+   "chart:7505"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-13",
+  "type": "chart",
+  "split": "tune",
+  "question": "오른쪽 아래 어금니 홈 메우기 했는데 애가 협조가 안 돼서 보호자랑 한 케이스요",
+  "answer_text": "실란트 + 시행 치아 4x + 협조 어려운 소아",
+  "answer_doc_ids": [
+   "chart:7442",
+   "chart:9894"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-14",
+  "type": "chart",
+  "split": "tune",
+  "question": "사랑니 말고 왼쪽 아래 이 뽑은 환자 중 피 묽게 하는 약 드시는 분 누구예요?",
+  "answer_text": "단순발치 + 시행 치아 3x + 항응고제 복용",
+  "answer_doc_ids": [
+   "chart:2205",
+   "chart:2727",
+   "chart:9094"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-15",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 치과에서 이 뺀 지 넉 달도 안 돼서 오른쪽 아래 임플란트 심은 환자 있어요?",
+  "answer_text": "임플란트 1차 + 타 기관 발치 후 4개월 미만 + 시행 치아 4x",
+  "answer_doc_ids": [
+   "chart:10074",
+   "chart:10300",
+   "chart:1869",
+   "chart:9490"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-16",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 데서 떼운 지 반년도 안 돼서 왼쪽 아래 다시 떼운 분들 찾아 주세요",
+  "answer_text": "아말감/GI + 타 기관 같은 치료 6개월 미만 전 + 시행 치아 3x",
+  "answer_doc_ids": [
+   "chart:1981",
+   "chart:7900"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-17",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 치과 스케일링 받고 한 달도 안 돼서 잇몸치료 들어갔는데 치주낭이 5mm 넘고 동요도 1도인 환자요",
+  "answer_text": "잇몸치료 + 타 기관 치석제거 30일 미만 전 + 치주낭 5mm 초과 + 동요도 1도",
+  "answer_doc_ids": [
+   "chart:1820",
+   "chart:2632",
+   "chart:2692"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "tune-chart-18",
+  "type": "chart",
+  "split": "tune",
+  "question": "다른 치과에서 신경치료 받고 1년 반 넘게 지나서 왼쪽 아래 치아 다시 신경치료한 환자 있나요?",
+  "answer_text": "신경치료 + 타 기관 같은 치료 18개월 초과 전 + 시행 치아 3x",
+  "answer_doc_ids": [
+   "chart:4282",
+   "chart:4848"
+  ],
+  "answer_chunk_hint": null,
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ }
+]

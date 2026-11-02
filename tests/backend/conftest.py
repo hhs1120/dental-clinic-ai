@@ -30,6 +30,16 @@ def paths(tmp_path):
     conn = sqlite3.connect(source)
     conn.execute("CREATE TABLE emr_patients (chart_no TEXT)")
     conn.execute("INSERT INTO emr_patients VALUES ('C-1')")
+    conn.execute("CREATE TABLE ax_documents (id, type, title, effective_date)")
+    conn.executemany(
+        "INSERT INTO ax_documents VALUES (?, ?, ?, ?)",
+        [
+            (101, "notice", "휴진", "2024-01-01"),
+            (102, "notice", "휴진", "2026-01-01"),
+            (103, "notice", "주차", "2026-01-01"),
+            (104, "manual", "휴진", "2020-01-01"),
+        ],
+    )
     conn.commit()
     conn.close()
     return tmp_path / "app.sqlite", source

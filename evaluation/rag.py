@@ -117,11 +117,13 @@ def _rate(qs: list[dict], field: str) -> dict:
     return {"k": sum(bool(q[field]) for q in qs), "n": len(qs)}
 
 
-def evaluate(conn, app: RagApp, split: str, condition: str | None = None, parts=PARTS) -> dict:
-    """parts = 돌릴 묶음(PARTS 부분집합). 안 돌린 묶음의 지표는 None"""
+def evaluate(
+    conn, app: RagApp, split: str, condition: str | None = None, parts=PARTS, questions=None
+) -> dict:
+    """parts = 돌릴 묶음(PARTS 부분집합). 안 돌린 묶음의 지표는 None. questions를 주면 split 대신 그 문항을 쓴다"""
     latest, pairs = _latest_notices(conn), _notice_pairs(conn)
     out_q = []
-    for q in _questions(conn, split):
+    for q in questions if questions is not None else _questions(conn, split):
         r = {"id": q["id"], "type": q["type"], "question": q["question"]}
         if "retrieval" in parts and q["type"] in BUCKET:
             ranked = app.search(q["question"], condition)[BUCKET[q["type"]]]

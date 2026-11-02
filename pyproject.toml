@@ -14,8 +14,12 @@ generator = [
 ]
 backend = [
     "anthropic>=2.3.0",
+    "numpy",
+    "openai",
     "pydantic",
     "pyyaml",
+    "sqlite-vec",
+    "voyageai>=0.3.7",
 ]
 dev = [
     "pytest",
@@ -24,6 +28,7 @@ dev = [
 
 [tool.uv]
 default-groups = ["generator", "backend", "dev"]  # uv sync·uv run 기본
+python-preference = "only-managed"  # sqlite-vec은 SQLite 확장을 여는 파이썬이 필요하다 — python.org 빌드는 막혀 있다
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
