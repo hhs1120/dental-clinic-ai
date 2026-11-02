@@ -896,7 +896,7 @@ R.ask = () => {
 };
 function answerCard(x) {
   if (x.refused) return `<div class="bubble-a"><div class="steps"><span>문서 버킷 검색</span><span>사례 버킷 검색</span><span>근거 없음 → refuse</span></div>
-    <b>문서함에 없음</b><p class="label2 fg3" style="margin:6px 0 0">확인된 문서에서 근거를 찾지 못했습니다. 이 질문은 오늘 화면 '사람이 볼 일'에 올라가 채울 문서 후보가 됩니다.</p>
+    <b>문서함에 없음</b><p class="label2 fg3" style="margin:6px 0 0">확인된 문서에서 근거를 찾지 못했습니다. 에이전트가 문서 초안을 만들어 오늘 화면 '사람이 볼 일'에 올립니다.</p>
     <div class="row mt8"><button class="btn btn-sm" data-act="searchWith" data-arg="${esc(x.q)}">근거 더 보기</button></div></div>`;
   return `<div class="bubble-a"><div class="steps"><span>search_docs</span><span>리랭커 정렬</span><span>답 쓰기</span></div>
     <div class="row" style="margin-bottom:4px">${AI}</div><div class="body1">${esc(x.a)}</div>
@@ -1018,7 +1018,7 @@ function evalJudge() {
   <section class="card mt16" id="judgeCard">
     ${items.map((it, i) => `<div class="jrow ${S.jActive === i && !S.jSaved ? "active" : ""}"><div class="lbl">${it.label}${S.jActive === i && S.jBuf ? `<span class="caption1 brand tnum"> ${S.jBuf}_</span>` : ""}</div><div>
       ${it.opts.map(o => { const on = S.jAns[it.key] === o.l, mine = S.jSaved && modelLabel(c, it) === o.l; return `<button class="opt ${on ? "on" : ""} ${mine ? "model" : ""}" data-act="jPick" data-arg="${i}|${esc(o.l)}"><kbd>${o.k}</kbd>${esc(o.l)}</button>`; }).join("")}
-      ${S.jSaved ? `<div class="caption1 ${S.jAns[it.key] === modelLabel(c, it) ? "fg3" : "neg"}">${AI} 모델: ${esc(modelLabel(c, it))} ${S.jAns[it.key] === modelLabel(c, it) ? "· 일치" : "· 다름 — 오류 유형 태그는 make gate 이후"}</div>` : ""}
+      ${S.jSaved ? `<div class="caption1 ${S.jAns[it.key] === modelLabel(c, it) ? "fg3" : "neg"}">${AI} 모델: ${esc(modelLabel(c, it))} ${S.jAns[it.key] === modelLabel(c, it) ? "· 일치" : "· 다름"}</div>` : ""}
     </div></div>`).join("")}
     <input id="jMemo" class="input mt12" style="width:100%" placeholder="메모(선택) — 애매한 이유, 원장 기준 필요 등   (/ 키로 들어가기, Enter 저장)" value="${esc(S.jMemo)}">
     <div class="row mt12">

@@ -1,4 +1,4 @@
-"""와이어프레임(docs/wireframe/index.html)용 데이터 — data/source.sqlite(+ 정답 DB 일부: AI 결과 칸 예시)에서 화면별로 뽑아
+"""와이어프레임(docs/wireframe/index-v2.html·index.html)용 데이터 — data/source.sqlite(+ 정답 DB 일부: AI 결과 칸 예시)에서 화면별로 뽑아
 JSON 한 파일로. make data 뒤에 make wireframe. 정답 라벨이 들어 있어 결과(data.json)는 커밋하지 않는다."""
 
 import json

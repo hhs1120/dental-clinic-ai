@@ -23,7 +23,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
-| `ax_call_classifications` | 모델별 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. UNIQUE `(call_uid, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델)의 버전** — 모델만 바꿔도 올림(`vN-final`). 대시보드는 버전마다 `model_actual` 표기. 요약·할 일은 모델 A 행만 쓴다 |
+| `ax_call_classifications` | 분류기(모델 A)의 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. UNIQUE `(call_uid, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델)의 버전** — 모델만 바꿔도 올림(`vN-final`). 대시보드는 버전마다 `model_actual` 표기 |
 | `ax_judgments` | 사람 판정. `judged_at`은 실제 시계. `note`(메모, 선택) |
 | `ax_agent_judgments` | 판정 에이전트(모델 B) 판정. 사람 판정과 섞지 않으려고 테이블을 나눈다. UNIQUE `(call_uid, model_alias, prompt_version)` |
 | `ax_call_disagreements` | 엇갈림 `(call_uid, prompt_version)` 1행, `is_core` = 목적·급함·응급 불일치 |
@@ -66,7 +66,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 - 호출 상한 6회/질문. 경계: 건수·목록 → `query_*`, 절차·규정·과거 대화 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document` 상위 25 + `call/message_thread/chart_note` 상위 25 따로 → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제
 
-**문서에서 근거를 못 찾은 질문**(오늘 화면) = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만.
+**문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만.
 
 ## 3b. 에이전트 하네스
 
@@ -98,7 +98,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | 운영 | 신호 조회, 기능 에이전트 호출, `flag_patient` |
 
 - **쓰기**: 도구는 `source.sqlite`에 쓰지 못한다. 자동 처리는 `request_auto_action` 하나로만 요청하고, 코드가 `auto_policy`와 작업별 조건을 검사해 `ax_auto_actions`에 쓴다
-- **스케줄러**: `make nightly`가 운영 에이전트를 시작한다. 기능 에이전트 착수 전에는 코드가 고정 순서로 호출한다. 기준일은 §6대로 고정이고 실행 시각만 실제 시계다
+- **스케줄러**: `make nightly`가 운영 에이전트를 시작한다. 운영 에이전트 착수 전에는 코드가 기능 에이전트를 고정 순서로 호출한다. 기준일은 §6대로 고정이고 실행 시각만 실제 시계다
 - **신뢰 경계**: 시스템 지시와 외부 텍스트를 메시지 구조로 나누고, 도구 결과에 출처 표시를 붙인다. 외부 텍스트는 정책·권한 판단의 입력이 되지 않는다
 - **훅**: 하네스의 `before_tool`·`after_tool` 두 지점. 금지 도구·`auto_policy` 검사와 후검증은 에이전트마다 쓰지 않고 여기에 등록한다
 - **재생**: `ax_agent_steps`의 응답·도구 결과로 실행을 다시 돌린다. `FakeGateway`와 같은 인터페이스(§7.1)이고 테스트 기록은 `tests/fixtures/`
@@ -185,19 +185,19 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 **페이지**
 
-| 라우트 | 화면 | 쓰는 API |
+| 라우트 | 화면 | API 원본 |
 |---|---|---|
 | `/` | 시작 화면 | 없음 |
-| `/today` | 오늘 | `GET /today`, `POST /auto-actions/{id}/revert` |
-| `/calls` | 통화 목록·상세, 후속 큐, 붙여넣기 | `GET /calls`, `GET /calls/{call_uid}`, `POST /calls/paste`, `POST /calls/{call_uid}/classify`, `POST /jobs/classify-batch`, `GET /calls/followups`, `POST /calls/{call_uid}/followup-done` |
-| `/prep` | 준비표(표·회의·체어) | `GET /prep?date=`, `POST /jobs/prep-regenerate?date=` |
-| `/ask` | 질문하기, 기록 검색, 문서함 | `POST /chat`, `GET /search`, `GET /documents`, `GET /documents/{id}` |
-| `/eval` | 판정, 블라인드, 정확도, 자동 개선 | `GET /judge/next`, `POST /judgments`, `POST /calls/{call_uid}/skip`, `GET /metrics/accuracy`, `GET /metrics/blind`, `GET /improve/runs`, `GET /failure-cases` |
-| `/emr` | 전환 전 EMR(데스크·예약·전자차트) | `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`, `GET /emr/schedule?date=` |
-| `/claims` | 삭감 대응, 청구 전 점검 | 슬롯 ⑤ 착수 때 |
-| `/report` | 경영 리포트 | 슬롯 ⑥ 착수 때 |
-| `/finance` | 수입 일계표, 지출 증빙 | 슬롯 ⑧ 착수 때 |
-| `/followup` | 후속 관리 | 슬롯 ⑨ 착수 때 |
+| `/today` | 오늘 | [[치과 AX - 기능 정의]] §4 앱 구성 |
+| `/calls` | 통화 목록·상세, 후속 큐, 붙여넣기 | [[치과 AX - 기능 정의]] §4 ① |
+| `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
+| `/ask` | 질문하기, 기록 검색, 문서함 | [[치과 AX - 기능 정의]] §4 ③ |
+| `/eval` | 판정, 블라인드, 정확도, 자동 개선 | [[치과 AX - 기능 정의]] §4 ② |
+| `/emr` | 전환 전 EMR(데스크·예약·전자차트) | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`, `GET /emr/schedule?date=` |
+| `/claims` | 삭감 대응, 청구 전 점검 | [[치과 AX - 기능 정의]] §5 ⑤, 착수 때 |
+| `/report` | 경영 리포트 | [[치과 AX - 기능 정의]] §5 ⑥, 착수 때 |
+| `/finance` | 수입 일계표, 지출 증빙 | [[치과 AX - 기능 정의]] §5 ⑧, 착수 때 |
+| `/followup` | 후속 관리 | [[치과 AX - 기능 정의]] §5 ⑨, 착수 때 |
 
 - 전환 전 EMR API는 `emr_*`를 읽기만 한다. 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
