@@ -127,3 +127,25 @@ CREATE TABLE ax_rule_counts (
     rule_id TEXT PRIMARY KEY,
     blocked INTEGER NOT NULL DEFAULT 0
 );
+
+-- ── 검색 색인 (앱 설계 §3) ───────────────────────────────────────────────
+
+CREATE TABLE ax_chunks (
+    id          TEXT PRIMARY KEY,  -- 출처에서 결정적으로 'doc:12:3' / 'call:c-0481:0' / 'thread:C-00001:2026-07' / 'chart:123'
+    source_type TEXT NOT NULL CHECK (source_type IN ('document', 'call', 'message_thread', 'chart_note')),
+    text        TEXT NOT NULL,  -- 출처 prefix 포함
+    chart_no    TEXT,
+    event_date  TEXT,
+    doc_type    TEXT
+);
+CREATE INDEX ix_chunks_filter ON ax_chunks (source_type, event_date, chart_no);
+
+CREATE VIRTUAL TABLE ax_chunks_fts USING fts5(chunk_id UNINDEXED, text, tokenize = 'unicode61');
+
+-- 임베딩 모델마다 한 벌 — 모델을 비교할 때 다시 계산하지 않게. embedding은 float32 BLOB
+CREATE TABLE ax_chunk_vectors (
+    chunk_id  TEXT NOT NULL REFERENCES ax_chunks(id),
+    model     TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    PRIMARY KEY (chunk_id, model)
+) WITHOUT ROWID;

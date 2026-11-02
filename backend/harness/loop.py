@@ -140,6 +140,8 @@ class Runner:
         last = steps[-1]
         if last["kind"] == "model" and not last["response"]["tool_calls"]:  # 답을 저장하고 죽음
             return self._finish(run_id, "done", result=last["response"]["text"])
+        if reason := self._ended(last):  # 끝내는 도구를 기록하고 죽음
+            return self._finish(run_id, "done", reason=reason)
         messages, pending, results = _rebuild(steps, spec.result_limit)
         while True:
             if pending:
@@ -147,6 +149,8 @@ class Runner:
                     if self.store.run(run_id)["tool_calls"] >= spec.max_tool_calls:
                         return self._finish(run_id, "handed_off", reason="call_limit")
                     results.append(self._tool(ctx, spec, call))
+                    if reason := self._ended(self.store.steps(run_id)[-1]):
+                        return self._finish(run_id, "done", reason=reason)
                 pending = []
             if results:
                 messages.append({"role": "user", "content": results})
@@ -188,6 +192,13 @@ class Runner:
                 return self._finish(run_id, "done", result=r.text)
             messages.append({"role": "assistant", "content": r.content})
             pending = list(r.tool_calls)
+
+    def _ended(self, step: dict) -> str | None:
+        """끝내는 도구가 정상 실행된 단계면 종료 사유"""
+        tool = self.registry.tools.get(step["tool"]) if step["kind"] == "tool" else None
+        if tool is None or tool.ends_run is None or step["is_error"]:
+            return None
+        return tool.ends_run(step["args"])
 
     def _finish(self, run_id, status, result=None, reason=None) -> Outcome:
         with self.store.conn:

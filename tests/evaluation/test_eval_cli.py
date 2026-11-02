@@ -282,14 +282,20 @@ def test_main_passes_db_to_app(conn, tmp_path, monkeypatch):
 
 @pytest.fixture
 def fake_backend(tmp_path, monkeypatch):
-    """임시 backend 패키지 — 테스트 뒤 sys.modules에서 지운다"""
+    """임시 backend 패키지 — 진짜 backend를 잠시 내리고 테스트 뒤 돌려놓는다"""
     pkg = tmp_path / "pkgs" / "backend"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path / "pkgs"))
+
+    def loaded():
+        return [m for m in sys.modules if m == "backend" or m.startswith("backend.")]
+
+    real = {name: sys.modules.pop(name) for name in loaded()}
     yield pkg
-    for name in [m for m in sys.modules if m == "backend" or m.startswith("backend.")]:
+    for name in loaded():
         del sys.modules[name]
+    sys.modules.update(real)
 
 
 def test_load_app_none_without_hooks(fake_backend):

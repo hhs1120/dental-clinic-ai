@@ -14,6 +14,6 @@ APP_TIMEOUT = 120.0  # 초
 APP_RETRIES = 1
 
 
-def make_gateway(conn: sqlite3.Connection, clock=datetime.now) -> llm.Gateway:
+def make_gateway(conn: sqlite3.Connection, clock=datetime.now, is_eval=False) -> llm.Gateway:
     client = anthropic.Anthropic(timeout=APP_TIMEOUT, max_retries=APP_RETRIES)
-    return llm.Gateway(llm.load_config(), SqliteLlmLog(conn), "runtime", client, clock)
+    return llm.Gateway(llm.load_config(), SqliteLlmLog(conn, is_eval), "runtime", client, clock)

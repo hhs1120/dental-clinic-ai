@@ -30,3 +30,12 @@ def test_init_schema_twice_keeps_rows(conn):
 
 def test_get_setting_default(conn):
     assert db.get_setting(conn, "없음", {}) == {}
+
+
+def test_sqlite_vec_is_loaded(conn):
+    assert conn.execute("SELECT vec_version()").fetchone()[0]
+
+
+def test_extension_loading_is_closed_after_connect(conn):
+    with pytest.raises(sqlite3.OperationalError):
+        conn.execute("SELECT load_extension('nothing')")

@@ -132,14 +132,15 @@ class RunStore:
 class SqliteLlmLog:
     """게이트웨이 호출 기록 — shared/llm.py JsonlLog와 같은 인터페이스(write·spent)"""
 
-    def __init__(self, conn: sqlite3.Connection):
-        self.conn = conn
+    def __init__(self, conn: sqlite3.Connection, is_eval: bool = False):
+        self.conn, self.is_eval = conn, is_eval
 
     def write(self, record: dict) -> None:
         self.conn.execute(
             "INSERT INTO ax_llm_calls (task, model_alias, model_actual, prompt_version,"
-            " fallback_used, ok, created_at, input_tokens, output_tokens, cost_usd, latency_ms,"
-            " error, ref_type, ref_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " fallback_used, ok, is_eval, created_at, input_tokens, output_tokens, cost_usd,"
+            " latency_ms, error, ref_type, ref_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 record["task"],
                 record["alias"],
@@ -147,6 +148,7 @@ class SqliteLlmLog:
                 record["prompt_version"],
                 int(record["fallback_used"]),
                 int(record["ok"]),
+                int(self.is_eval),
                 record["at"].replace("T", " "),
                 record["input_tokens"],
                 record["output_tokens"],

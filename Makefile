@@ -36,5 +36,10 @@ fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
 
-index fixture:
+# 검색 색인 (앱 설계 §3). 벡터는 모델마다 한 벌이고 없는 청크만 계산한다
+index:
+	$(if $(EMBEDDING),,$(error EMBEDDING=모델 이름 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.rag_index --embedding $(EMBEDDING)
+
+fixture:
 	@echo "TODO: $@"

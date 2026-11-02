@@ -5,11 +5,16 @@ import json
 import sqlite3
 from pathlib import Path
 
+import sqlite_vec
+
 SCHEMA = Path(__file__).resolve().parents[1] / "shared" / "app_schema.sql"
 
 
 def connect(app_path: Path, source_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(Path(app_path).resolve().as_uri(), uri=True)
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute(
