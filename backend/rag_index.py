@@ -5,7 +5,7 @@ import argparse
 import json
 import re
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from backend import db
@@ -156,12 +156,14 @@ def _period_terms(note: str) -> list[str]:
 
 
 def _name_terms(note: str, names: list[tuple]) -> list[str]:
-    """시술 이름과 별칭 중 하나가 서술에 있으면 나머지를 띄어쓰기 없이 더한다"""
+    """시술 이름과 별칭 중 하나가 서술에 있으면 나머지를 띄어쓰기 없이 더한다.
+    여러 시술이 함께 쓰는 별칭은 어느 시술인지 알 수 없어 찾는 말로 쓰지 않는다"""
     compact = note.replace(" ", "")
+    groups = [[w.replace(" ", "") for w in (name, *aliases)] for name, aliases in names]
+    shared = Counter(w for words in groups for w in words[1:])
     out = []
-    for name, aliases in names:
-        words = [w.replace(" ", "") for w in (name, *aliases)]
-        if any(w in compact for w in words):
+    for words in groups:
+        if any(w in compact and shared[w] < 2 for w in words):
             out += [w for w in words if w not in compact]
     return out
 

@@ -214,7 +214,12 @@ def test_tooth_number_becomes_position(tooth, want):
     assert tooth_terms(tooth) == want
 
 
-NAMES = [("스케일링", ["치석 제거"]), ("레진", [])]
+NAMES = [
+    ("스케일링", ["치석 제거"]),
+    ("레진", []),
+    ("임플란트 2차", ["임플란트"]),
+    ("임플란트 1차", ["임플란트"]),
+]
 
 
 @pytest.mark.parametrize(
@@ -229,6 +234,10 @@ NAMES = [("스케일링", ["치석 제거"]), ("레진", [])]
         ("4일 전 치석제거 시행", ["스케일링"]),
         ("스케일링 시행함", ["치석제거"]),
         ("레진 시행함", []),
+        (
+            "43번 치아 임플란트 1차 시행함",
+            [],
+        ),  # 다른 시술의 별칭에 걸려 틀린 시술이 붙으면 안 된다
     ],
 )
 def test_note_gets_other_expressions(note, want):

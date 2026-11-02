@@ -109,6 +109,39 @@ class Searcher:
         self.conn, self.clinic, self.embedder, self.reranker = conn, clinic, embedder, reranker
         self.vectors = VectorStore(conn, embedder.model)
         self.rerank_failures = 0
+        self.replaced_by = self._replacements()
+
+    def _replacements(self) -> dict:
+        """옛 공지 → 같은 제목의 최신 공지. 옛 값이 답이 되지 않게 코드로 정한다(앱 설계 §3)"""
+        latest, out = {}, {}
+        rows = self.conn.execute(
+            "SELECT id, title FROM source.ax_documents WHERE type = 'notice'"
+            " ORDER BY effective_date DESC, id DESC"
+        )
+        for doc_id, title in rows:
+            if title in latest:
+                out[doc_id] = latest[title]
+            else:
+                latest[title] = doc_id
+        return out
+
+    def latest_first(self, chunks: list[dict]) -> list[dict]:
+        """옛 공지 청크를 후보에 있는 최신 공지 청크 뒤로 옮긴다"""
+
+        def doc(chunk):
+            kind, *rest = chunk["id"].split(":")
+            return int(rest[0]) if kind == "doc" else None
+
+        present = {doc(c) for c in chunks}
+        out, waiting = [], {}
+        for c in chunks:
+            new = self.replaced_by.get(doc(c))
+            if new is not None and new in present and not any(doc(x) == new for x in out):
+                waiting.setdefault(new, []).append(c)
+                continue
+            out.append(c)
+            out += waiting.pop(doc(c), [])
+        return out
 
     def _where(self, kinds, date_from, date_to, chart_no) -> tuple[str, list]:
         sql = [
@@ -158,7 +191,7 @@ class Searcher:
             except Exception as e:  # 장애가 나도 검색은 답한다
                 self.rerank_failures += 1
                 log.warning("리랭커 실패: %s", e)
-        return chunks[:top_k]
+        return self.latest_first(chunks)[:top_k]
 
     def search(
         self,

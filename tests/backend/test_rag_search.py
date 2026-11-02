@@ -227,3 +227,48 @@ def test_make_app_search_returns_ids_by_bucket(paths, tmp_path):
     with pytest.raises(ValueError):
         app.search("틀니", "reranker=없는것")
     conn.close()
+
+
+def notices(*ids):
+    return [{"id": i} for i in ids]
+
+
+def test_old_notice_goes_behind_its_replacement(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder())
+    got = s.latest_first(notices("doc:101:0", "doc:109:0", "doc:102:0", "doc:102:1"))
+    assert [c["id"] for c in got] == ["doc:109:0", "doc:102:0", "doc:101:0", "doc:102:1"]
+
+
+def test_old_notice_stays_when_replacement_is_not_a_candidate(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder())
+    assert [c["id"] for c in s.latest_first(notices("doc:101:0"))] == ["doc:101:0"]
+
+
+def test_same_title_of_other_type_is_not_a_replacement(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder())
+    got = s.latest_first(notices("doc:104:0", "doc:102:0"))
+    assert [c["id"] for c in got] == ["doc:104:0", "doc:102:0"]
+
+
+def test_case_chunks_are_untouched(conn):
+    s = Searcher(conn, CLINIC, FakeEmbedder())
+    assert [c["id"] for c in s.latest_first(notices("call:c-1:0", "chart:7"))] == [
+        "call:c-1:0",
+        "chart:7",
+    ]
+
+
+def test_search_applies_latest_first_after_reranker(paths):
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    add(conn, "doc:101:0", "document", "휴진 안내 옛 공지")
+    add(conn, "doc:102:0", "document", "휴진 안내 새 공지")
+    e = FakeEmbedder()
+    VectorStore(conn, e.model).upsert(
+        ["doc:101:0", "doc:102:0"], e.embed(["휴진 안내 옛 공지", "휴진 안내 새 공지"], "document")
+    )
+    conn.commit()
+    first_old = lambda query, chunks: sorted(chunks, key=lambda c: c["id"])  # noqa: E731
+    r = Searcher(conn, CLINIC, e, first_old).search("휴진")
+    assert [c["id"] for c in r["manual_results"]] == ["doc:102:0", "doc:101:0"]
+    conn.close()
