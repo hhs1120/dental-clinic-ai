@@ -1,7 +1,7 @@
 """자동 처리 (기능 정의 §3 원칙 1, 앱 설계 §3b). LLM 경로(`request_auto_action`)와 코드 경로가 모두
 apply_auto_action()을 지난다 — auto_policy(기본 끔)와 작업별 조건을 코드가 검사하고, 허용한 건만 이유와 함께 남긴다.
 거절은 규칙 id `auto.<이유>`로 센다. 중복 방지 키의 기간은 코드가 정한다 — 모델이 고르면 되돌린 건이 다시 살아난다.
-커밋하지 않고 부르는 쪽 트랜잭션에 든다."""
+커밋하지 않고 부르는 쪽 트랜잭션에 든다. 그 트랜잭션이 롤백되면 거절 집계도 함께 사라진다."""
 
 import json
 import sqlite3
@@ -23,7 +23,7 @@ CONDITION = "condition"
 WRONG_TARGET = "wrong_target"
 
 
-def no_period(conn, target, result) -> str:
+def no_period(conn, target) -> str:
     return ""
 
 
@@ -33,7 +33,8 @@ class AutoKind:
     condition: Callable
     apply: Callable  # (conn, 행 dict) — 앱 상태 반영
     undo: Callable  # (conn, 행 dict) — 앱 상태 복원
-    period: Callable = no_period  # (conn, target, result) → 기간. 반복되는 일만 쓴다
+    # (conn, target) → 기간. 모델 값을 받지 않고 저장된 사실로 계산하며 예외를 내지 않는다. 반복되는 일만 쓴다
+    period: Callable = no_period
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ def apply_auto_action(
         return _refuse(conn, UNKNOWN_KIND)
     if not db.get_setting(conn, "auto_policy", {}).get(kind):
         return _refuse(conn, POLICY_OFF)
-    period = spec.period(conn, target, result)
+    period = spec.period(conn, target)
     old = conn.execute(
         "SELECT id, reverted_at FROM ax_auto_actions WHERE kind = ? AND target = ? AND period = ?",
         (kind, target, period),
@@ -139,7 +140,7 @@ def auto_action_tool(kinds: dict, allowed: tuple) -> Tool:
                 run_id=ctx.run_id,
                 clock=ctx.store.clock,
             )
-        return {"applied": decision.applied, "why": decision.why}
+        return {"applied": decision.applied, "why": decision.why, "detail": decision.detail}
 
     return Tool(
         "request_auto_action",

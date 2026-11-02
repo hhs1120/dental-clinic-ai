@@ -27,7 +27,7 @@ def kinds():
             condition=lambda conn, target, result: None if result.get("ok") else "조건 미달",
             apply=lambda conn, action: STATE.append(action["target"]),
             undo=lambda conn, action: STATE.remove(action["target"]),
-            period=lambda conn, target, result: PERIOD[0],
+            period=lambda conn, target: PERIOD[0],
         )
     }
 
@@ -277,3 +277,31 @@ def test_action_survives_deleting_run_history(conn, clock):
     conn.execute("DELETE FROM ax_agent_steps")
     conn.execute("DELETE FROM ax_agent_runs")
     assert conn.execute("SELECT COUNT(*) FROM ax_auto_actions").fetchone()[0] == 1
+
+
+def test_tool_returns_condition_reason(conn, clock):
+    k = kinds()
+    turn_on(conn)
+    conn.commit()
+    args = {"kind": "call_close", "target": "c-1", "result": {"ok": False}, "reason": "왜"}
+    out = agent(conn, clock, Script(call(("request_auto_action", args)), answer()), k).start(
+        "c-1", "입력"
+    )
+    assert RunStore(conn, clock).steps(out.run_id)[2]["result"]["detail"] == "조건 미달"
+
+
+def test_key_taken_during_condition_is_duplicate(conn):
+    """확인과 쓰기 사이에 다른 실행이 같은 키를 쓴 경우"""
+
+    def racing(c, target, result):
+        c.execute(
+            "INSERT INTO ax_auto_actions (kind, target, result, reason, created_at)"
+            " VALUES ('call_close', ?, '{}', '먼저', 'x')",
+            (target,),
+        )
+
+    k = {"call_close": AutoKind(racing, lambda c, a: None, lambda c, a: None)}
+    turn_on(conn)
+    with conn:
+        d = apply_auto_action(conn, k, "call_close", "c-1", result={}, reason="이유")
+    assert not d.applied and d.why == "duplicate"

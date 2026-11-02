@@ -1,4 +1,4 @@
--- app.sqlite 스키마 — 앱이 쓰는 ax_*(앱 설계 §1·§2). 생성 데이터는 source.sqlite(shared/source_schema.sql)를 읽기 전용으로 붙여 읽는다.
+-- app.sqlite 스키마 — 앱이 쓰는 ax_*(앱 설계 §1·§2·§3b·§6). 생성 데이터는 source.sqlite(shared/source_schema.sql)를 읽기 전용으로 붙여 읽는다.
 -- 생성 통화는 call_uid로 가리킨다 — 붙인 DB로는 외래 키를 걸 수 없다(앱 설계 §1)
 -- truth_* 는 여기 두지 않는다 (평가 설계 §6, ground_truth/)
 -- 시각은 naive KST ISO 문자열('2026-07-03 10:30:00'), 날짜는 'YYYY-MM-DD'

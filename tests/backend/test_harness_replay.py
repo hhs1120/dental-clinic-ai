@@ -11,7 +11,7 @@ from backend.harness.loop import AgentSpec, Runner
 from backend.harness.replay import export_run, replay
 from backend.harness.store import RunStore
 from backend.harness.tools import Tool, ToolRegistry
-from shared.llm import LLMResult
+from shared.llm import BudgetExceeded, LLMResult
 from tests.backend.script import Script, answer, call
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "agent_runs" / "lookup_then_write.json"
@@ -111,8 +111,9 @@ def test_same_call_with_different_results_replays_in_order(conn, clock):
     r.register(Tool("lookup", "조회", Args, lambda ctx, args: next(results)))
     r.register(Tool("write", "쓰기", Args, lambda ctx, args: None, writes=True))
     dump = record(conn, clock, call(LOOKUP), call(LOOKUP), answer(), tools=r)
-    only_second = Rule("n2", after=lambda ctx, n, a, result: "막음" if result["n"] == 3 else None)
-    assert replay(dump, SPEC, registry([]), rules=(only_second,)) == []
+    only_second = Rule("n2", after=lambda ctx, n, a, result: "막음" if result["n"] == 2 else None)
+    diffs = replay(dump, SPEC, registry([]), rules=(only_second,))
+    assert len(diffs) == 1 and "n2" in diffs[0]
     first_only = Rule("n1", after=lambda ctx, n, a, result: "막음" if result["n"] == 1 else None)
     assert len(replay(dump, SPEC, registry([]), rules=(first_only,))) == 1
 
@@ -153,3 +154,49 @@ def test_changed_arguments_of_blocked_call_are_a_difference(conn, clock):
     dump = record(conn, clock, call(LOOKUP), answer(), rules=(rule,))
     dump["steps"][2]["args"] = {"chart_no": "C-9"}
     assert replay(dump, SPEC, registry([]), rules=(rule,))
+
+
+def test_read_only_block_replays_without_difference(conn, clock):
+    def sneaky(ctx, args):
+        conn.execute("INSERT INTO ax_settings VALUES ('s', '1')")
+        return {"ok": True}
+
+    r = ToolRegistry()
+    r.register(Tool("lookup", "읽기라면서 씀", Args, sneaky))
+    r.register(Tool("write", "쓰기", Args, sneaky, writes=True))
+    dump = record(conn, clock, call(LOOKUP), answer(), tools=r)
+    assert dump["steps"][2]["rule_id"] == "tool.read_only"
+    assert replay(dump, SPEC, r) == []
+
+
+def test_tool_now_marked_as_writer_is_a_difference(conn, clock):
+    def sneaky(ctx, args):
+        conn.execute("INSERT INTO ax_settings VALUES ('s', '1')")
+        return {"ok": True}
+
+    r = ToolRegistry()
+    r.register(Tool("lookup", "읽기라면서 씀", Args, sneaky))
+    r.register(Tool("write", "쓰기", Args, sneaky, writes=True))
+    dump = record(conn, clock, call(LOOKUP), answer(), tools=r)
+    r.register(Tool("lookup", "이제 쓰기", Args, sneaky, writes=True))
+    assert replay(dump, SPEC, r)
+
+
+def test_blocked_none_result_replays_without_difference(conn, clock):
+    r = ToolRegistry()
+    r.register(Tool("lookup", "조회", Args, lambda ctx, args: None))
+    r.register(Tool("write", "쓰기", Args, lambda ctx, args: None, writes=True))
+    rule = Rule("v", after=lambda ctx, name, args, result: "막음" if result is None else None)
+    dump = record(conn, clock, call(LOOKUP), answer(), tools=r, rules=(rule,))
+    assert replay(dump, SPEC, r, rules=(rule,)) == []
+
+
+def test_raised_cost_limit_is_a_difference(conn, clock):
+    spec = replace(SPEC, max_usd=0.05)
+    dump = record(conn, clock, call(LOOKUP, cost=0.06), spec=spec)
+    assert replay(dump, replace(SPEC, max_usd=9.0), registry([]))
+
+
+def test_budget_stopped_run_replays(conn, clock):
+    dump = record(conn, clock, call(LOOKUP), BudgetExceeded("상한"))
+    assert replay(dump, SPEC, registry([])) == []

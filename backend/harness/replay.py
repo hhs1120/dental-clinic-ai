@@ -8,6 +8,7 @@ from collections import defaultdict
 from dataclasses import replace
 
 from backend import db
+from backend.harness.hooks import READ_ONLY
 from backend.harness.loop import AgentSpec, Runner
 from backend.harness.store import RunStore
 from backend.harness.tools import ToolRegistry
@@ -69,15 +70,19 @@ def _stubbed(registry: ToolRegistry, steps: list) -> ToolRegistry:
     def stub(name):
         def run(ctx, args):
             s = saved[_key(name, args)].pop(0)  # 없으면 IndexError — 기록에 없는 호출
-            if s["is_error"] and s["raw_result"] is None:
+            if s["rule_id"] == READ_ONLY:  # 쓰기까지 재현해야 같은 규칙이 다시 막는다
+                ctx.store.conn.execute("INSERT OR REPLACE INTO ax_settings VALUES ('replay', '1')")
+            if s["raw_result"] is not None:
+                return s["raw_result"]["value"]
+            if s["is_error"]:
                 raise RuntimeError(s["result"])
-            return s["result"] if s["raw_result"] is None else s["raw_result"]
+            return s["result"]
 
         return run
 
     out = ToolRegistry()
     for name, tool in registry.tools.items():
-        out.register(replace(tool, fn=stub(name), writes=True))
+        out.register(replace(tool, fn=stub(name)))
     return out
 
 
@@ -111,9 +116,9 @@ def replay(dump: dict, spec: AgentSpec, registry: ToolRegistry, rules: tuple = (
     diffs = [f"{a} → {b}" for a, b in zip(before, after, strict=False) if a != b]
     if len(before) != len(after):
         diffs.append(f"호출 수 {len(before)} → {len(after)}")
-    if outcome is None:
-        if run["status"] == "done":
-            diffs.append("저장된 응답이 끝났는데 실행이 끝나지 않음")
+    if outcome is None:  # 모델 응답 없이 끝난 실행만 여기서 멈추는 것이 정상이다
+        if run["status"] not in ("failed", "running") and run["reason"] != "budget":
+            diffs.append(f"저장된 응답이 끝남 — 원래 결과 {run['status']} {run['reason']}")
     elif (outcome.status, outcome.reason) != (run["status"], run["reason"]):
         diffs.append(f"결과 {run['status']} {run['reason']} → {outcome.status} {outcome.reason}")
     return diffs

@@ -6,7 +6,7 @@ PreToolUse
 - Bash 확인 창: 과금·되돌리기 어려운 명령(push·PR 머지·LLM API 채우기·test 평가)은 사용자 승인
 - Edit·Write 막기: 생성물(LLM 캐시·DB·생성기가 쓰는 정답 JSON)은 손으로 고치지 않는다 — make data·make llm-import가 쓴다.
   backend/가 ground_truth·generator를 import하는 편집, 자동 개선 코드(evaluation/improve*)가 test 분할을 읽는 편집도 막는다
-  — CLAUDE.md 절대 규칙. 편집 내용만 보는 얕은 검사이고 근거는 tests/test_no_ground_truth_import.py가 지킨다
+  — CLAUDE.md 절대 규칙. 편집 내용만 보는 얕은 검사이고 backend 쪽 근거는 tests/test_no_ground_truth_import.py가 지킨다
 - --readonly(리뷰·문서 점검 에이전트): 저장소를 바꾸는 Bash(쓰는 git·make·rm·저장소 안 리디렉션 등)를 막는다.
   명령 문자열만 보므로 프로그램이 속에서 쓰는 것까지는 못 막는다 — 부르는 쪽이 git status 전후를 비교한다
 PostToolUse
