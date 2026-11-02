@@ -453,15 +453,14 @@ for x in rows(
     TODAY.isoformat(),
 ):
     card[x["approved_at"][:10]] += x["amount"]
-mism = defaultdict(list)
-for m in rows("SELECT occurred_on, cause FROM truth.truth_recon_mismatches"):
-    mism[m["occurred_on"]].append(m["cause"])
 recon = [
     {
         "date": d,
         "ledger": dict(v),
         "card_approved": card.get(d, 0),
-        "mismatch_count": len(mism.get(d, [])),
+        "mismatch_count": int(
+            v.get("card", 0) != card.get(d, 0)
+        ),  # 정답이 아니라 코드 대조(test 달 격리)
     }
     for d, v in sorted(ledger.items())
 ]

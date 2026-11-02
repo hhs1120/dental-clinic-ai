@@ -1004,7 +1004,7 @@ function modelLabel(c, it) {
 R.eval = () => {
   const tabs = [["judge", "판정"], ["blind", "블라인드 비교"], ["acc", "정확도 표"], ["improve", "자동 개선"]];
   const body = S.evalTab === "judge" ? evalJudge() : S.evalTab === "blind" ? evalBlind() : S.evalTab === "improve" ? evalImprove() : evalAcc();
-  return head("AI 평가", "판정 풀은 사람이 전부 판정해 기준을 재고, 그 밖의 통화는 판정 에이전트가 1차로 판정해 엇갈림과 표본만 사람이 봅니다. 모델 라벨은 저장한 뒤에만 보입니다(먼저 보면 앵커링).", "") +
+  return head("AI 평가", "판정 풀은 사람이 전부 판정해 기준을 재고, 그 밖의 통화는 판정기가 1차로 판정해 엇갈림과 표본만 사람이 봅니다. 모델 라벨은 저장한 뒤에만 보입니다(먼저 보면 앵커링).", "") +
     `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${S.evalTab === k ? "on" : ""}" data-act="evalTab" data-arg="${k}">${l}</button>`).join("")}</div>` + body;
 };
 function evalJudge() {
@@ -1042,7 +1042,7 @@ function evalImprove() {
   <p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 실수를 재현 테스트로 남기고 훅·정책은 사람이 승인합니다 · 규칙별 차단 횟수로 쓸모없는 규칙을 지웁니다</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>출처</th><th>원인 ${AI}</th><th>고칠 곳</th><th>재현 테스트</th><th class="num">막은 호출</th><th>상태</th></tr></thead><tbody>
     <tr><td>자동 처리 되돌리기</td><td>금액은 맞지만 거래처가 다름</td><td>정책</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">12</td><td>${DONE("원장 승인")}</td></tr>
-    <tr><td>훅 차단</td><td>판정 에이전트가 환자 조회 시도</td><td>도구 설명</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">3</td><td>승인 대기</td></tr>
+    <tr><td>훅 차단</td><td>판정기가 환자 조회 시도</td><td>도구 설명</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">3</td><td>승인 대기</td></tr>
   </tbody></table></div>`;
 }
 function blindPair(c) {
@@ -1078,7 +1078,7 @@ function evalAcc() {
       <section class="card"><h2 class="headline2" style="margin-bottom:12px">블라인드 승률 (vN vs v1)</h2>
         <dl class="facts"><dt>vN이 나음</dt><dd>${bar(.48)}</dd><dt>v1이 나음</dt><dd>${bar(.22)}</dd><dt>비슷</dt><dd>${bar(.24)}</dd><dt>둘 다 틀림</dt><dd>${bar(.06)}</dd></dl>
         <p class="caption1 fg3" style="margin:12px 0 0">좌우 선택 비율 왼쪽 51% · 오른쪽 49% (위치 쏠림 확인용)</p></section>
-      <section class="card"><h2 class="headline2" style="margin-bottom:8px">판정 에이전트 vs 사람</h2>
+      <section class="card"><h2 class="headline2" style="margin-bottom:8px">판정기 vs 사람</h2>
         <dl class="facts"><dt>항목 평균 일치</dt><dd>${bar(.91)}</dd><dt>운영 구간 사람 몫</dt><dd>${bar(.18)}</dd></dl></section>
     </div>
   </div>`;
@@ -1451,7 +1451,7 @@ const A = {
   emrDate: a => { S.emrDate = a; render(); },
   emrTab: a => { if (S.emrTab !== a) S.emrMoves++; S.emrTab = a; render(); },
   askTab: a => { S.askTab = a; render(); },
-  askQ: a => { S.askTab = "chat"; ask(a); if (S.screen !== "ask") go("ask"); },
+  askQ: a => { S.askTab = "chat"; if (!S.chat) initChat(); ask(a); if (S.screen !== "ask") go("ask"); },
   searchWith: a => { S.searchQ = a; S.askTab = "search"; S.askInput = a; render(); },
   chatWith: a => { S.askTab = "chat"; ask(a); },
   docOpen: a => { S.docSel = +a; S.askTab = "docs"; go("ask"); },
