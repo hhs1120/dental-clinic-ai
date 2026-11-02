@@ -458,9 +458,8 @@ recon = [
         "date": d,
         "ledger": dict(v),
         "card_approved": card.get(d, 0),
-        "mismatch_count": int(
-            v.get("card", 0) != card.get(d, 0)
-        ),  # 정답이 아니라 코드 대조(test 달 격리)
+        # 정답이 아니라 카드 합계 대조만(test 달 격리). 이체·정산 대조는 ⑧ 코드 몫
+        "card_diff_day": v.get("card", 0) != card.get(d, 0),
     }
     for d, v in sorted(ledger.items())
 ]

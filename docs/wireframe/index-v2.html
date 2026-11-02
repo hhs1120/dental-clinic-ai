@@ -575,7 +575,7 @@ R.today = () => {
   const byType = t => rows.filter(r => r.type === t).length;
   const yCalls = d.calls.filter(c => c.at.startsWith("2026-11-30"));
   const appealSoon = d.slots.adjust.filter(a => !isDxError(a) && claimDeadline(a).left <= 30).sort((a, b) => a.reviewed < b.reviewed ? -1 : 1);
-  const lastRecon = d.slots.recon.filter(r => r.mismatch_count).slice(-3).reverse();
+  const lastRecon = d.slots.recon.filter(r => r.card_diff_day).slice(-3).reverse();
   const tier1 = d.slots.follow.filter(f => f.chips.length >= 4).length;
   const judgedLeft = d.calls.length - S.judged.length;
   const unconf = rows.filter(isUnconfirmed);
@@ -593,7 +593,7 @@ R.today = () => {
     ${stat(rows.length + "명", "오늘 예약", "prep", ` · 진료 ${byType("진료")} · 위생 ${byType("위생")} · 상담 ${byType("상담")}`)}
     ${stat(newP.length + "명", "신환", "prep")}
     ${stat(alertRows.length + "명", "주의 환자", "prep")}
-    ${stat(q.length + "건", "후속 큐(할 일 있는 통화)", "calls", ` · 급함 ${urgentQ.length}`)}
+    ${stat(q.length + "건", "후속 큐", "calls", ` · 급함 ${urgentQ.length}`)}
   </div>
 
   <div class="card mt16 briefing">
@@ -642,7 +642,7 @@ R.today = () => {
         ${appealSoon.slice(0, 2).map(a => { const dl = claimDeadline(a); return todo('<span class="tag t-caut">재심 기한</span>', `${esc(a.name)} · ${esc(a.procedure)} 조정 ${won(a.claimed - a.paid)}`, `기한 ${mdw(dl.d)} · ${dl.left}일 남음`, "go", "claims"); }).join("")}
         ${preDx.length ? todo('<span class="tag t-caut">청구 전 점검</span>', `상병 확인 경고 ${preDx.length}건`, "이번 달 청구 내기 전 확인 · 상병 착오는 재청구 불가", "openPre", "") : ""}
         ${todo('<span class="tag t-fam">후속 관리</span>', `1순위 ${tier1}명`, "예약 없이 놓친 환자 · 칩 4개 이상", "go", "followup")}
-        ${lastRecon.map(r => todo('<span class="tag t-neg">일계표 불일치</span>', `${mdw(r.date)} 불일치 ${r.mismatch_count}건`, "규칙 묶음은 자동 마감 · 애매한 건만 맞음/아님 확정", "openRecon", r.date)).join("")}
+        ${lastRecon.map(r => todo('<span class="tag t-neg">일계표 불일치</span>', `${mdw(r.date)} 카드 합계 차이`, "규칙 묶음은 자동 마감 · 애매한 건만 맞음/아님 확정", "openRecon", r.date)).join("")}
       </ul>
     </section>
   </div>`;
@@ -710,7 +710,7 @@ function callDetail(c) {
 }
 function callsFollow(q) {
   const doneList = Object.entries(S.done).map(([uid, v]) => ({ c: S.data.calls.find(x => x.uid === uid), ...v }));
-  return `<p class="label2 fg3" style="margin-top:0">AI 분류에서 '할 일 있음'인 통화만 모읍니다. 급한 건이 먼저, 그다음 최근 순. 후속 에이전트가 환자 기록을 조회해 처리안을 붙입니다. 할 일 없는 통화는 두 모델이 일치할 때 자동 종결됩니다. "처리함"을 누르면 빠지고 누가 언제 처리했는지 남습니다.</p>
+  return `<p class="label2 fg3" style="margin-top:0">처리·자동 종결되지 않은 통화를 모읍니다. 응급·급함이 먼저, 그다음 할 일 있는 통화, 남은 통화는 한 번에 처리합니다. 할 일 있는 통화에는 후속 에이전트가 처리안을 붙입니다. 자동 종결 정책이 켜져 있고 두 모델이 일치하면 자동 종결됩니다. "처리함"을 누르면 빠지고 누가 언제 처리했는지 남습니다.</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>급함</th><th>시각</th><th>상대</th><th>목적 ${AI}</th><th>할 일 ${AI}</th><th>처리안 ${AI}</th><th>근거</th><th></th></tr></thead><tbody>
   ${q.map(c => `<tr><td>${urgTag(c.ai.urgency)}</td><td class="num">${c.at.slice(5, 10).replace("-", "/")} ${c.at.slice(11)}</td>
     <td class="nowrap"><button class="link" data-act="openCall" data-arg="${c.uid}">${esc(c.caller)}</button><div class="caption1 fg3 tnum">${esc(c.phone)}</div></td>
@@ -1034,7 +1034,7 @@ function evalImprove() {
     { v:"v3", kind:"불만 플래그 조건 완화", d:"+2%p", g:"탈락 · 응급 1건 새로 놓침", on:false },
     { v:"v4", kind:"예약 확정 재확인 제외", d:"+3%p", g:"통과", on:true },
   ];
-  return `<p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 재료(비풀 절반)에서 오류를 찾고, 검증 + dev 판정 풀로 된 관문을 넘어야 반영합니다 · test는 사람이 실행 · 기준은 화면에서 바꾸지 않습니다</p>
+  return `<p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 재료(비풀 절반)에서 오류를 찾고, 검증 구간 관문을 넘으면 대기 버전이 됩니다 · 사람이 재분류를 실행해 끝나면 전환합니다 · test는 사람이 실행 · 기준은 화면에서 바꾸지 않습니다</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>후보</th><th>오류 유형 ${AI}</th><th class="num">목적 Strict</th><th>관문</th><th>상태</th></tr></thead><tbody>
     ${runs.map(x => `<tr><td class="tnum">${x.v}</td><td>${esc(x.kind)}</td><td class="num">${x.d}</td><td>${esc(x.g)}</td><td>${x.on ? "반영" : "버림"}</td></tr>`).join("")}
   </tbody></table></div>
@@ -1042,7 +1042,7 @@ function evalImprove() {
   <p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 실수를 재현 테스트로 남기고 훅·정책은 사람이 승인합니다 · 규칙별 차단 횟수로 쓸모없는 규칙을 지웁니다</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>출처</th><th>원인 ${AI}</th><th>고칠 곳</th><th>재현 테스트</th><th class="num">막은 호출</th><th>상태</th></tr></thead><tbody>
     <tr><td>자동 처리 되돌리기</td><td>금액은 맞지만 거래처가 다름</td><td>정책</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">12</td><td>${DONE("원장 승인")}</td></tr>
-    <tr><td>훅 차단</td><td>판정기가 환자 조회 시도</td><td>도구 설명</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">3</td><td>승인 대기</td></tr>
+    <tr><td>훅 차단</td><td>챗이 허용 밖 출처로 검색 시도</td><td>도구 설명</td><td>수정 전 실패 · 수정 뒤 통과</td><td class="num">3</td><td>승인 대기</td></tr>
   </tbody></table></div>`;
 }
 function blindPair(c) {
@@ -1239,35 +1239,29 @@ function claimExpand(a, id) {
 R.finance = () => {
   const all = S.data.slots.recon, months = [...new Set(all.map(r => r.date.slice(0, 7)))];
   const rows = all.filter(r => r.date.startsWith(S.finMonth));
-  const mis = rows.filter(r => r.mismatch_count);
+  const mis = rows.filter(r => r.card_diff_day);
   return head("재무 대조 · 수입 일계표", "장부(수납) 결제수단별 합계와 카드 승인 합계를 코드가 맞춰 봅니다. 불일치 행을 펼치면 AI가 조사한 과정과 원인 후보가 나오고, 맞는지는 사람이 확정합니다. 장부 수정은 사람이 합니다.", `<span class="updated">마지막 대조 12/1 04:20</span>`) + `
   <div class="row" style="margin-bottom:12px"><div class="seg">${months.map(m => `<button class="${S.finMonth === m ? "on" : ""}" data-act="finMonth" data-arg="${m}">${+m.slice(5)}월</button>`).join("")}</div>
-    <span class="fchip">영업일 <b>${rows.length}</b></span><span class="fchip">불일치 있는 날 <b>${mis.length}</b></span><span class="fchip">불일치 <b>${mis.reduce((t, r) => t + r.mismatch_count, 0)}건</b></span>
-    <span class="spacer"></span><span class="caption1 fg3">불일치 배지는 지금 정답 저장소의 건수로 채운 예시</span></div>
+    <span class="fchip">영업일 <b>${rows.length}</b></span><span class="fchip">카드 합계 차이 있는 날 <b>${mis.length}</b></span>
+    <span class="spacer"></span><span class="caption1 fg3">카드 합계만 대조한 예시 · 현금·이체·정산 대조는 ⑧에서</span></div>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>날짜</th><th class="num">장부 카드</th><th class="num">장부 현금</th><th class="num">장부 이체</th><th class="num">장부 합계</th><th class="num">카드 승인 합계</th><th class="num">카드 차이</th><th>상태</th></tr></thead><tbody>
   ${rows.map(r => { const L = r.ledger, tot = (L.card || 0) + (L.cash || 0) + (L.transfer || 0), diff = (L.card || 0) - r.card_approved, open = S.finOpen === r.date, cf = S.finConfirm[r.date];
-    return `<tr class="${r.mismatch_count ? "click" : ""} ${open ? "sel" : ""}" ${r.mismatch_count ? `data-act="finOpen" data-arg="${r.date}"` : ""}>
+    return `<tr class="${r.card_diff_day ? "click" : ""} ${open ? "sel" : ""}" ${r.card_diff_day ? `data-act="finOpen" data-arg="${r.date}"` : ""}>
       <td class="num">${mdw(r.date)}</td><td class="num">${commas(L.card)}</td><td class="num">${commas(L.cash)}</td><td class="num">${commas(L.transfer)}</td><td class="num"><b>${commas(tot)}</b></td><td class="num">${commas(r.card_approved)}</td>
       <td class="num ${diff ? "neg" : "fg3"}">${diff ? (diff > 0 ? "+" : "") + commas(diff) : "0"}</td>
-      <td>${r.mismatch_count ? (cf ? `${DONE(esc(cf))}` : `<span class="tag t-neg">불일치 ${r.mismatch_count}건</span>`) : '<span class="fg3">일치</span>'}</td></tr>
+      <td>${r.card_diff_day ? (cf ? `${DONE(esc(cf))}` : `<span class="tag t-neg">카드 합계 차이</span>`) : '<span class="fg3">차이 없음</span>'}</td></tr>
       ${open ? `<tr class="expand"><td colspan="8">${finExpand(r, diff)}</td></tr>` : ""}`; }).join("")}
   </tbody></table></div>`;
 };
 function finExpand(r, diff) {
   const cf = S.finConfirm[r.date];
-  const cand = diff ? [["분할결제", "승인 2건 합이 장부 1건과 같음"], ["금액 오입력", "장부 금액과 가장 가까운 승인의 차이가 한 자리 숫자"]] : [["입력 누락", "그날 내원했는데 수납 행이 0원"], ["날짜 밀림", "다음 날 장부에 같은 금액"]];
-  const steps = diff ? [
+  const cand = [["분할결제", "승인 2건 합이 장부 1건과 같음"], ["금액 오입력", "장부 금액과 가장 가까운 승인의 차이가 한 자리 숫자"]];
+  const steps = [
     ["비교", `장부 카드 ${won(r.ledger.card)} vs 승인 ${won(r.card_approved)} → 차이 ${won(Math.abs(diff))}`],
     ["가설", "분할결제 또는 취소 후 재승인일 수 있음"],
     ["조회", `query_card_sales(date=${r.date}) → 승인 건별 금액·시각`],
     ["조회", `query_payments(date=${r.date}, method=card) → 장부 건별 금액`],
     ["비교", "승인 2건의 합이 장부 1건과 맞는지 확인 → 결과 자리"]
-  ] : [
-    ["비교", "카드는 맞음 → 현금·이체·정산 입금 쪽 의심"],
-    ["가설", "입력 누락 또는 날짜 밀림"],
-    ["조회", `query_visits(date=${r.date}) → 그날 내원 환자`],
-    ["조회", `query_payments(date=${addDays(r.date, 1)}) → 다음 날 장부`],
-    ["비교", "내원했는데 수납이 0원인 행, 다음 날 같은 금액 → 결과 자리"]
   ];
   return `<div class="grid2" style="gap:24px">
     <div><div class="row"><h3 class="headline2">조사 과정</h3>${AI}<span class="caption1 fg3">도구 호출 순서 · 조회 조건 · 비교 결과 · 단계 상한 8</span></div>
@@ -1276,7 +1270,7 @@ function finExpand(r, diff) {
       <ul class="list">${cand.map(([c, w], i) => `<li><span class="tag ${i ? "" : "t-brand"}">${i ? "2순위" : "1순위"}</span><div class="main"><b>${c}</b><div class="caption1 fg3">근거: ${w}</div></div></li>`).join("")}</ul>
       <div class="row mt12"><span class="label2">1순위가 맞나요?</span><button class="btn btn-sm ${cf === cand[0][0] ? "on" : ""}" data-act="finYes" data-arg="${r.date}|${cand[0][0]}">맞음</button>
         <label class="label2" for="finNo-${r.date}">아님 →</label><select id="finNo-${r.date}" class="input" data-fin="${r.date}"><option value="">원인 고르기</option>${RECON_CAUSES.map(c => `<option ${cf === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
-      <p class="caption1 fg3" style="margin:8px 0 0">사람 확정은 ax_recon_confirmations에 남고 다음 프롬프트 개정 재료가 됩니다.</p></div></div>`;
+      <p class="caption1 fg3" style="margin:8px 0 0">사람 확정은 ax_recon_confirmations에 남습니다. dev 달 확정만 재료로 나눠 프롬프트 개정에 씁니다.</p></div></div>`;
 }
 
 /* ── ⑨ 후속 관리 ── */
