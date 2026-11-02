@@ -12,7 +12,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import yaml  # noqa: E402
 
-from generator.master import CLINIC_NAME, RECALL_CYCLE, SCALING_CODE, SCALING_MIN_AGE  # noqa: E402
+from generator.master import (  # noqa: E402
+    ACCOUNTS,
+    ADJUST_REASONS,
+    CLINIC_NAME,
+    PROCEDURE_DIAGNOSES,
+    RECALL_CYCLE,
+    SCALING_CODE,
+    SCALING_MIN_AGE,
+    VENDORS,
+)
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "wireframe" / "data.json"
 TODAY = date.fromisoformat(
@@ -200,6 +209,7 @@ for d in days:
         lst.append(
             {
                 "appt_id": a["id"],
+                "confirmed": bool(a["confirmed"]),
                 "time": a["scheduled_at"][11:16],
                 "duration": a["duration_min"],
                 "chair": a["chair_no"],
@@ -456,6 +466,231 @@ recon = [
     for d, v in sorted(ledger.items())
 ]
 
+# ── 슬롯 ⑤-2 청구 전 점검 — 정답 저장소를 쓰지 않는다(⑤ 평가셋 분할 전). 규칙 칸만 실제 값, AI 칸은 자리 ──
+dx_name = {r["code"]: r["name"] for r in rows("SELECT * FROM emr_diagnoses")}
+dx_notes = [r["note"] for r in ADJUST_REASONS.values() if r["type"] == "diagnosis"]
+ph = ",".join("?" * len(dx_notes))
+dx_adjusted = rows(
+    f"SELECT cl.*, n.dx_code FROM emr_claims cl JOIN emr_chart_notes n USING (treatment_id)"
+    f" WHERE cl.adjust_note IN ({ph}) ORDER BY cl.reviewed_at",
+    *dx_notes,
+)
+combo = defaultdict(lambda: {"n": 0, "lost": 0})
+for r in dx_adjusted:
+    k = (r["procedure_code"], r["dx_code"])
+    combo[k]["n"] += 1
+    combo[k]["lost"] += r["claim_amount"] - r["paid_amount"]
+pending = rows(
+    "SELECT cl.*, n.dx_code, n.note FROM emr_claims cl"
+    " LEFT JOIN emr_chart_notes n USING (treatment_id)"
+    " WHERE cl.status = 'pending' ORDER BY cl.service_date, cl.id"
+)
+precheck = []
+for cl in pending:
+    allowed = PROCEDURE_DIAGNOSES.get(cl["procedure_code"])
+    wrong = bool(allowed and cl["dx_code"] and cl["dx_code"] not in allowed)
+    past = combo.get((cl["procedure_code"], cl["dx_code"]), {"n": 0, "lost": 0})
+    precheck.append(
+        {
+            "service": cl["service_date"][:10],
+            "chart_no": cl["chart_no"],
+            "name": pats[cl["patient_id"]]["name"],
+            "procedure": pname[cl["procedure_code"]],
+            "tooth": cl["tooth_no"],
+            "amount": cl["claim_amount"],
+            "dx": dx_name.get(cl["dx_code"]),
+            "dx_wrong": wrong,
+            "past_n": past["n"] if wrong else 0,
+            "past_lost": past["lost"] if wrong else 0,
+            "note": cl["note"],
+        }
+    )
+
+# ── 슬롯 ⑥ 경영 리포트 — 달별 상병 착오(통보 월 기준) ──
+report = defaultdict(lambda: {"n": 0, "lost": 0, "combos": defaultdict(lambda: [0, 0])})
+for r in dx_adjusted:
+    m = report[r["reviewed_at"][:7]]
+    m["n"] += 1
+    m["lost"] += r["claim_amount"] - r["paid_amount"]
+    x = m["combos"][f"{pname[r['procedure_code']]} × {dx_name[r['dx_code']]}"]
+    x[0] += 1
+    x[1] += r["claim_amount"] - r["paid_amount"]
+report = [
+    {
+        "month": k,
+        "n": v["n"],
+        "lost": v["lost"],
+        "top": max(v["combos"].items(), key=lambda t: (t[1][0], t[1][1], t[0])),
+    }
+    for k, v in sorted(report.items())
+    if k < TODAY.isoformat()[:7]
+][-6:]
+
+# ── 슬롯 ⑥ 경영 리포트 — 매출·수금·노쇼·신환·재료비는 쿼리, 인건비는 가정값으로 만든 [추정] ──
+# 직원 1인 월 인건비 가정값(원, 4대보험 포함). 실제 앱은 ax_settings. 대표 원장 보수는 넣지 않는다
+WAGE_ASSUMED = {"hygienist": 3_800_000, "desk": 3_000_000, "consultant": 3_800_000}
+labor_est = sum(WAGE_ASSUMED.get(s["role"], 0) for s in staff.values() if s["active"])
+VENDOR_ACCOUNT = {}
+for v in VENDORS:
+    VENDOR_ACCOUNT[v["name"]] = v["account"]
+    if v.get("card_name"):
+        VENDOR_ACCOUNT[v["card_name"]] = v["account"]
+sales_rows = rows(
+    "SELECT substr(performed_at, 1, 10) d, fee_total v FROM emr_treatments WHERE performed_at < ?",
+    TODAY.isoformat(),
+)
+patient_paid = rows(
+    "SELECT substr(paid_at, 1, 10) d, amount_paid v FROM emr_payments WHERE paid_at < ?",
+    TODAY.isoformat(),
+)
+insurer_paid = rows(
+    "SELECT substr(reviewed_at, 1, 10) d, paid_amount v FROM emr_claims"
+    " WHERE reviewed_at IS NOT NULL AND reviewed_at < ?",
+    TODAY.isoformat(),
+)
+appts_done = rows(
+    "SELECT substr(scheduled_at, 1, 10) d, status FROM emr_appointments"
+    " WHERE scheduled_at < ? AND status != 'cancelled'",
+    TODAY.isoformat(),
+)
+new_pats = rows(
+    "SELECT substr(registered_at, 1, 10) d FROM emr_patients WHERE registered_at < ?",
+    TODAY.isoformat(),
+)
+spend = [
+    {"d": r["occurred_at"][:10], "who": r["memo"], "v": r["amount"]}
+    for r in rows("SELECT * FROM fin_bank_transactions WHERE direction = 'out'")
+] + [
+    {"d": r["used_at"][:10], "who": r["merchant"], "v": r["amount"]}
+    for r in rows("SELECT * FROM fin_card_expenses")
+]
+
+
+def bucket(key):
+    """기간 키(날짜 → 라벨)별로 운영 숫자를 묶는다."""
+    b = defaultdict(lambda: defaultdict(int))
+    for src, name in (
+        (sales_rows, "sales"),
+        (patient_paid, "patient_paid"),
+        (insurer_paid, "insurer_paid"),
+    ):
+        for r in src:
+            b[key(r["d"])][name] += r["v"]
+    for r in appts_done:
+        b[key(r["d"])]["visits"] += 1
+        b[key(r["d"])]["noshow"] += r["status"] == "noshow"
+    for r in new_pats:
+        b[key(r["d"])]["new_patients"] += 1
+    return b
+
+
+def op_row(label, v):
+    return {
+        "label": label,
+        "sales": v["sales"],
+        "collected": v["patient_paid"] + v["insurer_paid"],
+        "patient_paid": v["patient_paid"],
+        "insurer_paid": v["insurer_paid"],
+        "visits": v["visits"],
+        "noshow": v["noshow"],
+        "new_patients": v["new_patients"],
+    }
+
+
+by_month = bucket(lambda d: d[:7])
+months_cost = defaultdict(lambda: defaultdict(int))
+for x in spend:
+    months_cost[x["d"][:7]][VENDOR_ACCOUNT.get(x["who"], "기타")] += x["v"]
+monthly = []
+for k in sorted(k for k in by_month if k < TODAY.isoformat()[:7])[-6:]:
+    r = op_row(k, by_month[k])
+    cost = months_cost[k]
+    outflow = sum(cost.values())
+    variable = cost["재료비"] + cost["외주가공비"]
+    fixed = outflow - variable + labor_est
+    rate = variable / r["sales"] if r["sales"] else 0
+    monthly.append(
+        r
+        | {
+            "material": cost["재료비"],
+            "lab": cost["외주가공비"],
+            "outflow": outflow,
+            "profit_ex_labor": r["collected"] - outflow,
+            "labor_est": labor_est,
+            "profit_est": r["collected"] - outflow - labor_est,
+            "bep_est": round(fixed / (1 - rate)) if rate < 1 else None,
+        }
+    )
+
+
+def week_of(d):
+    x = date.fromisoformat(d)
+    return (x - timedelta(days=x.weekday())).isoformat()
+
+
+weekly = [
+    op_row(k, v)
+    for k, v in sorted(bucket(week_of).items())
+    if date.fromisoformat(k) + timedelta(days=7) <= TODAY
+][-8:]
+daily = [op_row(k, v) for k, v in sorted(bucket(lambda d: d).items()) if v["visits"]][-10:]
+biz = {
+    "monthly": monthly,
+    "weekly": weekly,
+    "daily": daily,
+    "wage": {ROLE_KO[k]: v for k, v in WAGE_ASSUMED.items()},
+    "headcount": {
+        ROLE_KO[r]: sum(1 for s in staff.values() if s["active"] and s["role"] == r)
+        for r in WAGE_ASSUMED
+    },
+}
+
+# ── 슬롯 ⑧-2 지출 증빙 — 지난달 출금. 금액·날짜 규칙으로 찾은 후보만(기준선), 계정 과목은 사람·AI 칸 ──
+EXP_MONTH = max(r["month"] for r in report)
+docs_exp = rows(
+    "SELECT * FROM fin_expense_documents WHERE issued_on >= date(? || '-01', '-5 days')"
+    " AND issued_on < date(? || '-01', '+1 month')",
+    EXP_MONTH,
+    EXP_MONTH,
+)
+outflows = [
+    {"at": r["occurred_at"][:10], "source": "통장", "who": r["memo"], "amount": r["amount"]}
+    for r in rows(
+        "SELECT * FROM fin_bank_transactions WHERE direction = 'out' AND substr(occurred_at, 1, 7) = ?"
+        " ORDER BY occurred_at, id",
+        EXP_MONTH,
+    )
+] + [
+    {"at": r["used_at"][:10], "source": "병원 카드", "who": r["merchant"], "amount": r["amount"]}
+    for r in rows(
+        "SELECT * FROM fin_card_expenses WHERE substr(used_at, 1, 7) = ? ORDER BY used_at, id",
+        EXP_MONTH,
+    )
+]
+expense = []
+for o in sorted(outflows, key=lambda x: x["at"]):
+    one = [d for d in docs_exp if d["amount"] == o["amount"] and d["issued_on"] <= o["at"]]
+    one = sorted(one, key=lambda d: d["issued_on"], reverse=True)[:1]
+    same = [d for d in docs_exp if d["issuer"] == o["who"] and d["issued_on"][:7] == EXP_MONTH]
+    sum_ok = not one and len(same) > 1 and sum(d["amount"] for d in same) == o["amount"]
+    found = one or (same if sum_ok else [])
+    expense.append(
+        o
+        | {
+            "match": "1:N 합계" if sum_ok else "1:1" if one else None,
+            "docs": [
+                {
+                    "kind": d["kind"],
+                    "issuer": d["issuer"],
+                    "on": d["issued_on"],
+                    "amount": d["amount"],
+                }
+                for d in found
+            ],
+            "body": found[0]["body"] if found else None,
+        }
+    )
+
 # ── 슬롯 ⑨ 후속 관리 후보 ──
 follow = []
 for pid in pats:
@@ -508,7 +743,16 @@ out = {
     "docs": docs,
     "ask_examples": ask_examples,
     "emr": emr,
-    "slots": {"adjust": adjust, "recon": recon, "follow": follow},
+    "slots": {
+        "adjust": adjust,
+        "recon": recon,
+        "follow": follow,
+        "precheck": precheck,
+        "report": report,
+        "biz": biz,
+        "expense": expense,
+        "accounts": list(ACCOUNTS),
+    },
     "enums": {
         "purposes": list(PURPOSE_KO.values()),
         "counterparts": list(COUNTERPART_KO.values()),

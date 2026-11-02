@@ -71,7 +71,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 **`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행(`id` PK). `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{text, used_facts[{key,value}]}` + `suggestion_valid`. UNIQUE `(sheet_date, patient_id, appointment_id)`. `facts`에 남은 치료계획·체어 번호가 들어간다(회의 보기·체어 보기가 같은 행을 쓴다)
 
 **오늘 화면**(`GET /today`): 테이블 없이 쿼리로 모은다(항목은 [[치과 AX - 기능 정의]] §4 앱 구성). **⑦ 브리핑**은 `ax_briefings`(날짜, 문장, 쓴 숫자, 후검증 통과 여부 — ④와 같은 틀), 슬롯 착수 시 추가.
-리포트 테이블(슬롯 ⑥)은 슬롯 착수 시 추가.
+**⑥ 리포트**: 숫자는 쿼리로 모으고 `metrics`로 저장한다. 앱 테이블 `ax_reports`(기간 종류·기간, `metrics`, 문장, 후검증 통과 여부 — ④와 같은 틀)는 슬롯 착수 시 추가. 인건비가 들어간 값은 `metrics`에서 추정 항목으로 구분해 화면이 `[추정]`을 붙인다. 항목은 [[치과 AX - 기능 정의]] §5 ⑥.
 
 ## 5. 슬롯 테이블
 
@@ -83,7 +83,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 ## 6. 설정·작업·고정 쿼리
 
-**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수(dev가 `eval_sort_order` 앞부분), test 판정 시 풀 전체. 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
+**`ax_settings(key, value)`**: `active_prompt_version`, `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다), `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수(dev가 `eval_sort_order` 앞부분), test 판정 시 풀 전체. 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성)의 상태·진행률. 프론트는 폴링
 
@@ -136,5 +136,42 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 - [ ] 리랭커 — Cohere vs LLM 리랭킹(Haiku) 비교 결과로 확정
 - [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)
-- [ ] backend가 `master` 값을 읽는 방법 (④·⑤·⑧ 착수 시) — 주의 칩의 관련 시술·행동(④, `ALERT_TYPES`), 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 원본은 `generator/master.py`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱이 읽는 `source.sqlite`에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다
+- [ ] backend가 `master` 값을 읽는 방법 (④·⑤·⑧ 착수 시) — 주의 칩의 관련 시술·행동(④, `ALERT_TYPES`), 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 원본은 `generator/master.py`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱이 읽는 `source.sqlite`에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다
 - [ ] ⑨ 점수 규칙과 값 (⑨ 착수 시) — 앱 로직이라 `master`가 아니라 앱 쪽 설정이 원본
+
+## 9. 프론트
+
+화면의 기준은 와이어프레임 `docs/wireframe/index-v2.html`이다. 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+
+**페이지**
+
+| 라우트 | 화면 | 쓰는 API |
+|---|---|---|
+| `/` | 시작 화면 | 없음 |
+| `/today` | 오늘 | `GET /today` |
+| `/calls` | 통화 목록·상세, 후속 큐, 붙여넣기 | `GET /calls`, `GET /calls/{call_uid}`, `POST /calls/paste`, `POST /calls/{call_uid}/classify`, `POST /jobs/classify-batch`, `GET /calls/followups`, `POST /calls/{call_uid}/followup-done` |
+| `/prep` | 준비표(표·회의·체어) | `GET /prep?date=`, `POST /jobs/prep-regenerate?date=` |
+| `/ask` | 질문하기, 기록 검색, 문서함 | `POST /chat`, `GET /search`, `GET /documents`, `GET /documents/{id}` |
+| `/eval` | 판정, 블라인드, 정확도 | `GET /judge/next`, `POST /judgments`, `POST /calls/{call_uid}/skip`, `GET /metrics/accuracy`, `GET /metrics/blind` |
+| `/emr` | 전환 전 EMR(데스크·예약·전자차트) | `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`, `GET /emr/schedule?date=` |
+| `/claims` | 삭감 대응, 청구 전 점검 | 슬롯 ⑤ 착수 때 |
+| `/report` | 경영 리포트 | 슬롯 ⑥ 착수 때 |
+| `/finance` | 수입 일계표, 지출 증빙 | 슬롯 ⑧ 착수 때 |
+| `/followup` | 후속 관리 | 슬롯 ⑨ 착수 때 |
+
+- 전환 전 EMR API는 `emr_*`를 읽기만 한다. 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
+
+**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 사용자 선택 + 기준일. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
+
+**데이터 가져오기**: 화면 진입 때 조회한다. 배치(①·④)는 작업을 시작한 뒤 `ax_jobs`를 폴링하고, ③ 챗은 SSE 진행 이벤트를 받는다.
+
+**공통 컴포넌트**: `AiBadge`(AI가 만듦), `Confirmed`(사람이 정함), `Estimated`(`[추정]`). 코드 값에는 표시를 붙이지 않는다.
+
+**판정 키 매핑**: 항목을 순서대로 입력하고 입력이 끝나면 다음 항목으로 넘어간다. 값은 enum 순서를 따른다([[치과 AX - 가상 데이터 생성 설계]] §4.1).
+
+| 항목 | 자리 | 값 |
+|---|---|---|
+| 목적 | 2 | `01`부터 enum 순서, `00` 모르겠음·애매 |
+| 상대 | 1 | `1`부터 enum 순서, `0` 모르겠음·애매 |
+| 급함 | 1 | `1` 낮음, `2` 보통, `3` 급함, `0` 모르겠음·애매 |
+| 불리언 6개 | 1 | `1` 아니오, `2` 예, `0` 모르겠음·애매 |
