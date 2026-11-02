@@ -4,7 +4,9 @@ PreToolUse
 - Bash 막기: `git add`는 파일 이름으로만(-A·--all·-u·`.`·폴더·글롭 금지), `git commit -a` 금지 — CLAUDE.md '깃'.
   `git commit` 전에 `make lint`가 통과해야 한다 — CLAUDE.md '코드 컨벤션'
 - Bash 확인 창: 과금·되돌리기 어려운 명령(push·PR 머지·LLM API 채우기·test 평가)은 사용자 승인
-- Edit·Write 막기: 생성물(LLM 캐시·DB·생성기가 쓰는 정답 JSON)은 손으로 고치지 않는다 — make data·make llm-import가 쓴다
+- Edit·Write 막기: 생성물(LLM 캐시·DB·생성기가 쓰는 정답 JSON)은 손으로 고치지 않는다 — make data·make llm-import가 쓴다.
+  backend/가 ground_truth·generator를 import하는 편집, 자동 개선 코드(evaluation/improve*)가 test 분할을 읽는 편집도 막는다
+  — CLAUDE.md 절대 규칙. 편집 내용만 보는 얕은 검사이고 근거는 tests/test_no_ground_truth_import.py가 지킨다
 - --readonly(리뷰·문서 점검 에이전트): 저장소를 바꾸는 Bash(쓰는 git·make·rm·저장소 안 리디렉션 등)를 막는다.
   명령 문자열만 보므로 프로그램이 속에서 쓰는 것까지는 못 막는다 — 부르는 쪽이 git status 전후를 비교한다
 PostToolUse
@@ -65,6 +67,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # 히어독은 본문만 지우고 여는 줄은 남긴다(여는 줄 뒤의 '&& git push'·'> 파일'도 검사하게)
 _HEREDOC = re.compile(r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\2[ \t]*(?=\n|$)", re.S)
 _SEPARATORS = {"&&", "||", ";", "|", "&", "\n", "(", ")"}
+_BACKEND_IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:ground_truth|generator)\b", re.M)
+_TEST_SPLIT = re.compile(r"split\s*={1,2}\s*['\"]test['\"]")
 
 
 def _segments(command: str) -> list[list[str]]:
@@ -345,6 +349,19 @@ def check_edit(path: str, root: Path) -> str | None:
     return None
 
 
+def check_content(path: str, text: str, root: Path) -> str | None:
+    """편집할 내용 검사 — 절대 규칙"""
+    try:
+        rel = (root / path).resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:  # 저장소 밖
+        return None
+    if rel.startswith("backend/") and _BACKEND_IMPORT.search(text):
+        return "backend/는 ground_truth·generator를 import하지 않는다 (CLAUDE.md 절대 규칙)"
+    if rel.startswith("evaluation/improve") and _TEST_SPLIT.search(text):
+        return "자동 개선 코드는 test 분할을 읽지 않는다 (평가 설계 §2.7)"
+    return None
+
+
 def main(argv: list[str]) -> int:
     event = json.load(sys.stdin)
     tool, args = event.get("tool_name"), event.get("tool_input") or {}
@@ -369,7 +386,8 @@ def main(argv: list[str]) -> int:
             print(json.dumps({"hookSpecificOutput": decision}, ensure_ascii=False))
             return 0
     elif tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
-        msg = check_edit(path, ROOT)
+        text = args.get("content") or args.get("new_string") or ""
+        msg = check_edit(path, ROOT) or check_content(path, text, ROOT)
     else:
         msg = None
     if msg:

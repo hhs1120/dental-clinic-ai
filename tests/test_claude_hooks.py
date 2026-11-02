@@ -329,3 +329,30 @@ def test_main_readonly_flag():
         cwd=ROOT,
     )
     assert r.returncode == 2 and "읽기 전용" in r.stderr
+
+
+@pytest.mark.parametrize(
+    "path, text",
+    [
+        ("backend/harness/x.py", "from ground_truth import labels"),
+        ("backend/x.py", "import generator.master"),
+        ("backend/x.py", "from generator import master"),
+        ("evaluation/improve.py", "rows = q(\"WHERE split = 'test'\")"),
+        ("evaluation/improve_gate.py", 'load(split="test")'),
+    ],
+)
+def test_content_check_blocks(path, text):
+    assert guard.check_content(path, text, ROOT)
+
+
+@pytest.mark.parametrize(
+    "path, text",
+    [
+        ("backend/x.py", "from shared import llm"),
+        ("evaluation/eval.py", "WHERE split = 'test'"),  # 사람이 돌리는 평가는 test를 읽는다
+        ("evaluation/improve.py", "WHERE split = 'dev'"),
+        ("tests/backend/x.py", "from ground_truth import labels"),
+    ],
+)
+def test_content_check_allows(path, text):
+    assert guard.check_content(path, text, ROOT) is None
