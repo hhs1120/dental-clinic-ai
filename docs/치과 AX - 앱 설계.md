@@ -24,13 +24,14 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
 | `ax_call_classifications` | 분류기(모델 A)의 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. UNIQUE `(call_uid, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델)의 버전** — 모델만 바꿔도 올림(`vN-final`). 대시보드는 버전마다 `model_actual` 표기 |
-| `ax_judgments` | 사람 판정. `judged_at`은 실제 시계. `note`(메모, 선택) |
+| `ax_judgments` | 사람 판정(운영 구간 엇갈림·표본). `judged_at`은 실제 시계. `note`(메모, 선택) |
 | `ax_model_judgments` | 판정기(모델 B) 판정. 사람 판정과 섞지 않으려고 테이블을 나눈다. UNIQUE `(call_uid, model_alias, prompt_version)` |
 | `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행, `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시하고 자동 종결하지 않는다 |
-| `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 앱이 처음 뜰 때 판정 풀 전부를 pending으로 채움 |
+| `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 엇갈림·표본이 정해질 때 채운다 |
 | `ax_pasted_calls` | 붙여넣기 통화 — 앱이 만든 통화라 앱 DB. 목록·색인·분류에서는 생성 통화와 합쳐 보인다 |
 | `ax_call_followups` | 후속 큐 처리 기록(처리한 파트·시각)과 후속 에이전트의 처리안(enum·근거·실행 id). 처리한 통화는 큐에서 빠짐 |
-| `ax_blind_votes` | 블라인드 투표. 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
+| `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·판정기 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). UNIQUE `(left_classification_id, right_classification_id, model_alias, prompt_version)`. 규칙은 [[치과 AX - 평가 설계]] §2.4 |
+| `ax_blind_votes` | 사람 블라인드 투표(최종 비교만). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
 ## 2. LLM 로그
 
@@ -46,6 +47,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 - 벡터 `ax_chunk_vectors(chunk_id = ax_chunks.id, model, embedding)` — sqlite-vec, float32 BLOB, 임베딩 모델마다 한 벌. 필터는 `ax_chunks` 실컬럼으로 먼저 거르고 남은 행만 `vec_distance_cosine` 전수 계산(정확 검색 — 근사 인덱스 없음, top-k가 필터에 깎이지 않음). 다중 조건 필터도 SQL 그대로
 
 **`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval`. eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
+- **인용 확인**(챗 후처리 — 훅은 도구 호출만 보므로 답을 낸 직후 코드가 검사): `cited_ids`가 이번 질문의 `retrieved_ids` 밖이면 같은 검색 결과로 한 번 다시 답하게 하고, 또 어긋나면 고정 거절 문구로 끝낸다. 이때 마지막 호출은 `refuse`가 아니고 `cited_ids`는 비우며 상태는 인용 실패로 `ax_search_logs`·`chat()` 반환값에 남긴다(문서 초안 입력은 `refuse(not_found)`만이라 여기에 들지 않는다). 막힐 때마다 `ax_rule_counts`에 `chat.cite_outside`로 더한다. ③ 문서 초안이 같은 검사를 쓰고, ⑤-4는 인용 문장이 실제로 있는지까지 본다(평가 설계 §5)
 
 **도구 5개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준, 코드 `backend/query_tools.py`·`backend/rag_search.py` `search_tool`)
 
@@ -106,7 +108,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 - **재생**: `ax_agent_steps`의 모델 응답·도구 결과로 실행을 다시 돌린다. 도구는 저장된 결과로 대신하고 호출·훅 결과·종료 상태를 비교한다. 훅·권한·인자·상한의 변화를 잡고 프롬프트 변화는 잡지 못한다. 저장된 응답을 `Gateway.complete()`와 같은 인터페이스로 내고(`backend/harness/replay.py`) 테스트 기록은 `tests/fixtures/agent_runs/`
 - **재개**: 잠금이 만료되고 끝나지 않은 `ax_agent_runs`는 마지막 단계 다음부터 이어 간다. 쓸 때마다 잠금 소유자를 확인해 잠금을 뺏긴 쪽은 멈춘다. 일반 재시도의 호출 최악 시간은 잠금 만료보다 짧아야 한다(`backend/harness/llm.py`). 서버가 준 `Retry-After` 대기는 상한이 없어 이 계산 밖이고, 그동안 잠금이 만료되면 소유자 확인으로 멈춘다. 부모가 끊기면 끝나지 않은 자식은 부모 재개 때 함께 이어 간다. 모든 앱 쓰기는 중복 방지 키로 한 번만 들어간다
 - **컨텍스트**: 에이전트별 결과 크기 상한은 `AgentSpec.result_limit`, 도구별 상한은 착수 시([[치과 AX - 기능 정의]] §9). 기능 에이전트는 운영 에이전트에 요약과 실행 id만 돌려준다
-- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
+- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗 인용 실패는 `chat.cite_outside` — §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
 
 ## 4. 준비표·오늘 화면·리포트
 
@@ -125,11 +127,12 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 ## 6. 설정·작업·고정 쿼리
 
-**`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다), `judge_upto`(판정 큐 개방 범위 — 기본 = 판정 풀의 dev 건수(dev가 `eval_sort_order` 앞부분), test 판정 시 풀 전체. 분할 규칙은 [[치과 AX - 평가 설계]] §2.1)
+**`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
 
-**판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped · 판정 풀이면 `eval_sort_order ≤ judge_upto`(분류 유무와 무관) · 운영 구간은 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 붙여넣기 통화 먼저 → 판정 풀은 `eval_sort_order` → 운영 구간 핵심 엇갈림 → 나머지 엇갈림 → 표본. 운영 구간 표본은 `call_uid` 해시로 고른다(판정 풀과 달리 `ax_judge_state`는 표본·엇갈림이 정해질 때 채운다). 저장 뒤 모델 비교는 dev 구간에서 분류가 있을 때만 보인다
+**판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·붙여넣기 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 붙여넣기 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 `call_uid` 해시로 고른다. 저장 뒤 두 모델 라벨이 보인다
+**dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다
 **블라인드 큐**: [[치과 AX - 평가 설계]] §2.4.
 
 ## 7. 기술 선택
@@ -145,7 +148,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | 모델 (확정) | 프로바이더 **Anthropic**(LLM). ① 분류 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) 착수 시 모델 A와 다른 계열로 확정, 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
 | LLM | 게이트웨이 모듈 1개 `shared/llm.py` — §7.1 |
 | 프롬프트 | `prompts/` — §7.2 |
-| 테스트 fixture | **`make fixture`**: fake 게이트웨이로 생성한 데이터로 판정 풀 전체 분류를 가짜 프롬프트 버전 v1·v2 두 벌로 적재(블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
+| 테스트 fixture | **`make fixture`**: fake 게이트웨이로 생성한 데이터로 판정 풀 전체와 판정 풀 밖 일부 통화를 가짜 프롬프트 버전 v1·v2 두 벌로 분류하고 판정기 판정까지 적재(판정 큐에 엇갈림·표본이 생기고 블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
 | 사람 데이터 보존 | 재생성해도 `app.sqlite`는 덮어쓰지 않는다 — 테이블별 처리는 §7.3 |
 | 시간 | DB naive KST, API `+09:00`. `ax_*` 활동은 실제 시계. 기준일은 §6 |
 | 실행 | `make index / fixture / save-demo / reset-demo / set KEY=… VALUE=…`(설정 변경, 허용 키는 [[치과 AX - 기능 정의]] §7) |
@@ -162,7 +165,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 ### 7.2 프롬프트
 
-- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), 에이전트마다 task 하나
+- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류·요약), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), 에이전트마다 task 하나
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
   - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다. 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
@@ -173,7 +176,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 ### 7.3 사람 데이터 보존
 
 재생성해도 `app.sqlite`는 덮어쓰지 않는다. 다만 앱 테이블이 가리키는 생성 데이터의 키(`call_uid`·환자·예약·`fin_` id)가 다른 실체를 가리킬 수 있어 테이블마다 처리를 정한다.
-- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·엇갈림·준비표·⑦ 브리핑·⑥ 리포트·⑤ 결과·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
+- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·LLM 쌍 비교·엇갈림·준비표·⑦ 브리핑·⑥ 리포트·⑤ 결과·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
 - **해시로 다시 붙임**: 판정(메모 포함)·투표 — `hash(transcript)`로만(`export-human/import-human`), 미스 시 버리고 "복원 실패 N건" 리포트. 투표는 `(hash, left_model, left_version, right_model, right_version, choice)`. 판정 상태는 판정 유무에서 파생한다
 - **자연키로 보존**: 되돌린 자동 처리 — 아래 키로 다시 붙이고, 못 붙이면 리포트한다. 되돌린 건은 같은 키로 다시 자동 처리하지 않는다
 
