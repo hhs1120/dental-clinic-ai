@@ -54,7 +54,7 @@ CREATE TABLE ax_model_judgments (
     UNIQUE (call_uid, model_alias, prompt_version)
 );
 
--- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3). 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
+-- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3) — 운영 감사라 eval.py는 읽지 않는다. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
 CREATE TABLE ax_judgments (
     id        INTEGER PRIMARY KEY,
     call_uid  TEXT NOT NULL UNIQUE,  -- source.sqlite ax_calls.call_uid

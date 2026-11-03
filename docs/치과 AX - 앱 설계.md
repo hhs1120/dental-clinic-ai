@@ -19,7 +19,7 @@ tags:
 
 **분류기 입력 = `transcript` + `direction`만** (환자·번호·시각은 정답 힌트. 함수 시그니처 `classify(transcript, direction)`로 강제).
 
-eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`이 정한다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
+eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`이 정한다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
@@ -30,7 +30,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 엇갈림·표본이 정해질 때 채운다 |
 | `ax_pasted_calls` | 붙여넣기 통화 — 앱이 만든 통화라 앱 DB. 목록·색인·분류에서는 생성 통화와 합쳐 보인다 |
 | `ax_call_followups` | 후속 큐 처리 기록(처리한 파트·시각)과 후속 에이전트의 처리안(enum·근거·실행 id). 처리한 통화는 큐에서 빠짐 |
-| `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·판정기 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). UNIQUE `(left_classification_id, right_classification_id, model_alias, prompt_version)`. 규칙은 [[치과 AX - 평가 설계]] §2.4 |
+| `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·쌍 비교 판정기(`blind_judge`) 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 | `ax_blind_votes` | 사람 블라인드 투표(최종 비교만). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
 ## 2. LLM 로그
@@ -132,7 +132,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
 
 **판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·붙여넣기 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 붙여넣기 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 `call_uid` 해시로 고른다. 저장 뒤 두 모델 라벨이 보인다
-**dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다
+**dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다 — 단 최종 비교(vN vs vN-final)의 LLM 쌍 비교는 블라인드 풀 전체([[치과 AX - 평가 설계]] §2.4)
 **블라인드 큐**: [[치과 AX - 평가 설계]] §2.4.
 
 ## 7. 기술 선택

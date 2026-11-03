@@ -142,6 +142,23 @@ def test_judge_and_crosscheck_sections(conn, reports):
         _run(conn, reports, split="test", section="judge", prompt_version="v9")
 
 
+def test_crosscheck_refused_before_history(conn, reports):
+    """판정기 버전에 기록이 없어 겹치는 통화가 0이거나 모델 A·B가 같으면 이력을 쓰기 전에 거절 — test 1회 기회를 쓰지 않게"""
+    conn.execute(
+        "INSERT INTO ax_settings (key, value) VALUES ('prompt_versions', '{\"judge\": \"v7\"}')"
+    )
+    conn.execute("UPDATE ax_model_judgments SET prompt_version = 'v7' WHERE call_uid = 'c-0001'")
+    conn.execute("DELETE FROM ax_model_judgments WHERE call_uid = 'c-0003'")
+    with pytest.raises(EvalRefused, match="겹치는 통화"):
+        _run(conn, reports, split="test", section="crosscheck", prompt_version="v1")
+    conn.execute("DELETE FROM ax_settings")
+    conn.execute("UPDATE ax_model_judgments SET prompt_version = 'v1'")
+    conn.execute("UPDATE ax_model_judgments SET model_actual = 'claude-haiku-5-5'")
+    with pytest.raises(EvalRefused, match="모델 A·B가 같음"):
+        _run(conn, reports, split="test", section="crosscheck", prompt_version="v1")
+    assert not (reports / "eval_runs.jsonl").exists()
+
+
 def test_dev_run_has_judge_and_crosscheck(conn, reports):
     out = _run(conn, reports, split="dev")
     data = _json(out)

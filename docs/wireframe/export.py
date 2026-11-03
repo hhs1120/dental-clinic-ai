@@ -27,9 +27,9 @@ from generator.master import (  # noqa: E402
 )
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "wireframe" / "data.json"
-TODAY = date.fromisoformat(
-    str(yaml.safe_load((ROOT / "config" / "generator.yaml").read_text())["today"])
-)
+CONFIG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text())
+TODAY = date.fromisoformat(str(CONFIG["today"]))
+NEW_FROM = str(CONFIG["range"]["start"])  # 창 시작 이후 등록 = 신환
 SCHEDULE_FROM = (TODAY - timedelta(days=30)).isoformat()  # 일별 예약표 — 최근 30일 + 앞으로의 예약
 CALLS_FROM = (TODAY - timedelta(days=47)).isoformat()  # 통화 목록 — 최근 약 7주
 RECON_FROM = (TODAY - timedelta(days=122)).isoformat()[:8] + "01"  # 재무 대조 — 최근 4개월
@@ -223,7 +223,7 @@ for d in days:
                 "procedure": pname[a["planned_procedure_code"]],
                 "status": STATUS_KO[a["status"]] if d < TODAY.isoformat() else "예정",
                 "patient": pinfo(pid, date.fromisoformat(d)),
-                "new_patient": pats[pid]["registered_at"] >= "2024-12-01"
+                "new_patient": pats[pid]["registered_at"] >= NEW_FROM
                 and not any(
                     x["status"] == "completed" and x["scheduled_at"][:10] < d
                     for x in appts_by[pid]
@@ -270,7 +270,7 @@ for a in rows(
             "confirmed": bool(a["confirmed"]),
             "chart_no": chart_no,
             "name": pats[pid]["name"],
-            "new_patient": pats[pid]["registered_at"] >= "2024-12-01"
+            "new_patient": pats[pid]["registered_at"] >= NEW_FROM
             and not any(
                 x["status"] == "completed" and x["scheduled_at"] < a["scheduled_at"]
                 for x in appts_by[pid]

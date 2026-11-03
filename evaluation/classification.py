@@ -126,7 +126,7 @@ def evaluate(
             },
         }
     out["compare"] = [_compare(a, b, usable, gold_ids, gold) for a, b in combinations(versions, 2)]
-    out["blind"] = _blind(conn, rows, calls, split)
+    out["blind"] = _blind(conn, rows, calls, split, versions)
     if dump:  # dev 판정 풀만 — 비풀(재료·검증)은 사람이 건별로 보지 않는다(평가 설계 §2.7)
         out["dump"] = [
             {
@@ -196,8 +196,9 @@ def judge_version(conn) -> str | None:
 CORE = (PURPOSE, "urgency", "emergency")  # 핵심 엇갈림 — 앱 설계 §1 is_core
 
 
-def crosscheck(conn, split: str, a: str, b: str) -> dict:
+def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> dict:
     """모델 2개 교차검증(평가 설계 §2.5) — 통화 단위로 9항목 중 하나라도 A ≠ B면 엇갈림, 양쪽 ok·폴백 아닌 골드 통화만.
+    fewshot = A의 예시 call_uid — dev 집계에서 뺀다(§7).
     일치 오류 = 엇갈림 없는 통화 중 골드와 다른 것, 포착 = A가 틀린 통화 중 엇갈림이 붙은 것, 향상 배수 = 포착률 ÷ 엇갈림 비율.
     가중은 골드 목적 카테고리의 역확률(§2.2)"""
     calls = _calls(conn)
@@ -206,7 +207,8 @@ def crosscheck(conn, split: str, a: str, b: str) -> dict:
     models_a = {r["model_actual"] for r in rows_a.values()}
     if models_a and models_a == {r["model_actual"] for r in rows_b.values()}:
         return {"a": a, "b": b, "skipped": "모델 A·B가 같음"}
-    ids = sorted(_gold_ids(calls, split) & rows_a.keys() & rows_b.keys())
+    skip = (fewshot or set()) if split == "dev" else set()
+    ids = sorted((_gold_ids(calls, split) & rows_a.keys() & rows_b.keys()) - skip)
     cat = {c: calls[c]["gold"][PURPOSE] for c in ids}
     weights = inverse_weights(
         Counter(c["gold"][PURPOSE] for c in calls.values()), Counter(cat.values())
@@ -265,10 +267,11 @@ def _compare(a: str, b: str, usable: dict, ref_ids: set, ref: dict) -> dict:
     return {"a": a, "b": b, "n": len(ids), "items": items}
 
 
-def _blind(conn, rows: list[dict], calls: dict, split: str) -> dict:
+def _blind(conn, rows: list[dict], calls: dict, split: str, versions: list[str]) -> dict:
     """블라인드 — LLM 쌍 비교(판정기 버전별)와 사람 투표(최종 비교)를 따로, 좌우 (prompt_version, model_actual) 쌍별로
     (평가 설계 §2.4). 승수는 그 쪽에 돌리고 좌/우 선택 비율 병기. 한쪽이라도 폴백·실패 분류이거나 쌍 비교 호출이
-    폴백이면 뺀다(§1 원칙 5). agreement = 같은 두 분류에 둘 다 고른 건 중 이긴 쪽(또는 비슷·둘 다 틀림)이 같은 수"""
+    폴백이면 뺀다(§1 원칙 5). test는 versions가 낀 쌍만(그 버전의 test 묶음). agreement = 쌍 비교 판정기 버전별로,
+    같은 두 분류에 사람도 고른 건 중 이긴 쪽(또는 비슷·둘 다 틀림)이 같은 수"""
     by_id = {r["id"]: r for r in rows}
     llm = conn.execute(
         "SELECT v.left_classification_id, v.right_classification_id, v.choice,"
@@ -292,6 +295,10 @@ def _blind(conn, rows: list[dict], calls: dict, split: str) -> dict:
                 continue
             if any(x["fallback"] or x["status"] != "ok" for x in (left, right)):
                 continue
+            if split == "test" and not {left["prompt_version"], right["prompt_version"]} & set(
+                versions
+            ):
+                continue
             sides = {
                 "left": (left["prompt_version"], left["model_actual"]),
                 "right": (right["prompt_version"], right["model_actual"]),
@@ -312,16 +319,21 @@ def _blind(conn, rows: list[dict], calls: dict, split: str) -> dict:
                 p["sides"][key[1:].index(sides[v[2]])]["wins"] += 1
             p[v[2]] += 1
             pick = {"left": v[0], "right": v[1]}.get(v[2], v[2])
-            picks.setdefault(frozenset((v[0], v[1])), {}).setdefault(name, []).append(pick)
+            picks.setdefault(frozenset((v[0], v[1])), {})[v[3] or name] = pick
         out[name] = [
             pairs[k]
             for k in sorted(
                 pairs, key=lambda k: (k[0] or "", [(version_key(s[0]), s[1]) for s in k[1:]])
             )
         ]
-    both = [(p["llm"], p["human"]) for p in picks.values() if "llm" in p and "human" in p]
-    out["agreement"] = {
-        "k": sum(h[0] in a for a, h in both),
-        "n": len(both),
-    }
+    both = [p for p in picks.values() if "human" in p]
+    judges = sorted({j for p in both for j in p if j != "human"}, key=version_key)
+    out["agreement"] = [
+        {
+            "judge": j,
+            "k": sum(p[j] == p["human"] for p in both if j in p),
+            "n": sum(j in p for p in both),
+        }
+        for j in judges
+    ]
     return out

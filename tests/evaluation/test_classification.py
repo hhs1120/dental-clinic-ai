@@ -1,9 +1,11 @@
 """분류 채점 (평가 설계 §2.2·§2.4·§2.6·§7) — fixture는 eval_db 머리말."""
 
+import json
+
 import pytest
 
 from evaluation import EvalRefused, classification
-from tests.evaluation.eval_db import make_db
+from tests.evaluation.eval_db import labels, make_db
 
 
 @pytest.fixture
@@ -82,6 +84,27 @@ def test_crosscheck_agree_error_and_catch(conn):
     assert (x["catch"]["k"], x["catch"]["n"]) == (0, 1) and x["lift"] is None
 
 
+def test_crosscheck_catch_and_lift(conn):
+    """판정기가 통화 2를 complaint로 고치면 v1의 틀린 1건에 엇갈림이 붙는다 → 포착 1/1, 엇갈림 1/3, 향상 배수 1 ÷ 1/3 = 3.
+    가중 엇갈림: complaint 1 / (book 2·2 + complaint 1) = 1/5"""
+    conn.execute(
+        "UPDATE ax_model_judgments SET labels = ? WHERE call_uid = 'c-0002'",
+        (json.dumps(labels("complaint", complaint=1)),),
+    )
+    x = classification.crosscheck(conn, "dev", "v1", "v1")
+    assert (x["catch"]["k"], x["catch"]["n"]) == (1, 1) and x["catch"]["weighted"] == 1
+    assert x["disagree"]["weighted"] == pytest.approx(0.2)
+    assert x["lift"] == pytest.approx(3)
+    assert (x["agree_error"]["k"], x["agree_error"]["n"]) == (0, 2)
+
+
+def test_crosscheck_excludes_fewshot_in_dev(conn):
+    """분류 버전 A의 few-shot 예시 통화는 dev 집계에서 뺀다(평가 설계 §7) — 분류 채점과 같은 모수"""
+    x = classification.crosscheck(conn, "dev", "v1", "v1", fewshot={"c-0002"})
+    assert x["n"] == 2 and x["agree_error"]["k"] == 0
+    assert classification.crosscheck(conn, "test", "v1", "v1", fewshot={"c-0003"})["n"] == 1
+
+
 def test_crosscheck_core_disagreement(conn):
     """v2는 통화 2에서 판정기와 목적이 달라 핵심 엇갈림 — v2 틀린 통화 없음 → 포착 0/0"""
     x = classification.crosscheck(conn, "dev", "v2", "v1")
@@ -152,13 +175,55 @@ def test_blind_llm_and_human_pairwise(conn):
     assert classification.evaluate(conn, "test")["blind"] == {
         "llm": [],
         "human": [],
-        "agreement": {"k": 0, "n": 0},
+        "agreement": [],
     }
 
 
 def test_blind_agreement_on_same_pair(conn):
-    """같은 두 분류에 LLM과 사람이 모두 고른 건만 — 좌우가 달라도 이긴 쪽 분류로 맞춘다. 통화 1 같음, 통화 2 다름"""
-    assert classification.evaluate(conn, "dev")["blind"]["agreement"] == {"k": 1, "n": 2}
+    """같은 두 분류에 LLM과 사람이 모두 고른 건만, 쌍 비교 판정기 버전별. 통화 1 같음, 통화 2 다름(LLM tie)"""
+    assert classification.evaluate(conn, "dev")["blind"]["agreement"] == [
+        {"judge": "blind_judge/v1", "k": 1, "n": 2}
+    ]
+
+
+def test_blind_agreement_matches_winner_across_sides(conn):
+    """좌우가 달라도 이긴 쪽 분류로 맞춘다 — 통화 2: LLM은 (v1 좌, v2 우)에서 right, 사람은 (v2 좌, v1 우)에서 left"""
+    conn.execute(
+        "UPDATE ax_model_blind_votes SET choice = 'right' WHERE left_classification_id = 2"
+    )
+    (ag,) = classification.evaluate(conn, "dev")["blind"]["agreement"]
+    assert (ag["k"], ag["n"]) == (2, 2)
+
+
+def test_blind_agreement_not_mixed_across_judge_versions(conn):
+    """쌍 비교 판정기 v2가 통화 1에서 사람과 다르게 골라도 v1의 일치로 세지 않는다 — 버전마다 따로"""
+    conn.executemany(
+        "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+        " VALUES (?, 'blind_judge', 'blind_judge', 'claude-opus-5-5', 'v2', 1, '2026-12-02 11:00:00')",
+        [(301,), (302,)],
+    )
+    conn.execute(
+        "INSERT INTO ax_model_blind_votes (left_classification_id, right_classification_id, model_alias,"
+        " model_actual, prompt_version, first_choice, second_choice, choice, first_llm_call_id,"
+        " second_llm_call_id, created_at)"
+        " VALUES (1, 7, 'blind_judge', 'claude-opus-5-5', 'v2', 'left', 'left', 'left', 301, 302,"
+        " '2026-12-02 11:00:00')"
+    )
+    assert classification.evaluate(conn, "dev")["blind"]["agreement"] == [
+        {"judge": "blind_judge/v1", "k": 1, "n": 2},
+        {"judge": "blind_judge/v2", "k": 0, "n": 1},
+    ]
+
+
+def test_blind_test_split_only_pairs_with_requested_version(conn):
+    """test는 요청한 버전이 낀 쌍만 — 다른 버전 쌍의 test 블라인드가 이 묶음으로 보이지 않게(평가 설계 §2.4)"""
+    conn.execute("UPDATE source.ax_calls SET in_blind_pool = 1 WHERE call_uid = 'c-0003'")
+    conn.execute(
+        "INSERT INTO ax_blind_votes (left_classification_id, right_classification_id, choice, voted_by,"
+        " voted_at) VALUES (3, 9, 'right', '데스크', '2026-12-01 11:00:00')"
+    )
+    assert len(classification.evaluate(conn, "test", ["v2"])["blind"]["human"]) == 1
+    assert classification.evaluate(conn, "test", ["v3"])["blind"]["human"] == []
 
 
 def test_blind_llm_excludes_fallback(conn):

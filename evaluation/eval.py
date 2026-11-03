@@ -152,6 +152,11 @@ def run(
                 raise EvalRefused(
                     "교차검증할 판정기 버전을 못 정함 — 판정기 버전이 여럿이면 ax_settings.prompt_versions의 judge"
                 )
+            x = classification.crosscheck(conn, split, prompt_version, jv)
+            if "skipped" in x or not x["n"]:
+                raise EvalRefused(
+                    f"교차검증 {prompt_version}×{jv}: {x.get('skipped') or '판정기와 겹치는 통화가 없음'}"
+                )
             pv = f"{prompt_version}×{jv}"
         if section not in VERSIONED and app is None:
             raise EvalRefused("앱 없음 — test RAG는 앱(backend/eval_hooks.py)이 생긴 뒤에")
@@ -230,7 +235,12 @@ def run(
             else list(result["classification"]["versions"])
         )
         result["crosscheck"] = (
-            [classification.crosscheck(conn, split, a, jv) for a in a_versions] if jv else []
+            [
+                classification.crosscheck(conn, split, a, jv, fewshot.get(a) if dev else None)
+                for a in a_versions
+            ]
+            if jv
+            else []
         )
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
@@ -364,9 +374,11 @@ def _render_classification(c: dict) -> list[str]:
                 f" / 위치 왼쪽 {b['left']} · 오른쪽 {b['right']}",
                 "",
             ]
-    ag = c["blind"]["agreement"]
-    if ag["n"]:
-        out += [f"블라인드 LLM 쌍 비교 vs 사람 일치 {fraction(ag['k'], ag['n'])}", ""]
+    for ag in c["blind"]["agreement"]:
+        out += [
+            f"블라인드 LLM 쌍 비교({ag['judge']}) vs 사람 일치 {fraction(ag['k'], ag['n'])}",
+            "",
+        ]
     if c.get("dump"):
         out += [
             "### 틀린 항목 (dev 판정 풀 — 골드 기준)",
