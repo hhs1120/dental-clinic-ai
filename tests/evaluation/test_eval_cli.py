@@ -125,6 +125,31 @@ def test_test_runs_once_per_section(conn, reports):
     assert len(_history(reports)) == 6
 
 
+def test_judge_and_crosscheck_sections(conn, reports):
+    """판정 묶음은 판정기 버전, 교차검증 묶음은 분류 버전 × 판정기 버전으로 1회 — 분류 test 묶음에는 판정기 수치가 없다"""
+    cls = _json(_run(conn, reports, split="test", section="classification", prompt_version="v1"))
+    assert cls["judge"] is None and cls["crosscheck"] is None
+    judge = _json(_run(conn, reports, split="test", section="judge", prompt_version="v1"))
+    assert judge["classification"] is None and judge["judge"]["v1"]["judge_vs_gold"]["n"] == 1
+    with pytest.raises(ev.AlreadyRun):
+        _run(conn, reports, split="test", section="judge", prompt_version="v1")
+    x = _json(_run(conn, reports, split="test", section="crosscheck", prompt_version="v1"))
+    assert x["prompt_version"] == "v1×v1" and x["crosscheck"][0]["n"] == 1
+    _run(conn, reports, split="test", section="crosscheck", prompt_version="v2")
+    with pytest.raises(ev.AlreadyRun):
+        _run(conn, reports, split="test", section="crosscheck", prompt_version="v1")
+    with pytest.raises(EvalRefused, match="판정기 버전 v9"):
+        _run(conn, reports, split="test", section="judge", prompt_version="v9")
+
+
+def test_dev_run_has_judge_and_crosscheck(conn, reports):
+    out = _run(conn, reports, split="dev")
+    data = _json(out)
+    assert list(data["judge"]) == ["v1"] and [x["a"] for x in data["crosscheck"]] == ["v1", "v2"]
+    text = out["report_path"].read_text(encoding="utf-8")
+    assert "판정기 vs 골드" in text and "교차검증" in text
+
+
 def test_dev_runs_repeat_freely(conn, reports):
     a, b = _run(conn, reports, split="dev"), _run(conn, reports, split="dev")
     assert a["report_path"] != b["report_path"]  # 같은 초에 돌려도 파일이 겹치지 않음

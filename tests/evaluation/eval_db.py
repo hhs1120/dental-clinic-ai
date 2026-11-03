@@ -5,7 +5,9 @@
 골드 목적: 1·3·4·5 book, 2 complaint. 모집단(생성 전사) = book 4 · complaint 1
 분류 v1: 1 book ✓ · 2 book ✗ · 3 book ✓ · 4 book ✓ · 5 reschedule(폴백 — 집계 제외) · 6 book
 분류 v2: 1·3·4 book ✓ · 2 complaint ✓ · 5 failed
-판정: 1 book · 2 complaint. 투표: 통화 1(좌 v1·우 v2 → right), 통화 2(좌 v2·우 v1 → left) — 둘 다 v2 승
+판정기 v1: 1 book ✓ · 2 book ✗ · 3 complaint ✗ · 4·5 book ✓. 사람 판정(운영 — 채점에 안 씀): 1 book · 2 complaint
+사람 투표(최종 비교): 통화 1(좌 v1·우 v2 → right), 통화 2(좌 v2·우 v1 → left) — 둘 다 v2 승
+LLM 쌍 비교: 통화 1(좌 v1·우 v2 → right — 사람과 같음), 통화 2(좌 v1·우 v2 → tie — 사람과 다름)
 """
 
 import json
@@ -130,11 +132,40 @@ def make_db(tmp_path) -> sqlite3.Connection:
             "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at) VALUES (?, ?, '데스크', '2026-12-01 10:00:00')",
             (uid_of[cid], json.dumps(labels(purpose, complaint=int(purpose == "complaint")))),
         )
+    # 판정기 — LLM 호출 id 101..105(통화 id + 100)
+    for cid, purpose in ((1, "book"), (2, "book"), (3, "complaint"), (4, "book"), (5, "book")):
+        conn.execute(
+            "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+            " VALUES (?, 'judge', 'judge', 'claude-opus-5-5', 'v1', 1, '2026-12-01 09:00:00')",
+            (100 + cid,),
+        )
+        conn.execute(
+            "INSERT INTO ax_model_judgments (call_uid, model_alias, model_actual, prompt_version, status, labels,"
+            " llm_call_id) VALUES (?, 'judge', 'claude-opus-5-5', 'v1', 'ok', ?, ?)",
+            (
+                uid_of[cid],
+                json.dumps(labels(purpose, complaint=int(purpose == "complaint"))),
+                100 + cid,
+            ),
+        )
     # 분류 id: v1 = 1..6(통화 id), v2 = 7..12
     conn.executemany(
         "INSERT INTO ax_blind_votes (left_classification_id, right_classification_id, choice, voted_by, voted_at)"
         " VALUES (?, ?, ?, '데스크', '2026-12-01 11:00:00')",
         [(1, 7, "right"), (8, 2, "left")],
+    )
+    # LLM 쌍 비교 — 판정마다 LLM 호출 2행(201·202 = 통화 1, 203·204 = 통화 2)
+    conn.executemany(
+        "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+        " VALUES (?, 'blind_judge', 'blind_judge', 'claude-opus-5-5', 'v1', 1, '2026-12-01 11:00:00')",
+        [(i,) for i in range(201, 205)],
+    )
+    conn.executemany(
+        "INSERT INTO ax_model_blind_votes (left_classification_id, right_classification_id, model_alias,"
+        " model_actual, prompt_version, first_choice, second_choice, choice, first_llm_call_id,"
+        " second_llm_call_id, created_at)"
+        " VALUES (?, ?, 'blind_judge', 'claude-opus-5-5', 'v1', ?, ?, ?, ?, ?, '2026-12-01 11:00:00')",
+        [(1, 7, "right", "right", "right", 201, 202), (2, 8, "right", "left", "tie", 203, 204)],
     )
     conn.commit()
     conn.execute("ATTACH DATABASE ? AS source", (str(tmp_path / "source.sqlite"),))
