@@ -16,6 +16,7 @@ from generator.master import (  # noqa: E402
     ACCOUNTS,
     ADJUST_REASONS,
     CLINIC_NAME,
+    CONDITIONAL_INSURED_MIN_AGE,
     HOURS,
     PROCEDURE_DIAGNOSES,
     RECALL_CYCLE,
@@ -249,11 +250,13 @@ for d in days:
 # ── 일별 예약표 ──
 schedule_days = defaultdict(list)
 schedule_patients = {}
+schedule_pids = set()
 for a in rows(
     "SELECT * FROM emr_appointments WHERE date(scheduled_at) >= ? ORDER BY scheduled_at",
     SCHEDULE_FROM,
 ):
     pid = a["patient_id"]
+    schedule_pids.add(pid)
     chart_no = pats[pid]["chart_no"]
     schedule_days[a["scheduled_at"][:10]].append(
         {
@@ -267,6 +270,11 @@ for a in rows(
             "confirmed": bool(a["confirmed"]),
             "chart_no": chart_no,
             "name": pats[pid]["name"],
+            "new_patient": pats[pid]["registered_at"] >= "2024-12-01"
+            and not any(
+                x["status"] == "completed" and x["scheduled_at"] < a["scheduled_at"]
+                for x in appts_by[pid]
+            ),
             "booked_via": a["booked_via"],
             # 이 예약을 잡은 통화 — 같은 환자, 통화 시각 = 예약 잡은 시각
             "call_uid": next(
@@ -312,6 +320,8 @@ schedule = {
     "to": max(schedule_days),
     "hours": HOURS,
     "slot_min": SLOT_MIN,
+    # 전환 전 EMR 나이 표시 — 스케일링 급여 나이, 보험 임플란트·틀니 나이
+    "age_marks": {"adult": SCALING_MIN_AGE, "senior": CONDITIONAL_INSURED_MIN_AGE},
     "staff": [
         {"id": s["id"], "name": s["name"], "role": ROLE_KO[s["role"]]}
         for role in ("doctor", "hygienist", "consultant")
@@ -393,10 +403,11 @@ ask_examples = [
     and x["split"] == "dev"  # test 문항은 보이지 않는다
 ][:24]
 
-# ── EMR: 오늘·준비표 환자 + 통화 환자 ──
+# ── EMR: 오늘·준비표 환자 + 통화 환자 + 예약표 환자 ──
 emr_ids = sorted(
     {x["patient"]["id"] for d in prep.values() for x in d}
     | {x["patient"]["id"] for x in calls if x["patient"]}
+    | schedule_pids
 )
 claims_by = defaultdict(list)
 for cl in rows("SELECT * FROM emr_claims ORDER BY service_date"):

@@ -297,7 +297,7 @@ kbd.k{display:inline-block;border:1px solid var(--line-primary);border-bottom-wi
 .e-box{background:var(--bg-primary);border:1px solid var(--line-primary);padding:5px;min-width:0}
 .e-box h3{margin:0 0 4px;font-size:12px;font-weight:700}
 .e-desk{display:grid;grid-template-columns:430px minmax(0,1fr);gap:6px}.e-col{display:flex;flex-direction:column;gap:6px;min-width:0}.e-grow{flex:1}
-.e-pinfo{display:grid;grid-template-columns:72px 1fr;gap:8px}.e-photo{height:86px;display:grid;place-items:center;background:var(--surface-secondary);color:var(--fg-tertiary)}
+.e-pinfo{display:grid;grid-template-columns:1fr;gap:8px}
 .e-form{display:grid;grid-template-columns:62px 1fr;gap:2px 6px}.e-form label{color:var(--fg-tertiary)}
 .e-pay{width:100%;border-collapse:collapse}.e-pay th,.e-pay td{border:1px solid var(--line-secondary);padding:2px 5px;text-align:right}.e-pay th{background:var(--surface-secondary);font-weight:600;text-align:left}
 .emr2 .red{color:var(--negative-text);font-weight:700}
@@ -317,8 +317,44 @@ kbd.k{display:inline-block;border:1px solid var(--line-primary);border-bottom-wi
 .e-rec{max-height:610px;overflow:auto}.e-rec article{display:grid;grid-template-columns:78px 1fr;gap:6px;border-top:1px solid var(--line-secondary);padding:4px 0}.e-rec time{font-weight:700;font-variant-numeric:tabular-nums}.e-rec p{margin:2px 0 0;color:var(--fg-secondary)}.e-rec small{color:var(--fg-tertiary)}
 .e-mid{display:flex;flex-direction:column;gap:6px;min-width:0}.e-teeth div{display:flex;justify-content:center;gap:2px;margin:2px 0}.e-teeth span{width:23px;height:22px;display:grid;place-items:center;background:var(--surface-secondary);font-size:11px}.e-teeth span.on{background:var(--brand);color:var(--on-brand)}.e-teeth i{width:8px}
 .e-bundle{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}.e-bundle button{border:1px solid var(--line-secondary);background:var(--surface-secondary);padding:4px 2px;opacity:.8}
-.e-memo p{margin:0;color:var(--fg-secondary)}.e-side{min-width:0}.e-sidebody{border:1px solid var(--line-primary);padding:4px;min-height:280px}.e-sidebody p{margin:0 0 3px}.e-sidebody dl{display:grid;grid-template-columns:36px 1fr;gap:2px;margin:0}.e-sidebody dd{margin:0}.e-note{color:var(--fg-tertiary);margin:6px 0 0}
+.e-memo p{margin:0;color:var(--fg-secondary)}.e-side{min-width:0}.e-sidebody{border:1px solid var(--line-primary);padding:4px;min-height:280px}.e-sidebody p{margin:0 0 3px}.e-pick{display:block;width:100%;border:0;background:none;text-align:left;padding:1px 3px;margin:0 0 2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.e-pick:hover{background:var(--surface-secondary)}.e-pick.on{background:var(--surface-secondary);font-weight:700}.e-sidebody dl{display:grid;grid-template-columns:36px 1fr;gap:2px;margin:0}.e-sidebody dd{margin:0}.e-note{color:var(--fg-tertiary);margin:6px 0 0}
 .e-status{display:flex;gap:16px;flex-wrap:wrap;padding:2px 8px;border-top:1px solid var(--line-primary);background:var(--surface-secondary);color:var(--fg-secondary)}
+/* 전환 전 EMR — 디자인 시스템을 따르지 않고 2010년대 윈도우 업무 프로그램 모양(평평한 얇은 선·밝은 회색·연한 파란 강조·촘촘한 표). 특정 제품의 색·로고는 쓰지 않는다. 토큰을 이 안에서 다시 정의해 다크 모드와 상관없이 같은 모양 */
+.emr2{--bg-primary:#ffffff;--bg-secondary:#f0f0f0;--surface-secondary:#e9edf2;--surface-tertiary:#f5f7fa;--line-primary:#b9c2cc;--line-secondary:#dde2e8;--fg-primary:#1f1f1f;--fg-secondary:#333;--fg-tertiary:#6b6b6b;--brand:#2b6cb0;--on-brand:#fff;--negative-text:#c42b1c;--surface-negative:#fde7e9;--positive:#107c10;--accent-violet:#7a4fbf;color-scheme:light;color:#1f1f1f;background:#f0f0f0;font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif}
+.emr2-scroll{border:1px solid #9aa5b1;border-radius:0;box-shadow:0 2px 8px #0000002e}
+.emr2 table{color:inherit}
+.e-win{display:flex;align-items:center;gap:8px;padding:0 0 0 10px;height:30px;background:#fff;color:#1f1f1f;border-bottom:1px solid #dde2e8}
+.e-win::before{content:"";width:14px;height:14px;border-radius:3px;background:#2b6cb0}
+.e-wbtn{margin-left:auto;display:flex;align-self:stretch}.e-wbtn i{width:44px;display:grid;place-items:center;font-style:normal;font-size:12px;color:#444}
+.e-menu{display:flex;gap:2px;padding:2px 6px;background:#fff;border-bottom:1px solid #dde2e8}.e-menu span{padding:2px 8px}
+.emr2 .e-top{background:#f5f7fa;border-bottom:1px solid #dde2e8}
+.emr2 .e-box{border:1px solid #c9d1da}
+.emr2 .e-box h3{margin:-5px -5px 5px;padding:4px 8px;background:#e9edf2;border-bottom:1px solid #c9d1da;color:#1f3b5c}
+.emr2 .e-tools button{border-radius:3px}.emr2 .e-tools button:hover:not(:disabled){background:#e5f1fb;border-color:#cce4f7}
+.emr2 .e-tools button.on{background:#cce4f7;border-color:#99c9ef}
+.emr2 .e-tools button i{border-radius:4px;background:#e9edf2;color:#2b6cb0}.emr2 .e-tools button.on i{background:#2b6cb0;color:#fff}
+.emr2 .etab{background:#f0f0f0;border-color:#c9d1da}.emr2 .etab.on{background:#fff;color:#2b6cb0}
+.emr2 table.g th,.emr2 .e-pay th,.emr2 .e-sched thead th,.emr2 .e-sched tbody th{background:#f0f3f7;border:1px solid #d5dbe2;font-weight:600}
+.emr2 table.g tr.on td{background:#cce4f7;color:#1f1f1f}
+.emr2 .e-search input{border:1px solid #9aa5b1}
+.emr2 .e-bundle button{border:1px solid #c9d1da;background:#fafbfc;border-radius:2px}
+.emr2 .e-alert{border:1px solid #f1b8b8}
+.emr2 .e-status{background:#2b6cb0;color:#fff;border-top:0}.emr2 .e-status span{padding:0 4px}
+.emr2 .e-book{grid-template-columns:220px minmax(0,1fr)}
+.e-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}.e-cal-head button{border:1px solid #c9d1da;background:#fafbfc;padding:0 6px;cursor:pointer}
+.e-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}.e-cal i{font-style:normal;color:#6b6b6b}.e-cal i:first-child{color:#c42b1c}
+.e-cal button,.e-cal span{padding:2px 0;border:0;background:none}.e-cal button{cursor:pointer}.e-cal button:hover{background:#e5f1fb}.e-cal button.today{font-weight:700;color:#2b6cb0}.e-cal button.on{background:#2b6cb0;color:#fff}.e-cal .off{color:#b0b0b0}
+.e-seg{float:right;display:inline-flex}.e-seg button{border:1px solid #c9d1da;background:#fff;padding:0 8px;font-weight:400;cursor:pointer}.e-seg button.on{background:#cce4f7}
+.emr2 .appt.newp{box-shadow:inset 4px 0 0 #7cc4f5;padding-left:8px}.emr2 .appt .dup{text-decoration:underline}
+.e-week th.on{background:#cce4f7!important}.e-week td{height:420px}.emr2 .e-week .appt{height:auto}.e-cal-head b{white-space:nowrap}
+.odonto{display:block;width:100%;max-width:520px;margin:0 auto}.odonto .t path,.odonto .t rect{fill:#fff;stroke:#9aa5b1;stroke-width:1}.odonto .t text{font-size:8px;fill:#555;text-anchor:middle}
+.odonto .t.on path,.odonto .t.on rect{fill:#7cb7ea;stroke:#2b6cb0}.odonto .t.on text{fill:#1f3b5c;font-weight:700}
+.odonto .t.plan path,.odonto .t.plan rect{fill:#fff4e5;stroke:#e8912d;stroke-dasharray:2 1.5}.odonto line{stroke:#c9d1da;stroke-dasharray:2 2}
+.odonto .t path.cej{fill:none;stroke:#c3cad2;stroke-dasharray:none}.odonto .t.on path.cej{stroke:#2b6cb0;opacity:.5}.odonto .t.plan path.cej{stroke:#e8912d;opacity:.5}
+.e-teeth .e-teeth-nums{display:block;margin-top:6px}.e-teeth .e-teeth-nums div{display:flex;justify-content:center;gap:2px;margin:2px 0}.e-teeth .e-teeth-nums span{width:23px;height:22px;display:grid;place-items:center;background:#e9edf2;font-size:11px}.e-teeth .e-teeth-nums i{width:8px}
+.e-teeth .e-teeth-nums span.on{background:#2b6cb0;color:#fff}.e-teeth .e-teeth-nums span.plan{background:#fff4e5;color:#9c5800;outline:1px dashed #e8912d;outline-offset:-1px}
+.odonto-legend{display:flex;gap:12px;justify-content:center;margin-top:2px;color:#555}.e-teeth .odonto-legend span{width:auto;height:auto;display:inline-block;background:none;font-size:12px}.odonto-legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px;border:1px solid #9aa5b1}.odonto-legend i.on{background:#7cb7ea;border-color:#2b6cb0}.odonto-legend i.plan{background:#fff4e5;border:1px dashed #e8912d}
+.e-age{display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;font-size:11px;line-height:16px;vertical-align:middle;color:#fff}.e-age-아이{background:#e8912d}.e-age-어른{background:#2b6cb0}.e-age-노인{background:#6b7280}
 .logo{color:inherit;text-decoration:none}
 .area-bar{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
 .area-bar[hidden],.nav[hidden]{display:none}
@@ -395,7 +431,7 @@ const S = {
   callsTab:"list", callFilter:"all", callQ:"", callSel:null, done:{}, reverted:{}, pasteResult:null,
   askTab:"chat", askInput:"", chat:null, searchQ:"스케일링", srcTypes:{doc:true,call:true,msg:true,chart:true}, sFrom:"", sTo:"", sChart:"", docSel:null, docType:"all",
   evalTab:"judge", jIdx:0, jAns:{}, jActive:0, jBuf:"", jSaved:false, jMemo:"", judged:[], bIdx:0, bVotes:[], bRevealed:null,
-  emrChart:null, emrTab:"진료기록", emrQ:"", emrMoves:0, emrMode:"desk", emrPanel:"기본", emrDate:null,
+  emrChart:null, emrTab:"진료기록", emrQ:"", emrMoves:0, emrMode:"desk", emrPanel:"기본", emrDate:null, emrWeek:false,
   claimChip:"all", claimOpen:null, claimJudge:{},
   finMonth:"2026-11", finOpen:null, finConfirm:{},
   claimTab:"adjust", claimReviewed:{}, claimSubmitted:{}, preChip:"dx", finTab:"income", expChip:"all", expOpen:null, expAcct:{}, reportMonth:null, reportScope:"monthly", back:"home",
@@ -694,7 +730,7 @@ R.today = () => {
         ${todo('<span class="tag t-caut">후속 큐</span>', `할 일 있는 통화 ${q.length}건 남음`, "급함 먼저 · 처리하면 빠짐", "openFollow", "")}
         ${alertRows.slice(0, 4).map(r => todo('<span class="tag t-alert">주의 환자</span>', `${r.time} ${esc(r.patient.name)} · ${esc(r.procedure)}`, r.chips.alerts.map(a => esc(a.label)).join(", "), "openPrep", r.appt_id)).join("")}
         ${alertRows.length > 4 ? todo('<span class="tag t-alert">주의 환자</span>', `외 ${alertRows.length - 4}명`, "준비표에서 '주의' 칩으로 보기", "openPrepChip", "alert") : ""}
-        ${todo('<span class="tag">판정 대기</span>', `측정 구간 판정 ${judgedLeft}건 남음`, `판정 풀 ${d.calls.length}건 중 오늘 ${S.judged.length}건 · 그 밖은 엇갈림·표본만`, "go", "eval")}
+        ${todo('<span class="tag">판정 대기</span>', `엇갈림·표본 판정 ${judgedLeft}건 남음`, `두 모델이 엇갈린 통화 먼저 · 오늘 ${S.judged.length}건`, "go", "eval")}
         ${todo('<span class="tag">근거 없음</span>', "“유치는 언제 빠져?”", "11/30 16:12 데스크 · 문서 초안 작성됨 · 게시는 사람", "askQ", "유치는 언제 빠져?")}
         ${todo('<span class="tag">근거 없음</span>', "“주말에 응급으로 갈 수 있는 근처 치과 있어?”", "11/28 10:40 데스크 · 문서함에 없음", "askQ", "주말에 응급으로 갈 수 있는 근처 치과 있어?")}
         ${appealSoon.slice(0, 2).map(a => { const dl = claimDeadline(a); return todo('<span class="tag t-caut">재심 기한</span>', `${esc(a.name)} · ${esc(a.procedure)} 조정 ${won(a.claimed - a.paid)}`, `기한 ${mdw(dl.d)} · ${dl.left}일 남음`, "go", "claims"); }).join("")}
@@ -1066,13 +1102,14 @@ function modelLabel(c, it) {
 R.eval = () => {
   const tabs = [["judge", "판정"], ["blind", "블라인드 비교"], ["acc", "정확도 표"], ["improve", "자동 개선"]];
   const body = S.evalTab === "judge" ? evalJudge() : S.evalTab === "blind" ? evalBlind() : S.evalTab === "improve" ? evalImprove() : evalAcc();
-  return head("AI 평가", "판정 풀은 사람이 전부 판정해 기준을 재고, 그 밖의 통화는 판정기가 1차로 판정해 엇갈림과 표본만 사람이 봅니다. 모델 라벨은 저장한 뒤에만 보입니다(먼저 보면 앵커링).", "") +
+  return head("AI 평가", "판정기가 모든 통화를 판정하고, 사람은 두 모델이 엇갈린 통화와 표본만 봅니다. 모델 라벨은 저장한 뒤에만 보입니다(먼저 보면 앵커링). 판정기 정확도와 정답지 점검은 평가 리포트(eval.py)에 있습니다.", "") +
     `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${S.evalTab === k ? "on" : ""}" data-act="evalTab" data-arg="${k}">${l}</button>`).join("")}</div>` + body;
 };
 function evalJudge() {
   const calls = S.data.calls, c = calls[S.jIdx % calls.length], items = judgeItems();
   const agree = S.judged.length ? items.map(it => `${it.label} ${S.judged.filter(j => j.ans[it.key] === j.model[it.key]).length}/${S.judged.length}`).join(" · ") : "아직 없음";
-  return `<p class="label2 fg2" style="margin-top:0">통화 오늘 ${S.judged.length} · 누적 ${S.judged.length}/${calls.length} · 모델 일치 ${agree}</p>
+  return `<p class="label2 fg2" style="margin-top:0">엇갈림·표본 남음 ${calls.length - S.judged.length} · 오늘 ${S.judged.length} · 모델 일치 ${agree}</p>
+  <div class="placeholder" style="margin-bottom:12px">와이어프레임 데이터에는 판정기 결과가 없어 통화를 순서대로 보입니다. 실제 큐는 판정 풀 밖 통화 중 두 모델이 엇갈린 통화(핵심 엇갈림 먼저)와 무작위 표본만입니다.</div>
   <section class="card">
     <div class="row"><span class="tag">${c.direction === "수신" ? "환자→병원" : "병원→환자"}</span><span class="label2 fg3 tnum">${c.at} · ${c.duration_sec}초 · #${esc(c.uid)} · prompt v1</span></div>
     <p class="caption1 fg3 mt12" style="margin-bottom:6px">판정 화면은 전사를 기본으로 펼쳐 둡니다(요약을 먼저 읽으면 정답지가 모델에 끌려감).</p>${transcriptHTML(c.transcript, true)}
@@ -1096,7 +1133,7 @@ function evalImprove() {
     { v:"v3", kind:"불만 플래그 조건 완화", d:"+2%p", g:"탈락 · 응급 1건 새로 놓침", on:false },
     { v:"v4", kind:"예약 확정 재확인 제외", d:"+3%p", g:"통과", on:true },
   ];
-  return `<p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 재료(비풀 절반)에서 오류를 찾고, 검증 구간 관문을 넘으면 대기 버전이 됩니다 · 사람이 재분류를 실행해 끝나면 전환합니다 · test는 사람이 실행 · 기준은 화면에서 바꾸지 않습니다</p>
+  return `<p class="label2 fg3" style="margin-top:0">숫자는 예시입니다 · 재료(비풀 절반)에서 오류를 찾고, 검증 구간 관문을 넘으면 대기 버전이 됩니다 · 탈락한 후보의 바꾼 규칙·못 넘은 조건은 다음 후보에 넘깁니다 · 사람이 재분류를 실행해 끝나면 전환합니다 · test는 사람이 실행 · 기준은 화면에서 바꾸지 않습니다</p>
   <div class="tbl-wrap"><table class="tbl"><thead><tr><th>후보</th><th>오류 유형 ${AI}</th><th class="num">목적 Strict</th><th>관문</th><th>상태</th></tr></thead><tbody>
     ${runs.map(x => `<tr><td class="tnum">${x.v}</td><td>${esc(x.kind)}</td><td class="num">${x.d}</td><td>${esc(x.g)}</td><td>${x.on ? "반영" : "버림"}</td></tr>`).join("")}
   </tbody></table></div>
@@ -1116,11 +1153,11 @@ function evalBlind() {
   const pool = S.data.calls.filter((c, i) => i % 3 === 0), c = pool[S.bIdx % pool.length], p = blindPair(c);
   const flip = S.bIdx % 2 === 1, left = flip ? p.v2 : p.v1, right = flip ? p.v1 : p.v2;
   const rv = S.bRevealed;
-  return `<p class="label2 fg2" style="margin-top:0">블라인드 오늘 ${S.bVotes.length} · 풀 ${pool.length}건 · 기본 같은 모델 v1 vs vN · 좌우는 건마다 무작위 ${AI}</p>
+  return `<p class="label2 fg2" style="margin-top:0">최종 비교 vN vs vN-final · 사람 투표 오늘 ${S.bVotes.length} · 풀 ${pool.length}건 · 좌우는 건마다 무작위. 버전마다의 비교(v1 vs vN)는 LLM 쌍 비교가 채점합니다(정확도 표) ${AI}</p>
   <section class="card"><div class="row"><span class="label2 fg3 tnum">${c.at} · #${esc(c.uid)} · ${c.direction}</span></div>
     <div class="vs mt12">
-      <div class="card" style="background:var(--bg-secondary)"><div class="row"><b>1</b>${rv ? `<span class="tag">${flip ? "v2" : "v1"}</span>` : ""}</div><p class="body1" style="margin:8px 0 0">${esc(left)}</p></div>
-      <div class="card" style="background:var(--bg-secondary)"><div class="row"><b>2</b>${rv ? `<span class="tag">${flip ? "v1" : "v2"}</span>` : ""}</div><p class="body1" style="margin:8px 0 0">${esc(right)}</p></div>
+      <div class="card" style="background:var(--bg-secondary)"><div class="row"><b>1</b>${rv ? `<span class="tag">${flip ? "vN-final" : "vN"}</span>` : ""}</div><p class="body1" style="margin:8px 0 0">${esc(left)}</p></div>
+      <div class="card" style="background:var(--bg-secondary)"><div class="row"><b>2</b>${rv ? `<span class="tag">${flip ? "vN" : "vN-final"}</span>` : ""}</div><p class="body1" style="margin:8px 0 0">${esc(right)}</p></div>
     </div>
     <div class="row mt16">${[["1", "1이 나음"], ["2", "2가 나음"], ["3", "비슷"], ["4", "둘 다 틀림"]].map(([k, l]) => `<button class="btn ${rv === k ? "on" : ""}" data-act="bVote" data-arg="${k}" ${rv ? "disabled" : ""}><kbd class="k">${k}</kbd> ${l}</button>`).join("")}
       ${rv ? `<button class="btn btn-primary" data-act="bNext">다음 (Enter)</button>` : ""}</div>
@@ -1131,17 +1168,18 @@ function evalAcc() {
   const items = judgeItems();
   const ex = [[.82, .90], [.94, .95], [.76, .85], [.80, .88], [.86, .91], [.84, .89], [.95, .96], [.92, .93], [.97, .97]];
   const bar = v => `<div class="row" style="flex-wrap:nowrap"><div class="meter" style="flex:1"><i style="width:${v * 100}%"></i></div><span class="tnum label2">${Math.round(v * 100)}%</span></div>`;
-  return `<div class="row" style="margin-bottom:12px"><span class="label2 fg3">숫자는 예시입니다 · 모수는 dev 판정만(예시 n = 60) · test 수치는 eval.py --split test에서만 · GET /metrics/accuracy?prompt_version=</span></div>
+  return `<div class="row" style="margin-bottom:12px"><span class="label2 fg3">숫자는 예시입니다 · 모델 vs 판정기 일치율 · 모수는 dev 판정 풀만(예시 n = 75) · 골드 지표·test 수치는 eval.py에서만 · GET /metrics/accuracy?prompt_version=</span></div>
   <div class="grid2">
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th>항목</th><th>v1 (기준)</th><th>vN (자동 개선)</th><th class="num">차이</th></tr></thead><tbody>
       ${items.map((it, i) => `<tr><td>${it.label}</td><td style="min-width:140px">${bar(ex[i][0])}</td><td style="min-width:140px">${bar(ex[i][1])}</td><td class="num ${ex[i][1] > ex[i][0] ? "brand" : "fg3"}">${ex[i][1] > ex[i][0] ? "+" : ""}${Math.round((ex[i][1] - ex[i][0]) * 100)}%p</td></tr>`).join("")}
     </tbody></table></div>
     <div class="stack">
-      <section class="card"><h2 class="headline2" style="margin-bottom:12px">블라인드 승률 (vN vs v1)</h2>
+      <section class="card"><h2 class="headline2" style="margin-bottom:12px">블라인드 승률 (vN vs v1) ${AI}</h2><p class="caption1 fg3" style="margin:-4px 0 8px">LLM 쌍 비교 · 좌우 바꿔 두 번 판정, 다르면 비슷</p>
         <dl class="facts"><dt>vN이 나음</dt><dd>${bar(.48)}</dd><dt>v1이 나음</dt><dd>${bar(.22)}</dd><dt>비슷</dt><dd>${bar(.24)}</dd><dt>둘 다 틀림</dt><dd>${bar(.06)}</dd></dl>
         <p class="caption1 fg3" style="margin:12px 0 0">좌우 선택 비율 왼쪽 51% · 오른쪽 49% (위치 쏠림 확인용)</p></section>
-      <section class="card"><h2 class="headline2" style="margin-bottom:8px">판정기 vs 사람</h2>
-        <dl class="facts"><dt>항목 평균 일치</dt><dd>${bar(.91)}</dd><dt>운영 구간 사람 몫</dt><dd>${bar(.18)}</dd></dl></section>
+      <section class="card"><h2 class="headline2" style="margin-bottom:8px">사람이 보는 몫</h2>
+        <dl class="facts"><dt>운영 구간 엇갈림·표본</dt><dd>${bar(.18)}</dd></dl>
+        <p class="caption1 fg3" style="margin:12px 0 0">판정기 vs 정답·정답지 점검(AI 중재 vs 사람 표본)은 앱에 정답이 없어 평가 리포트에서만 봅니다</p></section>
     </div>
   </div>`;
 }
@@ -1151,29 +1189,56 @@ function evalAcc() {
 const EMR_TABS = ["진료기록", "수납", "청구", "치료계획", "주의사항", "예약", "문자"];
 const EMR_TOOLS = [["desk", "데스크"], ["book", "예약"], ["chart", "전자차트"], [null, "환자상담"], [null, "사진"], [null, "X-ray"], [null, "문서발급"], [null, "고객관리"], [null, "구강검진"], [null, "청구/EDI"], [null, "경영통계"], [null, "환경설정"]];
 const emrBalance = e => e.payments.reduce((t, x) => t + x.due - x.paid, 0);
+function ageMark(age) {
+  const m = S.data.schedule.age_marks;
+  return age >= m.senior ? ["노인", `만 ${m.senior}세 이상 · 보험 임플란트·틀니 대상`] : age >= m.adult ? ["어른", `만 ${m.adult}세 이상 · 스케일링 연 1회 급여 대상`] : ["아이", `만 ${m.adult}세 미만`];
+}
 function emrTop(e, q, list) {
-  const p = e.patient, recent = S.data.prep[TODAY].slice(0, 4);
+  const p = e.patient, recent = S.data.prep[TODAY].slice(0, 4), [mark, why] = ageMark(p.age);
   return `<div class="e-top">
-    <div class="e-who"><b>${esc(p.name)}</b><span class="tnum">(${p.chart_no})</span>
+    <div class="e-who"><b>${esc(p.name)}</b><span class="tnum">(${p.chart_no})</span> <span class="e-age e-age-${mark}" title="${why}">${mark}</span>
       <div class="e-search"><input id="emrQ" aria-label="환자 검색" value="${esc(q)}" placeholder="이름·차트번호 검색">
       ${q ? `<div class="e-found">${list.slice(0, 10).map(k => `<button data-act="emrPick" data-arg="${k}">${k} ${esc(S.data.emr[k].patient.name)} · ${S.data.emr[k].patient.age}세</button>`).join("") || "<span>검색 결과 없음</span>"}</div>` : ""}</div></div>
     <div class="e-recent">${recent.map(r => `<button data-act="emrPick" data-arg="${r.patient.chart_no}"><span class="tnum">${r.time}</span> ${esc(r.patient.name)} · ${esc(r.procedure)}</button>`).join("")}</div>
     <div class="e-tools">${EMR_TOOLS.map(([k, l]) => k ? `<button class="${S.emrMode === k ? "on" : ""}" data-act="emrMode" data-arg="${k}"><i>${l[0]}</i>${l}</button>` : `<button disabled title="와이어프레임에 없는 화면"><i>${l[0]}</i>${l}</button>`).join("")}</div>
   </div>`;
 }
+/* EMR 예약 칸 — 신환은 왼쪽 하늘색 띠, 그날 예약 2건 이상은 이름 밑줄. 미확인은 기준일 예약에만 */
+const emrDay = d => (S.data.schedule.days[d] || []).filter(r => r.status !== "취소");
+function emrAppt(r, rows, d, compact) {
+  const dup = rows.filter(x => x.chart_no === r.chart_no).length > 1;
+  return `<button class="appt ty-${r.type} ${r.new_patient ? "newp" : ""}" data-act="emrPick" data-arg="${r.chart_no}" title="${r.new_patient ? "신환 · " : ""}${dup ? "그날 예약 2건 이상" : ""}"><b><span class="${dup ? "dup" : ""}">${r.time} ${esc(r.name)}</span></b>${compact ? "" : `<span>${esc(r.procedure)}</span>`}${d === TODAY && !r.confirmed && r.status === "예정" ? "<em>미확인</em>" : ""}</button>`;
+}
 function emrDayGrid(date, compact) {
-  const rows = S.data.prep[date] || [], cols = [...new Set(rows.map(r => r.staff))];
+  const rows = emrDay(date), staff = S.data.schedule.staff;
   const hours = [...new Set(rows.map(r => r.time.slice(0, 2)))].sort();
-  return `<div class="e-grid-wrap"><table class="e-sched"><thead><tr><th></th>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
-    ${hours.map(h => `<tr><th class="tnum">${+h}시</th>${cols.map(c => `<td>${rows.filter(r => r.staff === c && r.time.startsWith(h)).map(r => `<button class="appt ty-${r.type}" data-act="emrPick" data-arg="${r.patient.chart_no}"><b>${r.time} ${esc(r.patient.name)}</b>${compact ? "" : `<span>${esc(r.procedure)}${r.chair ? " · " + r.chair + "번" : ""}</span>`}${r.confirmed ? "" : "<em>미확인</em>"}</button>`).join("")}</td>`).join("")}</tr>`).join("") || '<tr><td>예약 없음</td></tr>'}
+  return `<div class="e-grid-wrap"><table class="e-sched"><thead><tr><th></th>${staff.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr></thead><tbody>
+    ${hours.map(h => `<tr><th class="tnum">${+h}시</th>${staff.map(s => `<td>${rows.filter(r => r.staff_id === s.id && r.time.startsWith(h)).map(r => emrAppt(r, rows, date, compact)).join("")}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${staff.length + 1}">예약 없음</td></tr>`}
   </tbody></table></div>`;
+}
+function emrWeekGrid(d) {
+  const mon = addDays(d, -((dObj(d).getUTCDay() + 6) % 7)), week = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(mon, i));
+  return `<div class="e-grid-wrap"><table class="e-sched e-week"><thead><tr>${week.map(x => `<th class="${x === d ? "on" : ""}"><button class="link" data-act="emrDate" data-arg="${x}">${mdw(x)}</button> · ${emrDay(x).length}</th>`).join("")}</tr></thead><tbody><tr>
+    ${week.map(x => { const rows = emrDay(x), closed = S.data.schedule.hours.closed_weekdays.some(w => (w + 1) % 7 === dObj(x).getUTCDay()); return `<td>${rows.map(r => emrAppt(r, rows, x, true)).join("") || `<span class="e-note">${closed ? "휴진" : "예약 없음"}</span>`}</td>`; }).join("")}
+  </tr></tbody></table></div>`;
+}
+function emrCal(d) {
+  const sc = S.data.schedule, first = d.slice(0, 8) + "01", lead = dObj(first).getUTCDay(), cells = [];
+  for (let i = 0; i < lead; i++) cells.push("<span></span>");
+  for (let x = first; x.slice(0, 7) === d.slice(0, 7); x = addDays(x, 1)) {
+    const inRange = x >= sc.from && x <= sc.to;
+    cells.push(inRange ? `<button class="${x === d ? "on" : ""} ${x === TODAY ? "today" : ""}" data-act="emrDate" data-arg="${x}">${+x.slice(8)}</button>` : `<span class="off">${+x.slice(8)}</span>`);
+  }
+  const prev = addDays(first, -1), next = addDays(first, 32).slice(0, 8) + "01";
+  return `<div class="e-cal-head"><button data-act="emrDate" data-arg="${prev.slice(0, 8) + "01" < sc.from ? sc.from : prev.slice(0, 8) + "01"}">◀</button><b>${d.slice(0, 4)}년 ${+d.slice(5, 7)}월</b><button data-act="emrDate" data-arg="${next > sc.to ? sc.to : next}">▶</button></div>
+    <div class="e-cal">${[..."일월화수목금토"].map(w => `<i>${w}</i>`).join("")}${cells.join("")}</div>`;
 }
 function emrDesk(e) {
   const p = e.patient, today = S.data.prep[TODAY], t0 = e.treatments[e.treatments.length - 1], bal = emrBalance(e);
   const f = (k, v) => `<label>${k}</label><span>${v}</span>`;
   return `<div class="e-desk">
     <div class="e-col">
-      <section class="e-box"><h3>환자 정보</h3><div class="e-pinfo"><div class="e-photo">사진</div><div class="e-form">
+      <section class="e-box"><h3>환자 정보</h3><div class="e-pinfo"><div class="e-form">
         ${f("이름", esc(p.name))}${f("차트번호", p.chart_no)}${f("생년월일", `${p.birth} (${p.age}세 ${p.sex})`)}${f("전화", esc(p.phone))}${f("등록일", p.registered)}${f("실손보험", p.private_insurance ? "가입" : "미가입")}${f("가족", p.family.length ? esc(p.family.join(", ")) : "-")}
       </div></div></section>
       <section class="e-box"><h3>당일 수납 정보</h3><table class="e-pay"><tr><th>총진료비</th><td>0</td><th>본인부담금</th><td>0</td></tr><tr><th>미수금</th><td class="red">${commas(bal)}</td><th>수납할 금액</th><td class="red">${commas(Math.max(bal, 0))}</td></tr><tr><th>카드</th><td>0</td><th>현금</th><td>0</td></tr></table></section>
@@ -1189,25 +1254,61 @@ function emrDesk(e) {
     </div></div>`;
 }
 function emrBook() {
-  const days = Object.keys(S.data.prep), d = days.includes(S.emrDate) ? S.emrDate : TODAY, rows = S.data.prep[d];
-  return `<div class="e-book"><aside class="e-box"><h3>날짜</h3>${days.slice().reverse().map(x => `<button class="${x === d ? "on" : ""}" data-act="emrDate" data-arg="${x}">${mdw(x)} · ${S.data.prep[x].length}명</button>`).join("")}<p>예약 칸을 누르면 그 환자로 바뀝니다. 미확인은 예약 확인 문자에 답이 없는 예약입니다.</p></aside>
-    <section class="e-box e-grow"><h3>일별 예약 · ${mdw(d)} · 총 ${rows.length}건</h3>${emrDayGrid(d, false)}</section></div>`;
+  const sc = S.data.schedule, d = S.emrDate && S.emrDate >= sc.from && S.emrDate <= sc.to ? S.emrDate : TODAY, rows = emrDay(d);
+  const cnt = t => rows.filter(r => r.type === t).length;
+  return `<div class="e-book"><aside class="e-col">
+      <section class="e-box">${emrCal(d)}</section>
+      <section class="e-box"><h3>예약 통계 · ${mdw(d)}</h3><table class="g"><tr><th>전체</th><td class="num">${rows.length}</td></tr><tr><th>진료</th><td class="num">${cnt("진료")}</td></tr><tr><th>위생</th><td class="num">${cnt("위생")}</td></tr><tr><th>상담</th><td class="num">${cnt("상담")}</td></tr><tr><th>신환</th><td class="num">${rows.filter(r => r.new_patient).length}</td></tr></table></section>
+      <section class="e-box"><h3>예약 메모</h3><p class="e-note">메모 없음</p></section>
+      <p class="e-note">예약 칸을 누르면 그 환자로 바뀝니다. 왼쪽 하늘색 띠는 신환, 이름 밑줄은 그날 예약이 2건 이상인 환자입니다.</p></aside>
+    <section class="e-box e-grow"><h3>${S.emrWeek ? "주간" : "일간"} 예약 · ${mdw(d)}${S.emrWeek ? " 주" : ` · 총 ${rows.length}건`}<span class="e-seg"><button class="${S.emrWeek ? "" : "on"}" data-act="emrWeek" data-arg="0">일간</button><button class="${S.emrWeek ? "on" : ""}" data-act="emrWeek" data-arg="1">주간</button></span></h3>${S.emrWeek ? emrWeekGrid(d) : emrDayGrid(d, false)}</section></div>`;
+}
+/* 치식도 — 치아 종류별 해부 모양 선화(앞니·송곳니·작은 어금니·큰 어금니). 단위 상자(0~1) 안 위턱 기준 경로, 아래턱은 뒤집는다.
+   진료 기록 있는 치아는 칠하고, 남은 치료계획은 점선. 아래에 번호 칸을 따로 둔다 */
+const TOOTH_PATH = {
+  incisor: "M.15 .55C.07 .7 .08 .9 .18 .99L.82 .99C.92 .9 .93 .7 .85 .55C.75 .3 .6 .05 .5 .02C.4 .05 .25 .3 .15 .55Z",
+  canine: "M.15 .55C.05 .72 .12 .88 .5 1C.88 .88 .95 .72 .85 .55C.75 .25 .6 0 .5 0C.4 0 .25 .25 .15 .55Z",
+  premolar: "M.12 .55C.02 .7 .05 .9 .25 .98Q.38 1 .5 .94Q.62 1 .75 .98C.95 .9 .98 .7 .88 .55C.78 .3 .6 .06 .5 .04C.4 .06 .22 .3 .12 .55Z",
+  molar: "M.08 .52C0 .68 .02 .9 .18 .97Q.3 1 .4 .94Q.5 1 .6 .94Q.7 1 .82 .97C.98 .9 1 .68 .92 .52C.88 .3 .8 .1 .74 .04C.68 .12 .62 .3 .57 .45Q.5 .4 .43 .45C.38 .3 .32 .12 .26 .04C.2 .1 .12 .3 .08 .52Z",
+};
+const toothKind = n => { const d = n % 10; return d <= 2 ? "incisor" : d === 3 ? "canine" : d <= 5 ? "premolar" : "molar"; };
+function teethSvg(e) {
+  const done = new Set(e.treatments.map(x => String(x.tooth)));
+  const plan = new Set(e.plans.filter(x => x.status === "open").map(x => String(x.tooth)));
+  const state = n => done.has(String(n)) ? "on" : plan.has(String(n)) ? "plan" : "";
+  const W = { incisor:15, canine:16, premolar:17, molar:23 }, GAP = 3, MID = 14, H = 46;
+  const rows = [[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28], [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]];
+  const total = rows[0].reduce((t, n) => t + W[toothKind(n)] + GAP, 0) + MID;
+  const tooth = (n, x, upper) => {
+    const w = W[toothKind(n)], cls = state(n), y = upper ? 2 : 70;
+    const tf = upper ? `translate(${x} ${y}) scale(${w} ${H})` : `translate(${x} ${y + H}) scale(${w} ${-H})`;
+    return `<g class="t ${cls}"><title>${n}번${cls === "on" ? " · 진료 기록 있음" : cls === "plan" ? " · 남은 치료계획" : ""}</title>
+      <g transform="${tf}"><path d="${TOOTH_PATH[toothKind(n)]}" vector-effect="non-scaling-stroke"/><path class="cej" d="M.12 .56Q.5 .64 .88 .56" vector-effect="non-scaling-stroke"/></g>
+      <text x="${x + w / 2}" y="${upper ? y + H + 9 : y - 3}">${n}</text></g>`;
+  };
+  const row = (list, upper) => { let x = 2; return list.map((n, i) => { const g = tooth(n, x, upper); x += W[toothKind(n)] + GAP + (i === 7 ? MID : 0); return g; }).join(""); };
+  const nums = list => list.map(n => `<span class="${state(n)}">${n}</span>`).join("");
+  return `<svg class="odonto" viewBox="0 0 ${total + 4} 120" role="img" aria-label="치식도">${row(rows[0], true)}${row(rows[1], false)}<line x1="${total / 2 + 2}" y1="2" x2="${total / 2 + 2}" y2="118"/></svg>
+    <div class="e-teeth-nums"><div>${nums(rows[0].slice(0, 8))}<i></i>${nums(rows[0].slice(8))}</div><div>${nums(rows[1].slice(0, 8))}<i></i>${nums(rows[1].slice(8))}</div></div>
+    <div class="odonto-legend"><span><i class="on"></i>진료 기록 있음</span><span><i class="plan"></i>남은 치료계획</span></div>`;
 }
 function emrChartView(e) {
-  const p = e.patient, on = S.emrPanel, tr = e.treatments.slice().reverse(), done = new Set(e.treatments.map(x => x.tooth));
-  const row = a => a.map(n => `<span class="${done.has(String(n)) ? "on" : ""}">${n}</span>`).join("");
+  const p = e.patient, on = S.emrPanel, tr = e.treatments.slice().reverse();
+  const pick = (k, t) => `<button class="e-pick ${k === p.chart_no ? "on" : ""}" data-act="emrPick" data-arg="${k}">${t}</button>`;
   const GRP = ["기본진료", "구강검사", "치석제거", "충치치료", "신경치료", "크라운", "임플란트", "발치", "치주치료", "소아치료", "X-ray", "약 처방"];
   const panels = {
     기본: `<dl>${[["나이", `${p.age}세 ${p.sex}`], ["보험", "건강보험"], ["실손", p.private_insurance ? "가입" : "미가입"], ["전화", esc(p.phone)]].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`,
+    메모: "<p>개별 메모 없음</p>",
     계획: e.plans.map(x => `<p>${x.created} ${esc(x.procedure)} ${x.tooth !== "00" ? "#" + x.tooth : ""} · ${PLAN_ST[x.status] || x.status}</p>`).join("") || "<p>치료계획 없음</p>",
+    접수: S.data.prep[TODAY].map(r => pick(r.patient.chart_no, `${r.time} ${esc(r.patient.name)} · ${esc(r.procedure)}`)).join(""),
+    예약: emrDay(TODAY).map(r => pick(r.chart_no, `${r.time} ${esc(r.name)} · ${esc(r.procedure)}`)).join("") || "<p>오늘 예약 없음</p>",
     수납: e.payments.slice(-8).reverse().map(x => `<p>${x.at.slice(0, 10)} · ${commas(x.paid)} / ${commas(x.due)}</p>`).join("") || "<p>수납 내역 없음</p>",
-    가족: p.family.length ? p.family.map(n => `<p>${esc(n)}</p>`).join("") : "<p>등록된 가족 없음</p>",
-    예약: e.appointments.slice(-6).reverse().map(a => `<p>${a.at.slice(0, 16)} ${a.status} · ${esc(a.procedure)}</p>`).join("") };
+    가족: p.family.length ? p.family.map(n => `<p>${esc(n)}</p>`).join("") : "<p>등록된 가족 없음</p>" };
   return `<div class="e-alert"><b>Alert</b> ${e.alerts.length ? e.alerts.map(a => esc(a.label)).join(" / ") : "특이사항 없음"}</div>
   <div class="e-chart">
     <section class="e-box e-rec"><h3>진료 기록</h3>${tr.map(x => `<article><time>${x.at}</time><div><b>${esc(x.procedure)}</b>${x.tooth !== "00" ? ` <span class="tnum">#${x.tooth}</span>` : ""}${x.dx ? ` <small>상병 ${esc(x.dx)}</small>` : ""}<p>${x.note ? esc(x.note) : "기록 없음"}</p></div></article>`).join("") || "<p>진료 기록 없음</p>"}</section>
     <section class="e-mid"><div class="etabs"><span class="etab">PI 입력</span><span class="etab">치료계획 입력</span><span class="etab on">진료 입력</span><span class="etab">문서 발급</span></div>
-      <div class="e-box e-teeth"><div>${row([18,17,16,15,14,13,12,11])}<i></i>${row([21,22,23,24,25,26,27,28])}</div><div>${row([48,47,46,45,44,43,42,41])}<i></i>${row([31,32,33,34,35,36,37,38])}</div></div>
+      <div class="e-box e-teeth">${teethSvg(e)}</div>
       <div class="e-box e-bundle">${GRP.map(g => `<button disabled>${g}</button>`).join("")}</div>
       <div class="e-box e-entry"><h3>처치 입력 · 읽기 전용</h3><table class="g"><tr><th>진료일</th><td>${md(TODAY)}</td><th>보험 구분</th><td>건강보험</td></tr><tr><th>상병명</th><td colspan="3">입력 전</td></tr><tr><th>총진료비</th><td>0</td><th>본인부담금</th><td>0</td></tr></table></div>
       <div class="e-box e-memo"><h3>진료 메모</h3><p>${tr[0]?.note ? "최근 메모: " + esc(tr[0].note).slice(0, 90) : "메모 없음"}</p></div></section>
@@ -1221,7 +1322,9 @@ R.emr = () => {
   const q = S.emrQ.trim(), list = keys.filter(k => !q || k.includes(q) || E[k].patient.name.includes(q)), e = E[S.emrChart];
   return head("전환 전 EMR", "AX 전 병원 프로그램의 일반적인 화면 구조입니다(읽기 전용). 주의사항은 전자차트, 미수는 데스크, 남은 치료는 차트 옆 계획 패널에 있어서 한 환자를 챙기려면 화면을 옮겨 다녀야 합니다. 준비표 한 행과 비교해 보세요.", `<span class="updated">환자 ${keys.length}명(오늘·준비표·통화 환자)</span>`) + `
   ${missing ? `<div class="placeholder" style="margin-bottom:12px">${esc(missing)}는 와이어프레임 데이터 묶음에 없어 첫 환자를 대신 엽니다. 실제 앱은 모든 환자를 엽니다.</div>` : ""}
-  <div class="emr2-scroll"><div class="emr2">${emrTop(e, q, list)}<div class="e-body">${S.emrMode === "book" ? emrBook() : S.emrMode === "chart" ? emrChartView(e) : emrDesk(e)}</div>
+  <div class="emr2-scroll"><div class="emr2"><div class="e-win">덴탈차트 Pro v3.2 - [${{ desk:"데스크", book:"예약", chart:"전자차트" }[S.emrMode]}]<span class="e-wbtn" aria-hidden="true"><i>─</i><i>☐</i><i>✕</i></span></div>
+    <div class="e-menu" aria-hidden="true">${["파일", "환자", "예약", "진료", "수납", "청구", "통계", "환경설정", "도움말"].map(m => `<span>${m}</span>`).join("")}</div>
+    ${emrTop(e, q, list)}<div class="e-body">${S.emrMode === "book" ? emrBook() : S.emrMode === "chart" ? emrChartView(e) : emrDesk(e)}</div>
     <div class="e-status"><span>덴탈차트 Pro v3.2 · 가상 프로그램</span><span>파트: ${esc(S.user)}</span><span>이 환자에서 화면 이동 ${S.emrMoves}회</span><span>읽기 전용</span><span>2026-12-01 ${NOW}</span></div></div></div>`;
 };
 function emrPane(e) {
@@ -1371,7 +1474,7 @@ R.home = () => {
     <div class="tiles">
       ${tile("today", "사내 포털", "오늘 · 통화 · 준비표 · 청구 · 재무", "전 직원")}
       ${tile("ask", "물어보기", "매뉴얼·공지·통화·문자·차트 검색과 질문", "전 직원")}
-      ${tile("eval", "AI 평가", "사람 판정 · 블라인드 비교 · 정확도 표", "원장 · 판정 담당 · 일상 업무와 분리")}
+      ${tile("eval", "AI 평가", "엇갈림 판정 · 블라인드 비교 · 정확도 표", "원장 · 판정 담당 · 일상 업무와 분리")}
       ${tile("emr", "전환 전 EMR", "데스크 · 예약 · 전자차트 · 준비표와 비교", "읽기 전용 · 비교용")}
     </div><p class="caption1 fg3 mt16">내부망 전용 · 문의는 관리자에게</p></div>`;
 };
@@ -1507,6 +1610,7 @@ const A = {
   emrMode: a => { if (S.emrMode !== a) S.emrMoves++; S.emrMode = a; render(); },
   emrPanel: a => { if (S.emrPanel !== a) S.emrMoves++; S.emrPanel = a; render(); },
   emrDate: a => { S.emrDate = a; render(); },
+  emrWeek: a => { S.emrWeek = a === "1"; render(); },
   emrTab: a => { if (S.emrTab !== a) S.emrMoves++; S.emrTab = a; render(); },
   askTab: a => { S.askTab = a; render(); },
   askQ: a => { S.askTab = "chat"; if (!S.chat) initChat(); ask(a); if (S.screen !== "ask") go("ask"); },
