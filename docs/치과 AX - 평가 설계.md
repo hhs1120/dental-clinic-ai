@@ -262,16 +262,17 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
   → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json(make gate가 읽음)  (+ reports/eval_runs.jsonl 1줄)
 ```
 - 실행 이력 `reports/eval_runs.jsonl`(커밋 — `make data`가 `truth.sqlite`를 다시 만들어도 남게). 한 줄 = `split, section, condition, prompt_version, started_at, report_path`
-- 분류: §2.2 표 + 분리 정확도 + 골드 점검 + 버전 비교(교집합) + 블라인드 쌍별 승률(LLM 쌍 비교, 최종 비교는 사람 투표와 일치율)·위치 편향
+- 분류: §2.2 모델 vs 골드 + 버전 비교(교집합) + 블라인드 쌍별 승률(LLM 쌍 비교·사람 투표 따로, 같은 쌍에서 둘의 일치율)·위치 편향
+- 판정: 판정기 vs 골드(§2.6). 교차검증: 엇갈림·핵심 엇갈림·일치 오류·오류 포착·향상 배수(§2.5). 골드 점검 결과(§2.3)는 `make gold-audit`가 생긴 뒤 붙인다
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 주의사항 반영률·과잉 언급률·과잉 제안률
 - 슬롯·에이전트 섹션은 착수 시 추가
-- 판정기·교차검증·자동 처리 값은 `eval.py`가 낸다(§2.5·§2.6·§5)
+- 자동 처리 값도 `eval.py`가 낸다(§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
 - **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류·자동 처리는 분류 `--prompt-version` 하나, 판정은 판정기 `--prompt-version` 하나, 교차검증은 분류 `--prompt-version` 하나 × 판정기 버전(하나뿐이면 그것, 여럿이면 `ax_settings.prompt_versions`의 judge), RAG는 검색·챗 중 하나와 조건 하나). 분류 묶음에는 판정기 수치를 내지 않는다. 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
 - **`--condition`**: `embedding=<모델>,reranker=<off·haiku·rerank-…>` 형식이고 빠진 키는 기본값이다(`backend/rag_search.py` `parse_condition`). 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다)
-- **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
+- **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록 — dev 판정 풀만, 골드 기준. 비풀은 관문 검증 구간이라 건별로 보이지 않는다, §2.7)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
 - **few-shot 예시 제외**: 예시는 사람이 판정한 운영 판정 건에서만 고르고(골드 점검 표본은 골드로 뽑은 통화라 쓰지 않는다), 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`)의 예시 `call_uid`를 dev 집계와 관문 모수에서 뺀다. 자동 개선은 few-shot을 추가하지 않는다
 
 `make gate`는 이 스크립트의 `--split dev` 출력을 읽음. 기준은 [[치과 AX - 기능 정의]] §6.
