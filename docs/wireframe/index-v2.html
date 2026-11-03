@@ -309,6 +309,8 @@ kbd.k{display:inline-block;border:1px solid var(--line-primary);border-bottom-wi
 .appt{display:block;width:100%;border:0;border-left:3px solid var(--line-primary);background:var(--surface-secondary);text-align:left;padding:2px 4px;margin-bottom:2px;cursor:pointer}
 .appt b,.appt span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.appt em{font-style:normal;color:var(--negative-text);font-weight:700}
 .appt.ty-진료{border-left-color:var(--brand)}.appt.ty-위생{border-left-color:var(--positive)}.appt.ty-상담{border-left-color:var(--accent-violet)}
+.sc-wrap{overflow-x:auto}.sc{border-collapse:collapse;width:100%;min-width:760px;table-layout:fixed}.sc th,.sc td{border:1px solid var(--line-secondary);padding:4px;vertical-align:top;font-size:12px}.sc thead th{background:var(--bg-secondary);font-weight:600}.sc thead th:first-child{width:56px}.sc tbody th{color:var(--fg-tertiary);font-weight:500}.sc td.busy{background:var(--surface-tertiary)}.sc td.lunch{text-align:center;color:var(--fg-tertiary);background:var(--bg-secondary)}
+.sc-appt{display:block;width:100%;border:0;border-left:3px solid var(--line-primary);border-radius:4px;background:var(--surface-secondary);text-align:left;padding:4px 6px;margin-bottom:2px;cursor:pointer;font:inherit;color:inherit}.sc-appt b,.sc-appt span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sc-appt.sel{outline:2px solid var(--brand)}.sc-appt.off{opacity:.55}.sc-appt em{font-style:normal;font-weight:700;color:var(--negative-text)}.sc-appt.ty-진료{border-left-color:var(--brand)}.sc-appt.ty-위생{border-left-color:var(--positive)}.sc-appt.ty-상담{border-left-color:var(--accent-violet)}
 .e-book{display:grid;grid-template-columns:170px minmax(0,1fr);gap:6px}.e-book aside button{display:block;width:100%;border:0;background:none;text-align:left;padding:3px 4px;cursor:pointer}.e-book aside button.on{background:var(--brand);color:var(--on-brand)}.e-book aside p{color:var(--fg-tertiary);margin:8px 0 0}
 .e-alert{background:var(--surface-negative);color:var(--negative-text);padding:4px 8px;margin-bottom:6px;font-size:14px;font-weight:700}
 .e-chart{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) 190px;gap:6px}
@@ -353,6 +355,7 @@ div:not(.card):not(.row):has(> .row > .t-ai){background:var(--surface-accent-vio
     <nav class="nav" id="nav" aria-label="메뉴">
       <a href="#today" data-s="today">오늘</a>
       <a href="#calls" data-s="calls">통화</a>
+      <a href="#schedule" data-s="schedule">예약</a>
       <a href="#prep" data-s="prep">준비표</a>
       <a href="#ask" data-s="ask">물어보기</a>
       <span class="sep" aria-hidden="true"></span>
@@ -366,11 +369,11 @@ div:not(.card):not(.row):has(> .row > .t-ai){background:var(--surface-accent-vio
       <button class="btn btn-sm" id="areaBack" data-act="areaBack"></button>
     </div>
     <div class="tb-right">
-      <label class="caption1 fg3" for="userSel">보는 사람</label>
+      <label class="caption1 fg3" for="userSel">담당 파트</label>
       <select id="userSel">
-        <option value="원장">원장 한명숙</option>
-        <option value="데스크">데스크 서영수</option>
-        <option value="상담실장">상담실장 박우진</option>
+        <option value="원장">원장</option>
+        <option value="데스크">데스크</option>
+        <option value="상담실장">상담실장</option>
       </select>
       <span class="label2 fg2 tnum"><span class="lbl-date">기준일 </span>2026-12-01(화) 08:50</span>
     </div>
@@ -386,6 +389,7 @@ const TODAY = "2026-12-01", NOW = "08:50";
 const APPEAL_DAYS = 90; // generator/master.py APPEAL_DAYS (재심 기한 = 통보일 + APPEAL_DAYS)
 const S = {
   data:null, screen:"today", user:"원장",
+  schedDate:TODAY, schedAll:false, schedSel:null,
   prepDate:TODAY, prepChip:"all", prepType:"all", prepTodoOnly:false, prepView:"table", prepOpen:null, prepRegen:null, prepUpdated:"05:30",
   meetType:"all", chairSel:1, chairPick:null,
   callsTab:"list", callFilter:"all", callQ:"", callSel:null, done:{}, reverted:{}, pasteResult:null,
@@ -419,7 +423,7 @@ const AUTO_ACTIONS = [
   { id:"recon", title:"일계표 불일치 자동 마감", why:"규칙과 에이전트 원인이 같음 · 장부 수정 불필요" },
 ];
 const DONE = t => `<span class="tag t-done">확정 · ${t}</span>`;
-const USER_NAME = { "원장":"원장 한명숙", "데스크":"데스크 서영수", "상담실장":"상담실장 박우진" };
+const PARTS = ["원장", "데스크", "상담실장"];
 
 const FLAG_KO = { emergency:"응급·통증", complaint:"불만", price_inquiry:"가격 문의", wants_appt:"예약 희망", appt_confirmed:"예약 확정", has_todo:"할 일 있음" };
 const DOC_TYPE = { manual:"직원 매뉴얼", notice:"원내 공지", faq:"환자 FAQ", insurance_guide:"보험 안내", claim_standard:"청구 기준", education:"환자 교육", external:"외부 자료" };
@@ -565,6 +569,60 @@ function head(title, desc, right = "") {
   return `<div class="screen-head"><h1 class="title3">${title}</h1>${right}<p class="desc">${desc}</p></div>`;
 }
 
+/* ── 일별 예약표 — 읽기 전용. 예약을 잡고 바꾸는 일은 EMR 몫 ── */
+const procLabel = r => r.type === "진료" && r.procedure === "상담" ? "진찰" : r.procedure; // 원장 진료 예약의 '상담' = 진찰
+function bookedVia(r) {
+  if (r.booked_via === "desk") return `<div><span>예약 경로</span>데스크 · ${md(r.created_at.slice(0, 10))} ${r.created_at.slice(11)}</div>`;
+  const c = r.call_uid && S.data.calls.find(x => x.uid === r.call_uid);
+  const call = c ? ` <button class="link caption1" data-act="openCall" data-arg="${c.uid}">통화 열기</button>` : r.call_uid ? " 통화" : "";
+  return `<div><span>예약 경로</span>전화 · ${md(r.created_at.slice(0, 10))} ${r.created_at.slice(11)}${call}</div>`;
+}
+R.schedule = () => {
+  const sc = S.data.schedule, d = S.schedDate, h = sc.hours, jsDay = dObj(d).getUTCDay();
+  const all = sc.days[d] || [], hidden = ["취소", "노쇼"];
+  const rows = S.schedAll ? all : all.filter(r => !hidden.includes(r.status));
+  const live = all.filter(r => !hidden.includes(r.status));
+  const byType = t => live.filter(r => r.type === t).length;
+  const closed = h.closed_weekdays.some(w => (w + 1) % 7 === jsDay), saturday = jsDay === 6;
+  const close = tmin(saturday ? h.saturday_close : h.weekday_close), lunch = saturday ? null : h.lunch.map(tmin);
+  const slots = []; for (let m = tmin(h.open); m < close; m += sc.slot_min) slots.push(m);
+  const inLunch = m => lunch && m >= lunch[0] && m < lunch[1];
+  const card = r => `<button class="sc-appt ty-${r.type} ${S.schedSel === r.id ? "sel" : ""} ${hidden.includes(r.status) ? "off" : ""}" data-act="schedSel" data-arg="${r.id}"><b>${r.time} ${esc(r.name)}${d === TODAY && isUnconfirmed(r) ? " <em>미확인</em>" : ""}</b><span>${esc(procLabel(r))} · ${r.duration}분${r.status === "예정" ? "" : " · " + r.status}</span></button>`;
+  const cell = (s, m) => {
+    const mine = rows.filter(r => r.staff_id === s.id);
+    const here = mine.filter(r => tmin(r.time) >= m && tmin(r.time) < m + sc.slot_min);
+    const busy = !here.length && mine.some(r => tmin(r.time) < m && tmin(r.time) + r.duration > m);
+    return `<td class="${busy ? "busy" : ""}">${here.map(card).join("")}</td>`;
+  };
+  const table = closed ? `<div class="card empty">휴진일입니다</div>` : `<div class="card sc-wrap" style="padding:0"><table class="sc"><thead><tr><th></th>${sc.staff.map(s => `<th>${esc(s.role)} ${esc(s.name)}</th>`).join("")}</tr></thead><tbody>
+    ${slots.map(m => `<tr><th class="tnum">${tstr(m)}</th>${inLunch(m) ? `<td class="lunch" colspan="${sc.staff.length}">점심시간</td>` : sc.staff.map(s => cell(s, m)).join("")}</tr>`).join("")}
+  </tbody></table></div>`;
+  const sel = all.find(r => r.id === S.schedSel), p = sel && sc.patients[sel.chart_no];
+  const selCall = sel && sel.call_uid && S.data.calls.find(x => x.uid === sel.call_uid); // 와이어프레임 통화는 판정 풀 밖(silver)만 — 판정 풀이면 분류를 보이지 않는다
+  const urgent = selCall && selCall.ai.flags.includes("emergency");
+  const panel = p ? `<aside class="card stack" aria-label="환자 요약">
+    <div class="row"><h2 class="headline2">${esc(p.name)}</h2><span class="caption1 fg3 tnum">${p.chart_no} · ${p.age}세 ${p.sex}</span></div>
+    ${urgent ? `<div class="row"><span class="tag t-neg">응급 · 통증</span>${AI}<span class="caption1 fg3">이 예약을 잡은 통화의 분류</span></div>` : ""}
+    <div class="kv"><div><span>이 예약</span>${md(d)} ${sel.time}</div><div><span>시술</span>${esc(procLabel(sel))}</div><div><span>상태</span>${sel.status}</div>${bookedVia(sel)}<div><span>연락처</span>${esc(p.phone)}</div><div><span>미수 잔액</span>${won(p.balance)}</div><div><span>마지막 내원</span>${p.last_visit ? md(p.last_visit) : "—"}</div></div>
+    ${p.alerts.length ? `<div class="row">${p.alerts.map(a => `<span class="tag t-alert">${esc(a)}</span>`).join("")}</div>` : ""}
+    <div><div class="label1">앞으로의 예약</div>${p.upcoming.length ? p.upcoming.map(u => `<div class="label2 mt8">${mdw(u.date)} ${u.time} ${esc(procLabel(u))}</div>`).join("") : '<p class="caption1 fg3">없음</p>'}</div>
+    <button class="btn btn-sm" data-act="emrOpen" data-arg="${p.chart_no}">전자차트 열기</button>
+  </aside>` : "";
+  return head("예약", "날짜별 예약을 담당자별로 봅니다. 전부 EMR 조회 값이고, 예약을 잡거나 바꾸는 일은 EMR에서 합니다.") + `
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn btn-sm" data-act="schedMove" data-arg="-1" aria-label="이전 날">◀</button>
+    <b class="headline2 tnum">${mdw(d)}</b>
+    <button class="btn btn-sm" data-act="schedMove" data-arg="1" aria-label="다음 날">▶</button>
+    <button class="btn btn-sm" data-act="schedMove" data-arg="today">오늘</button>
+    <input id="schedPick" type="date" class="input" value="${d}" min="${sc.from}" max="${sc.to}" aria-label="날짜 선택">
+    <label class="label2"><input id="schedAll" type="checkbox" ${S.schedAll ? "checked" : ""}> 취소·노쇼 보기</label>
+    <span class="spacer"></span>
+    <span class="label2 fg2">총 ${live.length}건 · 진료 ${byType("진료")} · 위생 ${byType("위생")} · 상담 ${byType("상담")}</span>
+  </div>
+  ${p ? `<div class="split"><div style="min-width:0">${table}</div>${panel}</div>` : table}
+  <p class="caption1 fg3 mt8">빈칸은 그 담당자의 예약이 없는 시간, 회색은 앞 예약이 이어지는 시간입니다. 시제품 데이터는 최근 30일과 ${md(sc.to)}까지의 예약입니다.</p>`;
+};
+
 /* ── 오늘 ── */
 R.today = () => {
   const d = S.data, rows = d.prep[TODAY];
@@ -588,7 +646,7 @@ R.today = () => {
   };
   const todo = (tag, ttl, meta, act, arg) => `<li><span style="min-width:96px">${tag}</span><div class="main"><button class="item" data-act="${act}" data-arg="${esc(arg)}"><div class="ttl label1">${ttl}</div><div class="caption1 fg3">${meta}</div></button></div></li>`;
 
-  return head(`안녕하세요, ${esc(USER_NAME[S.user])}님`, `12월 1일(화) 아침 화면입니다. 숫자는 전부 EMR·통화 기록을 코드로 센 값이고, AI가 쓴 문장에는 AI 표시가 있습니다.`, `<span class="updated">마지막 갱신 ${NOW}</span>`) + `
+  return head("오늘", `12월 1일(화) 아침 화면입니다. 숫자는 전부 EMR·통화 기록을 코드로 센 값이고, AI가 쓴 문장에는 AI 표시가 있습니다.`, `<span class="updated">마지막 갱신 ${NOW}</span>`) + `
   <div class="grid4">
     ${stat(rows.length + "명", "오늘 예약", "prep", ` · 진료 ${byType("진료")} · 위생 ${byType("위생")} · 상담 ${byType("상담")}`)}
     ${stat(newP.length + "명", "신환", "prep")}
@@ -925,11 +983,11 @@ function askSearch() {
     if (S.srcTypes.call) S.data.calls.forEach(c => {
       const txt = callSummary(c), hay = txt + " " + (c.transcript || ""); const s = toks.reduce((a, t) => a + (hay.includes(t) ? 1 : 0), 0);
       const hit = c.transcript && toks.map(t => c.transcript.split("\n").find(l => l.includes(t))).find(Boolean);
-      if (s && inRange(c.at.slice(0, 10)) && (!S.sChart || (c.patient && c.patient.chart_no.includes(S.sChart)))) cases.push({ kind:"통화", at:c.at, chart:c.patient ? c.patient.chart_no : "", text: hit ? txt + " — “" + hit.replace(/^(직원|환자):\s?/, "") + "”" : txt, s, uid:c.uid });
+      if (s && inRange(c.at.slice(0, 10)) && (!S.sChart || (c.patient && c.patient.chart_no.includes(S.sChart)))) cases.push({ kind:"통화", at:c.at, who:c.patient ? c.patient.name : "상대: " + c.caller, chart:c.patient ? c.patient.chart_no : "", text: hit ? txt + " — “" + hit.replace(/^(직원|환자):\s?/, "") + "”" : txt, s, uid:c.uid });
     });
     if (S.srcTypes.msg) Object.entries(S.data.emr).forEach(([ch, e]) => e.messages.forEach(m => {
       const s = toks.reduce((a, t) => a + (m.body.includes(t) ? 1 : 0), 0);
-      if (s && inRange(m.at.slice(0, 10)) && (!S.sChart || ch.includes(S.sChart))) cases.push({ kind:"문자", at:m.at, chart:ch, text:m.body, s, trig:m.trigger });
+      if (s && inRange(m.at.slice(0, 10)) && (!S.sChart || ch.includes(S.sChart))) cases.push({ kind:"문자", at:m.at, who:e.patient.name, chart:ch, text:m.body, s, trig:m.trigger });
     }));
     if (S.srcTypes.chart) Object.entries(S.data.emr).forEach(([ch, e]) => e.treatments.forEach(x => {
       if (!x.note) return; const s = toks.reduce((a, t) => a + (x.note.includes(t) ? 1 : 0), 0);
@@ -937,9 +995,13 @@ function askSearch() {
     }));
     cases.sort((a, b) => b.s - a.s || (a.at < b.at ? 1 : -1));
   }
+  if (S.sChart) docs = [];
+  else if (S.sFrom || S.sTo) docs = docs.filter(x => x.d.type === "notice" && inRange(x.d.effective));
+  const docNote = !S.srcTypes.doc ? "문서가 출처에서 빠졌습니다" : S.sChart ? "환자번호 필터에서는 문서를 찾지 않습니다" : S.sFrom || S.sTo ? "기간 필터에서는 시행일 있는 공지만 찾습니다" : "매뉴얼에서 찾지 못했습니다";
+  const latest = new Set(latestNotices().map(d => d.id));
   const nCases = cases.length; cases = cases.slice(0, 12);
   return `<form id="searchForm" class="card stack">
-    <div class="row"><input id="searchQ" class="input" style="flex:1;min-width:200px" value="${esc(S.searchQ)}" placeholder="예) 크라운 가격 묻고 예약 안 한 통화" aria-label="검색어"><button class="btn btn-primary" type="submit">찾기</button></div>
+    <div class="row"><input id="searchQ" class="input" style="flex:1;min-width:200px" value="${esc(S.searchQ)}" placeholder="예) 크라운 가격 묻고 예약 안 한 통화" aria-label="검색어"><button class="btn btn-primary" type="submit" ${Object.values(S.srcTypes).some(Boolean) ? "" : "disabled"}>찾기</button></div>
     <div class="row label2">
       <span class="fg3">출처</span>
       <label><input type="checkbox" data-src="doc" ${S.srcTypes.doc ? "checked" : ""}> 문서</label>
@@ -955,9 +1017,9 @@ function askSearch() {
   <div class="grid2 mt16">
     <section><h2 class="headline2" style="margin-bottom:8px">매뉴얼 결과 <span class="fg3 label2">${docs.length}</span></h2>
       <div class="stack">${docs.map(({ d }) => { const line = d.body.split("\n").find(l => toks.some(t => l.includes(t)) && !l.startsWith("#")) || d.body.split("\n")[2] || "";
-        return `<button class="card srccard" data-act="docOpen" data-arg="${d.id}" style="padding:12px 16px"><div class="row"><b>${hl(d.title, toks)}</b><span class="tag">${DOC_TYPE[d.type]}</span>${d.type === "notice" ? `<span class="tag">v${d.version} · 시행 ${d.effective}</span>` : ""}</div><div class="label2 fg2 mt8">${hl(line.replace(/^- /, ""), toks)}</div><div class="caption1 fg3 mt8">[문서 doc:${d.id} | ${DOC_TYPE[d.type]}]</div></button>`; }).join("") || '<div class="card empty">매뉴얼에서 찾지 못했습니다</div>'}</div></section>
+        return `<button class="card srccard" data-act="docOpen" data-arg="${d.id}" style="padding:12px 16px"><div class="row"><b>${hl(d.title, toks)}</b><span class="tag">${DOC_TYPE[d.type]}</span>${d.type === "notice" ? `<span class="tag">v${d.version} · 시행 ${d.effective}</span>${latest.has(d.id) ? "" : '<span class="tag t-caut">옛 버전</span>'}` : ""}</div><div class="label2 fg2 mt8">${hl(line.replace(/^- /, ""), toks)}</div><div class="caption1 fg3 mt8">[문서 doc:${d.id} | ${DOC_TYPE[d.type]}]</div></button>`; }).join("") || `<div class="card empty">${docNote}</div>`}</div></section>
     <section><h2 class="headline2" style="margin-bottom:8px">실제 사례 결과 <span class="fg3 label2">${nCases}${nCases > 12 ? " 중 12" : ""}</span></h2>
-      <div class="stack">${cases.map(x => `<div class="card" style="padding:12px 16px"><div class="row"><span class="tag ${x.kind === "통화" ? "t-brand" : ""}">${x.kind}${x.trig ? " · " + MSG_TRIG[x.trig] : ""}</span><span class="caption1 fg3 tnum">${x.at}</span>${x.chart ? `<button class="link caption1" data-act="emrOpen" data-arg="${x.chart}">${x.chart}</button>` : ""}${x.uid ? `<button class="link caption1" data-act="openCall" data-arg="${x.uid}">통화 열기</button>` : ""}</div><div class="label2 mt8">${hl(x.text, toks)}</div></div>`).join("") || '<div class="card empty">사례에서 찾지 못했습니다</div>'}</div></section>
+      <div class="stack">${cases.map(x => `<div class="card" style="padding:12px 16px"><div class="row"><span class="tag ${x.kind === "통화" ? "t-brand" : ""}">${x.kind}${x.trig ? " · " + MSG_TRIG[x.trig] : ""}</span><span class="caption1 fg3 tnum">${x.at}</span>${x.who ? `<span class="caption1">${esc(x.who)}</span>` : ""}${x.chart ? `<button class="link caption1" data-act="emrOpen" data-arg="${x.chart}">${x.chart}</button>` : ""}${x.uid ? `<button class="link caption1" data-act="openCall" data-arg="${x.uid}">통화 열기</button>` : ""}</div><div class="label2 mt8">${hl(x.text, toks)}</div></div>`).join("") || '<div class="card empty">사례에서 찾지 못했습니다</div>'}</div></section>
   </div>`;
 }
 function latestNotices() {
@@ -1160,7 +1222,7 @@ R.emr = () => {
   return head("전환 전 EMR", "AX 전 병원 프로그램의 일반적인 화면 구조입니다(읽기 전용). 주의사항은 전자차트, 미수는 데스크, 남은 치료는 차트 옆 계획 패널에 있어서 한 환자를 챙기려면 화면을 옮겨 다녀야 합니다. 준비표 한 행과 비교해 보세요.", `<span class="updated">환자 ${keys.length}명(오늘·준비표·통화 환자)</span>`) + `
   ${missing ? `<div class="placeholder" style="margin-bottom:12px">${esc(missing)}는 와이어프레임 데이터 묶음에 없어 첫 환자를 대신 엽니다. 실제 앱은 모든 환자를 엽니다.</div>` : ""}
   <div class="emr2-scroll"><div class="emr2">${emrTop(e, q, list)}<div class="e-body">${S.emrMode === "book" ? emrBook() : S.emrMode === "chart" ? emrChartView(e) : emrDesk(e)}</div>
-    <div class="e-status"><span>덴탈차트 Pro v3.2 · 가상 프로그램</span><span>사용자: ${esc(USER_NAME[S.user])}</span><span>이 환자에서 화면 이동 ${S.emrMoves}회</span><span>읽기 전용</span><span>2026-12-01 ${NOW}</span></div></div></div>`;
+    <div class="e-status"><span>덴탈차트 Pro v3.2 · 가상 프로그램</span><span>파트: ${esc(S.user)}</span><span>이 환자에서 화면 이동 ${S.emrMoves}회</span><span>읽기 전용</span><span>2026-12-01 ${NOW}</span></div></div></div>`;
 };
 function emrPane(e) {
   const t = S.emrTab, p = e.patient;
@@ -1407,13 +1469,15 @@ let tick = 0;
 const stamp = () => nowPlus(++tick);
 const A = {
   go: a => go(a),
+  schedMove: a => { S.schedDate = a === "today" ? TODAY : addDays(S.schedDate, +a); S.schedSel = null; render(); },
+  schedSel: a => { S.schedSel = S.schedSel === +a ? null : +a; render(); },
   areaBack: () => go(S.back),
   claimTab: a => { S.claimTab = a; render(); },
   finTab: a => { S.finTab = a; render(); },
   preChip: a => { S.preChip = a; render(); },
   openPre: () => { S.claimTab = "pre"; S.preChip = "dx"; go("claims"); },
   claimReview: a => { S.claimReviewed[a] = !S.claimReviewed[a]; render(); },
-  claimSubmit: a => { if (S.claimReviewed[a]) { S.claimSubmitted[a] = `${USER_NAME[S.user]} · ${stamp()}`; render(); } },
+  claimSubmit: a => { if (S.claimReviewed[a]) { S.claimSubmitted[a] = `${S.user} · ${stamp()}`; render(); } },
   reportMonth: a => { S.reportMonth = a; render(); },
   reportScope: a => { S.reportScope = a; S.reportMonth = null; render(); },
   expChip: a => { S.expChip = a; render(); },
@@ -1423,7 +1487,7 @@ const A = {
   callSel: a => { S.callSel = a || null; render(); },
   openCall: a => { S.callsTab = "list"; S.callFilter = "all"; S.callQ = ""; S.callSel = a; go("calls"); },
   openFollow: () => { S.callsTab = "follow"; go("calls"); },
-  done: a => { S.done[a] = { by: USER_NAME[S.user], at: stamp() }; render(); },
+  done: a => { S.done[a] = { by: S.user, at: stamp() }; render(); },
   undone: a => { delete S.done[a]; render(); },
   prepDate: a => { S.prepDate = a; S.prepOpen = null; S.chairPick = null; render(); },
   prepChip: a => { S.prepChip = a; render(); },
@@ -1450,7 +1514,7 @@ const A = {
   chatWith: a => { S.askTab = "chat"; ask(a); },
   docOpen: a => { S.docSel = +a; S.askTab = "docs"; go("ask"); },
   evalTab: a => { S.evalTab = a; render(); },
-  revertAuto: a => { S.reverted[a] = USER_NAME[S.user]; render(); },
+  revertAuto: a => { S.reverted[a] = S.user; render(); },
   jPick: a => { const [i, l] = a.split("|"); if (S.jSaved) return; const it = judgeItems()[+i]; S.jAns[it.key] = l; S.jActive = Math.min(+i + 1, judgeItems().length - 1); S.jBuf = ""; render(); },
   jSave: () => jSave(),
   jNext: () => jNext(),
@@ -1540,6 +1604,8 @@ document.addEventListener("change", e => {
   else if (el.id === "sChart") { S.sChart = el.value.trim(); render(); }
   else if (el.dataset.fin) { if (el.value) S.finConfirm[el.dataset.fin] = el.value; render(); }
   else if (el.dataset.exp !== undefined) { S.expAcct[el.dataset.exp] = el.value; render(); }
+  else if (el.id === "schedPick") { if (el.value) { S.schedDate = el.value; S.schedSel = null; } render(); }
+  else if (el.id === "schedAll") { S.schedAll = el.checked; S.schedSel = null; render(); }
   else if (el.id === "userSel") { S.user = el.value; try { localStorage.setItem("ax-user", S.user); } catch (_) {} render(); }
 });
 document.addEventListener("submit", e => {
@@ -1548,11 +1614,11 @@ document.addEventListener("submit", e => {
   else if (e.target.id === "askForm") ask($("#askInput").value);
   else if (e.target.id === "searchForm") { S.searchQ = $("#searchQ").value; S.sChart = $("#sChart").value.trim(); render(); }
 });
-const SCREENS = ["home", "today", "calls", "prep", "ask", "eval", "emr", "claims", "report", "finance", "followup"];
+const SCREENS = ["home", "today", "calls", "schedule", "prep", "ask", "eval", "emr", "claims", "report", "finance", "followup"];
 function fromHash() { const h = location.hash.replace("#", ""); return SCREENS.includes(h) ? h : "home"; }
 window.addEventListener("hashchange", () => { const was = S.screen; S.screen = fromHash(); if (AREA[S.screen] && !AREA[was]) S.back = was; if (S.data) { render(); window.scrollTo(0, 0); } });
 
-try { const u = localStorage.getItem("ax-user"); if (u && USER_NAME[u]) S.user = u; } catch (_) {}
+try { const u = localStorage.getItem("ax-user"); if (PARTS.includes(u)) S.user = u; } catch (_) {}
 $("#userSel").value = S.user;
 S.screen = fromHash();
 document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.s === S.screen));

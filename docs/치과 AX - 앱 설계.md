@@ -29,7 +29,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행, `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시하고 자동 종결하지 않는다 |
 | `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 앱이 처음 뜰 때 판정 풀 전부를 pending으로 채움 |
 | `ax_pasted_calls` | 붙여넣기 통화 — 앱이 만든 통화라 앱 DB. 목록·색인·분류에서는 생성 통화와 합쳐 보인다 |
-| `ax_call_followups` | 후속 큐 처리 기록(처리한 사람·시각)과 후속 에이전트의 처리안(enum·근거·실행 id). 처리한 통화는 큐에서 빠짐 |
+| `ax_call_followups` | 후속 큐 처리 기록(처리한 파트·시각)과 후속 에이전트의 처리안(enum·근거·실행 id). 처리한 통화는 큐에서 빠짐 |
 | `ax_blind_votes` | 블라인드 투표. 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
 ## 2. LLM 로그
@@ -51,7 +51,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 | 도구 | 인자 | 반환 |
 |---|---|---|
-| `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?=5` | `{manual_results, case_results}` — 버킷별 청크 목록 |
+| `search_docs` | `query`, `source_types?[]`, `date_from?/date_to?`, `patient_chart_no?`, `top_k?`(기본값은 `SearchArgs`) | `{manual_results, case_results}` — 버킷별 청크 목록 |
 | `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`)·열린 치료계획 항목 |
 | `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?` | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
@@ -141,7 +141,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | 벡터 저장소 결정 근거 | **규모**: 청크 수만 건(실측은 [[치과 AX - AI 실험 기록]] §1·§3)이면 전수 계산도 빨라서 근사 인덱스(ANN)가 필요 없다. **한 파일**: `ax_chunks`·FTS5·벡터가 `app.sqlite` 하나라 하이브리드 검색·메타데이터 필터가 SQL 조인 하나이고 두 저장소 동기화가 없다. **fixture**: `make fixture`·`save-demo`가 두 sqlite 파일만 복사. Chroma는 이 규모에서 얻는 것(ANN·서버 모드) 없이 저장소만 늘린다 |
 | Chroma로 옮길 때 | 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때. 벡터는 `VectorStore`(`upsert(ids, vectors)`·`query(vector, where, k)`) 뒤에만 있어 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로 — 구현 하나 추가 + 필터용 메타데이터 복사·다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사) |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
-| 리랭커·임베딩 | Voyage — 모델은 `backend/rag_search.py` `DEFAULT_EMBEDDING`·`DEFAULT_RERANKER`, `haiku`는 비교용 조건(`backend/eval_hooks.py`). 근거는 [[치과 AX - AI 실험 기록]]. 리랭커가 실패하면 합친 순서로 답하고 횟수를 남긴다. 벡터가 없는 청크가 있으면 검색기를 만들지 않는다(`MissingVectors`) |
+| 리랭커·임베딩 | Voyage — 모델은 `backend/rag_search.py` `DEFAULT_EMBEDDING`·`DEFAULT_RERANKER`, `haiku`는 비교용 조건(`backend/eval_hooks.py`). 근거는 [[치과 AX - AI 실험 기록]]. 리랭커가 실패하면 합친 순서로 답하고 로그를 남긴다(평가는 실패 횟수를 알린다). 벡터가 없는 청크가 있으면 검색기를 만들지 않는다(`MissingVectors`) |
 | 모델 (확정) | 프로바이더 **Anthropic**(LLM). ① 분류 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) 착수 시 모델 A와 다른 계열로 확정, 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
 | LLM | 게이트웨이 모듈 1개 `shared/llm.py` — §7.1 |
 | 프롬프트 | `prompts/` — §7.2 |
@@ -205,6 +205,7 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 | `/` | 시작 화면 | 없음 |
 | `/today` | 오늘 | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 통화 목록·상세, 후속 큐, 붙여넣기 | [[치과 AX - 기능 정의]] §4 ① |
+| `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(담당자 목록과 그날 예약 전부, 취소·노쇼 포함 — 숨김은 화면에서. 예약마다 `booked_via`·`created_at`과 잡은 통화 `call_uid` — 같은 환자·통화 시각 = `created_at`. 응급 여부는 그 통화의 `ax_call_classifications`이고 판정 풀 통화는 빼고 준다), 패널은 `GET /emr/patients/{chart_no}` |
 | `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
 | `/ask` | 질문하기, 기록 검색, 문서함 | [[치과 AX - 기능 정의]] §4 ③ |
 | `/eval` | 판정, 블라인드, 정확도, 자동 개선 | [[치과 AX - 기능 정의]] §4 ② |
@@ -216,7 +217,9 @@ eval.py가 읽는 칸(아래 분류·판정·투표, §2 LLM 로그)은 `shared/
 
 - 전환 전 EMR API는 `emr_*`를 읽기만 한다. 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
-**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 사용자 선택 + 기준일. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
+**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 담당 파트 선택 + 기준일. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
+
+**이름 표시**: 통화·문자 화면은 환자 이름과 차트 번호를 함께 보인다. 차트 서술 화면은 차트 번호만 보이고 이름을 붙이지 않는다(§3 prefix). 환자에는 차트 번호로 닿는다.
 
 **데이터 가져오기**: 화면 진입 때 조회한다. 배치(①·④)와 야간 실행은 작업을 시작한 뒤 `ax_jobs`를 폴링하고, ③ 챗은 SSE 진행 이벤트를 받는다.
 
