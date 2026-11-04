@@ -1,0 +1,329 @@
+"""전환 전 EMR·예약표 조회 (앱 설계 §9, 전환 전 EMR·일별 예약표 설계안)."""
+
+import sqlite3
+from datetime import date
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.api import app, get_db_paths
+from backend.emr import schedule_day
+
+TODAY, START = date(2026, 12, 1), date(2024, 12, 1)
+HOURS = (
+    '{"open":"09:30","weekday_close":"18:30","saturday_close":"13:30",'
+    '"lunch":["13:00","14:00"],"closed_weekdays":[3,6]}'
+)
+APPT = (
+    "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+    " planned_procedure_code, status, confirmed, booked_via, created_at, plan_item_id)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+def rw(paths, *sql):
+    conn = sqlite3.connect(paths[1])
+    for s in sql:
+        conn.execute(s) if isinstance(s, str) else conn.execute(*s)
+    conn.commit()
+    conn.close()
+
+
+def ro(paths) -> sqlite3.Connection:
+    conn = sqlite3.connect(f"{Path(paths[1]).resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@pytest.fixture
+def emr_paths(source_paths):
+    """source_paths에 예약·수납·주의사항·치료계획·통화를 더한다"""
+    conn = sqlite3.connect(source_paths[1])
+    conn.execute("UPDATE emr_clinic SET hours_json = ?", (HOURS,))
+    conn.executemany(
+        "INSERT INTO emr_staff (id, name, role, active) VALUES (?, ?, ?, ?)",
+        [
+            (1, "강태현", "doctor", 1),
+            (2, "임재윤", "hygienist", 1),
+            (3, "오지수", "desk", 1),
+            (4, "송민지", "consultant", 1),
+            (5, "퇴사자", "hygienist", 0),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO emr_procedures (code, name, category, is_insured, fee_total,"
+        " patient_share_rate, duration_min, is_tooth_level) VALUES (?, ?, ?, 'no', 0, 1, 30, 0)",
+        [("CROWN", "크라운", "prosth"), ("CONSULT", "상담", "consult")],
+    )
+    conn.execute("UPDATE emr_patients SET registered_at = '2026-11-01' WHERE id = 3")
+    conn.executemany(
+        APPT,
+        [
+            (
+                101,
+                1,
+                1,
+                "2026-12-01 10:00:00",
+                60,
+                "treatment",
+                "CROWN",
+                "scheduled",
+                0,
+                "phone",
+                "2026-11-17 14:20:00",
+                212,
+            ),
+            (
+                102,
+                2,
+                2,
+                "2026-12-01 09:30:00",
+                30,
+                "hygiene",
+                "scaling",
+                "scheduled",
+                1,
+                "desk",
+                "2026-06-01 10:00:00",
+                None,
+            ),
+            (
+                103,
+                3,
+                1,
+                "2026-12-01 11:00:00",
+                30,
+                "treatment",
+                "CONSULT",
+                "cancelled",
+                0,
+                "phone",
+                "2026-11-20 09:00:00",
+                None,
+            ),
+            (
+                104,
+                3,
+                1,
+                "2026-12-01 11:00:00",
+                30,
+                "treatment",
+                "CONSULT",
+                "scheduled",
+                0,
+                "desk",
+                "2026-11-30 09:00:00",
+                None,
+            ),
+            (
+                90,
+                1,
+                1,
+                "2026-11-17 10:00:00",
+                30,
+                "treatment",
+                "CROWN",
+                "completed",
+                1,
+                "desk",
+                "2026-11-03 10:00:00",
+                211,
+            ),
+            (
+                91,
+                1,
+                1,
+                "2026-03-02 10:00:00",
+                30,
+                "treatment",
+                "CROWN",
+                "noshow",
+                0,
+                "phone",
+                "2026-02-20 10:00:00",
+                None,
+            ),
+            (
+                92,
+                1,
+                1,
+                "2025-11-20 10:00:00",
+                30,
+                "treatment",
+                "CROWN",
+                "noshow",
+                0,
+                "phone",
+                "2025-11-10 10:00:00",
+                None,
+            ),
+            (
+                110,
+                2,
+                2,
+                "2026-12-15 14:00:00",
+                30,
+                "hygiene",
+                "scaling",
+                "scheduled",
+                0,
+                "desk",
+                "2026-12-01 09:00:00",
+                None,
+            ),
+        ],
+    )
+    conn.execute(
+        "INSERT INTO emr_treatment_plans (id, patient_id, created_at, created_appointment_id)"
+        " VALUES (201, 1, '2026-10-20', 90)"
+    )
+    conn.executemany(
+        "INSERT INTO emr_treatment_plan_items (id, plan_id, seq, procedure_code, tooth_no,"
+        " est_fee, status) VALUES (?, 201, ?, 'CROWN', ?, 0, ?)",
+        [(211, 1, "36", "done"), (212, 2, "36", "open"), (213, 3, "47", "open")],
+    )
+    conn.execute(
+        "INSERT INTO ax_calls (call_uid, source, patient_id, direction, started_at,"
+        " duration_sec, has_transcript, transcript)"
+        " VALUES ('c-0003', 'generated', 1, 'inbound', '2026-11-17 14:20:00', 60, 1, '예약')"
+    )
+    conn.executemany(
+        "INSERT INTO emr_payments (patient_id, kind, amount_due, amount_paid, paid_at, method)"
+        " VALUES (?, 'visit', ?, ?, ?, 'card')",
+        [
+            (1, 100000, 15000, "2026-11-17 11:00:00"),
+            (1, 50000, 0, "2026-12-01 09:00:00"),
+            (2, 0, 10000, "2026-11-01 11:00:00"),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO emr_alert_types VALUES (?, ?, ?)",
+        [
+            ("ANTICOAG", "항응고제 복용", "systemic"),
+            ("PREGNANT", "임신 중", "systemic"),
+            ("PENICILLIN", "페니실린 알레르기", "allergy"),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO emr_patient_alerts (patient_id, code, source, recorded_at, ends_at)"
+        " VALUES (?, ?, 'intake', ?, ?)",
+        [
+            (1, "ANTICOAG", "2026-01-01", None),
+            (1, "PREGNANT", "2026-01-01", "2026-12-01"),
+            (3, "PENICILLIN", "2026-12-02", None),
+        ],
+    )
+    conn.execute(
+        'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+        " related_appointment_id) VALUES (1, 'out', '2026-11-30 10:00:00',"
+        " '내일 10시 예약 확인 부탁드립니다', 'appt_confirm', 101)"
+    )
+    conn.commit()
+    conn.close()
+    return source_paths
+
+
+@pytest.fixture
+def conn(emr_paths):
+    c = ro(emr_paths)
+    yield c
+    c.close()
+
+
+def _client(paths):
+    app.dependency_overrides[get_db_paths] = lambda: paths
+    return TestClient(app)
+
+
+@pytest.fixture
+def client(emr_paths):
+    yield _client(emr_paths)
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client_source_only(emr_paths, tmp_path):
+    yield _client((tmp_path / "none" / "app.sqlite", emr_paths[1]))
+    app.dependency_overrides.clear()
+
+
+def test_schedule_staff_order_excludes_desk_and_inactive(conn):
+    d = schedule_day(conn, TODAY, TODAY, START)
+    assert [(s["name"], s["role"]) for s in d["staff"]] == [
+        ("강태현", "원장"),
+        ("임재윤", "위생사"),
+        ("송민지", "상담실장"),
+    ]
+
+
+def test_schedule_appointment_fields(conn):
+    a = {x["id"]: x for x in schedule_day(conn, TODAY, TODAY, START)["appointments"]}
+    assert (a[101]["time"], a[101]["duration"], a[101]["unconfirmed"]) == ("10:00", 60, True)
+    assert (a[101]["staff_name"], a[101]["staff_role"]) == ("강태현", "원장")
+    assert a[101]["plan_step"] == {"seq": 2, "total": 3} and a[101]["tooth"] == "36"
+    assert a[101]["call"] == {"uid": "c-0003", "started_at": "2026-11-17 14:20"}
+    assert a[101]["booked_at"] == "2026-11-17 14:20" and a[101]["booked_via"] == "phone"
+    assert a[102]["unconfirmed"] is False and a[102]["plan_step"] is None
+    assert a[102]["call"] is None and a[102]["tooth"] is None
+    assert a[104]["procedure"] == "진찰" and a[104]["new_patient"] is True
+    assert a[101]["new_patient"] is False
+
+
+def test_schedule_includes_cancelled_overlap(conn):
+    day = schedule_day(conn, TODAY, TODAY, START)["appointments"]
+    assert sorted(x["status"] for x in day if x["time"] == "11:00") == ["cancelled", "scheduled"]
+
+
+def test_schedule_counts_skip_cancelled(conn):
+    assert schedule_day(conn, TODAY, TODAY, START)["counts"] == {
+        "total": 3,
+        "treatment": 2,
+        "hygiene": 1,
+        "consult": 0,
+        "unconfirmed": 2,
+    }
+
+
+def test_unconfirmed_only_on_today(conn):
+    d = schedule_day(conn, date(2026, 12, 15), TODAY, START)
+    assert [x["unconfirmed"] for x in d["appointments"]] == [False]
+    assert d["counts"]["unconfirmed"] == 0
+
+
+def test_schedule_closed_day(conn):
+    assert schedule_day(conn, date(2026, 12, 3), TODAY, START)["hours"]["closed"] is True
+
+
+def test_schedule_saturday_close(conn):
+    h = schedule_day(conn, date(2026, 12, 5), TODAY, START)["hours"]
+    assert (h["close"], h["closed"], h["open"], h["lunch"]) == ("13:30", False, "09:30", None)
+
+
+def test_schedule_weekday_hours(conn):
+    h = schedule_day(conn, TODAY, TODAY, START)["hours"]
+    assert (h["open"], h["close"], h["lunch"], h["closed"]) == (
+        "09:30",
+        "18:30",
+        ["13:00", "14:00"],
+        False,
+    )
+
+
+def test_schedule_range(conn):
+    assert schedule_day(conn, TODAY, TODAY, START)["range"] == {
+        "from": "2025-11-20",
+        "to": "2026-12-15",
+    }
+
+
+def test_schedule_route_default_and_bad_date(client):
+    assert client.get("/emr/schedule").json()["date"] == "2026-12-01"
+    assert (
+        client.get("/emr/schedule", params={"date": "2026-12-15"}).json()["date"] == "2026-12-15"
+    )
+    assert client.get("/emr/schedule", params={"date": "2026-13-01"}).status_code == 422
+
+
+def test_schedule_route_without_index(client_source_only):
+    assert client_source_only.get("/emr/schedule").status_code == 200  # app.sqlite가 없어도 된다

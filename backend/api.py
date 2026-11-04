@@ -2,6 +2,7 @@
 sqlite3 연결은 만든 스레드에 묶이고 의존성과 핸들러는 다른 워커 스레드에서 돌 수 있어, 핸들러를 동기 def로 쓰고
 연결·Searcher는 핸들러 안에서 만들어 닫는다. 임베더·리랭커만 프로세스에 하나 둔다."""
 
+import datetime as dt
 import sqlite3
 from functools import lru_cache
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import ValidationError
 
-from backend import db
+from backend import db, emr
 from backend.embeddings import make_embedder
 from backend.rag_search import (
     DEFAULT_EMBEDDING,
@@ -138,15 +139,37 @@ def search(
         conn.close()
 
 
-@app.get("/clinic")
-def clinic(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
-    """source.sqlite만 읽는다 — 색인(app.sqlite)이 없어도 머리 띠의 병원 이름·기준일은 나온다"""
+def _open_source(paths: tuple[Path, Path]) -> sqlite3.Connection:
+    """source.sqlite만 읽기 전용으로 — 색인(app.sqlite)이 없어도 병원 정보·EMR·예약표는 나온다"""
     source = Path(paths[1])
     if not source.exists():
         raise HTTPException(503, NO_DATA)
     conn = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@app.get("/clinic")
+def clinic(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    conn = _open_source(paths)
     try:
         name = conn.execute("SELECT name FROM emr_clinic").fetchone()[0]
     finally:
         conn.close()
     return {"name": name, "today": _clinic().today.isoformat()}
+
+
+@app.get("/emr/schedule")
+def emr_schedule(
+    paths: Annotated[tuple[Path, Path], Depends(get_db_paths)], date: str | None = None
+) -> dict:
+    clinic = _clinic()
+    try:
+        day = dt.date.fromisoformat(date) if date else clinic.today
+    except ValueError as e:
+        raise HTTPException(422, f"date: {e}") from e
+    conn = _open_source(paths)
+    try:
+        return emr.schedule_day(conn, day, clinic.today, clinic.range_start)
+    finally:
+        conn.close()
