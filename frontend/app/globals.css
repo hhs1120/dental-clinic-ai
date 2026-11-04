@@ -45,6 +45,20 @@
   --color-status-info-fg: var(--status-info-fg);
   --color-status-info-border: var(--status-info-border);
   --color-status-info-dot: var(--status-info-dot);
+  --color-emr-title: var(--emr-title);
+  --color-emr-title-fg: var(--emr-title-fg);
+  --color-emr-chrome: var(--emr-chrome);
+  --color-emr-tab-off: var(--emr-tab-off);
+  --color-emr-line: var(--emr-line);
+  --color-emr-line-soft: var(--emr-line-soft);
+  --color-emr-surface: var(--emr-surface);
+  --color-emr-surface-2: var(--emr-surface-2);
+  --color-emr-fg: var(--emr-fg);
+  --color-emr-fg-muted: var(--emr-fg-muted);
+  --color-emr-alert-bg: var(--emr-alert-bg);
+  --color-emr-alert-fg: var(--emr-alert-fg);
+  --color-emr-alert-line: var(--emr-alert-line);
+  --color-emr-row-on: var(--emr-row-on);
   --shadow-card: var(--shadow-card);
   --shadow-control: var(--shadow-control);
   /* 컨트롤(rounded-lg·md) 5px, 카드(rounded-xl) 11px */
@@ -99,6 +113,21 @@
   --status-info-fg: #1e3a8a;
   --status-info-border: #60a5fa;
   --status-info-dot: #2563eb;
+  /* 전환 전 EMR 창 — 옛 병원 프로그램 색. 그때 프로그램엔 다크 모드가 없어 다크 블록에 두지 않는다 */
+  --emr-title: #3b4a5c;
+  --emr-title-fg: #ffffff;
+  --emr-chrome: #dce1e7;
+  --emr-tab-off: #c3cbd4;
+  --emr-line: #9aa4b0;
+  --emr-line-soft: #c9d0d8;
+  --emr-surface: #ffffff;
+  --emr-surface-2: #f4f6f8;
+  --emr-fg: #1f2933;
+  --emr-fg-muted: #6b7785;
+  --emr-alert-bg: #fdecec;
+  --emr-alert-fg: #8a1f1f;
+  --emr-alert-line: #e8a3a3;
+  --emr-row-on: #fff7cc;
 }
 
 @media (prefers-color-scheme: dark) {
