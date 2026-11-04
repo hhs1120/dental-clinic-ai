@@ -49,7 +49,7 @@
 - 영업시간·점심·휴진 요일은 `emr_clinic.hours_json`(`open`, `weekday_close`, `saturday_close`, `lunch`, `closed_weekdays`)에서 읽는다. 지금 데이터의 예약은 30분 단위(시각 :00·:30, 소요 30·60·90분)이므로 격자 한 칸은 30분이다. 이 단위는 앱 상수로 둔다
 - 예약표 열은 진료 담당자만이다. 원장, 위생사, 상담실장 순이고 같은 역할 안에서는 `emr_staff.id` 순이다. 데스크 직원은 빼고, `active = 0`도 뺀다
 - 신환: 환자 등록일이 `load_clinic().range_start` 이후이고, 그 예약 전에 `completed` 예약이 없다(`export.py`와 같은 규칙)
-- 치료 회차: 예약의 `plan_item_id`가 가리키는 항목의 `seq`와 그 계획의 항목 수로 "치료계획 N개 중 M번째"를 만든다. 계획에 연결되지 않은 예약(위생·리콜)은 이 줄이 없다
+- 치료 회차: 예약의 `plan_item_id`가 가리키는 항목의 `seq`와 그 계획의 항목 수(`replaced` 제외)로 "치료계획 N개 중 M번째"를 만든다. 계획에 연결되지 않은 예약(위생·리콜)은 이 줄이 없다
 - 예약을 잡은 통화: 같은 환자이고 `ax_calls.started_at = emr_appointments.created_at`인 통화(`export.py`와 같은 규칙)
 - 진찰 표기: 진료 종류(`treatment`) 예약의 `상담` 시술은 "진찰"로 보인다(기능 정의 §4)
 - 예약 미확인: 그날이 기준일이고 상태가 `scheduled`이며 `confirmed = 0`인 예약이다. 앞날 예약은 확인 문자 전이라 붙이지 않는다
@@ -59,11 +59,11 @@
 `backend/api.py`에 라우트를 더한다. 조회 함수는 화면과 분리해 `backend/emr.py`에 둔다(`conn, …) → dict`). 테스트는 이 함수와 라우트를 따로 본다. 라우터를 나눌지는 구현자가 정한다.
 
 **`GET /emr/schedule?date=YYYY-MM-DD`** (생략하면 기준일)
-- `{date, hours: {open, close, lunch, closed}, staff: [{id, name, role}], appointments: [...], range: {from, to}, today_count: {total, treatment, hygiene, consult, unconfirmed}}`
+- `{date, hours: {open, close, lunch, closed}, staff: [{id, name, role}], appointments: [...], range: {from, to}, counts: {total, treatment, hygiene, consult, unconfirmed}}`
   - `hours.close`는 그 요일의 마감이다(토요일이면 `saturday_close`). `closed`는 휴진일이면 참이다
   - `range`는 데이터의 첫 예약 날짜와 마지막 예약 날짜다. 화면은 이 밖으로 가지 않는다
 - 예약 한 건
-  - `id, time, duration, staff_id, type, procedure`(표기 규칙 적용), `status`, `unconfirmed`
+  - `id, time, duration, staff_id, staff_name, staff_role, type, procedure`(표기 규칙 적용), `tooth`, `status`, `unconfirmed`, `confirm`(`replied`·`no_reply`·`no_message` — `confirmed`와 리마인드 유무), `plan_item_id`
   - `chart_no, name, new_patient, plan_step: {seq, total} | null`
   - `booked_via, booked_at`(`created_at`), `call: {uid, started_at} | null`
 - 취소·노쇼도 함께 준다. 숨기는 일은 화면이 한다
@@ -79,7 +79,7 @@
 - 예약표 패널은 이 `summary`와 예약 한 건의 칸을 합쳐서 그린다
 
 **`GET /emr/tour`**: 따라 보기의 기준 환자다.
-- `{chart_no, name, time, appointments_today}`
+- `{chart_no, name, time, appointment_id, has: {balance, alert, remaining}, appointments_today}`
 - 고르는 규칙: 기준일 `scheduled` 예약 환자 중 **주의사항·미수·남은 치료(오늘 예약이 이행하는 항목을 뺀 열린 치료계획 항목)** 가운데 가진 수가 가장 많은 환자를 고른다. 같으면 예약 미확인인 환자, 예약 시각이 이른 환자, 차트 번호 순이다
   - 실데이터(기준일 26명)에서는 셋을 모두 가진 환자가 없다. 그래서 따라 보기는 없는 항목을 "없음"으로 보이는 것을 전제로 한다(아래 설명 카드)
   - 다음 예약은 기준으로 쓰지 않는다. 다음 회차는 진료가 끝난 뒤 데스크에서 잡으므로, 개원 전 스냅샷인 기준일에는 오늘 환자의 다음 예약이 없다
@@ -107,7 +107,7 @@
 2. **이 예약**(조금 크게)
    - 날짜·시각·소요 시간, 시술·치아, 담당자
    - "치료계획 N개 중 M번째"와 남은 항목
-   - 상태 배지와, 기준일이면 "예약 확인 문자 무응답"(`warn`)
+   - 상태 배지와, 기준일 미확인이면 리마인드에 답 없음 "예약 확인 문자 무응답" 또는 리마인드 없음 "예약 미확인 · 확인 문자 없음"(`warn`)
    - 신환 표시
 3. **어떻게 잡혔나**: 전화·데스크, 잡은 시각. 통화로 잡혔으면 "통화 있음 · 시각"과 응급 여부 "분류 전"(점선 테두리 배지)
 4. **이 환자의 일정**: 마지막 내원, 앞으로의 예약, 최근 1년 노쇼·취소
@@ -143,7 +143,7 @@
    - 제목은 "{기준 환자} 님 진료 전에 알아야 할 것이 흩어진 곳"이다
    - 네 줄을 둔다: 1 미수(데스크 › 당일 수납), 2 주의사항(전자차트 › 맨 위 Alert), 3 남은 치료(전자차트 › 옆 패널 계획), 4 예약 확인 문자 응답(데스크 › 히스토리 문자)
    - 기준 환자에게 그 정보가 없으면 그 줄에 "없음"을 보인다(예: "미수 없음"). 없다는 것을 확인하려 해도 그 화면까지 가야 한다는 점이 이 카드가 전하는 내용이다
-   - 4는 기준 환자의 오늘 예약에 대한 전날 리마인드(`emr_messages` `reminder`)와 답장, 예약의 `confirmed`로 "확인됨" 또는 "무응답"을 보인다. 리마인드가 없으면 "확인 문자 없음"(`appt_confirm`은 예약을 잡을 때의 확정 알림이라 쓰지 않는다)
+   - 4는 기준 환자의 오늘 예약의 `confirmed`(전날 리마인드에 대한 응답)와 리마인드(`emr_messages` `reminder`) 유무로 "확인됨" 또는 "무응답"을 보인다. 리마인드가 없으면 "확인 문자 없음"(`appt_confirm`은 예약을 잡을 때의 확정 알림이라 쓰지 않는다)
    - 맨 위에 "따라 보기" 버튼이 있다
 2. **따라 보기**: 버튼을 눌러야 시작한다. 저절로 재생하지 않는다
    - 기준 환자로 바꾸고 데스크에서 시작한다. 단계마다 EMR 창이 그 화면으로 넘어간다. 정보가 "없음"인 단계도 건너뛰지 않고 그 화면으로 간다. 이동은 위 규칙대로 센다
@@ -167,7 +167,7 @@
 
 - "전자차트 열기"가 데스크 화면으로 열리는 것 → 전자차트로 연다
 - 예약표의 예약 카드가 시작 칸에만 있는 것 → 소요 시간만큼 늘린다
-- 미확인 표기 → 격자는 "예약 미확인", 패널은 "예약 확인 문자 무응답"
+- 미확인 표기 → 격자는 "예약 미확인", 패널은 "예약 확인 문자 무응답" / "예약 미확인 · 확인 문자 없음"
 - 와이어프레임 데이터의 30일·일부 환자 제한 → API는 모든 날짜와 모든 환자를 준다
 
 와이어프레임 파일(`index-v2.html`)에는 이 중 첫째(전자차트로 열기)와 셋째(표기)를 반영한다. 소요 시간 카드, 설명 카드, 패널 항목은 앱이 기준이 되므로 와이어프레임에 옮기지 않는다.

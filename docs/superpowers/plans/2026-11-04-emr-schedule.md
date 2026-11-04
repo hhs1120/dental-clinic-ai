@@ -97,7 +97,7 @@
   - 환자1: `ANTICOAG` `2026-01-01`, `PREGNANT` `2026-01-01` ends `2026-12-01`
   - 환자3: `PENICILLIN` `2026-12-02`
   - `emr_alert_types`에 이 세 코드를 넣는다(항응고제 복용, 임신 중, 페니실린 알레르기)
-- `emr_messages`: 환자1 out `2026-11-30 10:00:00` `appt_confirm` `related_appointment_id=101` "내일 10시 예약 확인 부탁드립니다"
+- `emr_messages`: 환자1 out `2026-11-30 09:30:00` `reminder` `related_appointment_id=101`(전날 리마인드, 답 없음). 예약을 잡을 때의 확정 알림 `appt_confirm`은 따로 둔다
 
 - [ ] **Step 2: 실패하는 테스트를 쓴다**
 
@@ -347,7 +347,7 @@ def test_tour_tie_prefers_unconfirmed_then_time(emr_paths):
    - `{MM-DD (요일)} {time} · {duration}분`
    - `{procedure}{tooth ? " #" + tooth : ""} · {staff_role} {staff_name}`
    - plan_step이 있으면 `치료계획 {total}개 중 {seq}번째`
-   - 배지: 상태(`muted`), `unconfirmed`면 "예약 확인 문자 무응답"(`warn`), `new_patient`면 "신환"(`info`)
+   - 배지: 상태(`muted`), `unconfirmed`이고 `confirm`이 `no_reply`면 "예약 확인 문자 무응답", `no_message`면 "예약 미확인 · 확인 문자 없음"(`warn`), `new_patient`면 "신환"(`info`)
 3. 작은 제목 "어떻게 잡혔나"
    - `{전화 | 데스크} · {booked_at}`
    - call이 있으면 `통화 있음 · {call.started_at}` 아래에 `응급 여부` + 배지 "분류 전"(`outdated` variant)

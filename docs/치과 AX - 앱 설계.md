@@ -199,7 +199,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 9. 프론트
 
-화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고, 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다. 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드는 [[치과 AX - 기능 정의]] §4가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
 
 **페이지**
 
@@ -208,7 +208,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/` | 시작 화면 | 없음 |
 | `/today` | 오늘 | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 통화 목록·상세, 후속 큐, 붙여넣기 | [[치과 AX - 기능 정의]] §4 ① |
-| `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·신환·치료계획 몇 번째·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소, 모두 기준일 기준) |
+| `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
 | `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
 | `/ask` | 질문하기, 기록 검색, 문서함 | [[치과 AX - 기능 정의]] §4 ③ |
 | `/eval` | 판정, 블라인드, 정확도, 자동 개선 | [[치과 AX - 기능 정의]] §4 ② |
@@ -218,7 +218,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/finance` | 수입 일계표, 지출 증빙 | [[치과 AX - 기능 정의]] §5 ⑧, 착수 때 |
 | `/followup` | 후속 관리 | [[치과 AX - 기능 정의]] §5 ⑨, 착수 때 |
 
-- `/emr/*`은 `source.sqlite`만 읽기 전용으로 연다(색인 없이도 동작). `emr_*`를 읽기만 한다. 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
+- `/emr/*`은 `source.sqlite`만 읽기 전용으로 연다(색인 없이도 동작). 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
 **공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
 
