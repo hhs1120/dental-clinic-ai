@@ -64,7 +64,7 @@
 | `id` | 청크 id |
 | `source_type` | `document` / `call` / `message_thread` / `chart_note` |
 | `title` | 문서는 `제목 > 섹션`, 그 밖에는 `null` |
-| `body` | 화면에 낼 본문. prefix와 차트 끝 괄호를 뺀 것 |
+| `body` | 화면에 낼 본문. prefix와 차트 끝 괄호를 뺀 것. 문서는 마크다운 강조·제목 기호도 지운다 |
 | `event_date` | 시행일·통화일 등. 없으면 `null` |
 | `chart_no` | 환자 기록이면 차트 번호, 아니면 `null` |
 | `patient_name` | 통화·문자. 차트 기록은 prefix 규칙대로 이름 없음 |
@@ -77,7 +77,7 @@
 - 화면 칸 만들기는 출처마다 방식이 하나다
   - 문서·통화·문자: `text`의 prefix를 떼어 만든다. 이름·상대·방향도 prefix에서 읽는다 — 통화는 source 조인에 기대지 않아 뒤에 붙여넣기 통화(`call:p-…`)가 들어와도 깨지지 않는다
   - 차트: `chart:<treatment_id>`로 `source.emr_chart_notes.note`를 읽는다. `text`에서 괄호를 잘라내지 않는다(서술 자체에 괄호가 있다)
-  - prefix를 만드는 코드와 어긋나지 않도록 `backend/rag_index.py` 옆에 함수를 두고 테스트로 묶는다
+  - prefix를 만드는 코드(`backend/rag_index.py`)와 어긋나지 않도록 `backend/search_cards.py` `card`를 `tests/backend/test_search_cards.py`로 묶는다
 
 **`GET /clinic`**: `{name, today}` — `source.emr_clinic.name`, `load_clinic().today`.
 
@@ -105,7 +105,7 @@
 |---|---|---|
 | `background` | `#F0F0F0` | `#1A1A1A` |
 | `card`·`popover` | `#F5F5F5` | `#202020` |
-| 머리 띠(`sidebar`) | `#EAEAEA` | `#1F1F1F` |
+| 머리 띠(`header`) | `#EAEAEA` | `#1F1F1F` |
 | `secondary`·`muted`·`input` | `#E0E0E0` | `#303030` |
 | `border` | `#D0D0D0` | `#353535` |
 | `foreground` / `muted-foreground` | `#333333` / `#666666` | `#D9D9D9` / `#808080` |

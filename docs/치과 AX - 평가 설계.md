@@ -260,7 +260,7 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
   → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json(make gate가 읽음)  (+ reports/eval_runs.jsonl 1줄)
 ```
 - 실행 이력 `reports/eval_runs.jsonl`(커밋 — `make data`가 `truth.sqlite`를 다시 만들어도 남게). 한 줄 = `split, section, condition, prompt_version, started_at, report_path`
-- 분류: §2.2 모델 vs 골드 + 버전 비교(교집합) + 블라인드 쌍별 승률(LLM 쌍 비교·사람 투표 따로, 같은 쌍에서 둘의 일치율은 쌍 비교 판정기 버전별)·위치 편향
+- 분류: §2.2 모델 vs 골드 + 버전 비교(교집합) + 블라인드 쌍별 승률·LLM 쌍 비교와 사람 투표의 일치율(§2.4)·위치 편향
 - 판정: 판정기 vs 골드(§2.6). 교차검증: 엇갈림·핵심 엇갈림·일치 오류·오류 포착·향상 배수(§2.5). 골드 점검 결과(§2.3)는 `make gold-audit`가 생긴 뒤 붙인다
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 주의사항 반영률·과잉 언급률·과잉 제안률

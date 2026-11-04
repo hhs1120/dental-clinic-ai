@@ -27,9 +27,9 @@ tags:
 | 데이터 검사 | `make verify` — 생성 규칙을 코드로 검사(`check_*` 함수, 검사를 생성 코드보다 먼저 씀) | 완성 |
 | LLM 게이트웨이 | Anthropic 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭 | 완성 |
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
-| 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커 Voyage `rerank-3`, 임베딩 Voyage `voyage-4` | 색인·검색 구현 |
-| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구 구현, FastAPI·SSE·작업 폴링은 설계 완료 |
-| 앱 프론트 | Next.js · TypeScript strict · ESLint · Prettier, 화면은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 와이어프레임 완료 |
+| 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
+| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·FastAPI 검색 API 구현, SSE·작업 폴링은 설계 완료 |
+| 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색 구현 |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포·UI 테스트 | `docker compose` 로컬 배포 · Playwright | 앱 착수 뒤 |
 
@@ -208,7 +208,7 @@ tags:
 - **설계 문서가 원본**: 규칙은 `docs/`, 값(숫자·enum·컬럼)은 코드·스키마·설정이 원본이고 문서는 이름으로 가리킵니다. 문서가 가리키는 코드 이름과 문서에 남긴 일부 값은 테스트(`tests/generator/test_doc_sync.py`)가 코드와 비교합니다.
 - **테스트 우선**: 데이터 검사를 생성 코드보다, 테스트를 구현보다 먼저 씁니다. 같은 시드 → 같은 결과(단계별 독립 시드).
 - **AI 코딩 에이전트와 협업**: Claude Code에 작업 규칙(`CLAUDE.md`)·리뷰 에이전트·막기 훅(`.claude/`)을 붙여 씁니다. 사람은 설계·결정·리뷰, 에이전트는 구현과 검사를 맡습니다.
-- **깃**: 작업 묶음마다 `feat/<묶음>` 브랜치 → PR → CI(`make lint`·`make test`) 통과 후 머지.
+- **깃**: 작업 묶음마다 `feat/<묶음>` 브랜치 → PR → CI(`make lint`·`make test`·프론트 빌드) 통과 후 머지.
 
 ## 6. 독립 과제 — 서로 기다리지 않고 따로 개발
 

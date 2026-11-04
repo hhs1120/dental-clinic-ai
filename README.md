@@ -8,7 +8,7 @@
 - macOS 또는 Linux
 - [uv](https://docs.astral.sh/uv/) — Python 패키지·가상환경 관리. Python 3.11+는 uv가 자동으로 받는다
 - make (macOS 기본 포함)
-- [Node.js](https://nodejs.org/)와 npm — 버전은 `.nvmrc`. 프론트(`frontend/`)와 `make lint`가 쓴다(커밋 훅이 `make lint`를 돌린다)
+- [Node.js](https://nodejs.org/)와 npm — 버전은 `.nvmrc`. 프론트(`frontend/`)와 `make lint`가 쓴다(Claude Code 커밋 훅이 `make lint`를 돌린다)
 
 **설치**
 ```bash
