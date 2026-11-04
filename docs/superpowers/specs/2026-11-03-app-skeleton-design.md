@@ -1,6 +1,6 @@
 # 앱 뼈대·기록 검색 화면 설계
 
-기능 정의 §9 착수 순서의 첫 항목. 규칙의 원본은 `docs/치과 AX - 앱 설계.md` §3·§7·§9, `docs/치과 AX - 기능 정의.md` §4 ③, 화면 기준은 `docs/wireframe/index-v2.html`이다. 이 문서는 이번 범위와 원본에 없는 결정만 적는다. 표시 규칙처럼 뒤 화면도 따를 결정은 앱 설계 §9에 있다.
+기능 정의 §9 착수 순서의 첫 항목. 규칙의 원본은 `docs/치과 AX - 앱 설계.md` §3·§7·§9, `docs/치과 AX - 기능 정의.md` §4 ③, 화면의 레이아웃·동작 기준은 `docs/wireframe/index-v2.html`이다. 이 문서는 이번 범위와 원본에 없는 결정만 적는다. 표시 규칙처럼 뒤 화면도 따를 결정은 앱 설계 §9에 있다.
 
 ## 목적
 
@@ -95,7 +95,40 @@
 
 **세팅**: `frontend/`에 Next.js(App Router) + TypeScript strict, ESLint `next/core-web-vitals`, Prettier. 패키지 관리자는 npm(이 PC에 pnpm 없음), `package-lock.json` 커밋, Node 버전은 `.nvmrc`로 고정.
 
-**스타일**: CSS Modules + 공통 토큰 파일. 와이어프레임의 `:root` 토큰을 `frontend/app/tokens.css`로 옮기고, 화면별 스타일은 `*.module.css`로 둔다. 추가 의존성은 없고, 토큰은 임시 디자인 시스템이므로 값은 나중에 이 파일에서 바꾼다.
+**스타일**: Tailwind CSS v4 + shadcn/ui. 와이어프레임은 레이아웃·동작의 기준이고, 색·모양은 아래 토큰에서 나온다. 와이어프레임의 `:root` 값과 CSS는 옮기지 않는다.
+- 색·모서리·글꼴·그림자는 `frontend/app/globals.css`의 CSS 변수 토큰으로만 쓴다. 화면 코드에 hex·`rounded-[7px]` 같은 직접 값을 쓰지 않고, Tailwind 기본 색 이름(`teal-700` 등)도 쓰지 않는다
+- 버튼·입력·체크박스·탭·카드·배지 같은 부품은 shadcn CLI가 만든 `frontend/components/ui/`의 것만 쓴다. 필요한 모양은 그 파일에 variant로 더하고, 화면에서 같은 부품을 새로 만들지 않는다
+- 다크 값도 토큰에 넣고 OS 설정(`prefers-color-scheme`)을 따른다. 전환 버튼은 두지 않는다
+- 토큰 값은 2~3개 화면이 생긴 뒤 다듬기 단계에서 고친다(기능 정의 §9). 지금 값은 아래 표
+
+| 토큰 | 라이트 | 다크 |
+|---|---|---|
+| `background` | `#F0F0F0` | `#1A1A1A` |
+| `card`·`popover` | `#F5F5F5` | `#202020` |
+| 머리 띠(`sidebar`) | `#EAEAEA` | `#1F1F1F` |
+| `secondary`·`muted`·`input` | `#E0E0E0` | `#303030` |
+| `border` | `#D0D0D0` | `#353535` |
+| `foreground` / `muted-foreground` | `#333333` / `#666666` | `#D9D9D9` / `#808080` |
+| `primary` / `primary-foreground` | `#115E59` / `#FFFFFF` | `#2BB3A3` / `#062421` |
+| `accent`(선택된 메뉴·종류 배지) / 글자 | `#D0E4E2` / `#0F4F4B` | `#173A37` / `#99E6DA` |
+| `ring` | `rgba(17, 94, 89, 0.3)` | `rgba(43, 179, 163, 0.35)` |
+| 링크 | `#115E59` | `#5FD0C2` |
+| 검색어 강조(`mark`) | `#CBE1DE` | `#1C4743` |
+| `--radius` | `0.4375rem` — 컨트롤(`rounded-md`) 5px, 카드(`rounded-xl`) 11px | 같음 |
+| 그림자 | `0 2px 0 0 hsl(0 0% 20% / 0.15), 0 1px 2px -1px hsl(0 0% 20% / 0.15)`, 입력·버튼은 `0 2px 0 0 hsl(0 0% 20% / 0.07)` | 같음 |
+| 글꼴 | Inter + Noto Sans KR (`next/font/google`) | 같음 |
+
+- 바탕·글자·그림자는 tweakcn Graphite 테마(oklch → sRGB), 강조색은 그 위에 얹은 딥 틸이다. 라이트와 다크의 `primary`가 다른 것은 의도다 — 다크 값 `#2BB3A3`을 라이트에 쓰면 흰 글자 대비가 약 2.5:1로 모자라고, 링크·선택 글자를 결국 진한 청록으로 따로 둬야 한다
+- 상태 표시 — 진한 배경 + 같은 색 테두리 + 점 + 굵은 글자. `components/ui/badge`의 variant(`warn`·`danger`·`ok`·`info`)와 안내 띠가 같은 토큰(`--status-<종류>-bg·fg·border·dot`)을 쓴다. "옛 버전"은 `muted-foreground` 점선 테두리 variant
+
+| 상태 | 라이트 배경 / 글자 / 테두리 / 점 | 다크 배경 / 글자 / 테두리 / 점 |
+|---|---|---|
+| `warn` 주의 | `#FDE68A` / `#78350F` / `#F59E0B` / `#D97706` | `#5C4410` / `#FDE68A` / `#B45309` / `#FBBF24` |
+| `danger` 엇갈림·오류 | `#FECACA` / `#991B1B` / `#F87171` / `#DC2626` | `#5C1D1D` / `#FECACA` / `#DC2626` / `#F87171` |
+| `ok` 처리 완료 | `#BBF7D0` / `#14532D` / `#4ADE80` / `#16A34A` | `#14432A` / `#BBF7D0` / `#16A34A` / `#4ADE80` |
+| `info` 대기 | `#BFDBFE` / `#1E3A8A` / `#60A5FA` / `#2563EB` | `#1E3A6E` / `#BFDBFE` / `#2563EB` / `#60A5FA` |
+
+이번 화면에서 상태 색을 쓰는 곳은 "옛 버전"과 오류 띠뿐이지만, 토큰과 variant는 지금 다 만든다 — 뒤 화면이 값을 새로 고르지 않게.
 
 **API 연결**: `next.config`의 rewrites로 `/api/*` → `http://localhost:8000/*`. CORS를 쓰지 않는다. 외부 API 재시도까지 합친 지연을 프록시가 먼저 끊지 않는지 구현 때 확인한다.
 
@@ -117,7 +150,7 @@
   - 기간 있음 → "기간 필터에서는 시행일 있는 공지만 찾습니다"
 - 검색 상태는 URL 쿼리로 둔다(`/ask?tab=search&q=…`) — 새로고침·공유에 살아남고, 뒤에 챗의 "근거 더 보기"가 같은 URL을 쓴다
 
-**옮기지 않는 것**: 와이어프레임의 클라이언트 측 단어 일치 검색, HTML 문자열 강조, 지금 사실이 아닌 머리말 문구("무엇을 물었는지 기록됩니다", "색인 갱신 04:00", "08:50"). 머리말은 현재 동작에 맞게 쓴다.
+**옮기지 않는 것**: 와이어프레임의 색·CSS, 클라이언트 측 단어 일치 검색, HTML 문자열 강조, 지금 사실이 아닌 머리말 문구("무엇을 물었는지 기록됩니다", "색인 갱신 04:00", "08:50"). 머리말은 현재 동작에 맞게 쓴다.
 
 ## 실행·도구
 
@@ -154,8 +187,8 @@
 
 ## 문서 변경 (구현과 함께)
 
-- `CLAUDE.md`: 폴더(backend FastAPI, frontend), 명령(`make dev`), 코드 컨벤션의 Next.js 규칙을 켠 상태로, 깃 절의 CI 설명, 설계 문서의 검색 상수 위치에 맞는지 확인
+- `CLAUDE.md`: 폴더(backend FastAPI, frontend), 명령(`make dev`), 코드 컨벤션의 Next.js 규칙을 켠 상태로(Tailwind + shadcn, 토큰만·`components/ui`만 규칙 포함), 깃 절의 CI 설명, 설계 문서의 검색 상수 위치에 맞는지 확인
 - `README.md`: `frontend/ Next.js (예정)` 줄
 - `.github/workflows/ci.yml` 머리 주석
-- 앱 설계 §7 '실행' 행에 `make dev`, §9 공통 레이아웃에 `GET /clinic`
+- 앱 설계 §7 '스택' 행에 Tailwind + shadcn/ui, '실행' 행에 `make dev`. §9 첫 문단을 "와이어프레임은 레이아웃·동작의 기준, 색·모양은 `frontend/app/globals.css` 토큰과 `components/ui`"로, 공통 레이아웃에 `GET /clinic`
 - 기능 정의 §9: 끝난 "프론트 착수 시 — 컨벤션" 항목 삭제, 착수 순서에서 완료분 제거
