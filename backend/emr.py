@@ -103,3 +103,219 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
             "unconfirmed": sum(a["unconfirmed"] for a in live),
         },
     }
+
+
+def _age(birth: str, on: date) -> int:
+    b = date.fromisoformat(birth[:10])
+    return on.year - b.year - ((on.month, on.day) < (b.month, b.day))
+
+
+def _person(r: sqlite3.Row, today: date) -> dict:
+    return {
+        "chart_no": r["chart_no"],
+        "name": r["name"],
+        "age": _age(r["birth_date"], today),
+        "sex": "남" if r["sex"] == "M" else "여",
+    }
+
+
+def search_patients(conn: sqlite3.Connection, q: str, today: date) -> list[dict]:
+    """이름이나 차트 번호(대소문자 무시)에 q가 든 환자, 차트 번호 순 최대 20명"""
+    rows = conn.execute(
+        "SELECT * FROM emr_patients WHERE name LIKE ? OR upper(chart_no) LIKE upper(?)"
+        " ORDER BY chart_no LIMIT 20",
+        (f"%{q}%", f"%{q}%"),
+    )
+    return [_person(r, today) for r in rows]
+
+
+def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> dict:
+    """예약표 패널·EMR이 보는 '지금 이 환자' — 기준일 기준(설계안 '데이터 규칙')"""
+    day = today.isoformat()
+    year_ago = date.fromordinal(today.toordinal() - 365).isoformat()
+    balance = conn.execute(
+        "SELECT COALESCE(SUM(amount_due - amount_paid), 0) FROM emr_payments"
+        " WHERE patient_id = ? AND date(paid_at) < ?",
+        (patient_id, day),
+    ).fetchone()[0]
+    alerts = conn.execute(
+        "SELECT t.code, t.label, t.category FROM emr_patient_alerts a"
+        " JOIN emr_alert_types t ON t.code = a.code WHERE a.patient_id = ?"
+        " AND a.recorded_at <= ? AND (a.ends_at IS NULL OR ? < a.ends_at) ORDER BY a.id",
+        (patient_id, day, day),
+    )
+    last = conn.execute(
+        "SELECT MAX(date(scheduled_at)) FROM emr_appointments"
+        " WHERE patient_id = ? AND status = 'completed' AND date(scheduled_at) < ?",
+        (patient_id, day),
+    ).fetchone()[0]
+    upcoming = conn.execute(
+        "SELECT a.id, a.scheduled_at, a.type, r.name AS procedure, s.name AS staff"
+        " FROM emr_appointments a JOIN emr_procedures r ON r.code = a.planned_procedure_code"
+        " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ? AND a.status = 'scheduled'"
+        " AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at",
+        (patient_id, day),
+    )
+    missed = dict(
+        conn.execute(
+            "SELECT status, COUNT(*) FROM emr_appointments WHERE patient_id = ?"
+            " AND status IN ('noshow', 'cancelled') AND date(scheduled_at) >= ?"
+            " AND date(scheduled_at) < ? GROUP BY status",
+            (patient_id, year_ago, day),
+        ).fetchall()
+    )
+    return {
+        "balance": max(balance, 0),  # 더 낸 금액은 미수가 아니다
+        "alerts": [dict(a) for a in alerts],
+        "last_visit": last,
+        "upcoming": [
+            {
+                "id": u["id"],
+                "date": u["scheduled_at"][:10],
+                "time": u["scheduled_at"][11:16],
+                "procedure": _procedure(u["procedure"], u["type"]),
+                "staff": u["staff"],
+            }
+            for u in upcoming
+        ],
+        "noshow_1y": missed.get("noshow", 0),
+        "cancelled_1y": missed.get("cancelled", 0),
+    }
+
+
+def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict | None:
+    """전환 전 EMR 한 환자 전체. 칸은 와이어프레임 export.py의 emr[...]와 같고 목록은 오래된 순"""
+    p = conn.execute(
+        "SELECT * FROM emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
+    ).fetchone()
+    if not p:
+        return None
+    pid = p["id"]
+
+    def q(sql: str) -> list[sqlite3.Row]:
+        return conn.execute(sql, (pid,)).fetchall()
+
+    family = conn.execute(
+        "SELECT chart_no, name FROM emr_patients WHERE family_id = ? AND id != ? ORDER BY chart_no",
+        (p["family_id"], pid),
+    ).fetchall()
+    guardian = conn.execute(
+        "SELECT chart_no, name FROM emr_patients WHERE id = ?", (p["guardian_patient_id"],)
+    ).fetchone()
+    return {
+        "patient": _person(p, today)
+        | {
+            "birth": p["birth_date"],
+            "phone": p["phone"],
+            "registered": p["registered_at"],
+            "private_insurance": bool(p["has_private_insurance"]),
+            "family": [dict(f) for f in family],
+            "guardian": dict(guardian) if guardian else None,
+        },
+        "summary": patient_summary(conn, pid, today),
+        "alerts": [
+            {
+                "code": a["code"],
+                "label": a["label"],
+                "category": a["category"],
+                "recorded": a["recorded_at"],
+                "ends": a["ends_at"],
+                "source": a["source"],
+            }
+            for a in q(
+                "SELECT a.*, t.label, t.category FROM emr_patient_alerts a"
+                " JOIN emr_alert_types t ON t.code = a.code WHERE a.patient_id = ? ORDER BY a.id"
+            )
+        ],
+        "appointments": [
+            {
+                "id": a["id"],
+                "at": a["scheduled_at"][:16],
+                "type": a["type"],
+                "procedure": _procedure(a["procedure"], a["type"]),
+                "status": a["status"],
+                "staff": a["staff"],
+                "chair": a["chair_no"],
+                "confirmed": bool(a["confirmed"]),
+                "plan_item_id": a["plan_item_id"],
+            }
+            for a in q(
+                "SELECT a.*, r.name AS procedure, s.name AS staff FROM emr_appointments a"
+                " JOIN emr_procedures r ON r.code = a.planned_procedure_code"
+                " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
+                " ORDER BY a.scheduled_at, a.id"
+            )
+        ],
+        "treatments": [
+            {
+                "at": t["performed_at"][:10],
+                "procedure": t["procedure"],
+                "tooth": t["tooth_no"],
+                "fee": t["fee_total"],
+                "insured": t["insured_amount"],
+                "patient_amount": t["patient_amount"],
+                "dx": t["dx_code"],
+                "note": t["note"],
+            }
+            for t in q(
+                "SELECT t.*, r.name AS procedure, n.dx_code, n.note FROM emr_treatments t"
+                " JOIN emr_procedures r ON r.code = t.procedure_code"
+                " LEFT JOIN emr_chart_notes n ON n.treatment_id = t.id"
+                " WHERE t.patient_id = ? ORDER BY t.performed_at, t.id"
+            )
+        ],
+        "payments": [
+            {
+                "at": x["paid_at"][:16],
+                "kind": x["kind"],
+                "due": x["amount_due"],
+                "paid": x["amount_paid"],
+                "method": x["method"],
+            }
+            for x in q("SELECT * FROM emr_payments WHERE patient_id = ? ORDER BY paid_at, id")
+        ],
+        "claims": [
+            {
+                "month": c["claim_month"],
+                "service": c["service_date"][:10],
+                "procedure": c["procedure"],
+                "amount": c["claim_amount"],
+                "status": c["status"],
+                "paid": c["paid_amount"],
+                "adjust": c["adjust_note"],
+            }
+            for c in q(
+                "SELECT c.*, r.name AS procedure FROM emr_claims c"
+                " JOIN emr_procedures r ON r.code = c.procedure_code"
+                " WHERE c.patient_id = ? ORDER BY c.service_date, c.id"
+            )
+        ],
+        "plans": [
+            {
+                "id": i["id"],
+                "plan_id": i["plan_id"],
+                "seq": i["seq"],
+                "created": i["created_at"][:10],
+                "procedure": i["procedure"],
+                "tooth": i["tooth_no"],
+                "est_fee": i["est_fee"],
+                "status": i["status"],
+            }
+            for i in q(
+                "SELECT i.*, pl.created_at, r.name AS procedure FROM emr_treatment_plan_items i"
+                " JOIN emr_treatment_plans pl ON pl.id = i.plan_id"
+                " JOIN emr_procedures r ON r.code = i.procedure_code"
+                " WHERE pl.patient_id = ? ORDER BY pl.created_at, i.plan_id, i.seq"
+            )
+        ],
+        "messages": [
+            {
+                "at": m["sent_at"][:16],
+                "direction": m["direction"],
+                "trigger": m["trigger"],
+                "body": m["body"],
+                "related_appointment_id": m["related_appointment_id"],
+            }
+            for m in q("SELECT * FROM emr_messages WHERE patient_id = ? ORDER BY sent_at, id")
+        ],
+    }

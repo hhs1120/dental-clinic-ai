@@ -173,3 +173,26 @@ def emr_schedule(
         return emr.schedule_day(conn, day, clinic.today, clinic.range_start)
     finally:
         conn.close()
+
+
+@app.get("/emr/patients")
+def emr_patients(q: str, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> list:
+    if not q.strip():
+        raise HTTPException(422, "q: 검색어가 비어 있습니다")
+    conn = _open_source(paths)
+    try:
+        return emr.search_patients(conn, q.strip(), _clinic().today)
+    finally:
+        conn.close()
+
+
+@app.get("/emr/patients/{chart_no}")
+def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    conn = _open_source(paths)
+    try:
+        record = emr.patient_record(conn, chart_no.strip(), _clinic().today)
+    finally:
+        conn.close()
+    if record is None:
+        raise HTTPException(404, "환자를 찾을 수 없습니다")
+    return record

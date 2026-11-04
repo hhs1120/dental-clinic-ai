@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import app, get_db_paths
-from backend.emr import schedule_day
+from backend.emr import patient_record, patient_summary, schedule_day, search_patients
 
 TODAY, START = date(2026, 12, 1), date(2024, 12, 1)
 HOURS = (
@@ -327,3 +327,46 @@ def test_schedule_route_default_and_bad_date(client):
 
 def test_schedule_route_without_index(client_source_only):
     assert client_source_only.get("/emr/schedule").status_code == 200  # app.sqlite가 없어도 된다
+
+
+def test_summary_today_boundaries(conn):
+    s = patient_summary(conn, 1, TODAY)
+    assert s["balance"] == 85000  # 기준일 당일 수납분 제외
+    assert [a["code"] for a in s["alerts"]] == ["ANTICOAG"]  # ends_at 당일부터 안 보임
+    assert s["last_visit"] == "2026-11-17"
+    assert (s["noshow_1y"], s["cancelled_1y"]) == (1, 0)  # 2025-11-20은 365일 밖
+    assert [u["id"] for u in s["upcoming"]] == [101]
+    assert s["upcoming"][0]["staff"] == "강태현"
+
+
+def test_summary_overpay_is_zero_and_future_alert_hidden(conn):
+    assert patient_summary(conn, 2, TODAY)["balance"] == 0
+    assert patient_summary(conn, 3, TODAY)["alerts"] == []
+
+
+def test_search_patients(conn):
+    found = search_patients(conn, "c-0000", TODAY)
+    assert [p["chart_no"] for p in found] == ["C-00001", "C-00002", "C-00003"]
+    assert search_patients(conn, "영희", TODAY)[0] == {
+        "chart_no": "C-00002",
+        "name": "박영희",
+        "age": 46,
+        "sex": "남",
+    }
+
+
+def test_patient_record_lists(conn):
+    r = patient_record(conn, "c-00001", TODAY)
+    assert r["patient"]["chart_no"] == "C-00001" and r["summary"]["balance"] == 85000
+    confirms = [m for m in r["messages"] if m["trigger"] == "appt_confirm"]
+    assert [m["related_appointment_id"] for m in confirms] == [101]
+    assert {p["status"] for p in r["plans"]} == {"done", "open"}
+    assert [a["id"] for a in r["appointments"]] == [92, 91, 90, 101]
+    assert patient_record(conn, "C-99999", TODAY) is None
+
+
+def test_patient_routes(client):
+    assert client.get("/emr/patients", params={"q": " "}).status_code == 422
+    assert client.get("/emr/patients", params={"q": "철수"}).json()[0]["chart_no"] == "C-00001"
+    assert client.get("/emr/patients/C-99999").status_code == 404
+    assert client.get("/emr/patients/c-00001").json()["summary"]["balance"] == 85000
