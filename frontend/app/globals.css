@@ -55,9 +55,7 @@
   --color-emr-surface-2: var(--emr-surface-2);
   --color-emr-fg: var(--emr-fg);
   --color-emr-fg-muted: var(--emr-fg-muted);
-  --color-emr-alert-bg: var(--emr-alert-bg);
   --color-emr-alert-fg: var(--emr-alert-fg);
-  --color-emr-alert-line: var(--emr-alert-line);
   --color-emr-row-on: var(--emr-row-on);
   --shadow-card: var(--shadow-card);
   --shadow-control: var(--shadow-control);
@@ -124,9 +122,7 @@
   --emr-surface-2: #f4f6f8;
   --emr-fg: #1f2933;
   --emr-fg-muted: #6b7785;
-  --emr-alert-bg: #fdecec;
   --emr-alert-fg: #8a1f1f;
-  --emr-alert-line: #e8a3a3;
   --emr-row-on: #fff7cc;
 }
 
