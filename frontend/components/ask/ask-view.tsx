@@ -28,9 +28,13 @@ export function AskView() {
     ? params.get("tab")!
     : "search";
 
-  // 검색은 URL이 바뀔 때만 돈다 — 새로고침·뒤로 가기·공유 링크가 같은 경로를 탄다
-  const search = readSearch(params);
-  const key = writeSearch(search).toString();
+  // 검색은 URL이 바뀔 때 돈다 — 새로고침·뒤로 가기·공유 링크가 같은 경로를 탄다.
+  // 화면에 쓰는 검색은 URL을 한 번 정리한 값이다(공백만 있는 q는 검색 없음)
+  const key = writeSearch(readSearch(params)).toString();
+  const search = readSearch(new URLSearchParams(key));
+  // 같은 검색을 다시 누르면 URL이 그대로라 시도 번호로 다시 요청한다(오류 뒤 다시 시도)
+  const [attempt, setAttempt] = useState(0);
+  const request = `${key}#${attempt}`;
 
   // 입력 초안은 탭을 바꿔도 남고, URL의 검색이 바뀌면 그 값으로 다시 맞춘다
   const [draft, setDraft] = useState(search);
@@ -43,25 +47,26 @@ export function AskView() {
   const [answer, setAnswer] = useState<Answer | null>(null);
   useEffect(() => {
     const s = readSearch(new URLSearchParams(key));
+    const request = `${key}#${attempt}`;
     if (!s.q) return;
     const ac = new AbortController(); // 늦게 온 옛 응답은 버린다
     getJson<SearchResponse>("/search", toApiParams(s), ac.signal).then(
-      (data) => setAnswer({ key, data }),
+      (data) => setAnswer({ key: request, data }),
       (e) => {
         if (!ac.signal.aborted)
           setAnswer({
-            key,
+            key: request,
             error:
               e instanceof ApiError ? e.message : "서버에 연결하지 못했습니다",
           });
       },
     );
     return () => ac.abort();
-  }, [key]);
+  }, [key, attempt]);
 
   const status: SearchStatus = !search.q
     ? { kind: "idle" }
-    : answer?.key !== key
+    : answer?.key !== request
       ? { kind: "loading" }
       : "error" in answer
         ? { kind: "error", message: answer.error }
@@ -86,7 +91,11 @@ export function AskView() {
         <SearchForm
           draft={draft}
           onChange={setDraft}
-          onSubmit={() => router.push(`/ask?${writeSearch(draft)}`)}
+          onSubmit={() => {
+            const next = writeSearch(draft).toString();
+            if (next === key) setAttempt((n) => n + 1);
+            else router.push(`/ask?${next}`);
+          }}
         />
         <SearchResults status={status} search={search} />
       </TabsContent>

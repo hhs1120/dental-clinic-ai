@@ -9,7 +9,7 @@ export function generateStaticParams() {
 
 export default async function Page({ params }: PageProps<"/[screen]">) {
   const { screen } = await params;
-  const title = COMING_SOON[screen];
-  if (!title) notFound(); // cacheComponents에서는 dynamicParams를 쓰지 못한다
-  return <ComingSoon title={title} />;
+  // cacheComponents에서는 dynamicParams를 쓰지 못한다. hasOwn — /constructor 같은 상속 키를 막는다
+  if (!Object.hasOwn(COMING_SOON, screen)) notFound();
+  return <ComingSoon title={COMING_SOON[screen]} />;
 }

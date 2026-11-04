@@ -60,7 +60,8 @@ export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const clinic = useClinic();
-  const space = SPACES[pathname.split("/")[1]];
+  const segment = pathname.split("/")[1];
+  const space = Object.hasOwn(SPACES, segment) ? SPACES[segment] : undefined;
   const name = clinic === "error" ? "—" : (clinic?.name ?? "");
   const today = clinic === "error" ? "—" : (clinic?.today ?? "");
 
