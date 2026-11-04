@@ -479,14 +479,16 @@ def test_confirm_status_from_reminder(conn):
     assert {x["id"]: x["confirm"] for x in r["appointments"]}[101] == "no_reply"
 
 
-def test_reply_counts_as_replied(emr_paths):
+def test_reply_without_confirmed_is_not_replied(emr_paths):
+    # 답장이 있어도 확인 여부(confirmed — 전날 리마인드 응답)가 0이면 확인됨이 아니다.
+    # 예약을 잡을 때 보낸 확정 알림에 대한 답장일 수 있다 — 격자 '예약 미확인'과 어긋나지 않게
     rw(
         emr_paths,
         'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
-        " related_appointment_id) VALUES (1, 'in', '2026-11-30 11:00:00', '네', 'reply', 101)",
+        " related_appointment_id) VALUES (1, 'in', '2026-11-17 15:00:00', '네', 'reply', 101)",
     )
     a = {x["id"]: x for x in schedule_day(ro(emr_paths), TODAY, TODAY, START)["appointments"]}
-    assert a[101]["confirm"] == "replied"
+    assert (a[101]["confirm"], a[101]["unconfirmed"]) == ("no_reply", True)
 
 
 def test_plan_step_skips_replaced_and_open_items(conn):

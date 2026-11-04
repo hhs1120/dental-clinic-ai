@@ -9,18 +9,18 @@ from datetime import date
 
 ROLE = {"doctor": "원장", "hygienist": "위생사", "consultant": "상담실장"}
 LIVE = ("scheduled", "completed")  # 건수에 넣는 상태 — 취소·노쇼는 뺀다
-# 예약 확인은 전날 리마인드에 대한 응답이다(appt_confirm은 예약을 잡을 때의 확정 알림)
+# 예약 확인 = 전날 리마인드에 대한 응답. confirmed가 그 응답이고(appt_confirm은 예약을 잡을 때의 확정 알림 —
+# 그 알림에 대한 답장은 확인이 아니다), 리마인드가 왔는지는 emr_messages로 본다
 CONFIRM_SQL = (
     " (SELECT COUNT(*) FROM emr_messages m WHERE m.related_appointment_id = a.id"
-    "  AND m.\"trigger\" = 'reminder') AS reminders,"
-    " (SELECT COUNT(*) FROM emr_messages m WHERE m.related_appointment_id = a.id"
-    "  AND m.\"trigger\" = 'reply') AS replies"
+    "  AND m.\"trigger\" = 'reminder') AS reminders"
 )
 
 
 def _confirm(r: sqlite3.Row) -> str:
-    """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드 자체가 없음 — 전날 잡은 응급 등)"""
-    if r["confirmed"] or r["replies"]:
+    """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드 자체가 없음 — 전날 잡은 응급 등).
+    격자의 '예약 미확인'(confirmed = 0)과 항상 맞는다"""
+    if r["confirmed"]:
         return "replied"
     return "no_reply" if r["reminders"] else "no_message"
 
