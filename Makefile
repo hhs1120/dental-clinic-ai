@@ -47,7 +47,7 @@ frontend/node_modules: frontend/package-lock.json
 
 # 앱 실행 — API(8000)와 화면(3000)을 같이 띄우고 Ctrl+C로 둘 다 끝낸다
 dev: frontend/node_modules
-	trap 'kill 0' EXIT; \
+	trap 'kill 0' INT TERM EXIT; \
 	uv run $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
 	npm --prefix frontend run dev
 
