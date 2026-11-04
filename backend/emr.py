@@ -319,3 +319,46 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
             for m in q("SELECT * FROM emr_messages WHERE patient_id = ? ORDER BY sent_at, id")
         ],
     }
+
+
+def tour_patient(conn: sqlite3.Connection, today: date) -> dict | None:
+    """따라 보기 기준 환자 — 기준일 예약 환자 중 미수·주의사항·남은 치료(오늘 예약이 이행하는 항목 제외)를
+    가장 많이 가진 사람. 같으면 예약 미확인, 시각, 차트 번호 순(설계안 '백엔드')"""
+    rows = conn.execute(
+        "SELECT a.id, a.patient_id, a.scheduled_at, a.confirmed, a.plan_item_id, p.chart_no, p.name"
+        " FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"
+        " WHERE date(a.scheduled_at) = ? AND a.status = 'scheduled'",
+        (today.isoformat(),),
+    ).fetchall()
+    if not rows:
+        return None
+    picks = []
+    for r in rows:
+        s = patient_summary(conn, r["patient_id"], today)
+        remaining = conn.execute(
+            "SELECT 1 FROM emr_treatment_plan_items i JOIN emr_treatment_plans pl"
+            " ON pl.id = i.plan_id WHERE pl.patient_id = ? AND i.status = 'open'"
+            " AND i.id IS NOT ? LIMIT 1",
+            (r["patient_id"], r["plan_item_id"]),
+        ).fetchone()
+        has = {
+            "balance": s["balance"] > 0,
+            "alert": bool(s["alerts"]),
+            "remaining": bool(remaining),
+        }
+        key = (-sum(has.values()), bool(r["confirmed"]), r["scheduled_at"], r["chart_no"])
+        picks.append((key, r, has))
+    _, r, has = min(picks, key=lambda x: x[0])
+    live = conn.execute(
+        "SELECT COUNT(*) FROM emr_appointments WHERE date(scheduled_at) = ?"
+        " AND status NOT IN ('cancelled', 'noshow')",
+        (today.isoformat(),),
+    ).fetchone()[0]
+    return {
+        "chart_no": r["chart_no"],
+        "name": r["name"],
+        "time": r["scheduled_at"][11:16],
+        "appointment_id": r["id"],
+        "has": has,
+        "appointments_today": live,
+    }

@@ -8,7 +8,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import app, get_db_paths
-from backend.emr import patient_record, patient_summary, schedule_day, search_patients
+from backend.emr import (
+    patient_record,
+    patient_summary,
+    schedule_day,
+    search_patients,
+    tour_patient,
+)
 
 TODAY, START = date(2026, 12, 1), date(2024, 12, 1)
 HOURS = (
@@ -370,3 +376,51 @@ def test_patient_routes(client):
     assert client.get("/emr/patients", params={"q": "철수"}).json()[0]["chart_no"] == "C-00001"
     assert client.get("/emr/patients/C-99999").status_code == 404
     assert client.get("/emr/patients/c-00001").json()["summary"]["balance"] == 85000
+
+
+def test_tour_picks_most_items(conn):
+    t = tour_patient(conn, TODAY)
+    assert (t["chart_no"], t["name"], t["appointment_id"], t["time"]) == (
+        "C-00001",
+        "김철수",
+        101,
+        "10:00",
+    )
+    # 212는 오늘 예약이 이행하는 항목이라 빠지고 213이 남는다
+    assert t["has"] == {"balance": True, "alert": True, "remaining": True}
+    assert t["appointments_today"] == 3
+
+
+def test_tour_counts_missing(emr_paths):
+    rw(emr_paths, "UPDATE emr_treatment_plan_items SET status = 'done' WHERE id = 213")
+    t = tour_patient(ro(emr_paths), TODAY)
+    assert t["chart_no"] == "C-00001" and t["has"]["remaining"] is False
+
+
+def test_tour_tie_prefers_unconfirmed_then_time(emr_paths):
+    # 모두 0개면 미확인인 101(10:00)·104(11:00) 중 이른 101. 102는 확인돼 뒤로
+    rw(
+        emr_paths,
+        "DELETE FROM emr_patient_alerts WHERE patient_id = 1",
+        "DELETE FROM emr_payments WHERE patient_id = 1",
+        "UPDATE emr_treatment_plan_items SET status = 'done' WHERE id = 213",
+    )
+    assert tour_patient(ro(emr_paths), TODAY)["chart_no"] == "C-00001"
+
+
+def test_tour_tie_unconfirmed_beats_earlier_confirmed(emr_paths):
+    # 102(09:30)는 확인됐고 104(11:00)는 미확인 — 101을 확인 처리하면 104가 뽑힌다
+    rw(
+        emr_paths,
+        "DELETE FROM emr_patient_alerts WHERE patient_id = 1",
+        "DELETE FROM emr_payments WHERE patient_id = 1",
+        "UPDATE emr_treatment_plan_items SET status = 'done' WHERE id = 213",
+        "UPDATE emr_appointments SET confirmed = 1 WHERE id = 101",
+    )
+    assert tour_patient(ro(emr_paths), TODAY)["chart_no"] == "C-00003"
+
+
+def test_tour_route(client, emr_paths):
+    assert client.get("/emr/tour").json()["chart_no"] == "C-00001"
+    rw(emr_paths, "DELETE FROM emr_appointments WHERE date(scheduled_at) = '2026-12-01'")
+    assert client.get("/emr/tour").status_code == 404

@@ -196,3 +196,15 @@ def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_d
     if record is None:
         raise HTTPException(404, "환자를 찾을 수 없습니다")
     return record
+
+
+@app.get("/emr/tour")
+def emr_tour(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    conn = _open_source(paths)
+    try:
+        tour = emr.tour_patient(conn, _clinic().today)
+    finally:
+        conn.close()
+    if tour is None:
+        raise HTTPException(404, "기준일 예약이 없습니다")
+    return tour
