@@ -437,7 +437,6 @@ def test_tour_tie_prefers_unconfirmed_then_time(emr_paths):
 - 상태줄: `덴탈차트 Pro v3.2 · 가상 프로그램` · `파트: {담당 파트}` · `이 환자에서 화면 이동 {moves}회` · `읽기 전용` · `{기준일}`
 - `highlight`가 가리키는 영역에 `ring-2 ring-primary ring-offset-2`를 친다
   - balance: 당일 수납 상자
-  - alert: Alert 줄
   - plan: 차트 옆 패널
   - messages: 데스크 히스토리 상자
 - 옛 프로그램 모양(각진 모서리, 회청색 띠, 12px 글자)은 `--emr-*` 토큰과 `rounded-none`으로 낸다. 앱의 shadcn 부품은 EMR 창 안에 쓰지 않는다. EMR 창 안의 버튼·탭은 순수 `<button>`이고, 이 예외는 `emr-window.tsx` 머리 주석에 적는다
@@ -478,13 +477,13 @@ export function stepWhy(step, record: PatientRecord, found: boolean): string
 | key | what | where | nav | 찾았을 때 text | 없을 때 text |
 |---|---|---|---|---|---|
 | balance | 미수 잔액 | 데스크 › 당일 수납 | desk / 진료기록 / 기본 | `{n}원` | 미수 없음 |
-| alert | 주의사항 | 전자차트 › 맨 위 Alert | chart / 진료기록 / 기본 | 첫 주의사항 label | 주의사항 없음 |
+| alert | 주의사항 | 전자차트 › 옆 패널 메모 | chart / 진료기록 / 메모 | 첫 주의사항 label | 주의사항 없음 |
 | remaining | 남은 치료 | 전자차트 › 옆 패널 계획 | chart / 진료기록 / 계획 | `{시술}{#치아}` 외 n건 | 남은 치료 없음 |
 | confirm | 예약 확인 문자 응답 | 데스크 › 히스토리 문자 | desk / 문자 / 계획 | 확인됨 | 무응답 |
 
 - remaining: 열린 계획 항목 중 오늘 예약(`apptId`)의 `plan_item_id`가 아닌 것
 - confirm: 오늘 예약의 `confirmed`이거나 그 예약을 가리키는 `reply` 메시지가 있으면 "확인됨"이다. 확인 문자 자체가 없으면 "확인 문자 없음"이고, 이것은 "없음"으로 친다
-- 이동 수(기준 환자, 데스크 시작): balance 0 → alert +1(mode) → remaining +1(panel) → confirm +2(mode, tab). 따라 보기 끝의 N은 실제로 센 값을 쓴다(상수로 두지 않는다)
+- 이동 수(기준 환자, 데스크 시작): balance 0 → alert +2(mode, panel 메모) → remaining +1(panel 계획) → confirm +2(mode, tab) = 5. 따라 보기 끝의 N은 실제로 센 값을 쓴다(상수로 두지 않는다)
 
 `stepWhy` 문구:
 - 찾았을 때

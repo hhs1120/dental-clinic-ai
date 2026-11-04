@@ -26,10 +26,12 @@ const GROUPS = [
   "약 처방",
 ];
 
-/** 전자차트 — 상단 Alert, 진료 기록, 치식·처치 입력(읽기 전용), 옆 패널 탭 7개 */
+/** 전자차트 — 진료 기록, 치식·처치 입력(읽기 전용), 진료 메모(최근 진료 내용), 옆 패널 탭 7개.
+ * 옛 프로그램처럼 주의사항을 따로 띄우지 않는다 — 직원이 옆 패널 '메모' 탭에 적어 둔 것뿐이다 */
 export function EmrChart({
   record,
   todaySchedule,
+  today,
   nav,
   onNav,
   highlight,
@@ -40,10 +42,14 @@ export function EmrChart({
   nav: EmrNav;
   onNav: (next: EmrNav) => void;
   highlight: Highlight;
+  today: string;
   onPickPatient: (chartNo: string) => void;
 }) {
   const p = record.patient;
-  const alerts = record.summary.alerts;
+  // 메모 탭 — 기준일에 유효한 주의사항을 직원이 적어 둔 메모처럼(기록일·출처)
+  const memos = record.alerts.filter(
+    (a) => a.recorded <= today && (!a.ends || today < a.ends),
+  );
   const treatments = [...record.treatments].reverse();
   const live = (todaySchedule?.appointments ?? []).filter(
     (a) => a.status !== "cancelled" && a.status !== "noshow",
@@ -77,7 +83,16 @@ export function EmrChart({
         ))}
       </dl>
     ),
-    메모: <p>개별 메모 없음</p>,
+    메모: memos.length ? (
+      memos.map((a) => (
+        <p key={a.code}>
+          {a.recorded} {a.source === "intake" ? "문진표" : "진료 중"} —{" "}
+          {a.label}
+        </p>
+      ))
+    ) : (
+      <p>개별 메모 없음</p>
+    ),
     계획: record.plans.length ? (
       record.plans.map((x) => (
         <p key={x.id}>
@@ -117,18 +132,6 @@ export function EmrChart({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div
-        className={cn(
-          "border border-emr-alert-line bg-emr-alert-bg px-2 py-1 text-emr-alert-fg",
-          highlight === "alert" &&
-            "relative z-10 ring-2 ring-primary ring-offset-2",
-        )}
-      >
-        <b>Alert</b>{" "}
-        {alerts.length
-          ? alerts.map((a) => a.label).join(" / ")
-          : "특이사항 없음"}
-      </div>
       <div className="grid grid-cols-[19rem_minmax(0,1fr)_15rem] gap-1.5">
         <Box title="진료 기록" className="max-h-[36rem] overflow-auto">
           {treatments.length ? (
@@ -215,7 +218,7 @@ export function EmrChart({
             </p>
           </Box>
         </div>
-        <Box highlight={highlight === "plan"}>
+        <Box highlight={highlight === "panel"}>
           <Tabs
             items={EMR_PANELS}
             value={nav.panel}

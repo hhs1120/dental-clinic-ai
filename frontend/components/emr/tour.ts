@@ -22,16 +22,16 @@ export const TOUR_STEPS: TourStep[] = [
   {
     key: "alert",
     what: "주의사항",
-    where: "전자차트 › 맨 위 Alert",
-    nav: { mode: "chart", tab: "진료기록", panel: "기본" },
-    highlight: "alert",
+    where: "전자차트 › 옆 패널 메모",
+    nav: { mode: "chart", tab: "진료기록", panel: "메모" },
+    highlight: "panel",
   },
   {
     key: "remaining",
     what: "남은 치료",
     where: "전자차트 › 옆 패널 계획",
     nav: { mode: "chart", tab: "진료기록", panel: "계획" },
-    highlight: "plan",
+    highlight: "panel",
   },
   {
     key: "confirm",
@@ -135,7 +135,7 @@ export function stepWhy(
   if (step.key === "alert") {
     const code = topAlert(record)?.code;
     const why = ALERT_WHY.find(([c]) => c === code)?.[1] ?? ALERT_WHY_DEFAULT;
-    return `${why} 데스크 화면에는 없어 전자차트로 넘어왔습니다.`;
+    return `${why} 주의사항은 따로 띄워 주지 않아, 전자차트 옆 패널의 메모 탭을 열어야 보입니다.`;
   }
   if (step.key === "remaining")
     return "오늘 진료가 끝나면 다음 회차를 잡아야 합니다. 남은 치료는 차트 옆 계획 탭에만 있습니다.";

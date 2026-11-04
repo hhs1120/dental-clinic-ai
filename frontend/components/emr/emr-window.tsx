@@ -36,7 +36,7 @@ export const EMR_PANELS = [
 export type EmrTab = (typeof EMR_TABS)[number];
 export type EmrPanel = (typeof EMR_PANELS)[number];
 export type EmrNav = { mode: EmrMode; tab: EmrTab; panel: EmrPanel };
-export type Highlight = "balance" | "alert" | "plan" | "messages" | null;
+export type Highlight = "balance" | "panel" | "messages" | null;
 export const DEFAULT_NAV: EmrNav = {
   mode: "desk",
   tab: "진료기록",
@@ -182,6 +182,7 @@ export function EmrWindow({
               <EmrChart
                 record={record}
                 todaySchedule={todaySchedule}
+                today={today}
                 nav={nav}
                 onNav={onNav}
                 highlight={highlight}
