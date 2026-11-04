@@ -225,6 +225,50 @@ def emr_paths(source_paths):
         " related_appointment_id) VALUES (1, 'out', '2026-11-30 10:00:00',"
         " '내일 10시 예약 확인 부탁드립니다', 'appt_confirm', 101)"
     )
+    # 리뷰 반영: 101은 전날 리마인드에 답 없음, 102는 확인됨, 104는 문자 없음
+    conn.execute(
+        'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+        " related_appointment_id) VALUES (1, 'out', '2026-11-30 09:30:00',"
+        " '내일 10시 예약입니다', 'reminder', 101)"
+    )
+    conn.execute(
+        "INSERT INTO emr_treatment_plan_items (id, plan_id, seq, procedure_code, tooth_no,"
+        " est_fee, status) VALUES (214, 201, 4, 'CROWN', '46', 0, 'replaced')"
+    )
+    conn.executemany(
+        APPT,
+        [
+            # 365일 경계 — 2025-12-01은 포함, 2025-11-30은 제외
+            (
+                93,
+                1,
+                1,
+                "2025-12-01 10:00:00",
+                30,
+                "treatment",
+                "CROWN",
+                "noshow",
+                0,
+                "phone",
+                "2025-11-25 10:00:00",
+                None,
+            ),
+            (
+                94,
+                1,
+                1,
+                "2025-11-30 10:00:00",
+                30,
+                "treatment",
+                "CROWN",
+                "noshow",
+                0,
+                "phone",
+                "2025-11-25 10:00:00",
+                None,
+            ),
+        ],
+    )
     conn.commit()
     conn.close()
     return source_paths
@@ -318,7 +362,7 @@ def test_schedule_weekday_hours(conn):
 
 def test_schedule_range(conn):
     assert schedule_day(conn, TODAY, TODAY, START)["range"] == {
-        "from": "2025-11-20",
+        "from": "2025-11-20",  # 가장 이른 예약(92)
         "to": "2026-12-15",
     }
 
@@ -340,7 +384,7 @@ def test_summary_today_boundaries(conn):
     assert s["balance"] == 85000  # 기준일 당일 수납분 제외
     assert [a["code"] for a in s["alerts"]] == ["ANTICOAG"]  # ends_at 당일부터 안 보임
     assert s["last_visit"] == "2026-11-17"
-    assert (s["noshow_1y"], s["cancelled_1y"]) == (1, 0)  # 2025-11-20은 365일 밖
+    assert (s["noshow_1y"], s["cancelled_1y"]) == (2, 0)  # 91·93(경계 당일), 94·92는 밖
     assert [u["id"] for u in s["upcoming"]] == [101]
     assert s["upcoming"][0]["staff"] == "강태현"
 
@@ -366,8 +410,8 @@ def test_patient_record_lists(conn):
     assert r["patient"]["chart_no"] == "C-00001" and r["summary"]["balance"] == 85000
     confirms = [m for m in r["messages"] if m["trigger"] == "appt_confirm"]
     assert [m["related_appointment_id"] for m in confirms] == [101]
-    assert {p["status"] for p in r["plans"]} == {"done", "open"}
-    assert [a["id"] for a in r["appointments"]] == [92, 91, 90, 101]
+    assert {p["status"] for p in r["plans"]} == {"done", "open", "replaced"}
+    assert [a["id"] for a in r["appointments"]] == [92, 94, 93, 91, 90, 101]
     assert patient_record(conn, "C-99999", TODAY) is None
 
 
@@ -424,3 +468,37 @@ def test_tour_route(client, emr_paths):
     assert client.get("/emr/tour").json()["chart_no"] == "C-00001"
     rw(emr_paths, "DELETE FROM emr_appointments WHERE date(scheduled_at) = '2026-12-01'")
     assert client.get("/emr/tour").status_code == 404
+
+
+def test_confirm_status_from_reminder(conn):
+    a = {x["id"]: x for x in schedule_day(conn, TODAY, TODAY, START)["appointments"]}
+    assert a[101]["confirm"] == "no_reply"  # 리마인드에 답 없음
+    assert a[102]["confirm"] == "replied"  # 확인됨
+    assert a[104]["confirm"] == "no_message"  # 리마인드 자체가 없음(전날 잡은 응급 등)
+    r = patient_record(conn, "C-00001", TODAY)
+    assert {x["id"]: x["confirm"] for x in r["appointments"]}[101] == "no_reply"
+
+
+def test_reply_counts_as_replied(emr_paths):
+    rw(
+        emr_paths,
+        'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+        " related_appointment_id) VALUES (1, 'in', '2026-11-30 11:00:00', '네', 'reply', 101)",
+    )
+    a = {x["id"]: x for x in schedule_day(ro(emr_paths), TODAY, TODAY, START)["appointments"]}
+    assert a[101]["confirm"] == "replied"
+
+
+def test_plan_step_skips_replaced_and_open_items(conn):
+    a = {x["id"]: x for x in schedule_day(conn, TODAY, TODAY, START)["appointments"]}
+    assert a[101]["plan_step"] == {"seq": 2, "total": 3} and a[101]["plan_item_id"] == 212
+    items = patient_summary(conn, 1, TODAY)["open_items"]
+    assert [(i["id"], i["procedure"], i["tooth"]) for i in items] == [
+        (212, "크라운", "36"),
+        (213, "크라운", "47"),
+    ]
+
+
+def test_search_escapes_like_wildcards(conn):
+    assert search_patients(conn, "%", TODAY) == []
+    assert search_patients(conn, "_", TODAY) == []

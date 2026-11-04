@@ -9,6 +9,20 @@ from datetime import date
 
 ROLE = {"doctor": "원장", "hygienist": "위생사", "consultant": "상담실장"}
 LIVE = ("scheduled", "completed")  # 건수에 넣는 상태 — 취소·노쇼는 뺀다
+# 예약 확인은 전날 리마인드에 대한 응답이다(appt_confirm은 예약을 잡을 때의 확정 알림)
+CONFIRM_SQL = (
+    " (SELECT COUNT(*) FROM emr_messages m WHERE m.related_appointment_id = a.id"
+    "  AND m.\"trigger\" = 'reminder') AS reminders,"
+    " (SELECT COUNT(*) FROM emr_messages m WHERE m.related_appointment_id = a.id"
+    "  AND m.\"trigger\" = 'reply') AS replies"
+)
+
+
+def _confirm(r: sqlite3.Row) -> str:
+    """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드 자체가 없음 — 전날 잡은 응급 등)"""
+    if r["confirmed"] or r["replies"]:
+        return "replied"
+    return "no_reply" if r["reminders"] else "no_message"
 
 
 def _hours(conn: sqlite3.Connection, day: date) -> dict:
@@ -45,7 +59,9 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
     rows = conn.execute(
         "SELECT a.*, p.chart_no, p.name, p.registered_at, r.name AS procedure_name,"
         " i.seq, i.tooth_no, (SELECT COUNT(*) FROM emr_treatment_plan_items x"
-        "  WHERE x.plan_id = i.plan_id) AS plan_total,"
+        "  WHERE x.plan_id = i.plan_id AND x.status != 'replaced') AS plan_total,"
+        + CONFIRM_SQL
+        + ","
         " (SELECT COUNT(*) FROM emr_appointments b WHERE b.patient_id = a.patient_id"
         "  AND b.status = 'completed' AND b.scheduled_at < a.scheduled_at) AS done_before,"
         " (SELECT c.call_uid FROM ax_calls c WHERE c.patient_id = a.patient_id"
@@ -73,6 +89,7 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 "tooth": r["tooth_no"] if r["tooth_no"] not in (None, "00") else None,
                 "status": r["status"],
                 "unconfirmed": is_today and r["status"] == "scheduled" and not r["confirmed"],
+                "confirm": _confirm(r),
                 "chart_no": r["chart_no"],
                 "name": r["name"],
                 "new_patient": r["registered_at"] >= range_start.isoformat()
@@ -80,6 +97,7 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 "plan_step": {"seq": r["seq"], "total": r["plan_total"]}
                 if r["seq"] is not None
                 else None,
+                "plan_item_id": r["plan_item_id"],
                 "booked_via": r["booked_via"],
                 "booked_at": r["created_at"][:16],
                 "call": {"uid": r["call_uid"], "started_at": r["created_at"][:16]}
@@ -121,10 +139,11 @@ def _person(r: sqlite3.Row, today: date) -> dict:
 
 def search_patients(conn: sqlite3.Connection, q: str, today: date) -> list[dict]:
     """이름이나 차트 번호(대소문자 무시)에 q가 든 환자, 차트 번호 순 최대 20명"""
-    rows = conn.execute(
-        "SELECT * FROM emr_patients WHERE name LIKE ? OR upper(chart_no) LIKE upper(?)"
+    like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    rows = conn.execute(  # SQLite LIKE는 ASCII 대소문자를 무시한다. % _는 글자 그대로
+        "SELECT * FROM emr_patients WHERE name LIKE ? ESCAPE '\\' OR chart_no LIKE ? ESCAPE '\\'"
         " ORDER BY chart_no LIMIT 20",
-        (f"%{q}%", f"%{q}%"),
+        (like, like),
     )
     return [_person(r, today) for r in rows]
 
@@ -180,6 +199,16 @@ def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> d
         ],
         "noshow_1y": missed.get("noshow", 0),
         "cancelled_1y": missed.get("cancelled", 0),
+        "open_items": [
+            dict(i)
+            for i in conn.execute(
+                "SELECT i.id, r.name AS procedure, i.tooth_no AS tooth FROM emr_treatment_plan_items i"
+                " JOIN emr_treatment_plans pl ON pl.id = i.plan_id"
+                " JOIN emr_procedures r ON r.code = i.procedure_code"
+                " WHERE pl.patient_id = ? AND i.status = 'open' ORDER BY pl.created_at, i.plan_id, i.seq",
+                (patient_id,),
+            )
+        ],
     }
 
 
@@ -237,10 +266,13 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
                 "staff": a["staff"],
                 "chair": a["chair_no"],
                 "confirmed": bool(a["confirmed"]),
+                "confirm": _confirm(a),
                 "plan_item_id": a["plan_item_id"],
             }
             for a in q(
-                "SELECT a.*, r.name AS procedure, s.name AS staff FROM emr_appointments a"
+                "SELECT a.*, r.name AS procedure, s.name AS staff,"
+                + CONFIRM_SQL
+                + " FROM emr_appointments a"
                 " JOIN emr_procedures r ON r.code = a.planned_procedure_code"
                 " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
                 " ORDER BY a.scheduled_at, a.id"
