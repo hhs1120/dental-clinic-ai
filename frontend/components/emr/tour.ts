@@ -80,14 +80,9 @@ function confirmState(
   record: PatientRecord,
   apptId: number,
 ): "확인됨" | "무응답" | null {
-  const appt = record.appointments.find((a) => a.id === apptId);
-  const linked = record.messages.filter(
-    (m) => m.related_appointment_id === apptId,
-  );
-  if (!linked.some((m) => m.trigger === "appt_confirm")) return null; // 확인 문자 자체가 없음
-  return appt?.confirmed || linked.some((m) => m.trigger === "reply")
-    ? "확인됨"
-    : "무응답";
+  // 예약 확인은 전날 리마인드에 대한 응답 — 백엔드 confirm이 판정한다
+  const c = record.appointments.find((a) => a.id === apptId)?.confirm;
+  return c === "replied" ? "확인됨" : c === "no_reply" ? "무응답" : null;
 }
 
 export function stepValue(

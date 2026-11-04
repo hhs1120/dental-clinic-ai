@@ -3,6 +3,8 @@ import { getJson } from "@/lib/api";
 
 export type ApptType = "treatment" | "hygiene" | "consult";
 export type ApptStatus = "scheduled" | "completed" | "cancelled" | "noshow";
+/** 전날 리마인드에 대한 응답 — 답함 / 답 없음 / 리마인드 자체가 없음(전날 잡은 응급 등) */
+export type Confirm = "replied" | "no_reply" | "no_message";
 
 export interface Appt {
   id: number;
@@ -16,6 +18,8 @@ export interface Appt {
   tooth: string | null;
   status: ApptStatus;
   unconfirmed: boolean;
+  confirm: Confirm;
+  plan_item_id: number | null;
   chart_no: string;
   name: string;
   new_patient: boolean;
@@ -58,6 +62,7 @@ export interface PatientSummary {
   }[];
   noshow_1y: number;
   cancelled_1y: number;
+  open_items: { id: number; procedure: string; tooth: string }[];
 }
 
 export interface PatientHit {
@@ -95,6 +100,7 @@ export interface PatientRecord {
     chair: number | null;
     confirmed: boolean;
     plan_item_id: number | null;
+    confirm: Confirm;
   }[];
   treatments: {
     at: string;

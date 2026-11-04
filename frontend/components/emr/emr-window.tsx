@@ -101,120 +101,122 @@ export function EmrWindow({
   return (
     <div className="overflow-x-auto rounded-md border">
       <div className="relative min-w-[68rem] bg-emr-chrome text-xs leading-4 text-emr-fg">
-        <div className="flex items-center justify-between bg-emr-title px-2.5 py-1 text-emr-title-fg">
-          <span>덴탈차트 Pro v3.2 - [{MODE_NAME[nav.mode]}]</span>
-          <span aria-hidden="true" className="tracking-widest">
-            ─ ☐ ✕
-          </span>
-        </div>
-        <div
-          aria-hidden="true"
-          className="flex gap-4 border-b border-emr-line px-2.5 py-0.5"
-        >
-          {[
-            "파일",
-            "환자",
-            "예약",
-            "진료",
-            "수납",
-            "청구",
-            "통계",
-            "환경설정",
-            "도움말",
-          ].map((m) => (
-            <span key={m}>{m}</span>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-[14rem_15rem_minmax(0,1fr)] gap-2 border-b border-emr-line px-2 py-1.5">
-          <div className="relative">
-            <b className="text-lg leading-6">{p.name}</b>{" "}
-            <span className="tabular-nums">({p.chart_no})</span>
-            <PatientSearch onPick={onPickPatient} />
+        {/* 따라 보기 중에는 inert — 마우스뿐 아니라 키보드(Tab·Enter)로도 창 안을 건드리지 못하게 */}
+        <div inert={locked}>
+          <div className="flex items-center justify-between bg-emr-title px-2.5 py-1 text-emr-title-fg">
+            <span>덴탈차트 Pro v3.2 - [{MODE_NAME[nav.mode]}]</span>
+            <span aria-hidden="true" className="tracking-widest">
+              ─ ☐ ✕
+            </span>
           </div>
-          <div className="flex flex-col overflow-hidden border border-emr-line bg-emr-surface">
-            {recent.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => onPickPatient(a.chart_no)}
-                className="truncate px-1.5 text-left hover:bg-emr-surface-2"
-              >
-                <span className="tabular-nums">{a.time}</span> {a.name} ·{" "}
-                {a.procedure}
-              </button>
+          <div
+            aria-hidden="true"
+            className="flex gap-4 border-b border-emr-line px-2.5 py-0.5"
+          >
+            {[
+              "파일",
+              "환자",
+              "예약",
+              "진료",
+              "수납",
+              "청구",
+              "통계",
+              "환경설정",
+              "도움말",
+            ].map((m) => (
+              <span key={m}>{m}</span>
             ))}
           </div>
-          <div className="flex items-stretch justify-end gap-0.5">
-            {TOOLS.map(([mode, label]) => (
-              <button
-                key={label}
-                type="button"
-                disabled={!mode}
-                title={mode ? undefined : "가상 프로그램에 없는 화면"}
-                onClick={() => mode && onNav({ ...nav, mode })}
-                className={cn(
-                  "flex w-13 flex-col items-center gap-1 border border-transparent py-1 text-[11px] disabled:opacity-40",
-                  mode === nav.mode &&
-                    "border-emr-line bg-emr-surface font-bold",
-                )}
-              >
-                <i
+
+          <div className="grid grid-cols-[14rem_15rem_minmax(0,1fr)] gap-2 border-b border-emr-line px-2 py-1.5">
+            <div className="relative">
+              <b className="text-lg leading-6">{p.name}</b>{" "}
+              <span className="tabular-nums">({p.chart_no})</span>
+              <PatientSearch onPick={onPickPatient} />
+            </div>
+            <div className="flex flex-col overflow-hidden border border-emr-line bg-emr-surface">
+              {recent.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onPickPatient(a.chart_no)}
+                  className="truncate px-1.5 text-left hover:bg-emr-surface-2"
+                >
+                  <span className="tabular-nums">{a.time}</span> {a.name} ·{" "}
+                  {a.procedure}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-stretch justify-end gap-0.5">
+              {TOOLS.map(([mode, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={!mode}
+                  title={mode ? undefined : "가상 프로그램에 없는 화면"}
+                  onClick={() => mode && onNav({ ...nav, mode })}
                   className={cn(
-                    "grid size-6.5 place-items-center rounded-md bg-emr-line font-bold not-italic",
-                    mode === nav.mode && "bg-emr-title text-emr-title-fg",
+                    "flex w-13 flex-col items-center gap-1 border border-transparent py-1 text-[11px] disabled:opacity-40",
+                    mode === nav.mode &&
+                      "border-emr-line bg-emr-surface font-bold",
                   )}
                 >
-                  {label[0]}
-                </i>
-                {label}
-              </button>
-            ))}
+                  <i
+                    className={cn(
+                      "grid size-6.5 place-items-center rounded-md bg-emr-line font-bold not-italic",
+                      mode === nav.mode && "bg-emr-title text-emr-title-fg",
+                    )}
+                  >
+                    {label[0]}
+                  </i>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-h-[40rem] p-1.5">
+            {nav.mode === "book" ? (
+              <EmrBook today={today} onPickPatient={onPickPatient} />
+            ) : nav.mode === "chart" ? (
+              <EmrChart
+                record={record}
+                todaySchedule={todaySchedule}
+                nav={nav}
+                onNav={onNav}
+                highlight={highlight}
+                onPickPatient={onPickPatient}
+              />
+            ) : (
+              <EmrDesk
+                record={record}
+                today={today}
+                todaySchedule={todaySchedule}
+                nav={nav}
+                onNav={onNav}
+                highlight={highlight}
+                onPickPatient={onPickPatient}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-4 border-t border-emr-line px-2 py-0.5 text-emr-fg-muted">
+            <span>덴탈차트 Pro v3.2 · 가상 프로그램</span>
+            <span>파트: {part}</span>
+            <span>이 환자에서 화면 이동 {moves}회</span>
+            <span>읽기 전용</span>
+            <span>{today}</span>
           </div>
         </div>
-
-        <div className="min-h-[40rem] p-1.5">
-          {nav.mode === "book" ? (
-            <EmrBook today={today} onPickPatient={onPickPatient} />
-          ) : nav.mode === "chart" ? (
-            <EmrChart
-              record={record}
-              todaySchedule={todaySchedule}
-              nav={nav}
-              onNav={onNav}
-              highlight={highlight}
-              onPickPatient={onPickPatient}
-            />
-          ) : (
-            <EmrDesk
-              record={record}
-              today={today}
-              todaySchedule={todaySchedule}
-              nav={nav}
-              onNav={onNav}
-              highlight={highlight}
-              onPickPatient={onPickPatient}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-4 border-t border-emr-line px-2 py-0.5 text-emr-fg-muted">
-          <span>덴탈차트 Pro v3.2 · 가상 프로그램</span>
-          <span>파트: {part}</span>
-          <span>이 환자에서 화면 이동 {moves}회</span>
-          <span>읽기 전용</span>
-          <span>{today}</span>
-        </div>
-
         {locked && (
           <button
             type="button"
             aria-label="따라 보기 중에는 EMR 창을 누를 수 없습니다"
             onClick={() => setNotice(true)}
-            className="absolute inset-0 z-30 cursor-not-allowed bg-background/30"
+            className="absolute inset-0 z-30 cursor-not-allowed bg-emr-surface/30"
           >
             {notice && (
-              <span className="absolute top-14 left-1/2 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-sm text-background">
+              <span className="absolute top-14 left-1/2 -translate-x-1/2 rounded-md bg-emr-title px-3 py-1.5 text-sm text-emr-title-fg">
                 따라 보기 중에는 다음 버튼으로 넘어갑니다
               </span>
             )}

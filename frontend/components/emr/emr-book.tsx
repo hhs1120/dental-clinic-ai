@@ -147,7 +147,7 @@ function Calendar({
       <div className="mb-1 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => onPick(prev)}
+          onClick={() => onPick(range && prev < range.from ? range.from : prev)}
           disabled={!inRange(addDays(first, -1))}
           className="px-1 disabled:opacity-40"
         >

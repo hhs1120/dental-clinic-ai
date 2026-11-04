@@ -80,7 +80,13 @@ export function ScheduleView() {
     }
   });
 
-  const selected = current?.appointments.find((a) => a.id === appt) ?? null;
+  // 숨겨진(취소·노쇼 보기를 끈) 예약은 고른 것으로 치지 않는다
+  const selected =
+    current?.appointments.find(
+      (a) =>
+        a.id === appt &&
+        (showAll || (a.status !== "cancelled" && a.status !== "noshow")),
+    ) ?? null;
   const [patient, setPatient] = useState<Loaded<PatientRecord> | null>(null);
   const chart = selected?.chart_no ?? "";
   useEffect(() => {

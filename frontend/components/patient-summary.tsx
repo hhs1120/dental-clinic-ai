@@ -29,6 +29,17 @@ export function PatientSummary({
     .filter((u) => u.id !== appt?.id)
     .slice(0, 3);
   const flags = summary.alerts.length > 0 || summary.balance > 0;
+  // 이 예약이 이행하는 항목을 뺀 열린 치료계획 항목 — 다음 회차를 잡을 때 본다
+  const remaining = summary.open_items.filter(
+    (i) => i.id !== appt?.plan_item_id,
+  );
+  const remainingText = remaining.length
+    ? remaining
+        .slice(0, 2)
+        .map((i) => `${i.procedure}${i.tooth !== "00" ? ` #${i.tooth}` : ""}`)
+        .join(", ") +
+      (remaining.length > 2 ? ` 외 ${remaining.length - 2}건` : "")
+    : "없음";
 
   return (
     <Card aria-label="환자 요약" className="gap-0 p-5 text-sm shadow-card">
@@ -54,10 +65,16 @@ export function PatientSummary({
               치료계획 {appt.plan_step.total}개 중 {appt.plan_step.seq}번째
             </p>
           )}
+          {appt.plan_step && (
+            <p className="text-muted-foreground">남은 항목 · {remainingText}</p>
+          )}
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge variant="muted">{STATUS_LABEL[appt.status]}</Badge>
-            {appt.unconfirmed && (
+            {appt.unconfirmed && appt.confirm === "no_reply" && (
               <Badge variant="warn">예약 확인 문자 무응답</Badge>
+            )}
+            {appt.unconfirmed && appt.confirm === "no_message" && (
+              <Badge variant="warn">예약 미확인 · 확인 문자 없음</Badge>
             )}
             {appt.new_patient && <Badge variant="info">신환</Badge>}
           </div>

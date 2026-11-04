@@ -116,11 +116,16 @@ export function ExplainCard({
             variant="outline"
             className="h-11 flex-1"
             onClick={onPrev}
-            disabled={stage.step === 0}
+            disabled={stage.step === 0 || !record}
           >
             이전
           </Button>
-          <Button className="h-11 flex-1 font-bold" onClick={onNext}>
+          {/* 기준 환자로 바뀌는 동안(record 없음)은 넘기지 않는다 — 단계와 창이 어긋나지 않게 */}
+          <Button
+            className="h-11 flex-1 font-bold"
+            onClick={onNext}
+            disabled={!record}
+          >
             {stage.step === TOUR_STEPS.length - 1 ? "마치기" : "다음"}
           </Button>
         </div>

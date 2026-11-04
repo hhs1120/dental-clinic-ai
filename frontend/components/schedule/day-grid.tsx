@@ -36,9 +36,15 @@ export function DayGrid({
   }
   const open = toMin(day.hours.open);
   const slots = Math.ceil((toMin(day.hours.close) - open) / SLOT_MIN);
+  // 칸 번호(헤더 다음이 2). 30분 단위가 아닌 시각은 반올림, 영업시간 밖은 안으로 붙인다
   const row = (t: string) =>
-    Math.min(Math.max(Math.floor((toMin(t) - open) / SLOT_MIN), 0), slots - 1) +
+    Math.min(Math.max(Math.round((toMin(t) - open) / SLOT_MIN), 0), slots - 1) +
     2;
+  const span = (start: string, minutes: number) =>
+    Math.max(
+      1,
+      Math.min(Math.round(minutes / SLOT_MIN), slots + 2 - row(start)),
+    );
   const shown = day.appointments.filter(
     (a) => showAll || (a.status !== "cancelled" && a.status !== "noshow"),
   );
@@ -96,7 +102,7 @@ export function DayGrid({
             className="z-10 flex items-center justify-center rounded-md bg-muted text-xs text-muted-foreground"
             style={{
               gridColumn: "2 / -1",
-              gridRow: `${row(lunch[0])} / ${row(lunch[0]) + (toMin(lunch[1]) - toMin(lunch[0])) / SLOT_MIN}`,
+              gridRow: `${row(lunch[0])} / span ${span(lunch[0], toMin(lunch[1]) - toMin(lunch[0]))}`,
             }}
           >
             {lunch[0]} – {lunch[1]} 점심시간
@@ -112,7 +118,7 @@ export function DayGrid({
               <ApptCard
                 key={appt.id}
                 appt={appt}
-                span={Math.ceil(appt.duration / SLOT_MIN)}
+                span={span(appt.time, appt.duration)}
                 selected={appt.id === selected}
                 onSelect={() => onSelect(appt.id)}
                 style={{
