@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -27,14 +27,29 @@ wireframe:
 test:
 	uv run pytest
 
-# 코드 컨벤션(PEP 8, 설정은 pyproject.toml [tool.ruff]) — lint는 검사만, fmt는 모양 정리 + 안전한 자동 수정
-lint:
+# 코드 컨벤션(파이썬 PEP 8은 pyproject.toml [tool.ruff], 프론트는 ESLint·Prettier·tsc) — lint는 검사만, fmt는 모양 정리 + 안전한 자동 수정.
+# 커밋 훅이 make lint를 돌리므로 새 worktree에서도 npm ci가 먼저 돈다
+lint: frontend/node_modules
 	uv run ruff check .
 	uv run ruff format --check .
+	npm --prefix frontend run -s lint
+	npm --prefix frontend run -s format:check
+	npm --prefix frontend run -s typecheck
 
-fmt:
+fmt: frontend/node_modules
 	uv run ruff format .
 	uv run ruff check --fix .
+	npm --prefix frontend run -s format
+
+frontend/node_modules: frontend/package-lock.json
+	npm --prefix frontend ci
+	touch $@
+
+# 앱 실행 — API(8000)와 화면(3000)을 같이 띄우고 Ctrl+C로 둘 다 끝낸다
+dev: frontend/node_modules
+	trap 'kill 0' EXIT; \
+	uv run $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
+	npm --prefix frontend run dev
 
 # 검색 색인 (앱 설계 §3). 벡터는 모델마다 한 벌이고 없는 청크만 계산한다
 index:

@@ -1,5 +1,5 @@
-# PR·main 푸시마다 코드 컨벤션 검사와 테스트 (CLAUDE.md '명령'). 테스트는 가짜 LLM 게이트웨이와 커밋된 LLM 캐시로 돌아
-# API 키가 필요 없다. fixture·Playwright·next build까지 도는 make ci는 fixture·프론트가 생긴 뒤(기능 정의 §6)
+# PR·main 푸시마다 코드 컨벤션 검사(파이썬·프론트), 테스트, 프론트 빌드 (CLAUDE.md '명령'). 테스트는 가짜 LLM 게이트웨이와
+# 커밋된 LLM 캐시로 돌아 API 키가 필요 없다. fixture·Playwright까지 도는 make ci는 fixture가 생긴 뒤(기능 정의 §6)
 name: CI
 
 on:
@@ -18,7 +18,14 @@ jobs:
           enable-cache: true
       - name: 의존성 (uv.lock 그대로, 파이썬은 .python-version)
         run: uv sync --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: 코드 컨벤션
         run: make lint
       - name: 테스트
         run: make test
+      - name: 프론트 빌드
+        run: npm --prefix frontend run build
