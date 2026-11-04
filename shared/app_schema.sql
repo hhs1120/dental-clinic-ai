@@ -41,7 +41,20 @@ CREATE TABLE ax_call_classifications (
     UNIQUE (call_uid, model_alias, prompt_version)
 );
 
--- 사람 판정. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
+-- 판정기(모델 B) 판정 (앱 설계 §1). 사람 판정과 섞지 않으려고 테이블을 나눈다. 칸은 분류와 같다
+CREATE TABLE ax_model_judgments (
+    id             INTEGER PRIMARY KEY,
+    call_uid       TEXT NOT NULL,  -- source.sqlite ax_calls.call_uid
+    model_alias    TEXT NOT NULL,
+    model_actual   TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('ok', 'failed')),
+    labels         TEXT,
+    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
+    UNIQUE (call_uid, model_alias, prompt_version)
+);
+
+-- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3) — 운영 감사라 eval.py는 읽지 않는다. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
 CREATE TABLE ax_judgments (
     id        INTEGER PRIMARY KEY,
     call_uid  TEXT NOT NULL UNIQUE,  -- source.sqlite ax_calls.call_uid
@@ -51,7 +64,25 @@ CREATE TABLE ax_judgments (
     judged_at TEXT NOT NULL
 );
 
--- 블라인드 투표 (평가 설계 §2.4). 좌·우 = 화면 배치
+-- LLM 쌍 비교 (평가 설계 §2.4). 좌·우 = 첫 판정의 배치. second_choice는 좌우를 바꿔 물은 답을 첫 배치로 되돌린 값,
+-- choice = 둘이 같으면 그 값, 다르면 tie
+CREATE TABLE ax_model_blind_votes (
+    id                       INTEGER PRIMARY KEY,
+    left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),
+    right_classification_id  INTEGER NOT NULL REFERENCES ax_call_classifications(id),
+    model_alias              TEXT NOT NULL,
+    model_actual             TEXT NOT NULL,
+    prompt_version           TEXT NOT NULL,
+    first_choice             TEXT NOT NULL CHECK (first_choice IN ('left', 'right', 'tie', 'both_wrong')),
+    second_choice            TEXT NOT NULL CHECK (second_choice IN ('left', 'right', 'tie', 'both_wrong')),
+    choice                   TEXT NOT NULL CHECK (choice IN ('left', 'right', 'tie', 'both_wrong')),
+    first_llm_call_id        INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 둘 중 하나라도 폴백이면 집계에서 뺀다
+    second_llm_call_id       INTEGER NOT NULL REFERENCES ax_llm_calls(id),
+    created_at               TEXT NOT NULL,
+    UNIQUE (left_classification_id, right_classification_id, model_alias, prompt_version)
+);
+
+-- 사람 블라인드 투표 — 최종 비교만 (평가 설계 §2.4). 좌·우 = 화면 배치
 CREATE TABLE ax_blind_votes (
     id                       INTEGER PRIMARY KEY,
     left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),

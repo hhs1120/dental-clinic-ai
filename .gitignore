@@ -17,6 +17,12 @@ reports/tune_*
 # 개선 에이전트 실행 기록 — 골드가 들어 있다
 evaluation/runs/
 
+# 프론트 의존성·빌드 결과
+frontend/node_modules
+frontend/.next
+frontend/next-env.d.ts
+*.tsbuildinfo
+
 # 편집기 임시 파일·개인 편집기 설정
 .vscode/
 *.swp

@@ -66,8 +66,8 @@ def test_stages_1_to_3_registered_in_order():
 
 
 def test_master_staff_and_procedures(run):
-    roles = Counter(r["role"] for r in run.conn.execute("SELECT role FROM emr_staff"))
-    assert roles == Counter(dict(STAFF))
+    staff = [tuple(r) for r in run.conn.execute("SELECT role, name FROM emr_staff ORDER BY id")]
+    assert staff == [(role, name) for role, names in STAFF for name in names]
     assert run.conn.execute("SELECT count(*) FROM emr_procedures").fetchone()[0] == len(PROCEDURES)
     assert run.conn.execute("SELECT count(*) FROM emr_clinic").fetchone()[0] == 1
     aliases = dict(run.conn.execute("SELECT name, aliases FROM emr_procedures"))

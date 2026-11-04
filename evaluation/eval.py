@@ -1,16 +1,17 @@
 """eval.py — 평가 실행. 정의는 docs/치과 AX - 평가 설계.md §7.
 
   uv run python -m evaluation.eval --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-  uv run python -m evaluation.eval --split test --section classification|retrieval|chat [--prompt-version v2] [--condition …] [--force]
+  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|retrieval|chat [--prompt-version v2] [--condition …] [--force]
   → reports/eval_<split>_<condition>_<시각>.md + 같은 이름 .json(make gate가 읽음) + reports/eval_runs.jsonl 1줄
 
 - DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
   backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛰고, 앱 경고(rag 색인·리랭커)가 있으면 test를 거절한다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
-- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 검색·조건 / 챗·조건), 이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
+- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
+  이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
-- 준비표(④)·모델 2개 교차검증(§2.5)은 해당 기능 착수 때
+- 준비표(④)·자동 처리(§5 — 앱의 조건 함수를 쓴다)는 해당 기능 착수 때
 """
 
 import argparse
@@ -32,9 +33,12 @@ PROMPTS = ROOT / "prompts"
 RUNS = "eval_runs.jsonl"
 SECTIONS = (
     "classification",
+    "judge",
+    "crosscheck",
     "retrieval",
     "chat",
-)  # test 묶음 — 분류는 버전, 검색·챗은 조건 단위로 1회
+)  # test 묶음 — 분류·판정·교차검증은 버전, 검색·챗은 조건 단위로 1회
+VERSIONED = ("classification", "judge", "crosscheck")
 
 
 class AlreadyRun(Exception):
@@ -83,7 +87,7 @@ def _stored_base(reports_dir: Path, history: list[dict]) -> list[dict] | None:
 
 
 def _key(section: str, condition: str, prompt_version: str) -> str:
-    return prompt_version if section == "classification" else condition
+    return prompt_version if section in VERSIONED else condition
 
 
 def run(
@@ -113,32 +117,48 @@ def run(
         section = section or ("retrieval" if retrieval_only else None)
         if section not in SECTIONS:
             raise EvalRefused(
-                "test는 --section 하나(classification·retrieval·chat)만 돌린다 (평가 설계 §7)"
+                "test는 --section 하나(classification·judge·crosscheck·retrieval·chat)만 돌린다 (평가 설계 §7)"
             )
-        if section == "classification" and not prompt_version:
-            raise EvalRefused("test 분류는 --prompt-version 하나")
+        if section in VERSIONED and not prompt_version:
+            raise EvalRefused(f"test {section}는 --prompt-version 하나")
         mismatch = (
             "--retrieval-only"
             if retrieval_only and section != "retrieval"
             else "--condition"
-            if condition and section == "classification"
+            if condition and section in VERSIONED
             else "--prompt-version"
-            if prompt_version and section != "classification"
+            if prompt_version and section not in VERSIONED
             else None
         )
         if mismatch:
             raise EvalRefused(
                 f"test {section} 묶음에는 {mismatch}를 쓰지 않는다 — 리포트·이력에 맞지 않는 값이 남음"
             )
+        table, what = (
+            ("ax_model_judgments", "판정기")
+            if section == "judge"
+            else ("ax_call_classifications", "분류")
+        )
         if (
-            section == "classification"
+            section in VERSIONED
             and not conn.execute(
-                "SELECT 1 FROM ax_call_classifications WHERE prompt_version = ? LIMIT 1",
-                (prompt_version,),
+                f"SELECT 1 FROM {table} WHERE prompt_version = ? LIMIT 1", (prompt_version,)
             ).fetchone()
         ):
-            raise EvalRefused(f"분류 버전 {prompt_version}의 분류 기록이 없음")
-        if section != "classification" and app is None:
+            raise EvalRefused(f"{what} 버전 {prompt_version}의 기록이 없음")
+        if section == "crosscheck":
+            jv = classification.judge_version(conn)
+            if not jv:
+                raise EvalRefused(
+                    "교차검증할 판정기 버전을 못 정함 — 판정기 버전이 여럿이면 ax_settings.prompt_versions의 judge"
+                )
+            x = classification.crosscheck(conn, split, prompt_version, jv)
+            if "skipped" in x or not x["n"]:
+                raise EvalRefused(
+                    f"교차검증 {prompt_version}×{jv}: {x.get('skipped') or '판정기와 겹치는 통화가 없음'}"
+                )
+            pv = f"{prompt_version}×{jv}"
+        if section not in VERSIONED and app is None:
             raise EvalRefused("앱 없음 — test RAG는 앱(backend/eval_hooks.py)이 생긴 뒤에")
         history = [
             h
@@ -161,7 +181,7 @@ def run(
         (("retrieval",) if retrieval_only else rag.PARTS)
         if dev
         else (section,)
-        if section != "classification"
+        if section not in VERSIONED
         else ()
     )
     parts = tuple(p for p in parts if p != "chat" or has_chat)
@@ -172,6 +192,8 @@ def run(
         "prompt_version": pv,
         "retrieval_only": retrieval_only,
         "classification": None,
+        "judge": None,
+        "crosscheck": None,
         "rag": None,
     }
     if do_cls:
@@ -200,6 +222,25 @@ def run(
             raise EvalRefused(f"few-shot에 test 통화가 있음: {', '.join(leaked)}")
         result["classification"] = classification.evaluate(
             conn, split, versions, fewshot, dump=dev
+        )
+    if dev or section == "judge":
+        result["judge"] = classification.evaluate_judge(
+            conn, split, [prompt_version] if section == "judge" else None
+        )
+    if dev or section == "crosscheck":
+        jv = classification.judge_version(conn)
+        a_versions = (
+            [prompt_version]
+            if section == "crosscheck"
+            else list(result["classification"]["versions"])
+        )
+        result["crosscheck"] = (
+            [
+                classification.crosscheck(conn, split, a, jv, fewshot.get(a) if dev else None)
+                for a in a_versions
+            ]
+            if jv
+            else []
         )
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
@@ -277,6 +318,10 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
     ]
     if r["classification"] is not None:
         out += _render_classification(r["classification"])
+    if r["judge"] is not None:
+        out += _render_judge(r["judge"])
+    if r["crosscheck"] is not None:
+        out += _render_crosscheck(r["crosscheck"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -287,36 +332,27 @@ def _render_classification(c: dict) -> list[str]:
     if not c["versions"]:
         out += ["분류 기록 없음", ""]
     for v, x in c["versions"].items():
-        g, h = x["model_vs_gold"], x["model_vs_human"]
+        g = x["model_vs_gold"]
         out += [
             f"### {v} ({', '.join(x['model_actual'])})",
             "",
-            f"목적 Strict — 모델 vs 골드 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])} · 단순 평균 {_pct(g['purpose']['macro'])}"
-            f" / 모델 vs 사람 {_kn(h['purpose'])} · 가중 {_pct(h['purpose']['weighted'])}",
+            f"목적 Strict — 모델 vs 골드 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])} · 단순 평균 {_pct(g['purpose']['macro'])}",
             "카테고리별 n(모델 vs 골드) — "
             + " · ".join(f"{c} {_kn(d)}" for c, d in g["purpose"]["by_category"].items()),
             "",
-            "| 항목 | 모델 vs 골드 | 모델 vs 사람 |",
-            "|---|---|---|",
+            "| 항목 | 모델 vs 골드 |",
+            "|---|---|",
         ]
-        out += [
-            f"| {i} | {_kn(g['items'][i])} | {_kn(h['items'][i])} |" for i in classification.ITEMS
-        ]
+        out += [f"| {i} | {_kn(g['items'][i])} |" for i in classification.ITEMS]
         e = x["excluded"]
         out += [
             "",
             f"제외 — 폴백 {e['fallback']} · 실패 {e['failed']} · few-shot {e['fewshot']}",
             "",
         ]
-    hg = c["human_vs_gold"]
-    out += [
-        f"### 사람 vs 골드 (라벨 타당성) — 목적 {_kn(hg['purpose'])} · 가중 {_pct(hg['purpose']['weighted'])}",
-        "",
-    ]
     for cmp in c["compare"]:
-        ref = "골드" if cmp["ref"] == "gold" else "사람"
         out += [
-            f"### 버전 비교 {cmp['a']} → {cmp['b']} — 모델 vs {ref} (교집합 {cmp['n']}건)",
+            f"### 버전 비교 {cmp['a']} → {cmp['b']} — 모델 vs 골드 (교집합 {cmp['n']}건)",
             "",
             "| 항목 | 전 | 후 | p |",
             "|---|---|---|---|",
@@ -326,29 +362,74 @@ def _render_classification(c: dict) -> list[str]:
             for i, d in cmp["items"].items()
         ]
         out.append("")
-    for b in c["blind"]:
-        a, z = b["sides"]
-        total = a["wins"] + z["wins"] + b["tie"] + b["both_wrong"]
+    for name, title in (("llm", "LLM 쌍 비교"), ("human", "사람 투표")):
+        for b in c["blind"][name]:
+            a, z = b["sides"]
+            total = a["wins"] + z["wins"] + b["tie"] + b["both_wrong"]
+            who = f"{title} {b['judge']}" if "judge" in b else title
+            out += [
+                f"### 블라인드({who}) {a['version']}({a['model']}) vs {z['version']}({z['model']}) — {total}표",
+                "",
+                f"승 {a['version']} {a['wins']} · {z['version']} {z['wins']} · 비슷 {b['tie']} · 둘 다 틀림 {b['both_wrong']}"
+                f" / 위치 왼쪽 {b['left']} · 오른쪽 {b['right']}",
+                "",
+            ]
+    for ag in c["blind"]["agreement"]:
         out += [
-            f"### 블라인드 {a['version']}({a['model']}) vs {z['version']}({z['model']}) — {total}표",
-            "",
-            f"승 {a['version']} {a['wins']} · {z['version']} {z['wins']} · 비슷 {b['tie']} · 둘 다 틀림 {b['both_wrong']}"
-            f" / 위치 왼쪽 {b['left']} · 오른쪽 {b['right']}",
+            f"블라인드 LLM 쌍 비교({ag['judge']}) vs 사람 일치 {fraction(ag['k'], ag['n'])}",
             "",
         ]
     if c.get("dump"):
         out += [
-            "### 틀린 항목 (dev 판정 풀 — 사람 판정, 없으면 골드 기준)",
+            "### 틀린 항목 (dev 판정 풀 — 골드 기준)",
             "",
-            "| 통화 | 버전 | 항목 | 모델 | 사람 | 골드 | 전사 |",
-            "|---|---|---|---|---|---|---|",
+            "| 통화 | 버전 | 항목 | 모델 | 골드 | 전사 |",
+            "|---|---|---|---|---|---|",
         ]
         out += [
-            f"| {d['call_uid']} | {d['version']} | {d['item']} | {_cell(d['model'])} | {_cell(d['human'])} | {_cell(d['gold'])} |"
+            f"| {d['call_uid']} | {d['version']} | {d['item']} | {_cell(d['model'])} | {_cell(d['gold'])} |"
             f" {_cell((d['transcript'] or '')[:60])}… |"
             for d in c["dump"]
         ]
         out.append("")
+    return out
+
+
+def _render_judge(j: dict) -> list[str]:
+    out = ["## ② 판정기 vs 골드", ""]
+    if not j:
+        out += ["판정기 결과 없음", ""]
+    for v, x in j.items():
+        g = x["judge_vs_gold"]
+        out += [
+            f"### {v} ({', '.join(x['model_actual'])}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}",
+            "",
+            " · ".join(f"{i} {_kn(g['items'][i])}" for i in classification.ITEMS),
+            "",
+        ]
+    return out
+
+
+def _render_crosscheck(xs: list[dict]) -> list[str]:
+    out = ["## ① 교차검증 (모델 A × 판정기)", ""]
+    if not xs:
+        out += ["판정기 결과 없음 또는 판정기 버전을 못 정함", ""]
+    for x in xs:
+        if "skipped" in x:
+            out += [f"### {x['a']} × {x['b']} — 내지 않음({x['skipped']})", ""]
+            continue
+
+        def rate(d):
+            return f"{_kn(d)} · 가중 {_pct(d['weighted'])}"
+
+        lift = "—" if x["lift"] is None else f"{x['lift']:.2f}배"
+        out += [
+            f"### {x['a']} × {x['b']} — {x['n']}통화",
+            "",
+            f"엇갈림 {rate(x['disagree'])} (핵심 {_kn(x['core'])}) · 일치 오류 {rate(x['agree_error'])}"
+            f" · 오류 포착 {rate(x['catch'])} · 향상 배수 {lift}",
+            "",
+        ]
     return out
 
 
@@ -442,7 +523,10 @@ def main(argv=None) -> int:
         action="store_true",
         help="LLM 없이 검색 지표만($0). test에선 --section retrieval",
     )
-    parser.add_argument("--prompt-version", help="분류 버전 하나만. 없으면 분류가 있는 버전 전부")
+    parser.add_argument(
+        "--prompt-version",
+        help="분류 버전 하나만(판정 묶음은 판정기 버전). 없으면 분류가 있는 버전 전부",
+    )
     parser.add_argument("--condition", help="검색·챗 조건(예: reranker=off) — 기본 조건과 짝 비교")
     parser.add_argument("--force", action="store_true", help="같은 조건의 test를 다시 돌림")
     parser.add_argument("--db", type=Path, help="app.sqlite")

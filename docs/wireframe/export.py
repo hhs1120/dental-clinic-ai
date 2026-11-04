@@ -16,17 +16,21 @@ from generator.master import (  # noqa: E402
     ACCOUNTS,
     ADJUST_REASONS,
     CLINIC_NAME,
+    CONDITIONAL_INSURED_MIN_AGE,
+    HOURS,
     PROCEDURE_DIAGNOSES,
     RECALL_CYCLE,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    SLOT_MIN,
     VENDORS,
 )
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "wireframe" / "data.json"
-TODAY = date.fromisoformat(
-    str(yaml.safe_load((ROOT / "config" / "generator.yaml").read_text())["today"])
-)
+CONFIG = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text())
+TODAY = date.fromisoformat(str(CONFIG["today"]))
+NEW_FROM = str(CONFIG["range"]["start"])  # 창 시작 이후 등록 = 신환
+SCHEDULE_FROM = (TODAY - timedelta(days=30)).isoformat()  # 일별 예약표 — 최근 30일 + 앞으로의 예약
 CALLS_FROM = (TODAY - timedelta(days=47)).isoformat()  # 통화 목록 — 최근 약 7주
 RECON_FROM = (TODAY - timedelta(days=122)).isoformat()[:8] + "01"  # 재무 대조 — 최근 4개월
 ADJUST_FROM = (TODAY - timedelta(days=183)).isoformat()[:7]  # 청구 점검 — 최근 6개월
@@ -219,7 +223,7 @@ for d in days:
                 "procedure": pname[a["planned_procedure_code"]],
                 "status": STATUS_KO[a["status"]] if d < TODAY.isoformat() else "예정",
                 "patient": pinfo(pid, date.fromisoformat(d)),
-                "new_patient": pats[pid]["registered_at"] >= "2024-12-01"
+                "new_patient": pats[pid]["registered_at"] >= NEW_FROM
                 and not any(
                     x["status"] == "completed" and x["scheduled_at"][:10] < d
                     for x in appts_by[pid]
@@ -242,6 +246,91 @@ for d in days:
             }
         )
     prep[d] = lst
+
+# ── 일별 예약표 ──
+schedule_days = defaultdict(list)
+schedule_patients = {}
+schedule_pids = set()
+for a in rows(
+    "SELECT * FROM emr_appointments WHERE date(scheduled_at) >= ? ORDER BY scheduled_at",
+    SCHEDULE_FROM,
+):
+    pid = a["patient_id"]
+    schedule_pids.add(pid)
+    chart_no = pats[pid]["chart_no"]
+    schedule_days[a["scheduled_at"][:10]].append(
+        {
+            "id": a["id"],
+            "time": a["scheduled_at"][11:16],
+            "duration": a["duration_min"],
+            "staff_id": a["staff_id"],
+            "type": TYPE_KO[a["type"]],
+            "procedure": pname[a["planned_procedure_code"]],
+            "status": STATUS_KO[a["status"]],
+            "confirmed": bool(a["confirmed"]),
+            "chart_no": chart_no,
+            "name": pats[pid]["name"],
+            "new_patient": pats[pid]["registered_at"] >= NEW_FROM
+            and not any(
+                x["status"] == "completed" and x["scheduled_at"] < a["scheduled_at"]
+                for x in appts_by[pid]
+            ),
+            "booked_via": a["booked_via"],
+            # 이 예약을 잡은 통화 — 같은 환자, 통화 시각 = 예약 잡은 시각
+            "call_uid": next(
+                (
+                    r["call_uid"]
+                    for r in rows(
+                        "SELECT call_uid FROM ax_calls WHERE patient_id = ? AND started_at = ?",
+                        pid,
+                        a["created_at"],
+                    )
+                ),
+                None,
+            ),
+            "created_at": a["created_at"][:16],
+        }
+    )
+    if chart_no not in schedule_patients:
+        schedule_patients[chart_no] = {
+            **pinfo(pid),
+            "balance": balance(pid, TODAY.isoformat()),
+            "alerts": [x["label"] for x in visible_alerts(pid, TODAY.isoformat())],
+            "last_visit": max(
+                (
+                    x["scheduled_at"][:10]
+                    for x in appts_by[pid]
+                    if x["status"] == "completed" and x["scheduled_at"][:10] < TODAY.isoformat()
+                ),
+                default=None,
+            ),
+            "upcoming": [
+                {
+                    "date": x["scheduled_at"][:10],
+                    "time": x["scheduled_at"][11:16],
+                    "type": TYPE_KO[x["type"]],
+                    "procedure": pname[x["planned_procedure_code"]],
+                }
+                for x in sorted(appts_by[pid], key=lambda x: x["scheduled_at"])
+                if x["status"] == "scheduled" and x["scheduled_at"][:10] >= TODAY.isoformat()
+            ],
+        }
+schedule = {
+    "from": SCHEDULE_FROM,
+    "to": max(schedule_days),
+    "hours": HOURS,
+    "slot_min": SLOT_MIN,
+    # 전환 전 EMR 나이 표시 — 스케일링 급여 나이, 보험 임플란트·틀니 나이
+    "age_marks": {"adult": SCALING_MIN_AGE, "senior": CONDITIONAL_INSURED_MIN_AGE},
+    "staff": [
+        {"id": s["id"], "name": s["name"], "role": ROLE_KO[s["role"]]}
+        for role in ("doctor", "hygienist", "consultant")
+        for s in staff.values()
+        if s["role"] == role
+    ],
+    "days": schedule_days,
+    "patients": schedule_patients,
+}
 
 # ── 통화 ──
 calls = []
@@ -314,10 +403,11 @@ ask_examples = [
     and x["split"] == "dev"  # test 문항은 보이지 않는다
 ][:24]
 
-# ── EMR: 오늘·준비표 환자 + 통화 환자 ──
+# ── EMR: 오늘·준비표 환자 + 통화 환자 + 예약표 환자 ──
 emr_ids = sorted(
     {x["patient"]["id"] for d in prep.values() for x in d}
     | {x["patient"]["id"] for x in calls if x["patient"]}
+    | schedule_pids
 )
 claims_by = defaultdict(list)
 for cl in rows("SELECT * FROM emr_claims ORDER BY service_date"):
@@ -737,6 +827,7 @@ out = {
         "note": "가상 데이터(생성기 출력). AI 결과 칸은 정답 라벨로 채운 예시",
     },
     "prep": prep,
+    "schedule": schedule,
     "calls": calls,
     "docs": docs,
     "ask_examples": ask_examples,

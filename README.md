@@ -8,19 +8,21 @@
 - macOS 또는 Linux
 - [uv](https://docs.astral.sh/uv/) — Python 패키지·가상환경 관리. Python 3.11+는 uv가 자동으로 받는다
 - make (macOS 기본 포함)
+- [Node.js](https://nodejs.org/)와 npm — 버전은 `.nvmrc`. 프론트(`frontend/`)와 `make lint`가 쓴다(Claude Code 커밋 훅이 `make lint`를 돌린다)
 
 **설치**
 ```bash
-# 1. uv 설치 (한 번만)
-brew install uv
-# 또는: curl -LsSf https://astral.sh/uv/install.sh | sh
+# 1. uv·Node 설치 (한 번만)
+brew install uv node
+# 또는: curl -LsSf https://astral.sh/uv/install.sh | sh  (Node는 nodejs.org나 nvm — `nvm use`가 .nvmrc를 읽는다)
 
 # 2. 저장소 받기
 git clone https://github.com/hhs1120/dental-clinic-ai.git
 cd dental-clinic-ai
 
-# 3. 의존성 설치 (.venv 생성, uv.lock 기준으로 버전 고정)
+# 3. 의존성 설치 (.venv 생성, uv.lock 기준으로 버전 고정 / 프론트는 package-lock.json 기준)
 uv sync
+npm --prefix frontend ci
 
 # 4. 확인
 make test
@@ -41,6 +43,8 @@ cp .env.example .env   # API 키 입력. .env는 커밋되지 않는다
 | `make verify` | 생성 데이터 검사 |
 | `make test` | 테스트 실행 |
 | `make index EMBEDDING=voyage-4` | 검색 색인 (`data/app.sqlite`, `VOYAGE_API_KEY` 필요) |
+| `make dev` | 앱 실행 — API(8000) + 화면(http://localhost:3000), Ctrl+C로 둘 다 종료 |
+| `make lint` / `make fmt` | 코드 검사 / 모양 정리 (파이썬 ruff, 프론트 ESLint·Prettier·tsc) |
 
 ## 구조
 
@@ -52,7 +56,7 @@ shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트
 ground_truth/  정답지 (앱은 참조하지 않음)
 data/          생성 결과 (source.sqlite — 생성기 출력, app.sqlite — 앱 테이블·FTS5·벡터)
-backend/       에이전트 하네스, 검색 색인·검색, 조회 도구 (FastAPI는 예정)
-frontend/      Next.js (예정)
+backend/       에이전트 하네스, 검색 색인·검색, 조회 도구, FastAPI 앱
+frontend/      Next.js (Tailwind + shadcn/ui)
 tests/         generator/ 생성기·verify 테스트, shared/ 게이트웨이 테스트, evaluation/ 평가 테스트, backend/ 앱 테스트. 정답 격리 검사는 tests/ 바로 아래
 ```

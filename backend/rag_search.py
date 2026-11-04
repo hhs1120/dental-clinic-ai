@@ -20,6 +20,7 @@ DEFAULT_RERANKER = "rerank-3"
 CONDITION_KEYS = ("embedding", "reranker")
 POOL = 50  # 키워드·벡터 각각에서 가져오는 수
 CANDIDATES = 25  # 버킷마다 리랭커로 가는 수
+SEARCH_TOP_K = 10  # 화면 결과 수 — 도구 기본값과 별개, 화면은 훑어보는 용도(앱 뼈대 설계안)
 RRF_K = 60
 BUCKETS = {
     "manual_results": ("document",),

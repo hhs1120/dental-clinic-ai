@@ -12,7 +12,7 @@ def stage(run, rng, fake) -> None:
     )
     run.conn.executemany(
         "INSERT INTO emr_staff (name, role) VALUES (?, ?)",
-        [(fake.name(), role) for role, n in STAFF for _ in range(n)],
+        [(name, role) for role, names in STAFF for name in names],
     )
     cols = list(PROCEDURES[0])
     run.conn.executemany(
