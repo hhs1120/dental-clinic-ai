@@ -464,7 +464,7 @@ npx shadcn@4.23.0 add button input checkbox tabs card badge select label
 설계안 '스타일'의 두 표 값을 그대로 넣는다. 라이트는 `:root`, 다크는 `@media (prefers-color-scheme: dark) { :root { … } }`에 둔다. shadcn이 넣은 `.dark { … }` 블록과 `@custom-variant dark (&:is(.dark *));` 줄은 지운다. 그러면 Tailwind의 `dark:`가 OS 설정을 따른다. 전환 버튼은 두지 않는다.
 - shadcn 기본 토큰은 `card`/`popover`(+`-foreground` = foreground 값), `secondary`/`muted`/`input`(+`secondary-foreground` = foreground 값), `destructive` = 상태 `danger`의 점 색이다. `sidebar*`, `chart-*` 토큰은 지운다
 - 새 토큰: `--header`(머리 띠), `--link`, `--mark`, `--shadow-card`, `--shadow-control`, 상태 16개(`--status-warn-bg` 등)
-- `--radius: 0.4375rem`으로 둔다. `@theme inline`에서 `--radius-md: calc(var(--radius) - 2px)`, `--radius-xl: calc(var(--radius) + 4px)`인지 확인한다
+- 모서리는 컨트롤 5px, 카드 11px이 되게 `--radius`와 `@theme inline`의 `--radius-*`를 맞춘다(shadcn 스타일마다 컨트롤·카드에 쓰는 클래스가 다르니 생성된 부품을 보고 정한다)
 - `@theme inline`에 새 토큰을 연결한다(`--color-header: var(--header)`, `--color-status-warn-bg: var(--status-warn-bg)`, `--shadow-card: var(--shadow-card)` …). `--font-sans: var(--font-inter), var(--font-noto-kr), sans-serif`
 - shadcn 부품의 `shadow-xs`·`shadow-sm`은 `shadow-control`·`shadow-card`로 바꾸고, 카드는 `rounded-xl`인지 확인한다
 

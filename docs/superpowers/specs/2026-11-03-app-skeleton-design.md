@@ -114,7 +114,7 @@
 | `ring` | `rgba(17, 94, 89, 0.3)` | `rgba(43, 179, 163, 0.35)` |
 | 링크 | `#115E59` | `#5FD0C2` |
 | 검색어 강조(`mark`) | `#CBE1DE` | `#1C4743` |
-| `--radius` | `0.4375rem` — 컨트롤(`rounded-md`) 5px, 카드(`rounded-xl`) 11px | 같음 |
+| 모서리 | 컨트롤 5px, 카드 11px (값은 `globals.css`의 `--radius`·`--radius-xl`) | 같음 |
 | 그림자 | `0 2px 0 0 hsl(0 0% 20% / 0.15), 0 1px 2px -1px hsl(0 0% 20% / 0.15)`, 입력·버튼은 `0 2px 0 0 hsl(0 0% 20% / 0.07)` | 같음 |
 | 글꼴 | Inter + Noto Sans KR (`next/font/google`) | 같음 |
 

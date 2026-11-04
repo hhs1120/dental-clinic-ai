@@ -40,7 +40,7 @@
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
 - `make dev` — 앱 실행(API 8000 + 화면 3000, Ctrl+C로 둘 다 종료). `data/`와 색인이 있어야 검색이 된다
-- `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — ruff, 아래 코드 컨벤션
+- `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — 파이썬 ruff, 프론트 ESLint·Prettier·tsc(처음에 `npm ci`가 돈다 — Node 필요), 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음). 프롬프트·입력이 바뀐 옛 시도 줄은 `make llm-prune`으로 지운다(빈 건이 없을 때만)
 
 ## 코드 컨벤션
