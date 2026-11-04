@@ -17,13 +17,15 @@ export const SPACES: Record<string, string> = {
   emr: "전환 전 EMR",
 };
 
-/** 아직 화면이 없는 라우트 조각 → 화면 이름 */
+const BUILT = ["/ask", "/schedule"];
+
+/** 아직 화면이 없는 라우트 조각 → 화면 이름 (/emr은 화면이 있다) */
 export const COMING_SOON: Record<string, string> = {
   ...Object.fromEntries(
-    MENU.filter((m) => m.href !== "/ask").map((m) => [
+    MENU.filter((m) => !BUILT.includes(m.href)).map((m) => [
       m.href.slice(1),
       m.label,
     ]),
   ),
-  ...SPACES,
+  eval: SPACES.eval,
 };

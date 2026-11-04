@@ -13,7 +13,7 @@ export default function PortalLayout({
       <Suspense fallback={<div className="h-15 border-b bg-header" />}>
         <AppHeader />
       </Suspense>
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-[90rem] px-4 py-8 sm:px-6">
         {children}
       </main>
     </>

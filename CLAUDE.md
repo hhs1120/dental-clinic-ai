@@ -50,7 +50,7 @@
   - 값은 직접 쓰지 않고 `generator/master.py`·`config`·스키마의 이름으로 읽는다(위 절대 규칙)
   - verify 검사는 `check_*(conn, ctx) → 위반 행 목록`, 독스트링이 실패·경고 때 출력되는 규칙 설명
   - DB는 sqlite3에 SQL 그대로(ORM 없음)
-- Next.js: ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`. 색·모서리·글꼴·그림자는 `frontend/app/globals.css` 토큰으로만 쓰고(직접 hex·임의 값·Tailwind 기본 색 이름 금지), 부품은 `frontend/components/ui/`(shadcn)만 쓴다 — 모양이 더 필요하면 그 파일에 variant를 더한다
+- Next.js: ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`. 색·모서리·글꼴·그림자는 `frontend/app/globals.css` 토큰으로만 쓰고(직접 hex·임의 값·Tailwind 기본 색 이름 금지), 부품은 `frontend/components/ui/`(shadcn)만 쓴다 — 모양이 더 필요하면 그 파일에 variant를 더한다(예외: 전환 전 EMR 창 안은 옛 프로그램 부품 `components/emr/emr-ui.tsx`, 색은 `--emr-*` 토큰)
 
 ## 깃
 - 브랜치는 작업 묶음마다 `feat/<묶음>`(예: `feat/eval-set`) — main에서 따고, PR 머지 뒤 main에서 다음 브랜치

@@ -623,7 +623,7 @@ R.schedule = () => {
   const close = tmin(saturday ? h.saturday_close : h.weekday_close), lunch = saturday ? null : h.lunch.map(tmin);
   const slots = []; for (let m = tmin(h.open); m < close; m += sc.slot_min) slots.push(m);
   const inLunch = m => lunch && m >= lunch[0] && m < lunch[1];
-  const card = r => `<button class="sc-appt ty-${r.type} ${S.schedSel === r.id ? "sel" : ""} ${hidden.includes(r.status) ? "off" : ""}" data-act="schedSel" data-arg="${r.id}"><b>${r.time} ${esc(r.name)}${d === TODAY && isUnconfirmed(r) ? " <em>미확인</em>" : ""}</b><span>${esc(procLabel(r))} · ${r.duration}분${r.status === "예정" ? "" : " · " + r.status}</span></button>`;
+  const card = r => `<button class="sc-appt ty-${r.type} ${S.schedSel === r.id ? "sel" : ""} ${hidden.includes(r.status) ? "off" : ""}" data-act="schedSel" data-arg="${r.id}"><b>${r.time} ${esc(r.name)}${d === TODAY && isUnconfirmed(r) ? " <em>예약 미확인</em>" : ""}</b><span>${esc(procLabel(r))} · ${r.duration}분${r.status === "예정" ? "" : " · " + r.status}</span></button>`;
   const cell = (s, m) => {
     const mine = rows.filter(r => r.staff_id === s.id);
     const here = mine.filter(r => tmin(r.time) >= m && tmin(r.time) < m + sc.slot_min);
@@ -642,7 +642,7 @@ R.schedule = () => {
     <div class="kv"><div><span>이 예약</span>${md(d)} ${sel.time}</div><div><span>시술</span>${esc(procLabel(sel))}</div><div><span>상태</span>${sel.status}</div>${bookedVia(sel)}<div><span>연락처</span>${esc(p.phone)}</div><div><span>미수 잔액</span>${won(p.balance)}</div><div><span>마지막 내원</span>${p.last_visit ? md(p.last_visit) : "—"}</div></div>
     ${p.alerts.length ? `<div class="row">${p.alerts.map(a => `<span class="tag t-alert">${esc(a)}</span>`).join("")}</div>` : ""}
     <div><div class="label1">앞으로의 예약</div>${p.upcoming.length ? p.upcoming.map(u => `<div class="label2 mt8">${mdw(u.date)} ${u.time} ${esc(procLabel(u))}</div>`).join("") : '<p class="caption1 fg3">없음</p>'}</div>
-    <button class="btn btn-sm" data-act="emrOpen" data-arg="${p.chart_no}">전자차트 열기</button>
+    <button class="btn btn-sm" data-act="emrOpenChart" data-arg="${p.chart_no}">전자차트 열기</button>
   </aside>` : "";
   return head("예약", "날짜별 예약을 담당자별로 봅니다. 전부 EMR 조회 값이고, 예약을 잡거나 바꾸는 일은 EMR에서 합니다.") + `
   <div class="row" style="margin-bottom:12px">
@@ -1606,6 +1606,7 @@ const A = {
   chairSel: a => { S.chairSel = a === "상담" ? "상담" : +a; S.chairPick = null; render(); },
   chairPick: a => { S.chairPick = +a; render(); },
   emrOpen: a => { if (S.emrChart !== a) S.emrMoves = 0; S.emrChart = a; S.emrQ = ""; S.emrTab = "진료기록"; S.emrMode = "desk"; go("emr"); },
+  emrOpenChart: a => { if (S.emrChart !== a) S.emrMoves = 0; S.emrChart = a; S.emrQ = ""; S.emrTab = "진료기록"; S.emrMode = "chart"; go("emr"); }, // 예약표의 "전자차트 열기" — 그 환자의 전자차트로
   emrPick: a => { S.emrChart = a; S.emrQ = ""; S.emrTab = "진료기록"; S.emrMoves = 0; render(); },
   emrMode: a => { if (S.emrMode !== a) S.emrMoves++; S.emrMode = a; render(); },
   emrPanel: a => { if (S.emrPanel !== a) S.emrMoves++; S.emrPanel = a; render(); },
