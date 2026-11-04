@@ -10,6 +10,8 @@ import {
   type EmrNav,
   type Highlight,
 } from "@/components/emr/emr-window";
+import { ExplainCard, type Stage } from "@/components/emr/explain-card";
+import { TOUR_STEPS } from "@/components/emr/tour";
 import { StatusDot } from "@/components/ui/badge";
 import { ApiError, useClinic } from "@/lib/api";
 import {
@@ -115,7 +117,35 @@ export function EmrView() {
 
   const current =
     record?.key === chart && "data" in record ? record.data : null;
-  const highlight: Highlight = null;
+
+  // 설명 카드 — 시작 화면에서 오면 펼침, 예약표에서 오면 한 줄로 접힘
+  const [stage, setStage] = useState<Stage>(
+    fromSchedule ? { kind: "collapsed" } : { kind: "map" },
+  );
+  const startTour = () => {
+    setStage({ kind: "tour", step: 0 });
+    if (!tourPatient) return;
+    if (chart !== tourPatient.chart_no) pickPatient(tourPatient.chart_no);
+    else setState((s) => ({ ...s, nav: TOUR_STEPS[0].nav, moves: 0 }));
+  };
+  const moveStep = (step: number) => {
+    navigate(TOUR_STEPS[step].nav);
+    setStage({ kind: "tour", step });
+  };
+  const onNext = () => {
+    if (stage.kind !== "tour") return;
+    if (stage.step < TOUR_STEPS.length - 1) moveStep(stage.step + 1);
+    else setStage({ kind: "done", moves: state.moves });
+  };
+  const onPrev = () => {
+    if (stage.kind === "tour" && stage.step > 0) moveStep(stage.step - 1);
+  };
+  const highlight: Highlight =
+    stage.kind === "tour" ? TOUR_STEPS[stage.step].highlight : null;
+  const tourRecord =
+    current && tourPatient && current.patient.chart_no === tourPatient.chart_no
+      ? current
+      : null;
 
   if (record?.key === chart && "error" in record)
     return (
@@ -138,7 +168,7 @@ export function EmrView() {
       </p>
     );
 
-  return (
+  const emrWindow = (
     <EmrWindow
       record={current}
       today={clinic.today}
@@ -148,9 +178,54 @@ export function EmrView() {
       moves={state.moves}
       highlight={highlight}
       onPickPatient={pickPatient}
-      locked={false}
+      locked={stage.kind === "tour"}
       part={part}
     />
+  );
+  const card = tourPatient ? (
+    <ExplainCard
+      stage={stage}
+      tour={tourPatient}
+      record={tourRecord}
+      onStart={startTour}
+      onPrev={onPrev}
+      onNext={onNext}
+      onExpand={() => setStage({ kind: "map" })}
+    />
+  ) : tour && "error" in tour ? (
+    <p className="rounded-md border bg-card px-4 py-3 text-sm text-muted-foreground">
+      기준일 예약이 없어 따라 보기를 할 수 없습니다
+    </p>
+  ) : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {stage.kind === "tour" && tourPatient && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md bg-accent px-4 py-2.5 text-sm text-accent-foreground">
+          <b>따라 보기 중</b>
+          <span>
+            데스크 직원이 {tourPatient.time} {tourPatient.name} 님을 맞기 전에
+            하는 일
+          </span>
+          <button
+            type="button"
+            onClick={() => setStage({ kind: "map" })}
+            className="ml-auto font-medium underline"
+          >
+            그만 보기
+          </button>
+        </div>
+      )}
+      {stage.kind === "collapsed" && card}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        <div className="min-w-0 flex-1">{emrWindow}</div>
+        {stage.kind !== "collapsed" && (
+          <div className="order-first xl:order-none xl:w-80 xl:shrink-0">
+            {card}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
