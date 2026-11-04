@@ -13,12 +13,12 @@
 - `docs/치과 AX - AI 실험 기록.md` — AI 품질 실험의 문제·원인·시도·수치·한계 (구현 스펙 아님, 설계 문서에 경위를 넣지 않는 대신 여기에)
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 - `docs/치과 AX - 개발자 소개.md` — 팀원 모집용: 기술 스택·데이터 규모·기능별 AI·독립 과제·포트폴리오에 남는 것 (구현 스펙 아님)
-- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 기준은 `index-v2.html`(앱 설계 §9), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
+- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 `index-v2.html`(앱 설계 §9), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·자동 개선·시나리오 DB
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기·LLM 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
-- `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`), FastAPI는 예정 · `frontend/` Next.js (개발 단계에서 세팅)
+- `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
 
 ## 절대 규칙
@@ -39,6 +39,7 @@
 - `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향. 파이썬은 uv 관리 빌드만 쓴다 — sqlite-vec이 SQLite 확장을 연다). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 `backend`, 테스트·린트(pytest·ruff)는 `dev`
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
+- `make dev` — 앱 실행(API 8000 + 화면 3000, Ctrl+C로 둘 다 종료). `data/`와 색인이 있어야 검색이 된다
 - `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — ruff, 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음). 프롬프트·입력이 바뀐 옛 시도 줄은 `make llm-prune`으로 지운다(빈 건이 없을 때만)
 
@@ -49,13 +50,13 @@
   - 값은 직접 쓰지 않고 `generator/master.py`·`config`·스키마의 이름으로 읽는다(위 절대 규칙)
   - verify 검사는 `check_*(conn, ctx) → 위반 행 목록`, 독스트링이 실패·경고 때 출력되는 규칙 설명
   - DB는 sqlite3에 SQL 그대로(ORM 없음)
-- Next.js(frontend 착수 때 켠다): ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`
+- Next.js: ESLint `next/core-web-vitals`, TypeScript strict, Prettier. 컴포넌트 `PascalCase`, 훅 `useX`. 색·모서리·글꼴·그림자는 `frontend/app/globals.css` 토큰으로만 쓰고(직접 hex·임의 값·Tailwind 기본 색 이름 금지), 부품은 `frontend/components/ui/`(shadcn)만 쓴다 — 모양이 더 필요하면 그 파일에 variant를 더한다
 
 ## 깃
 - 브랜치는 작업 묶음마다 `feat/<묶음>`(예: `feat/eval-set`) — main에서 따고, PR 머지 뒤 main에서 다음 브랜치
-- 커밋 메시지는 `<영역>: <무엇>` + 본문 글머리. 영역: `generator` · `eval` · `docs` · `claude`(`.claude/` 설정) · `chore`(도구·의존성) · `style`(동작 없는 정리)
+- 커밋 메시지는 `<영역>: <무엇>` + 본문 글머리. 영역: `generator` · `eval` · `backend` · `frontend` · `docs` · `claude`(`.claude/` 설정) · `chore`(도구·의존성) · `style`(동작 없는 정리)
 - `git add`는 파일 이름으로 — 폴더 단위·`-A` 금지(임시 파일이 섞이지 않게)
-- PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`·`make test`를 돌린다
+- PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`(파이썬·프론트)·`make test`·프론트 빌드를 돌린다
 
 ## 현재 단계
 진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.

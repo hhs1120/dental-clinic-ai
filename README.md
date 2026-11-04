@@ -52,7 +52,7 @@ shared/        스키마, LLM 게이트웨이
 evaluation/    평가 스크립트
 ground_truth/  정답지 (앱은 참조하지 않음)
 data/          생성 결과 (source.sqlite — 생성기 출력, app.sqlite — 앱 테이블·FTS5·벡터)
-backend/       에이전트 하네스, 검색 색인·검색, 조회 도구 (FastAPI는 예정)
-frontend/      Next.js (예정)
+backend/       에이전트 하네스, 검색 색인·검색, 조회 도구, FastAPI 앱
+frontend/      Next.js (Tailwind + shadcn/ui)
 tests/         generator/ 생성기·verify 테스트, shared/ 게이트웨이 테스트, evaluation/ 평가 테스트, backend/ 앱 테스트. 정답 격리 검사는 tests/ 바로 아래
 ```
