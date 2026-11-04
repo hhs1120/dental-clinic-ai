@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
+from pydantic import ValidationError
 
 from backend import db
 from backend.embeddings import make_embedder
@@ -112,6 +113,10 @@ def search(
 ) -> dict:
     try:
         args = to_search_args(q, source_types, date_from, date_to, chart_no)
+    except ValidationError as e:
+        # 화면에는 첫 오류만 짧게 — pydantic 원문은 여러 줄에 링크까지 붙는다
+        err = e.errors()[0]
+        raise HTTPException(422, f"{'.'.join(map(str, err['loc']))}: {err['msg']}") from e
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     conn = _open(paths, NO_INDEX)

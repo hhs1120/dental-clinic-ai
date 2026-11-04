@@ -52,8 +52,8 @@ def test_document_title_and_version(cards):
     # 첫 헤더 앞 빈 절은 조각이 없어 번호를 쓰지 않는다(rag_index._documents)
     old, new, manual = cards["doc:1:0"], cards["doc:2:0"], cards["doc:3:0"]
     assert old["title"] == "미백 비용 > 변경 내용" and old["body"] == "미백 30만원"
-    assert (old["version"], old["is_outdated"]) == ("v1", True)
-    assert (new["version"], new["is_outdated"]) == ("v2", False)
+    assert (old["version"], old["is_outdated"]) == ("1", True)  # 실데이터처럼 숫자만
+    assert (new["version"], new["is_outdated"]) == ("2", False)
     assert manual["title"] == "틀니 수리" and manual["body"] == "접수 후 기공소로 보낸다"
     assert manual["doc_type"] == "manual" and manual["event_date"] is None
 

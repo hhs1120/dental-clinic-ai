@@ -85,9 +85,9 @@ def source_paths(tmp_path):
     conn.executemany(
         "INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
-            (1, "notice", "미백 비용", "v1", "2026-01-01", "n1.md", "# 변경 내용\n미백 30만원"),
-            (2, "notice", "미백 비용", "v2", "2026-06-01", "n2.md", "# 변경 내용\n미백 35만원"),
-            (3, "manual", "틀니 수리", "v1", None, "m1.md", "접수 후 기공소로 보낸다"),
+            (1, "notice", "미백 비용", "1", "2026-01-01", "n1.md", "# 변경 내용\n미백 30만원"),
+            (2, "notice", "미백 비용", "2", "2026-06-01", "n2.md", "# 변경 내용\n미백 35만원"),
+            (3, "manual", "틀니 수리", "1", None, "m1.md", "접수 후 기공소로 보낸다"),
         ],
     )
     conn.executemany(

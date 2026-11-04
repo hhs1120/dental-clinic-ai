@@ -200,3 +200,11 @@ def test_clinic_needs_only_source(client_with, source_paths, tmp_path):
     r = client_with(paths=(app_db, source_paths[1])).get("/clinic")
     assert r.status_code == 200 and r.json()["name"] == "클로드치과"
     assert not app_db.exists()
+
+
+def test_bad_date_detail_is_short(client):
+    # 손으로 고친 URL이면 화면 오류 띠에 pydantic 원문 대신 짧은 문구가 나온다
+    detail = client.get("/search", params={"q": "틀니", "date_from": "2026-13-01"}).json()[
+        "detail"
+    ]
+    assert "date_from" in detail and "pydantic.dev" not in detail and "\n" not in detail
