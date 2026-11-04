@@ -97,3 +97,24 @@ def test_unknown_prefix_raises(source_paths):
     }
     with pytest.raises(ValueError):
         card(conn, chunk, {})
+
+
+def test_document_body_drops_markdown_marks():
+    chunk = {
+        "id": "doc:9:0",
+        "source_type": "document",
+        "text": "비급여 안내\n## 레진\n- **레진**: 치아 색 `충전` __재료__\n| 구분 | 금액 |",
+        "chart_no": None,
+        "event_date": None,
+        "doc_type": "manual",
+    }
+
+    class Conn:
+        def execute(self, *_):
+            return self
+
+        def fetchone(self):
+            return ("1",)
+
+    c = card(Conn(), chunk, {})
+    assert c["body"] == "레진\n- 레진: 치아 색 충전 재료\n| 구분 | 금액 |"

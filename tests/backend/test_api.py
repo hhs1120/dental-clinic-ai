@@ -192,3 +192,11 @@ def test_concurrent_requests_on_real_server(indexed_paths):
         server.should_exit = True
         thread.join(10)
         app.dependency_overrides.clear()
+
+
+def test_clinic_needs_only_source(client_with, source_paths, tmp_path):
+    # 색인(app.sqlite)이 없어도 병원 이름·기준일은 나와야 한다 — 머리 띠가 '—'가 되지 않게
+    app_db = tmp_path / "none" / "app.sqlite"
+    r = client_with(paths=(app_db, source_paths[1])).get("/clinic")
+    assert r.status_code == 200 and r.json()["name"] == "클로드치과"
+    assert not app_db.exists()

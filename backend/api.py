@@ -135,9 +135,13 @@ def search(
 
 @app.get("/clinic")
 def clinic(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
-    conn = _open(paths, NO_DATA)
+    """source.sqlite만 읽는다 — 색인(app.sqlite)이 없어도 머리 띠의 병원 이름·기준일은 나온다"""
+    source = Path(paths[1])
+    if not source.exists():
+        raise HTTPException(503, NO_DATA)
+    conn = sqlite3.connect(f"{source.resolve().as_uri()}?mode=ro", uri=True)
     try:
-        name = conn.execute("SELECT name FROM source.emr_clinic").fetchone()[0]
+        name = conn.execute("SELECT name FROM emr_clinic").fetchone()[0]
     finally:
         conn.close()
     return {"name": name, "today": _clinic().today.isoformat()}

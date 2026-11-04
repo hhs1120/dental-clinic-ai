@@ -8,6 +8,13 @@ _CALL = re.compile(
     r"\[(?:환자: (?P<name>.+)\((?P<chart>[^()]+)\)|상대: (?P<caller>.*)) \| [\d-]+ \| (?P<dir>수신|발신)\]\n"
 )
 _THREAD = re.compile(r"\[환자: (?P<name>.+)\([^()]+\) \| [\d-]+\] ")
+# 화면 카드는 미리보기라 마크다운을 그리지 않고 강조·제목 표시만 지운다. 목록 '-'와 표 '|'는 읽는 데 도움이 돼 남긴다
+_MD_MARKS = re.compile(r"\*\*|__|`")
+_MD_HEADING = re.compile(r"^#{1,6}\s+", re.M)
+
+
+def _plain(text: str) -> str:
+    return _MD_HEADING.sub("", _MD_MARKS.sub("", text))
 
 
 def _match(pattern: re.Pattern, chunk: dict) -> re.Match:
@@ -36,7 +43,8 @@ def card(conn: sqlite3.Connection, chunk: dict, replaced_by: dict[int, int]) -> 
     kind, text = chunk["source_type"], chunk["text"]
     if kind == "document":
         doc_id = int(chunk["id"].split(":")[1])
-        out["title"], _, out["body"] = text.partition("\n")
+        out["title"], _, body = text.partition("\n")
+        out["body"] = _plain(body)
         out["version"] = conn.execute(
             "SELECT version FROM source.ax_documents WHERE id = ?", (doc_id,)
         ).fetchone()[0]
