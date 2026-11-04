@@ -1,0 +1,535 @@
+[
+ {
+  "call_uid": "c-0019",
+  "verdict": "ambiguous",
+  "items": [
+   "has_todo"
+  ],
+  "should_be": {
+   "has_todo": 1
+  },
+  "reason": "직원이 '그렇게 전달해서 지키겠습니다'라고 전달을 약속함. 같은 '원장님께 전달' 표현이 다른 건(c-0130 등)에서는 has_todo=1이라 갈림"
+ },
+ {
+  "call_uid": "c-0031",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0095",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0103",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0122",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0130",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0142",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0158",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0179",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0212",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0235",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0246",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0253",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0281",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0287",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0288",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0299",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0316",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0348",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0357",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0392",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0411",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0421",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0460",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0479",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0481",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0499",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0519",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0526",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0534",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0539",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0553",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0592",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0648",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0658",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0677",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0715",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0728",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0776",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0783",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0792",
+  "verdict": "ambiguous",
+  "items": [
+   "has_todo"
+  ],
+  "should_be": {
+   "has_todo": 1
+  },
+  "reason": "'원장님께 그대로 말씀드려 두겠습니다'로 전달이 남음. 회신 약속은 없어 사람마다 갈릴 수 있음"
+ },
+ {
+  "call_uid": "c-0807",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0817",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0901",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0905",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0916",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0950",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0965",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-0994",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1002",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1067",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1068",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1079",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1088",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1093",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1099",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1118",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1128",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1134",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1148",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1195",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1247",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1260",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1264",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1289",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1291",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1331",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1360",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1375",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1394",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1417",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1419",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1453",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1478",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ },
+ {
+  "call_uid": "c-1498",
+  "verdict": "ok",
+  "items": [],
+  "should_be": {},
+  "reason": ""
+ }
+]

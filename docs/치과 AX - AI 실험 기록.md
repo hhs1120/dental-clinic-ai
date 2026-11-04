@@ -195,7 +195,7 @@ tags:
   - 데이터가 고정이라 골드는 고치지 않는다. 틀림 10건은 원본과 변형을 학습에서 빼고, 애매함은 남긴다(빼면 경계를 못 배운다)
   - 같은 방식으로 dev 75건도 점검했다: 맞음 73, 애매함 2, 틀림 0. 애매함은 둘 다 `has_todo` — 직원이 "원장님께 전달하겠다"고만 한 통화가 어떤 건 1, 어떤 건 0으로 붙어 일관성이 갈린다. silver의 급함 패턴은 dev에 없었다. test는 점검하지 않았다(평가 설계 §2.3) — dev와 같은 생성기·같은 층화라 비슷한 비율로 본다
 - **최종 학습 재료**: 원본 1,340건 + 바꿔 쓰기 3,426건 = 4,766건(`aug.jsonl`의 `train`). 스타일별 ① 1192 ② 1030 ③ 1108 ④ 46 ⑤ 50. 희귀 목적은 불만 18+75, 모르겠음 12+52, 응급 29+113
-- **위치**: `evaluation/finetune/aug/`(골드 라벨이 붙어 커밋하지 않음) — 학습용 `augment.py` → `aug.jsonl`(`kept`·버린 이유·검사 분류 결과, 사람 검토 `review`·원본 오류 `original_wrong`·최종 `train`), 검토 전 사본 `aug_before_review.jsonl`, 원본 점검 `silver_review.json`·`dev_gold_review.json`, 평가 셋 `make_eval.py` → `dev_eval.jsonl`(재시도 이유 포함), 호출 기록 `llm_log.jsonl`·`eval_llm_log.jsonl`
+- **위치**: `evaluation/finetune/aug/` — 학습용 `augment.py` → `aug.jsonl`(`kept`·버린 이유·검사 분류 결과, 사람 검토 `review`·원본 오류 `original_wrong`·최종 `train`), 원본 점검 `silver_review.json`·`dev_gold_review.json`, 평가 셋 `make_eval.py` → `dev_eval.jsonl`(재시도 이유 포함), 호출 기록 `llm_log.jsonl`·`eval_llm_log.jsonl`
 - **결과**: 4,170건 중 3,889건(93%)을 남겼다. silver 원본과 합치면 학습 재료는 5,239건이다
   - 스타일별 남긴 수: ① 말투 1270/1350, ② 순서 1229/1350, ③ 군말 1286/1350, ④ 60건 중 49, ⑤ 60건 중 55. 순서를 바꾸는 방식이 내용을 가장 많이 흔들었다
   - 희귀 목적: 불만 82/90, 모르겠음 56/60, 응급 128/150 → silver 원본(18·12·30건)이 각각 100·68·158건이 된다

@@ -1,0 +1,9663 @@
+{
+ "original_wrong": [
+  "c-0232",
+  "c-0298",
+  "c-0328",
+  "c-0354",
+  "c-0665",
+  "c-0834",
+  "c-0856",
+  "c-1124",
+  "c-1393",
+  "c-1436"
+ ],
+ "original_ambiguous": [
+  "c-0090",
+  "c-0180",
+  "c-0221",
+  "c-0286",
+  "c-0296",
+  "c-0343",
+  "c-0435",
+  "c-0466",
+  "c-0542",
+  "c-0550",
+  "c-0581",
+  "c-0601",
+  "c-0704",
+  "c-0729",
+  "c-0738",
+  "c-0787",
+  "c-0988",
+  "c-0997",
+  "c-1024",
+  "c-1102",
+  "c-1138",
+  "c-1151",
+  "c-1182",
+  "c-1235",
+  "c-1313",
+  "c-1338",
+  "c-1388"
+ ],
+ "silver_review": {
+  "c-0001": {
+   "call_uid": "c-0001",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0002": {
+   "call_uid": "c-0002",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0003": {
+   "call_uid": "c-0003",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0005": {
+   "call_uid": "c-0005",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0006": {
+   "call_uid": "c-0006",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0007": {
+   "call_uid": "c-0007",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0008": {
+   "call_uid": "c-0008",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0009": {
+   "call_uid": "c-0009",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0010": {
+   "call_uid": "c-0010",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0011": {
+   "call_uid": "c-0011",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0012": {
+   "call_uid": "c-0012",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0013": {
+   "call_uid": "c-0013",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0014": {
+   "call_uid": "c-0014",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0016": {
+   "call_uid": "c-0016",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0018": {
+   "call_uid": "c-0018",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0020": {
+   "call_uid": "c-0020",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0021": {
+   "call_uid": "c-0021",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0022": {
+   "call_uid": "c-0022",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0023": {
+   "call_uid": "c-0023",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0024": {
+   "call_uid": "c-0024",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0025": {
+   "call_uid": "c-0025",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0026": {
+   "call_uid": "c-0026",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0027": {
+   "call_uid": "c-0027",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0028": {
+   "call_uid": "c-0028",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0029": {
+   "call_uid": "c-0029",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0030": {
+   "call_uid": "c-0030",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0032": {
+   "call_uid": "c-0032",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0033": {
+   "call_uid": "c-0033",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0034": {
+   "call_uid": "c-0034",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0035": {
+   "call_uid": "c-0035",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0036": {
+   "call_uid": "c-0036",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0037": {
+   "call_uid": "c-0037",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0038": {
+   "call_uid": "c-0038",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0039": {
+   "call_uid": "c-0039",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0040": {
+   "call_uid": "c-0040",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0041": {
+   "call_uid": "c-0041",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0042": {
+   "call_uid": "c-0042",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0043": {
+   "call_uid": "c-0043",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0044": {
+   "call_uid": "c-0044",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0045": {
+   "call_uid": "c-0045",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0046": {
+   "call_uid": "c-0046",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0047": {
+   "call_uid": "c-0047",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0048": {
+   "call_uid": "c-0048",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0049": {
+   "call_uid": "c-0049",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0050": {
+   "call_uid": "c-0050",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0051": {
+   "call_uid": "c-0051",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0052": {
+   "call_uid": "c-0052",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0053": {
+   "call_uid": "c-0053",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0054": {
+   "call_uid": "c-0054",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0055": {
+   "call_uid": "c-0055",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0056": {
+   "call_uid": "c-0056",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0057": {
+   "call_uid": "c-0057",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0058": {
+   "call_uid": "c-0058",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0059": {
+   "call_uid": "c-0059",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0060": {
+   "call_uid": "c-0060",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0061": {
+   "call_uid": "c-0061",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0062": {
+   "call_uid": "c-0062",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0063": {
+   "call_uid": "c-0063",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0064": {
+   "call_uid": "c-0064",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0065": {
+   "call_uid": "c-0065",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0066": {
+   "call_uid": "c-0066",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0067": {
+   "call_uid": "c-0067",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0068": {
+   "call_uid": "c-0068",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0069": {
+   "call_uid": "c-0069",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0070": {
+   "call_uid": "c-0070",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0071": {
+   "call_uid": "c-0071",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0073": {
+   "call_uid": "c-0073",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0074": {
+   "call_uid": "c-0074",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0075": {
+   "call_uid": "c-0075",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0076": {
+   "call_uid": "c-0076",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0077": {
+   "call_uid": "c-0077",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0078": {
+   "call_uid": "c-0078",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0079": {
+   "call_uid": "c-0079",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0080": {
+   "call_uid": "c-0080",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0081": {
+   "call_uid": "c-0081",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0082": {
+   "call_uid": "c-0082",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0083": {
+   "call_uid": "c-0083",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0084": {
+   "call_uid": "c-0084",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0085": {
+   "call_uid": "c-0085",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0086": {
+   "call_uid": "c-0086",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0087": {
+   "call_uid": "c-0087",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0088": {
+   "call_uid": "c-0088",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0089": {
+   "call_uid": "c-0089",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0090": {
+   "call_uid": "c-0090",
+   "verdict": "ambiguous",
+   "items": [
+    "wants_appt"
+   ],
+   "should_be": {
+    "wants_appt": 1
+   },
+   "reason": "임플란트 비용을 들은 뒤 '언제쯤 시작할 수 있을까요?'라고 물어 새 진료(예약) 요청으로도 볼 수 있음. 직원은 확인 후 연락하겠다고만 함"
+  },
+  "c-0091": {
+   "call_uid": "c-0091",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0092": {
+   "call_uid": "c-0092",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0093": {
+   "call_uid": "c-0093",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0094": {
+   "call_uid": "c-0094",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0096": {
+   "call_uid": "c-0096",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0097": {
+   "call_uid": "c-0097",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0098": {
+   "call_uid": "c-0098",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0099": {
+   "call_uid": "c-0099",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0100": {
+   "call_uid": "c-0100",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0101": {
+   "call_uid": "c-0101",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0102": {
+   "call_uid": "c-0102",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0104": {
+   "call_uid": "c-0104",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0105": {
+   "call_uid": "c-0105",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0107": {
+   "call_uid": "c-0107",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0108": {
+   "call_uid": "c-0108",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0109": {
+   "call_uid": "c-0109",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0110": {
+   "call_uid": "c-0110",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0111": {
+   "call_uid": "c-0111",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0112": {
+   "call_uid": "c-0112",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0113": {
+   "call_uid": "c-0113",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0114": {
+   "call_uid": "c-0114",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0115": {
+   "call_uid": "c-0115",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0116": {
+   "call_uid": "c-0116",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0117": {
+   "call_uid": "c-0117",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0118": {
+   "call_uid": "c-0118",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0119": {
+   "call_uid": "c-0119",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0120": {
+   "call_uid": "c-0120",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0121": {
+   "call_uid": "c-0121",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0123": {
+   "call_uid": "c-0123",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0878": {
+   "call_uid": "c-0878",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0879": {
+   "call_uid": "c-0879",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0880": {
+   "call_uid": "c-0880",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0881": {
+   "call_uid": "c-0881",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0882": {
+   "call_uid": "c-0882",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0883": {
+   "call_uid": "c-0883",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0884": {
+   "call_uid": "c-0884",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0885": {
+   "call_uid": "c-0885",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0886": {
+   "call_uid": "c-0886",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0887": {
+   "call_uid": "c-0887",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0888": {
+   "call_uid": "c-0888",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0889": {
+   "call_uid": "c-0889",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0890": {
+   "call_uid": "c-0890",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0891": {
+   "call_uid": "c-0891",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0892": {
+   "call_uid": "c-0892",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0894": {
+   "call_uid": "c-0894",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0895": {
+   "call_uid": "c-0895",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0896": {
+   "call_uid": "c-0896",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0897": {
+   "call_uid": "c-0897",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0898": {
+   "call_uid": "c-0898",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0899": {
+   "call_uid": "c-0899",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0902": {
+   "call_uid": "c-0902",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0903": {
+   "call_uid": "c-0903",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0904": {
+   "call_uid": "c-0904",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0906": {
+   "call_uid": "c-0906",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0907": {
+   "call_uid": "c-0907",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0908": {
+   "call_uid": "c-0908",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0909": {
+   "call_uid": "c-0909",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0910": {
+   "call_uid": "c-0910",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0911": {
+   "call_uid": "c-0911",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0912": {
+   "call_uid": "c-0912",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0913": {
+   "call_uid": "c-0913",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0914": {
+   "call_uid": "c-0914",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0915": {
+   "call_uid": "c-0915",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0917": {
+   "call_uid": "c-0917",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0919": {
+   "call_uid": "c-0919",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0920": {
+   "call_uid": "c-0920",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0921": {
+   "call_uid": "c-0921",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0922": {
+   "call_uid": "c-0922",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0923": {
+   "call_uid": "c-0923",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0924": {
+   "call_uid": "c-0924",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0925": {
+   "call_uid": "c-0925",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0926": {
+   "call_uid": "c-0926",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0927": {
+   "call_uid": "c-0927",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0928": {
+   "call_uid": "c-0928",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0929": {
+   "call_uid": "c-0929",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0930": {
+   "call_uid": "c-0930",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0931": {
+   "call_uid": "c-0931",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0932": {
+   "call_uid": "c-0932",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0933": {
+   "call_uid": "c-0933",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0934": {
+   "call_uid": "c-0934",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0935": {
+   "call_uid": "c-0935",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0936": {
+   "call_uid": "c-0936",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0937": {
+   "call_uid": "c-0937",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0938": {
+   "call_uid": "c-0938",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0940": {
+   "call_uid": "c-0940",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0941": {
+   "call_uid": "c-0941",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0942": {
+   "call_uid": "c-0942",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0943": {
+   "call_uid": "c-0943",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0944": {
+   "call_uid": "c-0944",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0945": {
+   "call_uid": "c-0945",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0947": {
+   "call_uid": "c-0947",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0948": {
+   "call_uid": "c-0948",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0949": {
+   "call_uid": "c-0949",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0951": {
+   "call_uid": "c-0951",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0952": {
+   "call_uid": "c-0952",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0953": {
+   "call_uid": "c-0953",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0954": {
+   "call_uid": "c-0954",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0955": {
+   "call_uid": "c-0955",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0956": {
+   "call_uid": "c-0956",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0957": {
+   "call_uid": "c-0957",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0958": {
+   "call_uid": "c-0958",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0959": {
+   "call_uid": "c-0959",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0960": {
+   "call_uid": "c-0960",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0961": {
+   "call_uid": "c-0961",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0962": {
+   "call_uid": "c-0962",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0963": {
+   "call_uid": "c-0963",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0964": {
+   "call_uid": "c-0964",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0966": {
+   "call_uid": "c-0966",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0967": {
+   "call_uid": "c-0967",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0968": {
+   "call_uid": "c-0968",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0969": {
+   "call_uid": "c-0969",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0970": {
+   "call_uid": "c-0970",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0971": {
+   "call_uid": "c-0971",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0972": {
+   "call_uid": "c-0972",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0973": {
+   "call_uid": "c-0973",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0974": {
+   "call_uid": "c-0974",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0975": {
+   "call_uid": "c-0975",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0976": {
+   "call_uid": "c-0976",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0977": {
+   "call_uid": "c-0977",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0978": {
+   "call_uid": "c-0978",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0979": {
+   "call_uid": "c-0979",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0980": {
+   "call_uid": "c-0980",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0982": {
+   "call_uid": "c-0982",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0984": {
+   "call_uid": "c-0984",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0985": {
+   "call_uid": "c-0985",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0986": {
+   "call_uid": "c-0986",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0987": {
+   "call_uid": "c-0987",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0988": {
+   "call_uid": "c-0988",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "document_req"
+   },
+   "reason": "보험사가 처음 꺼낸 건 진료 날짜 확인(기록 요청 성격), 보험 적용 여부는 뒤에 나옴 — insurance_q/document_req 갈림"
+  },
+  "c-0989": {
+   "call_uid": "c-0989",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0990": {
+   "call_uid": "c-0990",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0991": {
+   "call_uid": "c-0991",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0992": {
+   "call_uid": "c-0992",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0993": {
+   "call_uid": "c-0993",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0995": {
+   "call_uid": "c-0995",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0996": {
+   "call_uid": "c-0996",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0997": {
+   "call_uid": "c-0997",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "billing_q"
+   },
+   "reason": "이미 낸 금액이 안내와 달랐다는 문의+불만 — 불만 중심(complaint)인지 수납 문의(billing_q)인지 갈림"
+  },
+  "c-0998": {
+   "call_uid": "c-0998",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0999": {
+   "call_uid": "c-0999",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1000": {
+   "call_uid": "c-1000",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1001": {
+   "call_uid": "c-1001",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1003": {
+   "call_uid": "c-1003",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1004": {
+   "call_uid": "c-1004",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1261": {
+   "call_uid": "c-1261",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1262": {
+   "call_uid": "c-1262",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1263": {
+   "call_uid": "c-1263",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1265": {
+   "call_uid": "c-1265",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1266": {
+   "call_uid": "c-1266",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1267": {
+   "call_uid": "c-1267",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1268": {
+   "call_uid": "c-1268",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1269": {
+   "call_uid": "c-1269",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1270": {
+   "call_uid": "c-1270",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1271": {
+   "call_uid": "c-1271",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1272": {
+   "call_uid": "c-1272",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1273": {
+   "call_uid": "c-1273",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1274": {
+   "call_uid": "c-1274",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1275": {
+   "call_uid": "c-1275",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1276": {
+   "call_uid": "c-1276",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1277": {
+   "call_uid": "c-1277",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1278": {
+   "call_uid": "c-1278",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1279": {
+   "call_uid": "c-1279",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1280": {
+   "call_uid": "c-1280",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1281": {
+   "call_uid": "c-1281",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1282": {
+   "call_uid": "c-1282",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1283": {
+   "call_uid": "c-1283",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1284": {
+   "call_uid": "c-1284",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1285": {
+   "call_uid": "c-1285",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1286": {
+   "call_uid": "c-1286",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1288": {
+   "call_uid": "c-1288",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1290": {
+   "call_uid": "c-1290",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1292": {
+   "call_uid": "c-1292",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1293": {
+   "call_uid": "c-1293",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1294": {
+   "call_uid": "c-1294",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1295": {
+   "call_uid": "c-1295",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1296": {
+   "call_uid": "c-1296",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1297": {
+   "call_uid": "c-1297",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1298": {
+   "call_uid": "c-1298",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1299": {
+   "call_uid": "c-1299",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1300": {
+   "call_uid": "c-1300",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1301": {
+   "call_uid": "c-1301",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1303": {
+   "call_uid": "c-1303",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1304": {
+   "call_uid": "c-1304",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1305": {
+   "call_uid": "c-1305",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1306": {
+   "call_uid": "c-1306",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1307": {
+   "call_uid": "c-1307",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1308": {
+   "call_uid": "c-1308",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1309": {
+   "call_uid": "c-1309",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1310": {
+   "call_uid": "c-1310",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1311": {
+   "call_uid": "c-1311",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1313": {
+   "call_uid": "c-1313",
+   "verdict": "ambiguous",
+   "items": [
+    "has_todo"
+   ],
+   "should_be": {
+    "has_todo": 1
+   },
+   "reason": "불만을 직원들과 공유하겠다고 함 — 전달 할 일로 볼 수도 있음"
+  },
+  "c-1314": {
+   "call_uid": "c-1314",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1315": {
+   "call_uid": "c-1315",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1316": {
+   "call_uid": "c-1316",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1317": {
+   "call_uid": "c-1317",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1318": {
+   "call_uid": "c-1318",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1319": {
+   "call_uid": "c-1319",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1320": {
+   "call_uid": "c-1320",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1321": {
+   "call_uid": "c-1321",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1322": {
+   "call_uid": "c-1322",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1323": {
+   "call_uid": "c-1323",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1324": {
+   "call_uid": "c-1324",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1325": {
+   "call_uid": "c-1325",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1326": {
+   "call_uid": "c-1326",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1327": {
+   "call_uid": "c-1327",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1328": {
+   "call_uid": "c-1328",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1329": {
+   "call_uid": "c-1329",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1330": {
+   "call_uid": "c-1330",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1332": {
+   "call_uid": "c-1332",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1333": {
+   "call_uid": "c-1333",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1334": {
+   "call_uid": "c-1334",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1335": {
+   "call_uid": "c-1335",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1336": {
+   "call_uid": "c-1336",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1337": {
+   "call_uid": "c-1337",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1338": {
+   "call_uid": "c-1338",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose",
+    "accepted_purposes"
+   ],
+   "should_be": {
+    "primary_purpose": "billing_q",
+    "accepted_purposes": [
+     "billing_q",
+     "complaint"
+    ]
+   },
+   "reason": "이미 받은 진료비가 안내와 다르다는 불만 — billing_q와 complaint 경계"
+  },
+  "c-1339": {
+   "call_uid": "c-1339",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1340": {
+   "call_uid": "c-1340",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1341": {
+   "call_uid": "c-1341",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1342": {
+   "call_uid": "c-1342",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1343": {
+   "call_uid": "c-1343",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1344": {
+   "call_uid": "c-1344",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1345": {
+   "call_uid": "c-1345",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1346": {
+   "call_uid": "c-1346",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1347": {
+   "call_uid": "c-1347",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1348": {
+   "call_uid": "c-1348",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1349": {
+   "call_uid": "c-1349",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1350": {
+   "call_uid": "c-1350",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1351": {
+   "call_uid": "c-1351",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1352": {
+   "call_uid": "c-1352",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1353": {
+   "call_uid": "c-1353",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1354": {
+   "call_uid": "c-1354",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1355": {
+   "call_uid": "c-1355",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1356": {
+   "call_uid": "c-1356",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1357": {
+   "call_uid": "c-1357",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1358": {
+   "call_uid": "c-1358",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1359": {
+   "call_uid": "c-1359",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1361": {
+   "call_uid": "c-1361",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1362": {
+   "call_uid": "c-1362",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1363": {
+   "call_uid": "c-1363",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1364": {
+   "call_uid": "c-1364",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1365": {
+   "call_uid": "c-1365",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1366": {
+   "call_uid": "c-1366",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1367": {
+   "call_uid": "c-1367",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1368": {
+   "call_uid": "c-1368",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1369": {
+   "call_uid": "c-1369",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1370": {
+   "call_uid": "c-1370",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1371": {
+   "call_uid": "c-1371",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1372": {
+   "call_uid": "c-1372",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1373": {
+   "call_uid": "c-1373",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1374": {
+   "call_uid": "c-1374",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1376": {
+   "call_uid": "c-1376",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1377": {
+   "call_uid": "c-1377",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1378": {
+   "call_uid": "c-1378",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1379": {
+   "call_uid": "c-1379",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1380": {
+   "call_uid": "c-1380",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1381": {
+   "call_uid": "c-1381",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1382": {
+   "call_uid": "c-1382",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0373": {
+   "call_uid": "c-0373",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0374": {
+   "call_uid": "c-0374",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0375": {
+   "call_uid": "c-0375",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0376": {
+   "call_uid": "c-0376",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0377": {
+   "call_uid": "c-0377",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0378": {
+   "call_uid": "c-0378",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0379": {
+   "call_uid": "c-0379",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0380": {
+   "call_uid": "c-0380",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0382": {
+   "call_uid": "c-0382",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0383": {
+   "call_uid": "c-0383",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0385": {
+   "call_uid": "c-0385",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0386": {
+   "call_uid": "c-0386",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0387": {
+   "call_uid": "c-0387",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0388": {
+   "call_uid": "c-0388",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0389": {
+   "call_uid": "c-0389",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0390": {
+   "call_uid": "c-0390",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0391": {
+   "call_uid": "c-0391",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0393": {
+   "call_uid": "c-0393",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0394": {
+   "call_uid": "c-0394",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0395": {
+   "call_uid": "c-0395",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0396": {
+   "call_uid": "c-0396",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0397": {
+   "call_uid": "c-0397",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0398": {
+   "call_uid": "c-0398",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0399": {
+   "call_uid": "c-0399",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0400": {
+   "call_uid": "c-0400",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0401": {
+   "call_uid": "c-0401",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0402": {
+   "call_uid": "c-0402",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0403": {
+   "call_uid": "c-0403",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0404": {
+   "call_uid": "c-0404",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0405": {
+   "call_uid": "c-0405",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0406": {
+   "call_uid": "c-0406",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0407": {
+   "call_uid": "c-0407",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0408": {
+   "call_uid": "c-0408",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0410": {
+   "call_uid": "c-0410",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0412": {
+   "call_uid": "c-0412",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0413": {
+   "call_uid": "c-0413",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0415": {
+   "call_uid": "c-0415",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0416": {
+   "call_uid": "c-0416",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0417": {
+   "call_uid": "c-0417",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0418": {
+   "call_uid": "c-0418",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0419": {
+   "call_uid": "c-0419",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0420": {
+   "call_uid": "c-0420",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0422": {
+   "call_uid": "c-0422",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0423": {
+   "call_uid": "c-0423",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0424": {
+   "call_uid": "c-0424",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0425": {
+   "call_uid": "c-0425",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0426": {
+   "call_uid": "c-0426",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0428": {
+   "call_uid": "c-0428",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0429": {
+   "call_uid": "c-0429",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0430": {
+   "call_uid": "c-0430",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0431": {
+   "call_uid": "c-0431",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0432": {
+   "call_uid": "c-0432",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0433": {
+   "call_uid": "c-0433",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0434": {
+   "call_uid": "c-0434",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0435": {
+   "call_uid": "c-0435",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "처음 꺼낸 용건이 교정 월 체크를 언제 다시 와야 하는지(시기) 문의라 recall_q로도 볼 수 있음. 파절 응급은 뒤에 나온 주제"
+  },
+  "c-0436": {
+   "call_uid": "c-0436",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0437": {
+   "call_uid": "c-0437",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0438": {
+   "call_uid": "c-0438",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0439": {
+   "call_uid": "c-0439",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0440": {
+   "call_uid": "c-0440",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0441": {
+   "call_uid": "c-0441",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0442": {
+   "call_uid": "c-0442",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0443": {
+   "call_uid": "c-0443",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0444": {
+   "call_uid": "c-0444",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0445": {
+   "call_uid": "c-0445",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0446": {
+   "call_uid": "c-0446",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0447": {
+   "call_uid": "c-0447",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0449": {
+   "call_uid": "c-0449",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0450": {
+   "call_uid": "c-0450",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0451": {
+   "call_uid": "c-0451",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0452": {
+   "call_uid": "c-0452",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0454": {
+   "call_uid": "c-0454",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0455": {
+   "call_uid": "c-0455",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0456": {
+   "call_uid": "c-0456",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0458": {
+   "call_uid": "c-0458",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0459": {
+   "call_uid": "c-0459",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0461": {
+   "call_uid": "c-0461",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0462": {
+   "call_uid": "c-0462",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0463": {
+   "call_uid": "c-0463",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0464": {
+   "call_uid": "c-0464",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0465": {
+   "call_uid": "c-0465",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0466": {
+   "call_uid": "c-0466",
+   "verdict": "ambiguous",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "증상이 애매하고 잠 깰 정도 아님. 직원이 오늘 봐야 한다고 하지 않고 원장 확인 후 연락만 약속해 urgent 근거가 약함"
+  },
+  "c-0467": {
+   "call_uid": "c-0467",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0468": {
+   "call_uid": "c-0468",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0469": {
+   "call_uid": "c-0469",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0470": {
+   "call_uid": "c-0470",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0472": {
+   "call_uid": "c-0472",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0474": {
+   "call_uid": "c-0474",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0475": {
+   "call_uid": "c-0475",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0476": {
+   "call_uid": "c-0476",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0477": {
+   "call_uid": "c-0477",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0478": {
+   "call_uid": "c-0478",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0480": {
+   "call_uid": "c-0480",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0482": {
+   "call_uid": "c-0482",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0483": {
+   "call_uid": "c-0483",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0484": {
+   "call_uid": "c-0484",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0485": {
+   "call_uid": "c-0485",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0486": {
+   "call_uid": "c-0486",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0487": {
+   "call_uid": "c-0487",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0488": {
+   "call_uid": "c-0488",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0489": {
+   "call_uid": "c-0489",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0490": {
+   "call_uid": "c-0490",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0491": {
+   "call_uid": "c-0491",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0492": {
+   "call_uid": "c-0492",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0493": {
+   "call_uid": "c-0493",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0494": {
+   "call_uid": "c-0494",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0495": {
+   "call_uid": "c-0495",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0496": {
+   "call_uid": "c-0496",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0497": {
+   "call_uid": "c-0497",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0498": {
+   "call_uid": "c-0498",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0500": {
+   "call_uid": "c-0500",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0501": {
+   "call_uid": "c-0501",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0502": {
+   "call_uid": "c-0502",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0754": {
+   "call_uid": "c-0754",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0755": {
+   "call_uid": "c-0755",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0756": {
+   "call_uid": "c-0756",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0757": {
+   "call_uid": "c-0757",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0758": {
+   "call_uid": "c-0758",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0759": {
+   "call_uid": "c-0759",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0760": {
+   "call_uid": "c-0760",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0761": {
+   "call_uid": "c-0761",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0762": {
+   "call_uid": "c-0762",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0763": {
+   "call_uid": "c-0763",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0764": {
+   "call_uid": "c-0764",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0765": {
+   "call_uid": "c-0765",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0766": {
+   "call_uid": "c-0766",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0767": {
+   "call_uid": "c-0767",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0768": {
+   "call_uid": "c-0768",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0769": {
+   "call_uid": "c-0769",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0770": {
+   "call_uid": "c-0770",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0771": {
+   "call_uid": "c-0771",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0773": {
+   "call_uid": "c-0773",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0774": {
+   "call_uid": "c-0774",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0775": {
+   "call_uid": "c-0775",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0778": {
+   "call_uid": "c-0778",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0779": {
+   "call_uid": "c-0779",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0780": {
+   "call_uid": "c-0780",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0781": {
+   "call_uid": "c-0781",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0782": {
+   "call_uid": "c-0782",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0785": {
+   "call_uid": "c-0785",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0786": {
+   "call_uid": "c-0786",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0787": {
+   "call_uid": "c-0787",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "처음 꺼낸 말은 스케일링 받은 지 오래됐다는 시기 문의(recall_q)로도, 이어진 고혈압·혈압약 질문(treatment_q)으로도 볼 수 있음"
+  },
+  "c-0788": {
+   "call_uid": "c-0788",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0789": {
+   "call_uid": "c-0789",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0790": {
+   "call_uid": "c-0790",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0791": {
+   "call_uid": "c-0791",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0793": {
+   "call_uid": "c-0793",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0794": {
+   "call_uid": "c-0794",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0795": {
+   "call_uid": "c-0795",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0796": {
+   "call_uid": "c-0796",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0798": {
+   "call_uid": "c-0798",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0799": {
+   "call_uid": "c-0799",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0800": {
+   "call_uid": "c-0800",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0801": {
+   "call_uid": "c-0801",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0802": {
+   "call_uid": "c-0802",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0803": {
+   "call_uid": "c-0803",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0804": {
+   "call_uid": "c-0804",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0805": {
+   "call_uid": "c-0805",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0806": {
+   "call_uid": "c-0806",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0808": {
+   "call_uid": "c-0808",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0809": {
+   "call_uid": "c-0809",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0810": {
+   "call_uid": "c-0810",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0811": {
+   "call_uid": "c-0811",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0812": {
+   "call_uid": "c-0812",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0813": {
+   "call_uid": "c-0813",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0814": {
+   "call_uid": "c-0814",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0816": {
+   "call_uid": "c-0816",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0818": {
+   "call_uid": "c-0818",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0819": {
+   "call_uid": "c-0819",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0820": {
+   "call_uid": "c-0820",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0821": {
+   "call_uid": "c-0821",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0822": {
+   "call_uid": "c-0822",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0823": {
+   "call_uid": "c-0823",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0824": {
+   "call_uid": "c-0824",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0825": {
+   "call_uid": "c-0825",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0826": {
+   "call_uid": "c-0826",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0827": {
+   "call_uid": "c-0827",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0828": {
+   "call_uid": "c-0828",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0829": {
+   "call_uid": "c-0829",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0830": {
+   "call_uid": "c-0830",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0831": {
+   "call_uid": "c-0831",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0832": {
+   "call_uid": "c-0832",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0833": {
+   "call_uid": "c-0833",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0834": {
+   "call_uid": "c-0834",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "환자가 아픈지 모르겠다·붓지 않음·피 조금으로 심한 증상이 아니어서 오늘 봐야 할 상태 아님(emergency=0과도 어긋남)"
+  },
+  "c-0835": {
+   "call_uid": "c-0835",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0836": {
+   "call_uid": "c-0836",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0837": {
+   "call_uid": "c-0837",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0838": {
+   "call_uid": "c-0838",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0839": {
+   "call_uid": "c-0839",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0840": {
+   "call_uid": "c-0840",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0841": {
+   "call_uid": "c-0841",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0842": {
+   "call_uid": "c-0842",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0843": {
+   "call_uid": "c-0843",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0844": {
+   "call_uid": "c-0844",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0845": {
+   "call_uid": "c-0845",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0846": {
+   "call_uid": "c-0846",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0847": {
+   "call_uid": "c-0847",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0848": {
+   "call_uid": "c-0848",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0849": {
+   "call_uid": "c-0849",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0850": {
+   "call_uid": "c-0850",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0851": {
+   "call_uid": "c-0851",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0852": {
+   "call_uid": "c-0852",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0854": {
+   "call_uid": "c-0854",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0855": {
+   "call_uid": "c-0855",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0856": {
+   "call_uid": "c-0856",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "'많이 아픈 건 아닌데'·붓지 않음, 찬물 시림 정도로 심한 증상 아님(emergency=0과도 어긋남)"
+  },
+  "c-0857": {
+   "call_uid": "c-0857",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0858": {
+   "call_uid": "c-0858",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0859": {
+   "call_uid": "c-0859",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0860": {
+   "call_uid": "c-0860",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0861": {
+   "call_uid": "c-0861",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0862": {
+   "call_uid": "c-0862",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0863": {
+   "call_uid": "c-0863",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0864": {
+   "call_uid": "c-0864",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0865": {
+   "call_uid": "c-0865",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0866": {
+   "call_uid": "c-0866",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0867": {
+   "call_uid": "c-0867",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0868": {
+   "call_uid": "c-0868",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0869": {
+   "call_uid": "c-0869",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0870": {
+   "call_uid": "c-0870",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0871": {
+   "call_uid": "c-0871",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0872": {
+   "call_uid": "c-0872",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0873": {
+   "call_uid": "c-0873",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0874": {
+   "call_uid": "c-0874",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0875": {
+   "call_uid": "c-0875",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0876": {
+   "call_uid": "c-0876",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0877": {
+   "call_uid": "c-0877",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1383": {
+   "call_uid": "c-1383",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1384": {
+   "call_uid": "c-1384",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1385": {
+   "call_uid": "c-1385",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1386": {
+   "call_uid": "c-1386",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1387": {
+   "call_uid": "c-1387",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1388": {
+   "call_uid": "c-1388",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "스케일링 받은 지 오래됐다며 시작(리콜 시기 성격)한 뒤 잇몸 출혈·시림 증상과 받아도 되는지를 물음 — recall_q/treatment_q 갈림"
+  },
+  "c-1389": {
+   "call_uid": "c-1389",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1390": {
+   "call_uid": "c-1390",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1391": {
+   "call_uid": "c-1391",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1392": {
+   "call_uid": "c-1392",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1393": {
+   "call_uid": "c-1393",
+   "verdict": "wrong",
+   "items": [
+    "has_todo"
+   ],
+   "should_be": {
+    "has_todo": 1
+   },
+   "reason": "직원이 '왼쪽 아래 어금니 쪽이라고 전달해 둘게요'라고 해 전달 할 일이 남음"
+  },
+  "c-1395": {
+   "call_uid": "c-1395",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1396": {
+   "call_uid": "c-1396",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1397": {
+   "call_uid": "c-1397",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1399": {
+   "call_uid": "c-1399",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1400": {
+   "call_uid": "c-1400",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1402": {
+   "call_uid": "c-1402",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1403": {
+   "call_uid": "c-1403",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1404": {
+   "call_uid": "c-1404",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1405": {
+   "call_uid": "c-1405",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1406": {
+   "call_uid": "c-1406",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1407": {
+   "call_uid": "c-1407",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1408": {
+   "call_uid": "c-1408",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1409": {
+   "call_uid": "c-1409",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1410": {
+   "call_uid": "c-1410",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1411": {
+   "call_uid": "c-1411",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1412": {
+   "call_uid": "c-1412",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1413": {
+   "call_uid": "c-1413",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1414": {
+   "call_uid": "c-1414",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1415": {
+   "call_uid": "c-1415",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1416": {
+   "call_uid": "c-1416",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1418": {
+   "call_uid": "c-1418",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1420": {
+   "call_uid": "c-1420",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1421": {
+   "call_uid": "c-1421",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1422": {
+   "call_uid": "c-1422",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1423": {
+   "call_uid": "c-1423",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1424": {
+   "call_uid": "c-1424",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1425": {
+   "call_uid": "c-1425",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1426": {
+   "call_uid": "c-1426",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1427": {
+   "call_uid": "c-1427",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1428": {
+   "call_uid": "c-1428",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1429": {
+   "call_uid": "c-1429",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1430": {
+   "call_uid": "c-1430",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1431": {
+   "call_uid": "c-1431",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1432": {
+   "call_uid": "c-1432",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1434": {
+   "call_uid": "c-1434",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1435": {
+   "call_uid": "c-1435",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1436": {
+   "call_uid": "c-1436",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "붓기·열 없고 가만히 있으면 괜찮은 가벼운 시큰함, 오늘 봐야 할 상태 아님(emergency 0과도 맞음)"
+  },
+  "c-1437": {
+   "call_uid": "c-1437",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1439": {
+   "call_uid": "c-1439",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1440": {
+   "call_uid": "c-1440",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1442": {
+   "call_uid": "c-1442",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1443": {
+   "call_uid": "c-1443",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1444": {
+   "call_uid": "c-1444",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1445": {
+   "call_uid": "c-1445",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1446": {
+   "call_uid": "c-1446",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1447": {
+   "call_uid": "c-1447",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1448": {
+   "call_uid": "c-1448",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1449": {
+   "call_uid": "c-1449",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1450": {
+   "call_uid": "c-1450",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1451": {
+   "call_uid": "c-1451",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1452": {
+   "call_uid": "c-1452",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1454": {
+   "call_uid": "c-1454",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1455": {
+   "call_uid": "c-1455",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1456": {
+   "call_uid": "c-1456",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1457": {
+   "call_uid": "c-1457",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1458": {
+   "call_uid": "c-1458",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1459": {
+   "call_uid": "c-1459",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1460": {
+   "call_uid": "c-1460",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1461": {
+   "call_uid": "c-1461",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1462": {
+   "call_uid": "c-1462",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1463": {
+   "call_uid": "c-1463",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1464": {
+   "call_uid": "c-1464",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1465": {
+   "call_uid": "c-1465",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1466": {
+   "call_uid": "c-1466",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1467": {
+   "call_uid": "c-1467",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1468": {
+   "call_uid": "c-1468",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1469": {
+   "call_uid": "c-1469",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1470": {
+   "call_uid": "c-1470",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1471": {
+   "call_uid": "c-1471",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1472": {
+   "call_uid": "c-1472",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1473": {
+   "call_uid": "c-1473",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1474": {
+   "call_uid": "c-1474",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1475": {
+   "call_uid": "c-1475",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1476": {
+   "call_uid": "c-1476",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1477": {
+   "call_uid": "c-1477",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1479": {
+   "call_uid": "c-1479",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1480": {
+   "call_uid": "c-1480",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1481": {
+   "call_uid": "c-1481",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1482": {
+   "call_uid": "c-1482",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1483": {
+   "call_uid": "c-1483",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1484": {
+   "call_uid": "c-1484",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1485": {
+   "call_uid": "c-1485",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1486": {
+   "call_uid": "c-1486",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1487": {
+   "call_uid": "c-1487",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1488": {
+   "call_uid": "c-1488",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1489": {
+   "call_uid": "c-1489",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1490": {
+   "call_uid": "c-1490",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1491": {
+   "call_uid": "c-1491",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1492": {
+   "call_uid": "c-1492",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1493": {
+   "call_uid": "c-1493",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1494": {
+   "call_uid": "c-1494",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1495": {
+   "call_uid": "c-1495",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1496": {
+   "call_uid": "c-1496",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1497": {
+   "call_uid": "c-1497",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1499": {
+   "call_uid": "c-1499",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1500": {
+   "call_uid": "c-1500",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0124": {
+   "call_uid": "c-0124",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0125": {
+   "call_uid": "c-0125",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0126": {
+   "call_uid": "c-0126",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0127": {
+   "call_uid": "c-0127",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0128": {
+   "call_uid": "c-0128",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0129": {
+   "call_uid": "c-0129",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0131": {
+   "call_uid": "c-0131",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0132": {
+   "call_uid": "c-0132",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0133": {
+   "call_uid": "c-0133",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0134": {
+   "call_uid": "c-0134",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0135": {
+   "call_uid": "c-0135",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0136": {
+   "call_uid": "c-0136",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0137": {
+   "call_uid": "c-0137",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0138": {
+   "call_uid": "c-0138",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0139": {
+   "call_uid": "c-0139",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0140": {
+   "call_uid": "c-0140",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0141": {
+   "call_uid": "c-0141",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0143": {
+   "call_uid": "c-0143",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0144": {
+   "call_uid": "c-0144",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0145": {
+   "call_uid": "c-0145",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0146": {
+   "call_uid": "c-0146",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0147": {
+   "call_uid": "c-0147",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0148": {
+   "call_uid": "c-0148",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0149": {
+   "call_uid": "c-0149",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0150": {
+   "call_uid": "c-0150",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0151": {
+   "call_uid": "c-0151",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0152": {
+   "call_uid": "c-0152",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0153": {
+   "call_uid": "c-0153",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0154": {
+   "call_uid": "c-0154",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0155": {
+   "call_uid": "c-0155",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0156": {
+   "call_uid": "c-0156",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0157": {
+   "call_uid": "c-0157",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0159": {
+   "call_uid": "c-0159",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0160": {
+   "call_uid": "c-0160",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0161": {
+   "call_uid": "c-0161",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0162": {
+   "call_uid": "c-0162",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0163": {
+   "call_uid": "c-0163",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0164": {
+   "call_uid": "c-0164",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0165": {
+   "call_uid": "c-0165",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0166": {
+   "call_uid": "c-0166",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0168": {
+   "call_uid": "c-0168",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0169": {
+   "call_uid": "c-0169",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0170": {
+   "call_uid": "c-0170",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0171": {
+   "call_uid": "c-0171",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0172": {
+   "call_uid": "c-0172",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0173": {
+   "call_uid": "c-0173",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0174": {
+   "call_uid": "c-0174",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0175": {
+   "call_uid": "c-0175",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0176": {
+   "call_uid": "c-0176",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0177": {
+   "call_uid": "c-0177",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0178": {
+   "call_uid": "c-0178",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0180": {
+   "call_uid": "c-0180",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "불소도포 다시 할 간격(시기)을 묻는 통화라 리콜 시기 문의(recall_q)로도 볼 수 있음"
+  },
+  "c-0181": {
+   "call_uid": "c-0181",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0182": {
+   "call_uid": "c-0182",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0183": {
+   "call_uid": "c-0183",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0184": {
+   "call_uid": "c-0184",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0185": {
+   "call_uid": "c-0185",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0186": {
+   "call_uid": "c-0186",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0187": {
+   "call_uid": "c-0187",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0188": {
+   "call_uid": "c-0188",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0189": {
+   "call_uid": "c-0189",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0190": {
+   "call_uid": "c-0190",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0191": {
+   "call_uid": "c-0191",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0192": {
+   "call_uid": "c-0192",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0193": {
+   "call_uid": "c-0193",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0194": {
+   "call_uid": "c-0194",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0195": {
+   "call_uid": "c-0195",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0197": {
+   "call_uid": "c-0197",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0198": {
+   "call_uid": "c-0198",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0199": {
+   "call_uid": "c-0199",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0200": {
+   "call_uid": "c-0200",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0201": {
+   "call_uid": "c-0201",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0202": {
+   "call_uid": "c-0202",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0203": {
+   "call_uid": "c-0203",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0205": {
+   "call_uid": "c-0205",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0206": {
+   "call_uid": "c-0206",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0207": {
+   "call_uid": "c-0207",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0208": {
+   "call_uid": "c-0208",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0209": {
+   "call_uid": "c-0209",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0210": {
+   "call_uid": "c-0210",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0211": {
+   "call_uid": "c-0211",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0213": {
+   "call_uid": "c-0213",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0214": {
+   "call_uid": "c-0214",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0215": {
+   "call_uid": "c-0215",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0216": {
+   "call_uid": "c-0216",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0217": {
+   "call_uid": "c-0217",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0218": {
+   "call_uid": "c-0218",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0219": {
+   "call_uid": "c-0219",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0220": {
+   "call_uid": "c-0220",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0221": {
+   "call_uid": "c-0221",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "지난 불소 날짜 확인 후 다시 할 간격을 묻는 게 핵심이라 recall_q로도 볼 수 있음"
+  },
+  "c-0222": {
+   "call_uid": "c-0222",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0223": {
+   "call_uid": "c-0223",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0224": {
+   "call_uid": "c-0224",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0225": {
+   "call_uid": "c-0225",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0226": {
+   "call_uid": "c-0226",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0227": {
+   "call_uid": "c-0227",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0228": {
+   "call_uid": "c-0228",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0229": {
+   "call_uid": "c-0229",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0230": {
+   "call_uid": "c-0230",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0231": {
+   "call_uid": "c-0231",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0232": {
+   "call_uid": "c-0232",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "가끔 찬물에 시큰, 밤 통증·붓기 없음. 직원이 안심용으로 오늘 오라고 했을 뿐 심한 증상이 아니라 urgent 아님(emergency=0과도 어긋남)"
+  },
+  "c-0233": {
+   "call_uid": "c-0233",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0234": {
+   "call_uid": "c-0234",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0236": {
+   "call_uid": "c-0236",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0237": {
+   "call_uid": "c-0237",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0238": {
+   "call_uid": "c-0238",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0239": {
+   "call_uid": "c-0239",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0240": {
+   "call_uid": "c-0240",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0241": {
+   "call_uid": "c-0241",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0242": {
+   "call_uid": "c-0242",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0243": {
+   "call_uid": "c-0243",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0244": {
+   "call_uid": "c-0244",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0245": {
+   "call_uid": "c-0245",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0503": {
+   "call_uid": "c-0503",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0504": {
+   "call_uid": "c-0504",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0505": {
+   "call_uid": "c-0505",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0506": {
+   "call_uid": "c-0506",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0507": {
+   "call_uid": "c-0507",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0509": {
+   "call_uid": "c-0509",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0510": {
+   "call_uid": "c-0510",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0511": {
+   "call_uid": "c-0511",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0512": {
+   "call_uid": "c-0512",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0513": {
+   "call_uid": "c-0513",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0514": {
+   "call_uid": "c-0514",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0515": {
+   "call_uid": "c-0515",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0516": {
+   "call_uid": "c-0516",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0517": {
+   "call_uid": "c-0517",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0518": {
+   "call_uid": "c-0518",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0521": {
+   "call_uid": "c-0521",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0522": {
+   "call_uid": "c-0522",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0523": {
+   "call_uid": "c-0523",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0524": {
+   "call_uid": "c-0524",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0525": {
+   "call_uid": "c-0525",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0527": {
+   "call_uid": "c-0527",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0528": {
+   "call_uid": "c-0528",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0529": {
+   "call_uid": "c-0529",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0530": {
+   "call_uid": "c-0530",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0531": {
+   "call_uid": "c-0531",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0532": {
+   "call_uid": "c-0532",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0533": {
+   "call_uid": "c-0533",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0535": {
+   "call_uid": "c-0535",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0536": {
+   "call_uid": "c-0536",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0537": {
+   "call_uid": "c-0537",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0538": {
+   "call_uid": "c-0538",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0540": {
+   "call_uid": "c-0540",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0541": {
+   "call_uid": "c-0541",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0542": {
+   "call_uid": "c-0542",
+   "verdict": "ambiguous",
+   "items": [
+    "counterpart"
+   ],
+   "should_be": {
+    "counterpart": "new_caller"
+   },
+   "reason": "'다니는 건 아닌데'라며 처음 연락한 사람으로 보여 new_caller로도 볼 수 있음(용건 불명이라 other도 가능)"
+  },
+  "c-0543": {
+   "call_uid": "c-0543",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0544": {
+   "call_uid": "c-0544",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0545": {
+   "call_uid": "c-0545",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0546": {
+   "call_uid": "c-0546",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0547": {
+   "call_uid": "c-0547",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0548": {
+   "call_uid": "c-0548",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0549": {
+   "call_uid": "c-0549",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0550": {
+   "call_uid": "c-0550",
+   "verdict": "ambiguous",
+   "items": [
+    "emergency"
+   ],
+   "should_be": {
+    "emergency": 1
+   },
+   "reason": "아이가 씹기를 피하고 아프다고 함, 직원이 오늘 진료 권유·urgency urgent인데 emergency 0 — 통증 정도가 애매"
+  },
+  "c-0551": {
+   "call_uid": "c-0551",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0552": {
+   "call_uid": "c-0552",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0554": {
+   "call_uid": "c-0554",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0555": {
+   "call_uid": "c-0555",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0556": {
+   "call_uid": "c-0556",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0557": {
+   "call_uid": "c-0557",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0558": {
+   "call_uid": "c-0558",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0559": {
+   "call_uid": "c-0559",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0560": {
+   "call_uid": "c-0560",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0561": {
+   "call_uid": "c-0561",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0562": {
+   "call_uid": "c-0562",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0563": {
+   "call_uid": "c-0563",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0564": {
+   "call_uid": "c-0564",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0565": {
+   "call_uid": "c-0565",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0566": {
+   "call_uid": "c-0566",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0567": {
+   "call_uid": "c-0567",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0568": {
+   "call_uid": "c-0568",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0569": {
+   "call_uid": "c-0569",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0570": {
+   "call_uid": "c-0570",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0571": {
+   "call_uid": "c-0571",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0572": {
+   "call_uid": "c-0572",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0573": {
+   "call_uid": "c-0573",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0574": {
+   "call_uid": "c-0574",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0575": {
+   "call_uid": "c-0575",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0576": {
+   "call_uid": "c-0576",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0577": {
+   "call_uid": "c-0577",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0578": {
+   "call_uid": "c-0578",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0579": {
+   "call_uid": "c-0579",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0581": {
+   "call_uid": "c-0581",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose",
+    "accepted_purposes"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "처음 꺼낸 질문이 '얼마 만에 다시 스케일링 받아야 하나'(시기)이고 잇몸 출혈은 뒤에 나옴 — recall_q/treatment_q 갈림"
+  },
+  "c-0582": {
+   "call_uid": "c-0582",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0583": {
+   "call_uid": "c-0583",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0584": {
+   "call_uid": "c-0584",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0586": {
+   "call_uid": "c-0586",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0587": {
+   "call_uid": "c-0587",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0588": {
+   "call_uid": "c-0588",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0589": {
+   "call_uid": "c-0589",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0591": {
+   "call_uid": "c-0591",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0593": {
+   "call_uid": "c-0593",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0594": {
+   "call_uid": "c-0594",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0595": {
+   "call_uid": "c-0595",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0596": {
+   "call_uid": "c-0596",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0598": {
+   "call_uid": "c-0598",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0599": {
+   "call_uid": "c-0599",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0600": {
+   "call_uid": "c-0600",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0601": {
+   "call_uid": "c-0601",
+   "verdict": "ambiguous",
+   "items": [
+    "wants_appt"
+   ],
+   "should_be": {
+    "wants_appt": 0
+   },
+   "reason": "예약이 필요한지 묻기만 하고 오늘은 정하지 않겠다고 함 — 새 예약 요청으로 볼지 갈림"
+  },
+  "c-0602": {
+   "call_uid": "c-0602",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0603": {
+   "call_uid": "c-0603",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0604": {
+   "call_uid": "c-0604",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0605": {
+   "call_uid": "c-0605",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0606": {
+   "call_uid": "c-0606",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0607": {
+   "call_uid": "c-0607",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0608": {
+   "call_uid": "c-0608",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0609": {
+   "call_uid": "c-0609",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0610": {
+   "call_uid": "c-0610",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0611": {
+   "call_uid": "c-0611",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0612": {
+   "call_uid": "c-0612",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0613": {
+   "call_uid": "c-0613",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0614": {
+   "call_uid": "c-0614",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0615": {
+   "call_uid": "c-0615",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0616": {
+   "call_uid": "c-0616",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0617": {
+   "call_uid": "c-0617",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0618": {
+   "call_uid": "c-0618",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0619": {
+   "call_uid": "c-0619",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0620": {
+   "call_uid": "c-0620",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0621": {
+   "call_uid": "c-0621",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0622": {
+   "call_uid": "c-0622",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0623": {
+   "call_uid": "c-0623",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0624": {
+   "call_uid": "c-0624",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0625": {
+   "call_uid": "c-0625",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0626": {
+   "call_uid": "c-0626",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0627": {
+   "call_uid": "c-0627",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1136": {
+   "call_uid": "c-1136",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1137": {
+   "call_uid": "c-1137",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1138": {
+   "call_uid": "c-1138",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "불소도포가 얼마나 가는지·다시 해야 하는지(재시술 시기)를 처음 물음 — recall_q로도 볼 수 있음"
+  },
+  "c-1139": {
+   "call_uid": "c-1139",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1140": {
+   "call_uid": "c-1140",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1141": {
+   "call_uid": "c-1141",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1143": {
+   "call_uid": "c-1143",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1144": {
+   "call_uid": "c-1144",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1145": {
+   "call_uid": "c-1145",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1146": {
+   "call_uid": "c-1146",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1147": {
+   "call_uid": "c-1147",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1149": {
+   "call_uid": "c-1149",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1150": {
+   "call_uid": "c-1150",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1151": {
+   "call_uid": "c-1151",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "complaint"
+   },
+   "reason": "처음 꺼낸 말이 예약 안내 착오로 헛걸음한 불만이고 변경은 뒤에 나옴 — complaint 주 목적으로도 볼 수 있음"
+  },
+  "c-1152": {
+   "call_uid": "c-1152",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1153": {
+   "call_uid": "c-1153",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1154": {
+   "call_uid": "c-1154",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1155": {
+   "call_uid": "c-1155",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1156": {
+   "call_uid": "c-1156",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1157": {
+   "call_uid": "c-1157",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1158": {
+   "call_uid": "c-1158",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1159": {
+   "call_uid": "c-1159",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1160": {
+   "call_uid": "c-1160",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1161": {
+   "call_uid": "c-1161",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1162": {
+   "call_uid": "c-1162",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1163": {
+   "call_uid": "c-1163",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1164": {
+   "call_uid": "c-1164",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1165": {
+   "call_uid": "c-1165",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1166": {
+   "call_uid": "c-1166",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1167": {
+   "call_uid": "c-1167",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1168": {
+   "call_uid": "c-1168",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1169": {
+   "call_uid": "c-1169",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1170": {
+   "call_uid": "c-1170",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1171": {
+   "call_uid": "c-1171",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1172": {
+   "call_uid": "c-1172",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1173": {
+   "call_uid": "c-1173",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1174": {
+   "call_uid": "c-1174",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1175": {
+   "call_uid": "c-1175",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1176": {
+   "call_uid": "c-1176",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1177": {
+   "call_uid": "c-1177",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1178": {
+   "call_uid": "c-1178",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1180": {
+   "call_uid": "c-1180",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1181": {
+   "call_uid": "c-1181",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1182": {
+   "call_uid": "c-1182",
+   "verdict": "ambiguous",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "증상이 오락가락하고 참을 만하다고 함(emergency=0). 직원이 오늘 보자고 했지만 상태상 urgent인지 갈림"
+  },
+  "c-1184": {
+   "call_uid": "c-1184",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1185": {
+   "call_uid": "c-1185",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1186": {
+   "call_uid": "c-1186",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1188": {
+   "call_uid": "c-1188",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1189": {
+   "call_uid": "c-1189",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1190": {
+   "call_uid": "c-1190",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1191": {
+   "call_uid": "c-1191",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1193": {
+   "call_uid": "c-1193",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1194": {
+   "call_uid": "c-1194",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1196": {
+   "call_uid": "c-1196",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1197": {
+   "call_uid": "c-1197",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1198": {
+   "call_uid": "c-1198",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1199": {
+   "call_uid": "c-1199",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1200": {
+   "call_uid": "c-1200",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1201": {
+   "call_uid": "c-1201",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1202": {
+   "call_uid": "c-1202",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1203": {
+   "call_uid": "c-1203",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1204": {
+   "call_uid": "c-1204",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1205": {
+   "call_uid": "c-1205",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1206": {
+   "call_uid": "c-1206",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1208": {
+   "call_uid": "c-1208",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1209": {
+   "call_uid": "c-1209",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1210": {
+   "call_uid": "c-1210",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1211": {
+   "call_uid": "c-1211",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1212": {
+   "call_uid": "c-1212",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1213": {
+   "call_uid": "c-1213",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1214": {
+   "call_uid": "c-1214",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1215": {
+   "call_uid": "c-1215",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1216": {
+   "call_uid": "c-1216",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1217": {
+   "call_uid": "c-1217",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1218": {
+   "call_uid": "c-1218",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1219": {
+   "call_uid": "c-1219",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1220": {
+   "call_uid": "c-1220",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1221": {
+   "call_uid": "c-1221",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1222": {
+   "call_uid": "c-1222",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1223": {
+   "call_uid": "c-1223",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1224": {
+   "call_uid": "c-1224",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1225": {
+   "call_uid": "c-1225",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1226": {
+   "call_uid": "c-1226",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1227": {
+   "call_uid": "c-1227",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1228": {
+   "call_uid": "c-1228",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1229": {
+   "call_uid": "c-1229",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1230": {
+   "call_uid": "c-1230",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1231": {
+   "call_uid": "c-1231",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1232": {
+   "call_uid": "c-1232",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1233": {
+   "call_uid": "c-1233",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1234": {
+   "call_uid": "c-1234",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1235": {
+   "call_uid": "c-1235",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "처음엔 마지막 스케일링 뒤 또 받아야 하는지(시기)를 물음, 뒤에 통증·고혈압 질문 — recall_q/treatment_q 갈림"
+  },
+  "c-1236": {
+   "call_uid": "c-1236",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1237": {
+   "call_uid": "c-1237",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1238": {
+   "call_uid": "c-1238",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1239": {
+   "call_uid": "c-1239",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1240": {
+   "call_uid": "c-1240",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1241": {
+   "call_uid": "c-1241",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1242": {
+   "call_uid": "c-1242",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1244": {
+   "call_uid": "c-1244",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1246": {
+   "call_uid": "c-1246",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1248": {
+   "call_uid": "c-1248",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1249": {
+   "call_uid": "c-1249",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1250": {
+   "call_uid": "c-1250",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1251": {
+   "call_uid": "c-1251",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1252": {
+   "call_uid": "c-1252",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1253": {
+   "call_uid": "c-1253",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1254": {
+   "call_uid": "c-1254",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1255": {
+   "call_uid": "c-1255",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1256": {
+   "call_uid": "c-1256",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1257": {
+   "call_uid": "c-1257",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1258": {
+   "call_uid": "c-1258",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1259": {
+   "call_uid": "c-1259",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1005": {
+   "call_uid": "c-1005",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1006": {
+   "call_uid": "c-1006",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1007": {
+   "call_uid": "c-1007",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1008": {
+   "call_uid": "c-1008",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1009": {
+   "call_uid": "c-1009",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1010": {
+   "call_uid": "c-1010",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1011": {
+   "call_uid": "c-1011",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1013": {
+   "call_uid": "c-1013",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1014": {
+   "call_uid": "c-1014",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1016": {
+   "call_uid": "c-1016",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1018": {
+   "call_uid": "c-1018",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1019": {
+   "call_uid": "c-1019",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1020": {
+   "call_uid": "c-1020",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1021": {
+   "call_uid": "c-1021",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1022": {
+   "call_uid": "c-1022",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1023": {
+   "call_uid": "c-1023",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1024": {
+   "call_uid": "c-1024",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "처음 꺼낸 말이 스케일링 다시 받을 시기 문의(recall_q)이나 잇몸 시큰거림 때문에 받을지 묻는 것이라 treatment_q로도 볼 수 있음"
+  },
+  "c-1025": {
+   "call_uid": "c-1025",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1026": {
+   "call_uid": "c-1026",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1027": {
+   "call_uid": "c-1027",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1029": {
+   "call_uid": "c-1029",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1030": {
+   "call_uid": "c-1030",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1031": {
+   "call_uid": "c-1031",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1032": {
+   "call_uid": "c-1032",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1033": {
+   "call_uid": "c-1033",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1034": {
+   "call_uid": "c-1034",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1035": {
+   "call_uid": "c-1035",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1036": {
+   "call_uid": "c-1036",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1037": {
+   "call_uid": "c-1037",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1038": {
+   "call_uid": "c-1038",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1039": {
+   "call_uid": "c-1039",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1040": {
+   "call_uid": "c-1040",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1041": {
+   "call_uid": "c-1041",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1043": {
+   "call_uid": "c-1043",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1044": {
+   "call_uid": "c-1044",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1045": {
+   "call_uid": "c-1045",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1046": {
+   "call_uid": "c-1046",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1047": {
+   "call_uid": "c-1047",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1048": {
+   "call_uid": "c-1048",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1049": {
+   "call_uid": "c-1049",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1050": {
+   "call_uid": "c-1050",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1051": {
+   "call_uid": "c-1051",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1052": {
+   "call_uid": "c-1052",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1053": {
+   "call_uid": "c-1053",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1054": {
+   "call_uid": "c-1054",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1055": {
+   "call_uid": "c-1055",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1056": {
+   "call_uid": "c-1056",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1057": {
+   "call_uid": "c-1057",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1058": {
+   "call_uid": "c-1058",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1059": {
+   "call_uid": "c-1059",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1060": {
+   "call_uid": "c-1060",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1061": {
+   "call_uid": "c-1061",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1064": {
+   "call_uid": "c-1064",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1065": {
+   "call_uid": "c-1065",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1066": {
+   "call_uid": "c-1066",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1069": {
+   "call_uid": "c-1069",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1070": {
+   "call_uid": "c-1070",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1071": {
+   "call_uid": "c-1071",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1072": {
+   "call_uid": "c-1072",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1073": {
+   "call_uid": "c-1073",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1074": {
+   "call_uid": "c-1074",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1075": {
+   "call_uid": "c-1075",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1076": {
+   "call_uid": "c-1076",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1077": {
+   "call_uid": "c-1077",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1078": {
+   "call_uid": "c-1078",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1080": {
+   "call_uid": "c-1080",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1081": {
+   "call_uid": "c-1081",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1082": {
+   "call_uid": "c-1082",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1083": {
+   "call_uid": "c-1083",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1084": {
+   "call_uid": "c-1084",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1085": {
+   "call_uid": "c-1085",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1086": {
+   "call_uid": "c-1086",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1087": {
+   "call_uid": "c-1087",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1089": {
+   "call_uid": "c-1089",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1090": {
+   "call_uid": "c-1090",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1091": {
+   "call_uid": "c-1091",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1092": {
+   "call_uid": "c-1092",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1095": {
+   "call_uid": "c-1095",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1096": {
+   "call_uid": "c-1096",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1097": {
+   "call_uid": "c-1097",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1098": {
+   "call_uid": "c-1098",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1100": {
+   "call_uid": "c-1100",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1101": {
+   "call_uid": "c-1101",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1102": {
+   "call_uid": "c-1102",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "billing_q"
+   },
+   "reason": "이미 받은 불소도포 금액이 들은 것과 다르다는 문의 — 수납 문의(billing_q)+불만 플래그로도, 불만 중심(complaint)으로도 볼 수 있음"
+  },
+  "c-1103": {
+   "call_uid": "c-1103",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1104": {
+   "call_uid": "c-1104",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1105": {
+   "call_uid": "c-1105",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1106": {
+   "call_uid": "c-1106",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1107": {
+   "call_uid": "c-1107",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1108": {
+   "call_uid": "c-1108",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1109": {
+   "call_uid": "c-1109",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1110": {
+   "call_uid": "c-1110",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1111": {
+   "call_uid": "c-1111",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1112": {
+   "call_uid": "c-1112",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1113": {
+   "call_uid": "c-1113",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1114": {
+   "call_uid": "c-1114",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1115": {
+   "call_uid": "c-1115",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1116": {
+   "call_uid": "c-1116",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1117": {
+   "call_uid": "c-1117",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1119": {
+   "call_uid": "c-1119",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1120": {
+   "call_uid": "c-1120",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1121": {
+   "call_uid": "c-1121",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1122": {
+   "call_uid": "c-1122",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1123": {
+   "call_uid": "c-1123",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1124": {
+   "call_uid": "c-1124",
+   "verdict": "wrong",
+   "items": [
+    "primary_purpose",
+    "accepted_purposes"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q",
+    "accepted_purposes": [
+     "recall_q"
+    ]
+   },
+   "reason": "잇몸치료 이력자의 스케일링 간격(시기)만 묻고 증상 언급이 없음 — 정의상 recall_q"
+  },
+  "c-1125": {
+   "call_uid": "c-1125",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1126": {
+   "call_uid": "c-1126",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1127": {
+   "call_uid": "c-1127",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1129": {
+   "call_uid": "c-1129",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1130": {
+   "call_uid": "c-1130",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1131": {
+   "call_uid": "c-1131",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1132": {
+   "call_uid": "c-1132",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-1135": {
+   "call_uid": "c-1135",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0247": {
+   "call_uid": "c-0247",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0248": {
+   "call_uid": "c-0248",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0249": {
+   "call_uid": "c-0249",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0250": {
+   "call_uid": "c-0250",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0252": {
+   "call_uid": "c-0252",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0254": {
+   "call_uid": "c-0254",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0255": {
+   "call_uid": "c-0255",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0256": {
+   "call_uid": "c-0256",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0257": {
+   "call_uid": "c-0257",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0258": {
+   "call_uid": "c-0258",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0259": {
+   "call_uid": "c-0259",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0260": {
+   "call_uid": "c-0260",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0261": {
+   "call_uid": "c-0261",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0262": {
+   "call_uid": "c-0262",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0263": {
+   "call_uid": "c-0263",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0264": {
+   "call_uid": "c-0264",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0265": {
+   "call_uid": "c-0265",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0266": {
+   "call_uid": "c-0266",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0267": {
+   "call_uid": "c-0267",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0269": {
+   "call_uid": "c-0269",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0270": {
+   "call_uid": "c-0270",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0271": {
+   "call_uid": "c-0271",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0272": {
+   "call_uid": "c-0272",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0273": {
+   "call_uid": "c-0273",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0274": {
+   "call_uid": "c-0274",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0275": {
+   "call_uid": "c-0275",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0276": {
+   "call_uid": "c-0276",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0277": {
+   "call_uid": "c-0277",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0278": {
+   "call_uid": "c-0278",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0279": {
+   "call_uid": "c-0279",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0280": {
+   "call_uid": "c-0280",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0282": {
+   "call_uid": "c-0282",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0283": {
+   "call_uid": "c-0283",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0284": {
+   "call_uid": "c-0284",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0285": {
+   "call_uid": "c-0285",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0286": {
+   "call_uid": "c-0286",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "잇몸 출혈 증상을 말하며 스케일링 간격을 물어 treatment_q/recall_q가 갈림"
+  },
+  "c-0289": {
+   "call_uid": "c-0289",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0290": {
+   "call_uid": "c-0290",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0291": {
+   "call_uid": "c-0291",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0292": {
+   "call_uid": "c-0292",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0293": {
+   "call_uid": "c-0293",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0294": {
+   "call_uid": "c-0294",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0295": {
+   "call_uid": "c-0295",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0296": {
+   "call_uid": "c-0296",
+   "verdict": "ambiguous",
+   "items": [
+    "appt_confirmed"
+   ],
+   "should_be": {
+    "appt_confirmed": 1
+   },
+   "reason": "통증 호소 환자가 오늘 내원을 원했으나 직원이 7/27 10시로 새 일정을 정함 — 응급 내원 안내인지 새 예약 확정인지 갈림"
+  },
+  "c-0297": {
+   "call_uid": "c-0297",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0298": {
+   "call_uid": "c-0298",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "가끔 시큰한 정도로 통증·붓기 없음, 직원도 회신 후 내원 안내 — 오늘 봐야 할 상태 아님"
+  },
+  "c-0300": {
+   "call_uid": "c-0300",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0301": {
+   "call_uid": "c-0301",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0302": {
+   "call_uid": "c-0302",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0303": {
+   "call_uid": "c-0303",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0304": {
+   "call_uid": "c-0304",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0305": {
+   "call_uid": "c-0305",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0306": {
+   "call_uid": "c-0306",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0307": {
+   "call_uid": "c-0307",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0308": {
+   "call_uid": "c-0308",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0309": {
+   "call_uid": "c-0309",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0310": {
+   "call_uid": "c-0310",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0311": {
+   "call_uid": "c-0311",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0312": {
+   "call_uid": "c-0312",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0313": {
+   "call_uid": "c-0313",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0314": {
+   "call_uid": "c-0314",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0315": {
+   "call_uid": "c-0315",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0317": {
+   "call_uid": "c-0317",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0318": {
+   "call_uid": "c-0318",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0319": {
+   "call_uid": "c-0319",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0320": {
+   "call_uid": "c-0320",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0321": {
+   "call_uid": "c-0321",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0322": {
+   "call_uid": "c-0322",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0323": {
+   "call_uid": "c-0323",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0325": {
+   "call_uid": "c-0325",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0326": {
+   "call_uid": "c-0326",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0327": {
+   "call_uid": "c-0327",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0328": {
+   "call_uid": "c-0328",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "찬물에 가끔 시린 정도, 직원도 '심하지 않아도' 검진 시기가 지나 오늘 오라고 함 — 상태 때문의 urgent 아님"
+  },
+  "c-0329": {
+   "call_uid": "c-0329",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0330": {
+   "call_uid": "c-0330",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0331": {
+   "call_uid": "c-0331",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0332": {
+   "call_uid": "c-0332",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0333": {
+   "call_uid": "c-0333",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0334": {
+   "call_uid": "c-0334",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0335": {
+   "call_uid": "c-0335",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0336": {
+   "call_uid": "c-0336",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0337": {
+   "call_uid": "c-0337",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0338": {
+   "call_uid": "c-0338",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0339": {
+   "call_uid": "c-0339",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0340": {
+   "call_uid": "c-0340",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0341": {
+   "call_uid": "c-0341",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0342": {
+   "call_uid": "c-0342",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0343": {
+   "call_uid": "c-0343",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose",
+    "accepted_purposes"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q",
+    "accepted_purposes": [
+     "recall_q",
+     "emergency"
+    ]
+   },
+   "reason": "처음 꺼낸 용건이 불소도포 다음 시기 문의 — 리콜성 시기 문의라 recall_q로 볼 수 있음"
+  },
+  "c-0344": {
+   "call_uid": "c-0344",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0345": {
+   "call_uid": "c-0345",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0347": {
+   "call_uid": "c-0347",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0349": {
+   "call_uid": "c-0349",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0350": {
+   "call_uid": "c-0350",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0351": {
+   "call_uid": "c-0351",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0352": {
+   "call_uid": "c-0352",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0353": {
+   "call_uid": "c-0353",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0354": {
+   "call_uid": "c-0354",
+   "verdict": "wrong",
+   "items": [
+    "primary_purpose",
+    "accepted_purposes"
+   ],
+   "should_be": {
+    "primary_purpose": "price_q",
+    "accepted_purposes": [
+     "price_q",
+     "insurance_q"
+    ]
+   },
+   "reason": "처음 꺼낸 용건은 교정 체크 비용('얼마 정도 하나요'), 보험 여부는 그 뒤에 물음"
+  },
+  "c-0355": {
+   "call_uid": "c-0355",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0356": {
+   "call_uid": "c-0356",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0359": {
+   "call_uid": "c-0359",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0360": {
+   "call_uid": "c-0360",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0361": {
+   "call_uid": "c-0361",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0362": {
+   "call_uid": "c-0362",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0363": {
+   "call_uid": "c-0363",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0364": {
+   "call_uid": "c-0364",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0365": {
+   "call_uid": "c-0365",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0366": {
+   "call_uid": "c-0366",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0367": {
+   "call_uid": "c-0367",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0368": {
+   "call_uid": "c-0368",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0369": {
+   "call_uid": "c-0369",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0370": {
+   "call_uid": "c-0370",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0371": {
+   "call_uid": "c-0371",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0372": {
+   "call_uid": "c-0372",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0628": {
+   "call_uid": "c-0628",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0629": {
+   "call_uid": "c-0629",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0630": {
+   "call_uid": "c-0630",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0631": {
+   "call_uid": "c-0631",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0632": {
+   "call_uid": "c-0632",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0633": {
+   "call_uid": "c-0633",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0634": {
+   "call_uid": "c-0634",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0635": {
+   "call_uid": "c-0635",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0636": {
+   "call_uid": "c-0636",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0637": {
+   "call_uid": "c-0637",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0638": {
+   "call_uid": "c-0638",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0639": {
+   "call_uid": "c-0639",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0640": {
+   "call_uid": "c-0640",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0641": {
+   "call_uid": "c-0641",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0642": {
+   "call_uid": "c-0642",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0643": {
+   "call_uid": "c-0643",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0644": {
+   "call_uid": "c-0644",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0645": {
+   "call_uid": "c-0645",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0646": {
+   "call_uid": "c-0646",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0647": {
+   "call_uid": "c-0647",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0649": {
+   "call_uid": "c-0649",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0650": {
+   "call_uid": "c-0650",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0651": {
+   "call_uid": "c-0651",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0652": {
+   "call_uid": "c-0652",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0653": {
+   "call_uid": "c-0653",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0654": {
+   "call_uid": "c-0654",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0655": {
+   "call_uid": "c-0655",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0656": {
+   "call_uid": "c-0656",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0657": {
+   "call_uid": "c-0657",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0659": {
+   "call_uid": "c-0659",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0660": {
+   "call_uid": "c-0660",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0661": {
+   "call_uid": "c-0661",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0662": {
+   "call_uid": "c-0662",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0663": {
+   "call_uid": "c-0663",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0664": {
+   "call_uid": "c-0664",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0665": {
+   "call_uid": "c-0665",
+   "verdict": "wrong",
+   "items": [
+    "urgency"
+   ],
+   "should_be": {
+    "urgency": "normal"
+   },
+   "reason": "참을 만하고 붓기·열 없음, 오늘 봐야 할 상태 아님(emergency=0과도 어긋남). 오늘 회신만 약속"
+  },
+  "c-0666": {
+   "call_uid": "c-0666",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0667": {
+   "call_uid": "c-0667",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0668": {
+   "call_uid": "c-0668",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0669": {
+   "call_uid": "c-0669",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0670": {
+   "call_uid": "c-0670",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0671": {
+   "call_uid": "c-0671",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0672": {
+   "call_uid": "c-0672",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0673": {
+   "call_uid": "c-0673",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0674": {
+   "call_uid": "c-0674",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0675": {
+   "call_uid": "c-0675",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0678": {
+   "call_uid": "c-0678",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0679": {
+   "call_uid": "c-0679",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0680": {
+   "call_uid": "c-0680",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0681": {
+   "call_uid": "c-0681",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0682": {
+   "call_uid": "c-0682",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0683": {
+   "call_uid": "c-0683",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0686": {
+   "call_uid": "c-0686",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0687": {
+   "call_uid": "c-0687",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0688": {
+   "call_uid": "c-0688",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0690": {
+   "call_uid": "c-0690",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0691": {
+   "call_uid": "c-0691",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0693": {
+   "call_uid": "c-0693",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0694": {
+   "call_uid": "c-0694",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0695": {
+   "call_uid": "c-0695",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0696": {
+   "call_uid": "c-0696",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0697": {
+   "call_uid": "c-0697",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0698": {
+   "call_uid": "c-0698",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0699": {
+   "call_uid": "c-0699",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0700": {
+   "call_uid": "c-0700",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0701": {
+   "call_uid": "c-0701",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0702": {
+   "call_uid": "c-0702",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0703": {
+   "call_uid": "c-0703",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0704": {
+   "call_uid": "c-0704",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "price_q"
+   },
+   "reason": "'스케일링 받으려는데 비용이 먼저 궁금'으로 시작, 예약은 금액 들은 뒤 '같이 할게요'로 나옴 — book/price_q 갈림"
+  },
+  "c-0705": {
+   "call_uid": "c-0705",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0706": {
+   "call_uid": "c-0706",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0707": {
+   "call_uid": "c-0707",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0708": {
+   "call_uid": "c-0708",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0709": {
+   "call_uid": "c-0709",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0710": {
+   "call_uid": "c-0710",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0711": {
+   "call_uid": "c-0711",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0712": {
+   "call_uid": "c-0712",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0713": {
+   "call_uid": "c-0713",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0714": {
+   "call_uid": "c-0714",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0716": {
+   "call_uid": "c-0716",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0717": {
+   "call_uid": "c-0717",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0718": {
+   "call_uid": "c-0718",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0720": {
+   "call_uid": "c-0720",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0721": {
+   "call_uid": "c-0721",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0722": {
+   "call_uid": "c-0722",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0723": {
+   "call_uid": "c-0723",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0724": {
+   "call_uid": "c-0724",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0725": {
+   "call_uid": "c-0725",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0727": {
+   "call_uid": "c-0727",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0729": {
+   "call_uid": "c-0729",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "마지막 스케일링 시기를 먼저 묻고 잇몸 출혈 증상 질문 — recall_q/treatment_q 갈림"
+  },
+  "c-0730": {
+   "call_uid": "c-0730",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0731": {
+   "call_uid": "c-0731",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0732": {
+   "call_uid": "c-0732",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0733": {
+   "call_uid": "c-0733",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0734": {
+   "call_uid": "c-0734",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0735": {
+   "call_uid": "c-0735",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0736": {
+   "call_uid": "c-0736",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0737": {
+   "call_uid": "c-0737",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0738": {
+   "call_uid": "c-0738",
+   "verdict": "ambiguous",
+   "items": [
+    "primary_purpose"
+   ],
+   "should_be": {
+    "primary_purpose": "recall_q"
+   },
+   "reason": "불소도포를 언제 다시 해야 하는지(재도포 시기) 문의 — 리콜 시기 문의로도 볼 수 있음"
+  },
+  "c-0739": {
+   "call_uid": "c-0739",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0740": {
+   "call_uid": "c-0740",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0741": {
+   "call_uid": "c-0741",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0742": {
+   "call_uid": "c-0742",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0744": {
+   "call_uid": "c-0744",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0745": {
+   "call_uid": "c-0745",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0746": {
+   "call_uid": "c-0746",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0747": {
+   "call_uid": "c-0747",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0748": {
+   "call_uid": "c-0748",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0749": {
+   "call_uid": "c-0749",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0750": {
+   "call_uid": "c-0750",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0751": {
+   "call_uid": "c-0751",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0752": {
+   "call_uid": "c-0752",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  },
+  "c-0753": {
+   "call_uid": "c-0753",
+   "verdict": "ok",
+   "items": [],
+   "should_be": {},
+   "reason": ""
+  }
+ }
+}
