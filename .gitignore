@@ -16,6 +16,8 @@ reports/eval_dev_*
 reports/tune_*
 # 개선 에이전트 실행 기록 — 골드가 들어 있다
 evaluation/runs/
+# 파인튜닝용 바꿔 쓴 녹취록 — 골드 라벨이 붙어 있다
+evaluation/finetune/aug/
 
 # 프론트 의존성·빌드 결과
 frontend/node_modules
