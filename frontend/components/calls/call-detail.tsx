@@ -205,7 +205,10 @@ export function CallDetail({
   );
   const patient = (
     <Section title="환자 정보">
-      <Patient chartNo={call.chart_no} />
+      <Patient
+        chartNo={call.chart_no}
+        counterpart={labels ? String(labels.counterpart) : null}
+      />
     </Section>
   );
 
@@ -273,12 +276,32 @@ function Section({
   );
 }
 
-function Patient({ chartNo }: { chartNo: string | null }) {
+// 차트가 없을 때 덧붙이는 말 — AI가 본 상대가 처음 연락·업체·보험사일 때만(환자·보호자는 다른 번호일 수 있어 붙이지 않음)
+const NO_CHART: Record<string, string> = {
+  new_caller: "처음 연락한 분",
+  vendor: "업체",
+  insurer: "보험사",
+};
+
+function Patient({
+  chartNo,
+  counterpart,
+}: {
+  chartNo: string | null;
+  counterpart: string | null;
+}) {
   const { data, error } = useFetch(chartNo, (signal) =>
     fetchPatient(chartNo as string, signal),
   );
   if (!chartNo)
-    return <p className="text-sm text-muted-foreground">차트 없음</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        차트 없음
+        {counterpart && NO_CHART[counterpart]
+          ? ` · ${NO_CHART[counterpart]}`
+          : ""}
+      </p>
+    );
   if (error) return <p className="text-sm text-muted-foreground">{error}</p>;
   if (!data)
     return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
