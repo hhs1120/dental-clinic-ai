@@ -170,3 +170,11 @@ def test_blind_vote_not_offered_422(bclient):
         "/blind-votes", json={"left_id": 99999, "right_id": 99998, "choice": "tie", "part": "d"}
     )
     assert r.status_code == 422
+
+
+def test_list_calls_limit(client):
+    """화면이 더 불러온 만큼 한 번에 다시 받는다(체크·새 통화 뒤 쪽 유지) — 1~500"""
+    r = client.get("/calls", params={"limit": 1}).json()
+    assert sum(len(d["calls"]) for d in r["days"]) == 1 and r["next"]
+    assert client.get("/calls", params={"limit": 0}).status_code == 422
+    assert client.get("/calls", params={"limit": 501}).status_code == 422

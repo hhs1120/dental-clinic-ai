@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, ValidationError
 
 from backend import blind, calls, db, emr, judge_queue, metrics
@@ -278,11 +278,16 @@ def calls_today(paths: Paths, clinic: ClinicDep) -> dict:
 
 @app.get("/calls")
 def calls_list(
-    paths: Paths, filter: str | None = None, q: str | None = None, before: str | None = None
+    paths: Paths,
+    filter: str | None = None,
+    q: str | None = None,
+    before: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> dict:
+    """limit — 화면이 "더 보기"로 펼친 만큼 한 번에 다시 받을 때"""
     conn = _open_rw(paths)
     try:
-        return calls.list_calls(conn, flt=filter or None, q=q, before=before)
+        return calls.list_calls(conn, flt=filter or None, q=q, before=before, limit=limit)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     finally:
