@@ -200,7 +200,7 @@ function ApptCard({
         "flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-0.5 text-left text-xs",
         // 취소·노쇼는 흐리게 하지 않고(다크 모드에서 안 읽힘) 점선 테두리·취소선으로 구분한다
         off
-          ? "border border-dashed border-muted-foreground bg-transparent text-muted-foreground"
+          ? "border border-dashed border-status-danger-border bg-status-danger-bg text-status-danger-fg"
           : CARD[appt.type],
         selected && "ring-2 ring-primary",
       )}
@@ -212,7 +212,7 @@ function ApptCard({
           {appt.time} {appt.name}
         </b>
         {off && (
-          <Badge variant="muted" className="h-4 shrink-0 py-0">
+          <Badge variant="danger" className="h-4 shrink-0 py-0">
             {STATUS_LABEL[appt.status]}
           </Badge>
         )}

@@ -51,9 +51,9 @@ export function Transcript({
             )}
           >
             {first && (
-              <span className="px-1 text-xs font-bold text-muted-foreground">
+              <Badge variant={staff ? "kind" : "muted"}>
                 {l.speaker || "—"}
-              </span>
+              </Badge>
             )}
             <p
               className={cn(
