@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { type Board, type BoardItem, shortAt } from "@/lib/calls-api";
 import { cn } from "@/lib/utils";
 
-/** "오늘" 두 칸 — 왼쪽 병원 안에서 할 일, 오른쪽 연락할 사람(통화·② 판정 화면 설계 "오늘") */
+/** "오늘 할 일" 두 칸 — 왼쪽 병원 안에서 할 일, 오른쪽 연락할 사람. 칸마다 통화 하나에 카드 하나(통화·② 판정 화면 설계 "오늘") */
 export function TodayBoard({
   board,
   selected,
@@ -102,74 +102,95 @@ function Column({
           {empty}
         </p>
       )}
-      {items.map((it) => (
-        <Row
-          key={`${it.classification_id}-${it.item}`}
-          item={it}
-          on={selected === it.call_uid}
+      {groups(items).map((g) => (
+        <CallCard
+          key={g[0].call_uid}
+          items={g}
+          on={selected === g[0].call_uid}
           onOpen={onOpen}
           onCheck={onCheck}
-          note={note?.(it) ?? null}
+          note={note}
         />
       ))}
     </section>
   );
 }
 
-function Row({
-  item,
+/** 같은 통화의 할 일을 한 카드로 — 칸 안의 순서(응급·급함 먼저, 최근 통화)는 첫 항목 자리를 따른다 */
+function groups(items: BoardItem[]): BoardItem[][] {
+  const by = new Map<string, BoardItem[]>();
+  for (const it of items) {
+    const g = by.get(it.call_uid);
+    if (g) g.push(it);
+    else by.set(it.call_uid, [it]);
+  }
+  return [...by.values()];
+}
+
+/** 통화 하나 = 카드 하나, 안에 할 일 여러 줄(칸마다 — 같은 통화가 두 칸에 한 번씩 나올 수 있다) */
+function CallCard({
+  items,
   on,
   onOpen,
   onCheck,
   note,
 }: {
-  item: BoardItem;
+  items: BoardItem[];
   on: boolean;
   onOpen: (uid: string) => void;
   onCheck: (item: BoardItem, done: boolean) => void;
-  note: string | null;
+  note?: (it: BoardItem) => string | null;
 }) {
-  const label = item.kind === "contact" ? item.who || item.name : item.name;
+  const head = items[0];
+  const name = head.name ?? (head.kind === "contact" ? head.who : null);
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border bg-card px-3 py-2.5 shadow-card",
+        "flex flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-card",
         on && "border-primary",
       )}
     >
-      <Checkbox
-        className="mt-0.5"
-        checked={item.done}
-        onCheckedChange={(v) => onCheck(item, v === true)}
-        aria-label={`${item.text} 끝냄`}
-      />
       <button
         type="button"
-        className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"
-        onClick={() => onOpen(item.call_uid)}
+        className="flex flex-wrap items-center gap-1.5 text-left"
+        onClick={() => onOpen(head.call_uid)}
       >
-        <span className="flex flex-wrap items-center gap-1.5">
-          {item.kind === "contact" && label && (
-            <b className="whitespace-nowrap">{label}</b>
-          )}
-          {item.emergency && <Badge variant="danger">응급</Badge>}
-          {!item.emergency && item.urgent && (
-            <Badge variant="danger">급함</Badge>
-          )}
-          <span>{item.text}</span>
-        </span>
+        <b className="whitespace-nowrap">{name ?? "이름 없음"}</b>
+        {head.emergency && <Badge variant="danger">응급</Badge>}
+        {!head.emergency && head.urgent && <Badge variant="danger">급함</Badge>}
         <span className="text-xs text-muted-foreground">
-          {shortAt(item.at)} 통화{item.name ? ` · ${item.name}` : ""}
-          {item.chart_no ? ` ${item.chart_no}` : ""}
+          {shortAt(head.at)} 통화{head.chart_no ? ` · ${head.chart_no}` : ""}
         </span>
-        {note && (
-          <span className="mt-1 flex items-center gap-1.5 text-xs">
-            <Badge variant="warn">먼저</Badge>
-            {/* 먼저 끝낼 할 일 — 회색 맥락 글자와 구분되게 배지와 같은 계열 색 */}
-            <span className="font-medium text-status-warn-fg">{note}</span>
-          </span>
-        )}
       </button>
+      {items.map((it) => {
+        const first = note?.(it) ?? null;
+        return (
+          <div key={it.item} className="flex flex-col gap-1">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                className="mt-0.5"
+                checked={it.done}
+                onCheckedChange={(v) => onCheck(it, v === true)}
+                aria-label={`${it.text} 끝냄`}
+              />
+              <button
+                type="button"
+                className="text-left"
+                onClick={() => onOpen(it.call_uid)}
+              >
+                {it.text}
+              </button>
+            </div>
+            {first && (
+              <span className="ml-7 flex items-center gap-1.5 text-xs">
+                <Badge variant="warn">먼저</Badge>
+                {/* 먼저 끝낼 할 일 — 회색 맥락 글자와 구분되게 배지와 같은 계열 색 */}
+                <span className="font-medium text-status-warn-fg">{first}</span>
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
