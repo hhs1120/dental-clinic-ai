@@ -40,8 +40,11 @@ test("판정 — 메모를 쓴 다음 건도 숫자 키로", async ({ page }) =>
   await page.goto("/eval", { waitUntil: "networkidle" });
   const id = page.getByText(/#[cp]-\d+/);
   const first = await id.textContent();
+  // 화면이 다 뜬 뒤에 친다(다른 판정 테스트와 같게)
+  await expect(page.getByText("0/9 항목")).toBeVisible();
   for (const k of ["0", "1", "1", "2", "1", "1", "1", "1", "1", "1"])
     await page.keyboard.press(k);
+  await expect(page.getByText("9/9 항목")).toBeVisible();
   await page.keyboard.press("/");
   await page.keyboard.type("애매함");
   await page.keyboard.press("Enter");
