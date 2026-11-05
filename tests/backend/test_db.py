@@ -60,6 +60,18 @@ def test_init_schema_refuses_not_null_column_without_default(conn, tmp_path):
     assert not conn.in_transaction
 
 
+def test_new_tables_exist(conn):
+    """통화 화면 앱 테이블(통화·② 판정 화면 설계 '앱 테이블')"""
+    for t in ("ax_pasted_calls", "ax_judge_state", "ax_todo_checks"):
+        assert conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (t,)).fetchone()
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, added_by,"
+            " added_at) VALUES ('p-0001', 'sideways', '2026-12-01 09:00:00', '내용', '데스크',"
+            " '2026-11-05 09:00:00')"
+        )
+
+
 def test_get_setting_default(conn):
     assert db.get_setting(conn, "없음", {}) == {}
 
