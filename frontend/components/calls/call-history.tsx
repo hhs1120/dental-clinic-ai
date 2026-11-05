@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,10 +59,18 @@ export function CallHistory({
     return () => clearTimeout(t);
   }, [q]);
 
-  const key = `${filter}|${query}|${version}`;
-  const first = useFetch(key, (signal) =>
-    fetchCalls({ filter, q: query }, signal),
-  );
+  // 체크·새 통화(version)로 다시 불러올 때는 "더 보기"로 펼친 만큼 한 번에 받아 쪽을 유지한다.
+  // 조건(filter·검색어)이 바뀌면 첫 쪽부터
+  const base = `${filter}|${query}`;
+  const key = `${base}|${version}`;
+  const shown = useRef({ base: "", n: 0 });
+  const first = useFetch(key, (signal) => {
+    const keep = shown.current.base === base ? shown.current.n : 0;
+    return fetchCalls(
+      { filter, q: query, limit: String(Math.min(Math.max(keep, 50), 500)) },
+      signal,
+    );
+  });
   const pages = first.data
     ? [first.data, ...(extra.key === key ? extra.pages : [])]
     : [];
@@ -96,6 +104,13 @@ export function CallHistory({
       days.set(d.date, cur);
     }
   const next = pages[pages.length - 1]?.next;
+  const count = pages.reduce(
+    (n, p) => n + p.days.reduce((m, d) => m + d.calls.length, 0),
+    0,
+  );
+  useEffect(() => {
+    if (first.data) shown.current = { base, n: count };
+  });
 
   return (
     <div className="flex flex-col gap-3">

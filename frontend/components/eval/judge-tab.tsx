@@ -131,6 +131,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
         const v = answers[it.key].value;
         if (v !== null) labels[it.key] = v;
       }
+      memoRef.current?.blur(); // 메모 칸에 남으면 다음 건의 숫자 키가 메모로 들어간다
       setRevealed(
         await saveJudgment({
           call_uid: call.call_uid,
@@ -146,8 +147,22 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
     }
   };
   const advance = () => {
+    memoRef.current?.blur();
     reset();
     next.reload();
+  };
+  const skip = async () => {
+    if (!call || busy || next.loading) return;
+    setBusy(true);
+    setFail(null);
+    try {
+      await skipJudgment(call.call_uid);
+      advance();
+    } catch (e) {
+      setFail(errorText(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // 렌더마다 다시 건다 — 핸들러가 늘 지금 상태를 본다
@@ -247,7 +262,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
                         disabled={!!revealed}
                         onClick={() => pick(i, o)}
                       >
-                        <kbd className="text-[0.65rem] opacity-70">{o.key}</kbd>
+                        <kbd className="text-xs opacity-70">{o.key}</kbd>
                         {o.label}
                       </Button>
                     );
@@ -266,6 +281,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
             className="mt-2"
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}
             placeholder="메모(선택) — 애매한 이유, 원장 기준 필요 등  (/ 키로 들어가기, Enter 저장)"
             aria-label="메모"
           />
@@ -278,13 +294,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
                 <Button onClick={save} disabled={!done || busy}>
                   저장·다음 (Enter)
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    await skipJudgment(call.call_uid);
-                    advance();
-                  }}
-                >
+                <Button variant="outline" onClick={skip} disabled={busy}>
                   건너뛰기
                 </Button>
                 <span className="text-xs text-muted-foreground">

@@ -36,6 +36,26 @@ test("판정 — 키보드만으로 10건", async ({ page }) => {
   await expect.poll(() => judged(page)).toBe(before + 10);
 });
 
+test("판정 — 메모를 쓴 다음 건도 숫자 키로", async ({ page }) => {
+  await page.goto("/eval", { waitUntil: "networkidle" });
+  const id = page.getByText(/#[cp]-\d+/);
+  const first = await id.textContent();
+  for (const k of ["0", "1", "1", "2", "1", "1", "1", "1", "1", "1"])
+    await page.keyboard.press(k);
+  await page.keyboard.press("/");
+  await page.keyboard.type("애매함");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "다음 건 (Enter)" }),
+  ).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(id).not.toHaveText(first ?? "");
+  await page.keyboard.press("0");
+  await page.keyboard.press("1");
+  await expect(page.getByText("1/9 항목")).toBeVisible();
+  await expect(page.getByLabel("메모")).toHaveValue("");
+});
+
 test("블라인드 — 키보드만으로 5건", async ({ page }) => {
   const before = await voted(page);
   await page.goto("/eval?tab=blind", { waitUntil: "networkidle" });

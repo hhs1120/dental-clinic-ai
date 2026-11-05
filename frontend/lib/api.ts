@@ -82,7 +82,10 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   }
   if (!res.ok) {
     const detail = (data as { detail?: unknown }).detail;
-    throw new ApiError(typeof detail === "string" ? detail : NO_SERVER);
+    if (typeof detail === "string") throw new ApiError(detail);
+    if (Array.isArray(detail))
+      throw new ApiError(detail.map((d: { msg?: string }) => d.msg).join(", "));
+    throw new ApiError(NO_SERVER);
   }
   return data as T;
 }

@@ -27,9 +27,11 @@ export function BlindTab() {
     right: string;
   } | null>(null);
   const [fail, setFail] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const vote = async (choice: Choice) => {
-    if (!pair || versions || next.loading) return;
+    if (!pair || versions || next.loading || busy) return; // 연타·키 반복으로 두 번 보내지 않게
+    setBusy(true);
     setPicked(choice);
     setFail(null);
     try {
@@ -44,6 +46,8 @@ export function BlindTab() {
     } catch (e) {
       setPicked(null);
       setFail(errorText(e));
+    } finally {
+      setBusy(false);
     }
   };
   const advance = () => {
@@ -118,7 +122,7 @@ export function BlindTab() {
               <Button
                 key={k}
                 variant={picked === c ? "default" : "outline"}
-                disabled={!!versions || next.loading}
+                disabled={!!versions || next.loading || busy}
                 onClick={() => vote(c)}
               >
                 <kbd className="text-xs opacity-70">{k}</kbd> {l}

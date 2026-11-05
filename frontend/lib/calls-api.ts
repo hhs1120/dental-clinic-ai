@@ -96,7 +96,7 @@ export const fetchBoard = (signal?: AbortSignal) =>
 export const fetchCall = (uid: string, signal?: AbortSignal) =>
   getJson<CallDetail>(`/calls/${encodeURIComponent(uid)}`, undefined, signal);
 export const fetchCalls = (
-  o: { filter?: string; q?: string; before?: string },
+  o: { filter?: string; q?: string; before?: string; limit?: string },
   signal?: AbortSignal,
 ) => {
   const p = new URLSearchParams();

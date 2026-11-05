@@ -17,6 +17,7 @@ process.env.AX_E2E_DIR ??= (() => {
 
 export default defineConfig({
   testDir: "e2e",
+  globalTeardown: "./e2e/global-teardown.ts",
   workers: 1,
   timeout: 120_000,
   use: { baseURL: "http://localhost:3100", channel: "chrome" },
