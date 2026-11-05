@@ -25,10 +25,10 @@ tags:
 |---|---|---|
 | 가상 데이터 생성기 | Python 3.11 · `uv` · SQLite(SQL 그대로, ORM 없음) · Faker · numpy | 완성 |
 | 데이터 검사 | `make verify` — 생성 규칙을 코드로 검사(`check_*` 함수, 검사를 생성 코드보다 먼저 씀) | 완성 |
-| LLM 게이트웨이 | Anthropic 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭 | 완성 |
+| LLM 게이트웨이 | Anthropic·Upstage 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭 | 완성 |
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
 | 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
-| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·FastAPI 검색·EMR 조회 API 구현, SSE·작업 폴링은 설계 완료 |
+| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·FastAPI 검색·EMR 조회 API 구현, SSE·작업 폴링은 설계 완료 |
 | 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색·일별 예약표·전환 전 EMR 구현 |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포·UI 테스트 | `docker compose` 로컬 배포 · Playwright | 앱 착수 뒤 |
@@ -125,7 +125,7 @@ tags:
 - **왜 AI인가**: 환자는 "그 저번에 했던 거 있잖아요, 그거 날짜 좀…"처럼 말한다. 키워드 규칙으로는 목적을 못 잡고, 한 통화에 주제가 여럿 섞인다. 문맥을 읽어야 하는 일이다
 - **왜 이 방식인가**
   - 출력을 스키마와 고정 enum으로 묶었다. 그래야 분류값으로 **후속 큐**(할 일 있는 통화를 급한 순으로)가 자동으로 돌고, 정답과 항목별로 비교된다
-  - 분류기 입력은 `classify(transcript, direction)` 두 개뿐이다. 환자 이름·번호·시각을 주면 모델이 EMR 기록에서 정답을 "커닝"할 수 있어서 함수 시그니처로 막았다. 실제 교환기가 넘겨주는 정보(녹음 → 녹취록, 수신/발신)와도 같다
+  - 분류기의 통화 입력은 녹취록·방향(`classify(gw, transcript, direction, version)`의 `transcript`·`direction`) 두 개뿐이다. 환자 이름·번호·시각을 주면 모델이 EMR 기록에서 정답을 "커닝"할 수 있어서 함수 시그니처로 막았다. 실제 교환기가 넘겨주는 정보(녹음 → 녹취록, 수신/발신)와도 같다
   - 모델 2개로 교차검증한다. 자동 종결은 사람이 안 보는 오류를 만들기 때문에, 그 크기를 재는 교차검증이 필수다. 분류는 함수로 두고 에이전트는 분류 다음 단계부터 넣는다 — 분류에 도구를 주면 EMR에서 정답을 커닝할 수 있다
 - **어떻게 믿나**: 정답(골드)으로 항목별 정확도를 재고, 자동 종결 오류율과 둘이 함께 틀린 비율을 낸다. 후속 처리안은 규칙 기준선과 비교한다
 

@@ -31,7 +31,7 @@
 - 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않는다. 추가 데이터는 새 테이블로. 상태를 **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인을 마친다
 - 정형(코드) 단계를 고치면 그 뒤 LLM 입력이 바뀐 건의 캐시가 미스 나 다시 채워야 한다(앞 단계일수록 넓게). 고치기 전에 `make data`로 다시 나갈 작업 수를 확인한다. 단계 목록·순서는 가상 데이터 생성 설계 §5.1
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
-- 분류기 입력은 `classify(transcript, direction)`만
+- 분류기의 통화 입력은 `transcript`·`direction`만(`backend/classify.py` `classify(gw, transcript, direction, version)` — 나머지는 게이트웨이·프롬프트 버전)
 - 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
 - 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/generator/test_doc_sync.py`에 비교를 추가한다
 
@@ -39,6 +39,7 @@
 - `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향. 파이썬은 uv 관리 빌드만 쓴다 — sqlite-vec이 SQLite 확장을 연다). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 `backend`, 테스트·린트(pytest·ruff)는 `dev`
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
+- `make classify V=<버전> [LIMIT=N] [NO_BATCH=1]` / `make judge V=<버전>` / `make disagreements A=<분류 버전> B=<판정 버전>` — ① 전체 통화 분류·판정·엇갈림(`backend/classify_batch.py`, 실패·빠진 건만 다시 돈다). 느린 일반 호출은 `python -m backend.classify_batch … --shard K/N`을 N개 띄워 나눈다
 - `make dev` — 앱 실행(API 8000 + 화면 3000, Ctrl+C로 둘 다 종료). `data/`와 색인이 있어야 검색이 된다
 - `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — 파이썬 ruff, 프론트 ESLint·Prettier·tsc(처음에 `npm ci`가 돈다 — Node 필요), 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음). 프롬프트·입력이 바뀐 옛 시도 줄은 `make llm-prune`으로 지운다(빈 건이 없을 때만)

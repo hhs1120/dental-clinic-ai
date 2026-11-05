@@ -16,7 +16,7 @@
 
 **이번에 만든다**
 - LLM 게이트웨이에 Upstage(Solar) 호출 경로
-- 분류기: `classify(transcript, direction)` — 라벨 호출 + 요약·할 일 호출(둘 다 Haiku), 결과는 `ax_call_classifications` 1행
+- 분류기: `classify(gw, transcript, direction, version)`(통화 입력은 녹취록·방향뿐) — 라벨 호출 + 요약·할 일 호출(둘 다 Haiku), 결과는 `ax_call_classifications` 1행
 - 판정기: `judge(transcript, direction)` — Solar 라벨 호출, 결과는 `ax_model_judgments` 1행
 - 엇갈림 계산: `ax_call_disagreements`
 - 일괄 실행: 전체 통화를 분류·판정하는 명령(아래 "실행")
@@ -53,11 +53,11 @@
 - 착수 전 확인(Solar 맛보기): Solar Mini를 실험 기록 7의 v1 원문 그대로 dev 75건과 silver 1,350건에 돌려 같은 조건의 Haiku v1(silver 목적 1328/1350)과 비교한다(약 $0.4). 원문으로 돌리는 이유는 Haiku 수치와 같은 조건으로 비교하기 위해서다. 다음 중 하나라도 해당하면 자리를 바꾼다 — 분류기 라벨 Haiku, 판정기 Solar(이 문서의 배치 표와 별칭만 바뀐다)
   - silver 목적 Strict가 Haiku보다 2%p 넘게 낮다
   - silver 플래그 6개 평균 정확도가 Haiku보다 2%p 넘게 낮다
-  - 결과: Solar Mini 4 silver 목적 0.807·플래그 0.926, Haiku 0.984·0.990 — 둘 다 걸려 자리를 바꿨다(위 표가 바꾼 배치, 실험 기록 9)
+  - 결과: Solar Mini 4 silver 목적 0.807·플래그 0.926, Haiku 0.984·0.990 — 둘 다 걸려 자리를 바꿨다(위 표가 바꾼 배치, 실험 기록 9). 추론 low로도 목적 −2.6%p라 그대로(실험 기록 11)
 
 ## 분류기
 
-- 시그니처 `classify(transcript, direction) -> Classification` — 앱 설계 §1. 호출 두 번
+- 시그니처 `classify(gw, transcript, direction, version) -> Classification` — 통화 입력은 녹취록·방향뿐(앱 설계 §1). 호출 두 번
   1. **라벨**(Haiku): 9항목. 구조화 출력(JSON 스키마). enum은 `generator/master.py`가 원본이지만 backend는 `generator/`를 import할 수 없으므로, 스키마 enum은 `shared/`의 상수로 옮겨 두 곳이 같은지 테스트로 비교한다 — 내 판단
   2. **요약·할 일**(Haiku): 요약 1개와 할 일 목록
 - 요약 형식은 평가 설계 §2.4 그대로: 마크다운·글머리 금지, 명사형 종결(~함/~음), 공백 포함 80~110자 단일 문단, 코드 후처리로 줄바꿈·기호 정규화
@@ -111,7 +111,7 @@
 
 ## Qwen 비교
 
-- **silver 재료·검증 분할을 이번에 고정한다**: `eval.py --split dev` 모수에 silver가 들어가고(`evaluation/classification.py` `_gold_ids`), 자동 개선 관문은 silver의 검증 구간으로 판정한다(평가 설계 §2.7). silver 전부로 학습하면 Qwen이 본 통화로 Qwen을 재고, Qwen이 분류기가 되면 관문 구간도 오염된다. 그래서 평가 설계 §2.7의 층화 분할(층 키 `(희귀 목적 묶음, emergency, complaint)`, 층 안 `call_uid` 해시 정렬)을 **재료 70 : 검증 30**으로 이번에 고정하고(기능 정의 §9 "비풀 층화 분할 상수"), 값은 `evaluation/metrics.py` 상수로 둔다. 분할 함수는 자동 개선과 Qwen이 같이 쓴다
+- **silver 재료·검증 분할을 이번에 고정한다**: `eval.py --split dev` 모수에 silver가 들어가고(`evaluation/classification.py` `_gold_ids`), 자동 개선 관문은 silver의 검증 구간으로 판정한다(평가 설계 §2.7). silver 전부로 학습하면 Qwen이 본 통화로 Qwen을 재고, Qwen이 분류기가 되면 관문 구간도 오염된다. 그래서 평가 설계 §2.7의 층화 분할(층 키 `(희귀 목적 묶음, emergency, complaint)`, 층 안 `call_uid` 해시 정렬)을 **재료 70 : 검증 30**으로 이번에 고정하고, 값은 `evaluation/metrics.py` 상수로 둔다. 분할 함수는 자동 개선과 Qwen이 같이 쓴다
 - 학습 재료: 재료 구간 silver 원본 중 `original_wrong`이 아닌 936건 + 그 원본의 `train = true` 바꿔 쓰기 2,419건 = 3,355건(어림 — 분할 함수로 다시 센다). 검증 구간 통화는 원본도 변형도 쓰지 않는다. dev·test 녹취록은 쓰지 않는다
 - 급함은 3값 그대로 학습한다(합치거나 빼면 다른 모델과 같은 칸으로 비교할 수 없다). 비교는 urgent 여부를 주로 보고 3값 결과를 함께 적는다. normal/low는 골드가 추첨이라는 한계를 적는다
 - 평가 셋
@@ -138,7 +138,7 @@
 - 평가 설계 §2.3: `has_todo`에 "전달만 약속해도 1"
 - 평가 설계 §2.7: 재료·검증 비율을 `evaluation/metrics.py` 상수 이름으로 가리킨다
 - AI 실험 기록 8: "급함은 합치거나 손실에서 뺀다"를 "3값 그대로, 비교는 urgent 여부 위주"로
-- 기능 정의 §9: "모델 B 착수 시" 항목을 이번 배치로 정리, 후순위 두 줄 추가(다른 오픈 모델 비교 — 얻는 것: 모델 선택 근거를 정확도·속도·크기로, Qwen 대안, 병원 사양에 맞춘 크기 선택 / 꺼낼 조건: Qwen 비교 뒤, 판정기는 계속 Haiku. 세 계열 다수결 — Qwen 교체 뒤 필요하면)
+- 기능 정의 §9: "모델 B 착수 시" 항목을 이번 배치로 정리, 후순위 두 줄 추가(다른 오픈 모델 비교 — 얻는 것: 모델 선택 근거를 정확도·속도·크기로, Qwen 대안, 병원 사양에 맞춘 크기 선택 / 꺼낼 조건: Qwen 비교 뒤, 판정기는 그대로. 세 계열 다수결 — Qwen 교체 뒤 필요하면)
 - `.env.example`, `config/llm.yaml`
 
 ## 정한 것과 구현자에게 남긴 것

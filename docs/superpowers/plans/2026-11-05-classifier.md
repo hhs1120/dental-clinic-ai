@@ -4,6 +4,8 @@
 
 **Goal:** 전체 생성 통화를 분류기(라벨 Solar Mini + 요약·할 일 Haiku)와 판정기(Haiku)로 분류·판정하고, 엇갈림을 계산하고, `eval.py --split dev`로 골드 정확도와 교차검증 지표를 낸다.
 
+> Task 2 결과로 자리를 바꿨다 — 분류기 라벨 Haiku, 판정기 Solar Mini 4(`solar-mini4`). 이후 판정기 v2(머리말 `effort`), 급함 urgent 여부 비교, `--shard`, `init_schema` 맞춤은 앱 설계 §1·§7.2·평가 설계 §2.5가 원본
+
 **Architecture:** 게이트웨이(`shared/llm.py`)에 Upstage 경로와 호출 기록 id(`log_id`) 반환을 더한다. 분류·판정은 `backend/classify.py`의 함수(`gateway, transcript, direction, version → 결과`)와 저장 함수로 두고, 일괄 실행 명령 `backend/classify_batch.py`가 Haiku는 Batch, Solar는 일반 호출로 돌려 `app.sqlite`에 쓴다. 엇갈림은 `backend/disagreements.py`가 계산한다. silver 재료·검증 분할은 `evaluation/splits.py`에 둔다(이번에는 함수와 상수만, Qwen 학습은 별도 계획).
 
 **Tech Stack:** Python 3.11, sqlite3, anthropic SDK, openai SDK(Upstage OpenAI 호환 API), pytest.
