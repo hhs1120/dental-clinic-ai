@@ -17,6 +17,7 @@ from shared.call_labels import (
     LABEL_SCHEMA,
     PURPOSES,
     SUMMARY_SCHEMA,
+    SUMMARY_SCHEMA_KINDS,
     URGENCIES,
 )
 from shared.llm import LLMResult
@@ -65,10 +66,11 @@ def label_request(transcript: str, direction: str, version: str) -> dict:
 
 
 def summary_request(transcript: str, direction: str, version: str) -> dict:
+    """머리말 todo_kinds 버전은 할 일 종류 스키마"""
     return {
         "system": prompts.load("classify", version)["summary"],
         "messages": [{"role": "user", "content": user_message(transcript, direction)}],
-        "schema": SUMMARY_SCHEMA,
+        "schema": SUMMARY_SCHEMA_KINDS if prompts.summary_kinds(version) else SUMMARY_SCHEMA,
     }
 
 

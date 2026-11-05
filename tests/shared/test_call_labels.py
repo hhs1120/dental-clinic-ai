@@ -27,3 +27,15 @@ def test_other_items_compared_as_is():
         "complaint",
     ]
     assert differing_items(BASE | {"has_todo": True}, BASE | {"has_todo": 1}) == []
+
+
+def test_todo_items_reads_v1_strings():
+    """v1 할 일(문자열)은 전부 '안에서'로, v2 항목(dict)은 그대로 — v1 행이 남는다"""
+    from shared.call_labels import todo_items
+
+    assert todo_items(["원장님께 전달"]) == [
+        {"kind": "internal", "text": "원장님께 전달", "who": "", "after": -1}
+    ]
+    v2 = {"kind": "contact", "text": "회신 전화", "who": "환자", "after": 0}
+    assert todo_items([v2]) == [v2]
+    assert todo_items(None) == []

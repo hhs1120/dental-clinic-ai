@@ -98,3 +98,37 @@ SUMMARY_SCHEMA = {
     "required": ["summary", "todo"],
     "additionalProperties": False,
 }
+
+# 분류기 v2 요약 — 할 일을 종류로 나눈다(통화·② 판정 화면 설계 "분류기 v2"). 프롬프트 머리말 todo_kinds: true인 버전이 쓴다.
+# who = 연락 상대(internal은 ""), after = 먼저 끝내야 할 internal 항목 번호(없으면 -1)
+TODO_KINDS = ("contact", "internal")
+SUMMARY_SCHEMA_KINDS = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "todo": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": list(TODO_KINDS)},
+                    "text": {"type": "string"},
+                    "who": {"type": "string"},
+                    "after": {"type": "integer"},
+                },
+                "required": ["kind", "text", "who", "after"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["summary", "todo"],
+    "additionalProperties": False,
+}
+
+
+def todo_items(raw: list | None) -> list[dict]:
+    """저장된 할 일 목록 → 항목 dict 목록. v1(문자열)은 전부 internal로 본다"""
+    return [
+        t if isinstance(t, dict) else {"kind": "internal", "text": t, "who": "", "after": -1}
+        for t in raw or []
+    ]

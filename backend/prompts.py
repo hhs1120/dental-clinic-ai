@@ -30,6 +30,12 @@ def load(task: str, version: str, root: Path = PROMPTS_DIR) -> dict[str, str]:
     return {"system": _body(root / task / f"{version}.md")}
 
 
+def summary_kinds(version: str, root: Path = PROMPTS_DIR) -> bool:
+    """분류기 요약 프롬프트 머리말 todo_kinds — 참이면 할 일을 종류로 나눈 스키마(통화·② 판정 화면 설계 "분류기 v2")"""
+    m = FRONT_MATTER.match(_text(root / "classify" / version / "summary.md"))
+    return bool(m and (yaml.safe_load(m[1]) or {}).get("todo_kinds"))
+
+
 def effort(task: str, version: str, root: Path = PROMPTS_DIR) -> str | None:
     """버전 파일 머리말의 effort(추론 단계, 앱 설계 §7) — 없으면 None. 분류기 버전 폴더는 아직 쓰지 않는다"""
     m = FRONT_MATTER.match(_text(root / task / f"{version}.md"))
