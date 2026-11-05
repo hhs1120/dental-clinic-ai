@@ -18,3 +18,10 @@ def test_gateway_uses_app_limits_and_log(conn, monkeypatch):
     assert gw.scope == "runtime"
     assert gw.client.timeout == APP_TIMEOUT and gw.client.max_retries == APP_RETRIES
     assert gw.log.spent(date(2026, 1, 1), "runtime") == 0
+
+
+def test_gateway_keeps_clock(conn, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    clock = lambda: None  # noqa: E731
+    gw = make_gateway(conn, clock)
+    assert gw.clock is clock and gw.upstage_client is None

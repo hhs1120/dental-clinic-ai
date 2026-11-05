@@ -150,7 +150,14 @@ class _Base:
 
 class Gateway(_Base):
     def __init__(
-        self, config: dict, log, scope: str, client=None, upstage_client=None, clock=datetime.now
+        self,
+        config: dict,
+        log,
+        scope: str,
+        client=None,
+        *,
+        upstage_client=None,
+        clock=datetime.now,
     ):
         super().__init__(log, scope, clock)
         self.config = config
