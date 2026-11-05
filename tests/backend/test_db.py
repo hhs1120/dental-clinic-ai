@@ -39,3 +39,18 @@ def test_sqlite_vec_is_loaded(conn):
 def test_extension_loading_is_closed_after_connect(conn):
     with pytest.raises(sqlite3.OperationalError):
         conn.execute("SELECT load_extension('nothing')")
+
+
+def test_app_schema_has_disagreements(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(ax_call_disagreements)")}
+    assert cols == {
+        "call_uid",
+        "a_version",
+        "b_version",
+        "is_core",
+        "fallback",
+        "todo_mismatch",
+        "items",
+    }
+    cls = {r[1] for r in conn.execute("PRAGMA table_info(ax_call_classifications)")}
+    assert {"summary_model_actual", "summary_llm_call_id"} <= cls
