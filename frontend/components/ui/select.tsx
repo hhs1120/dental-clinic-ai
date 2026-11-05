@@ -61,8 +61,13 @@ function SelectContent({
   children,
   position = "item-aligned",
   align = "center",
+  onPointerDown,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  // 마우스로 고르면 닫힐 때 포커스를 선택 상자로 되돌리지 않는다 — 되돌리면 강조 테두리가 남는다.
+  // 키보드로 고르면 그대로 되돌린다(이어서 Tab으로 움직이게)
+  const byPointer = React.useRef(false);
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -76,6 +81,15 @@ function SelectContent({
         )}
         position={position}
         align={align}
+        onPointerDown={(e) => {
+          byPointer.current = true;
+          onPointerDown?.(e);
+        }}
+        onCloseAutoFocus={(e) => {
+          if (byPointer.current) e.preventDefault();
+          byPointer.current = false;
+          onCloseAutoFocus?.(e);
+        }}
         {...props}
       >
         <SelectScrollUpButton />
