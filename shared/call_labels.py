@@ -32,6 +32,41 @@ FLAGS = (
 ITEMS = ("primary_purpose", "counterpart", "urgency") + FLAGS
 CORE_ITEMS = ("primary_purpose", "urgency", "emergency")  # 다르면 엇갈림 is_core (앱 설계 §1)
 
+# 화면에 보이는 우리말 이름(통화·② 판정 화면 설계 "화면 공통 원칙") — API GET /labels가 내준다
+PURPOSE_KO = {
+    "book": "예약 잡기",
+    "reschedule": "예약 변경",
+    "confirm": "예약 확인",
+    "cancel": "예약 취소",
+    "recall_q": "리콜 문의",
+    "treatment_q": "치료 문의",
+    "insurance_q": "보험 문의",
+    "price_q": "가격·비용 문의",
+    "billing_q": "수납·청구 문의",
+    "document_req": "서류·기록 요청",
+    "emergency": "응급·통증",
+    "complaint": "불만",
+    "other": "기타",
+    "unknown": "알 수 없음(끊김·내용 없음)",  # 판정의 "모르겠음·애매"(키 00)와 다른 라벨 값
+}
+COUNTERPART_KO = {
+    "patient": "환자",
+    "guardian": "보호자",
+    "new_caller": "처음 연락",
+    "insurer": "보험사",
+    "vendor": "업체",
+    "other": "기타",
+}
+URGENCY_KO = {"urgent": "급함", "normal": "보통", "low": "낮음"}
+FLAG_KO = {
+    "emergency": "응급",
+    "complaint": "불만",
+    "price_inquiry": "비용 문의",
+    "wants_appt": "예약 희망",
+    "appt_confirmed": "예약 잡힘",
+    "has_todo": "할 일 있음",
+}
+
 
 def differing_items(a: dict, b: dict) -> list[str]:
     """두 라벨에서 다른 항목(평가 설계 §2.5) — 급함은 urgent 여부만 본다(normal/low는 골드가 추첨이라 같은 것으로).
@@ -63,3 +98,47 @@ SUMMARY_SCHEMA = {
     "required": ["summary", "todo"],
     "additionalProperties": False,
 }
+
+# 분류기 v2 요약 — 할 일을 종류로 나눈다(통화·② 판정 화면 설계 "분류기 v2"). 프롬프트 머리말 todo_kinds: true인 버전이 쓴다.
+# who = 연락 상대(internal은 ""), after = 먼저 끝내야 할 internal 항목 번호(없으면 -1)
+TODO_KINDS = ("contact", "internal")
+SUMMARY_SCHEMA_KINDS = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "todo": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": list(TODO_KINDS)},
+                    "text": {"type": "string"},
+                    "who": {"type": "string"},
+                    "after": {"type": "integer"},
+                },
+                "required": ["kind", "text", "who", "after"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["summary", "todo"],
+    "additionalProperties": False,
+}
+
+
+# LLM 쌍 비교 답(평가 설계 §2.4) — left = 요약 1, right = 요약 2
+PAIR_CHOICES = ("left", "right", "tie", "both_wrong")
+PAIR_SCHEMA = {
+    "type": "object",
+    "properties": {"choice": {"type": "string", "enum": list(PAIR_CHOICES)}},
+    "required": ["choice"],
+    "additionalProperties": False,
+}
+
+
+def todo_items(raw: list | None) -> list[dict]:
+    """저장된 할 일 목록 → 항목 dict 목록. v1(문자열)은 전부 internal로 본다"""
+    return [
+        t if isinstance(t, dict) else {"kind": "internal", "text": t, "who": "", "after": -1}
+        for t in raw or []
+    ]

@@ -21,7 +21,7 @@ from backend.vector_store import VectorStore
 from shared.clinic import Clinic
 from shared.llm import LLMResult
 
-CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1))
+CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1), eval_pool_size=150)
 
 
 def add(conn, id_, kind, text, chart=None, day=None):

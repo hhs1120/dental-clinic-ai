@@ -89,6 +89,19 @@ def test_judge_saves_row(conn):
     assert all(json.loads(row["labels"])[f] in (0, 1) for f in call_labels.FLAGS)
 
 
+def test_v2_summary_uses_kind_schema(conn):
+    """분류기 v2는 할 일 종류 스키마, 라벨 프롬프트는 v1과 같다(통화·② 판정 화면 설계 '분류기 v2')"""
+    gw = Recording(SqliteLlmLog(conn))
+    c = cl.classify(gw, "직원: 네\n환자: 예약", "inbound", "v2")
+    cl.classify(gw, "직원: 네\n환자: 예약", "inbound", "v1")
+    schemas = [kw["schema"] for a, kw in gw.calls if a == "summarize"]
+    assert schemas == [call_labels.SUMMARY_SCHEMA_KINDS, call_labels.SUMMARY_SCHEMA]
+    assert all(set(t) == {"kind", "text", "who", "after"} for t in c.todo)
+    from backend import prompts
+
+    assert prompts.load("classify", "v2")["labels"] == prompts.load("classify", "v1")["labels"]
+
+
 def test_judge_effort_from_prompt(conn):
     """판정기 버전 머리말의 effort가 호출로 가고, 추론 토큰 몫만큼 max_tokens를 늘린다"""
     gw = Recording(SqliteLlmLog(conn))

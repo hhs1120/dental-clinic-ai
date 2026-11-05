@@ -109,3 +109,13 @@ def source_paths(tmp_path):
     conn.commit()
     conn.close()
     return tmp_path / "app.sqlite", source
+
+
+@pytest.fixture
+def cconn(tmp_path):
+    """통화 화면 테스트 DB(tests/backend/call_db.py)"""
+    from tests.backend.call_db import make_call_db
+
+    c = make_call_db(tmp_path)
+    yield c
+    c.close()

@@ -13,7 +13,7 @@
 - `docs/치과 AX - AI 실험 기록.md` — AI 품질 실험의 문제·원인·시도·수치·한계 (구현 스펙 아님, 설계 문서에 경위를 넣지 않는 대신 여기에)
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
 - `docs/치과 AX - 개발자 소개.md` — 팀원 모집용: 기술 스택·데이터 규모·기능별 AI·독립 과제·포트폴리오에 남는 것 (구현 스펙 아님)
-- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 `index-v2.html`(앱 설계 §9), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
+- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 앱 설계 §9(와이어프레임 `index-v2.html`과 그 예외), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·자동 개선·시나리오 DB
@@ -40,6 +40,7 @@
 - `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
 - `make classify V=<버전> [LIMIT=N] [NO_BATCH=1]` / `make judge V=<버전>` / `make disagreements A=<분류 버전> B=<판정 버전>` — ① 전체 통화 분류·판정·엇갈림(`backend/classify_batch.py`, 실패·빠진 건만 다시 돈다). 느린 일반 호출은 `python -m backend.classify_batch … --shard K/N`을 N개 띄워 나눈다
+- `make blind-judge A=<분류 버전> B=<분류 버전> V=<쌍 비교 프롬프트 버전>` — 블라인드 LLM 쌍 비교(dev 블라인드 통화). `make e2e` — 화면 Playwright(`data/` 복사본, 로컬 전용 — 설치된 Chrome 사용, `make dev`를 끄고 돌린다, 설정 `frontend/playwright.config.ts`)
 - `make dev` — 앱 실행(API 8000 + 화면 3000, Ctrl+C로 둘 다 종료). `data/`와 색인이 있어야 검색이 된다
 - `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — 파이썬 ruff, 프론트 ESLint·Prettier·tsc(처음에 `npm ci`가 돈다 — Node 필요), 아래 코드 컨벤션
 - LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음). 프롬프트·입력이 바뀐 옛 시도 줄은 `make llm-prune`으로 지운다(빈 건이 없을 때만)

@@ -16,3 +16,10 @@ def test_label_schema_items():
     assert call_labels.LABEL_SCHEMA["required"] == list(call_labels.ITEMS)
     assert len(call_labels.ITEMS) == 9
     assert set(call_labels.CORE_ITEMS) <= set(call_labels.ITEMS)
+
+
+def test_ko_names_cover_enums():
+    assert set(call_labels.PURPOSE_KO) == set(call_labels.PURPOSES)
+    assert set(call_labels.COUNTERPART_KO) == set(call_labels.COUNTERPARTS)
+    assert set(call_labels.URGENCY_KO) == set(call_labels.URGENCIES)
+    assert set(call_labels.FLAG_KO) == set(call_labels.FLAGS)

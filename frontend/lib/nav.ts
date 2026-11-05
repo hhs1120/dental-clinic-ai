@@ -17,7 +17,7 @@ export const SPACES: Record<string, string> = {
   emr: "전환 전 EMR",
 };
 
-const BUILT = ["/ask", "/schedule"];
+const BUILT = ["/ask", "/schedule", "/calls"];
 
 /** 아직 화면이 없는 라우트 조각 → 화면 이름 (/emr은 화면이 있다) */
 export const COMING_SOON: Record<string, string> = {
@@ -27,5 +27,4 @@ export const COMING_SOON: Record<string, string> = {
       m.label,
     ]),
   ),
-  eval: SPACES.eval,
 };

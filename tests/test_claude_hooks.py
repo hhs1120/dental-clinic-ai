@@ -24,6 +24,7 @@ spec.loader.exec_module(guard)
         "git add -u",
         "git add evaluation/",
         "git add 'tests/*.py'",
+        "git add 'frontend/app/(portal)/[s]creen'",  # 있는 파일이 아닌 글롭
         "cd /tmp && git add -A",
         "git -C /x add .",
         "git status; git add .",
@@ -47,6 +48,8 @@ def test_bulk_add_blocked(command):
     [
         "git add evaluation/eval.py tests/evaluation/test_rag.py",
         'git add "docs/치과 AX - 평가 설계.md"',
+        # 대괄호·괄호가 든 실제 파일 이름(Next.js 동적 경로) — 글롭이 아니다
+        "git add 'frontend/app/(portal)/[screen]/page.tsx'",
         "git diff --name-only -z | xargs -0 git add --",
         'echo "git add -A 는 금지"',
         "git commit -m 'a 와 b'",

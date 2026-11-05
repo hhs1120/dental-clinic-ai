@@ -3,15 +3,16 @@ sqlite3 연결은 만든 스레드에 묶이고 의존성과 핸들러는 다른
 연결·Searcher는 핸들러 안에서 만들어 닫는다. 임베더·리랭커만 프로세스에 하나 둔다."""
 
 import datetime as dt
+import os
 import sqlite3
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import ValidationError
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel, ValidationError
 
-from backend import db, emr
+from backend import blind, calls, db, emr, judge_queue, metrics
 from backend.embeddings import make_embedder
 from backend.rag_search import (
     DEFAULT_EMBEDDING,
@@ -23,6 +24,13 @@ from backend.rag_search import (
     voyage_rerank,
 )
 from backend.search_cards import card
+from shared.call_labels import (
+    COUNTERPART_KO,
+    FLAG_KO,
+    PAIR_CHOICES,
+    PURPOSE_KO,
+    URGENCY_KO,
+)
 from shared.clinic import Clinic, load_clinic
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +58,9 @@ class GuardedEmbedder:
 
 
 def get_db_paths() -> tuple[Path, Path]:
-    return ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite"
+    """환경 변수 AX_DATA_DIR이 있으면 그 폴더 — Playwright가 data/ 복사본으로 띄운다(make e2e)"""
+    data = Path(os.environ.get("AX_DATA_DIR") or ROOT / "data")
+    return data / "app.sqlite", data / "source.sqlite"
 
 
 @lru_cache
@@ -208,3 +218,260 @@ def emr_tour(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict
     if tour is None:
         raise HTTPException(404, "기준일 예약이 없습니다")
     return tour
+
+
+# ── 통화·② 판정 화면 (통화·② 판정 화면 설계 "API") ─────────────────────────
+
+
+def get_clinic() -> Clinic:
+    return _clinic()
+
+
+def get_now() -> dt.datetime:
+    return dt.datetime.now()
+
+
+def get_gateway_factory():
+    """연결 → 게이트웨이. 호출 기록이 그 연결의 ax_llm_calls에 남는다(테스트는 FakeGateway로 바꾼다)"""
+    from backend.harness.llm import make_gateway
+
+    return make_gateway
+
+
+Paths = Annotated[tuple[Path, Path], Depends(get_db_paths)]
+ClinicDep = Annotated[Clinic, Depends(get_clinic)]
+Now = Annotated[dt.datetime, Depends(get_now)]
+GatewayFactory = Annotated[object, Depends(get_gateway_factory)]
+
+
+def _open_rw(paths: tuple[Path, Path]) -> sqlite3.Connection:
+    """쓰기 연결 — 앱 DB가 없으면 만들지 않고 503, 스키마는 맞춘다"""
+    if not all(Path(p).exists() for p in paths):
+        raise HTTPException(503, NO_DATA)
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    return conn
+
+
+def _stamp(now: dt.datetime) -> str:
+    return now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+@app.get("/labels")
+def labels() -> dict:
+    return {
+        "purpose": PURPOSE_KO,
+        "counterpart": COUNTERPART_KO,
+        "urgency": URGENCY_KO,
+        "flag": FLAG_KO,
+    }
+
+
+@app.get("/calls/today")
+def calls_today(paths: Paths, clinic: ClinicDep) -> dict:
+    conn = _open_rw(paths)
+    try:
+        return calls.today_board(conn, clinic.today)
+    finally:
+        conn.close()
+
+
+@app.get("/calls")
+def calls_list(
+    paths: Paths,
+    filter: str | None = None,
+    q: str | None = None,
+    before: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> dict:
+    """limit — 화면이 "더 보기"로 펼친 만큼 한 번에 다시 받을 때"""
+    conn = _open_rw(paths)
+    try:
+        return calls.list_calls(conn, flt=filter or None, q=q, before=before, limit=limit)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.get("/calls/{call_uid}")
+def call_detail(call_uid: str, paths: Paths) -> dict:
+    conn = _open_rw(paths)
+    try:
+        d = calls.call_detail(conn, call_uid)
+    finally:
+        conn.close()
+    if d is None:
+        raise HTTPException(404, "통화를 찾을 수 없습니다")
+    return d
+
+
+class NewCall(BaseModel):
+    direction: str
+    transcript: str
+    phone: str | None = None
+    part: str
+
+
+@app.post("/calls")
+def add_call(body: NewCall, paths: Paths, clinic: ClinicDep, now: Now, gw: GatewayFactory) -> dict:
+    conn = _open_rw(paths)
+    try:
+        uid = calls.add_call(
+            conn,
+            gw(conn),
+            direction=body.direction,
+            transcript=body.transcript,
+            phone=body.phone,
+            part=body.part,
+            now=now,
+            today=clinic.today,
+        )
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    finally:
+        conn.close()
+    return {"call_uid": uid}
+
+
+@app.post("/calls/{call_uid}/classify")
+def reclassify(call_uid: str, paths: Paths, gw: GatewayFactory) -> dict:
+    conn = _open_rw(paths)
+    try:
+        if calls.call_detail(conn, call_uid) is None:
+            raise HTTPException(404, "통화를 찾을 수 없습니다")
+        calls.classify_one(conn, gw(conn), call_uid)
+        return calls.call_detail(conn, call_uid)
+    finally:
+        conn.close()
+
+
+class TodoDone(BaseModel):
+    part: str
+    done: bool
+
+
+@app.post("/calls/{call_uid}/todos/{item}/done")
+def todo_done(call_uid: str, item: int, body: TodoDone, paths: Paths, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        d = calls.call_detail(conn, call_uid)
+        if d is None or d["classification"]["id"] is None:
+            raise HTTPException(404, "통화를 찾을 수 없습니다")
+        try:
+            calls.set_todo_done(
+                conn,
+                d["classification"]["id"],
+                item,
+                part=body.part,
+                at=_stamp(now),
+                done=body.done,
+            )
+        except KeyError as e:
+            raise HTTPException(404, "할 일을 찾을 수 없습니다") from e
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.get("/judge/next")
+def judge_next(paths: Paths, now: Now) -> dict | None:
+    conn = _open_rw(paths)
+    try:
+        return judge_queue.next_call(conn, now.date().isoformat())
+    finally:
+        conn.close()
+
+
+class Judgment(BaseModel):
+    call_uid: str
+    labels: dict
+    note: str | None = None
+    part: str
+
+
+@app.post("/judgments")
+def save_judgment(body: Judgment, paths: Paths, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        return judge_queue.save(
+            conn, body.call_uid, body.labels, body.note or None, part=body.part, at=_stamp(now)
+        )
+    except KeyError as e:
+        raise HTTPException(404, "판정할 통화가 아닙니다") from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.post("/calls/{call_uid}/skip")
+def skip_judgment(call_uid: str, paths: Paths, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        judge_queue.skip(conn, call_uid, _stamp(now))
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.get("/blind/next")
+def blind_next(paths: Paths, clinic: ClinicDep) -> dict | None:
+    conn = _open_rw(paths)
+    try:
+        return blind.next_pair(conn, clinic)
+    finally:
+        conn.close()
+
+
+class BlindVote(BaseModel):
+    left_id: int
+    right_id: int
+    choice: str
+    part: str
+
+
+@app.post("/blind-votes")
+def blind_vote(body: BlindVote, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    if body.choice not in PAIR_CHOICES:
+        raise HTTPException(422, f"choice: {body.choice}")
+    conn = _open_rw(paths)
+    try:
+        return blind.save_vote(
+            conn,
+            clinic,
+            body.left_id,
+            body.right_id,
+            body.choice,
+            part=body.part,
+            at=_stamp(now),
+        )
+    except ValueError as e:
+        raise HTTPException(422, "보여 준 비교 쌍이 아닙니다") from e
+    except sqlite3.IntegrityError as e:
+        raise HTTPException(409, "이미 투표한 쌍입니다") from e
+    finally:
+        conn.close()
+
+
+@app.get("/metrics/accuracy")
+def accuracy(paths: Paths, clinic: ClinicDep) -> dict:
+    conn = _open_rw(paths)
+    try:
+        a, b = calls.active_versions(conn)
+        versions = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT prompt_version FROM ax_call_classifications"
+                " WHERE model_alias = 'classify' ORDER BY prompt_version"
+            )
+        ]
+        pair = db.get_setting(conn, "blind_versions")
+        return {
+            "agreement": metrics.agreement(conn, clinic, versions, b) if b else {},
+            "blind": metrics.blind_rates(conn, clinic, *pair) if pair else None,
+            "human_share": metrics.human_share(conn, a, b),
+            "versions": {"classify": versions, "active": a, "judge": b, "blind": pair},
+        }
+    finally:
+        conn.close()

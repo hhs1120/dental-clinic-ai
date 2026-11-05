@@ -106,3 +106,20 @@ def test_recompute_replaces_pair(conn):
     disagreements.compute(conn, "v1", "v1")
     conn.execute("UPDATE ax_model_judgments SET labels = ?", (json.dumps(BASE),))
     assert disagreements.compute(conn, "v1", "v1") == 0 and _rows(conn) == []
+
+
+def test_compute_call_matches_compute(conn):
+    """한 통화만 다시 계산해도 전체 계산과 같은 행 — 그 통화의 행만 바꾼다"""
+    _put(conn, "c-1", b={"complaint": 1})
+    _put(conn, "c-2", b={"urgency": "urgent"})
+    disagreements.compute(conn, "v1", "v1")
+    want = _rows(conn)
+    conn.execute("DELETE FROM ax_call_disagreements")
+    assert disagreements.compute_call(conn, "c-1", "v1", "v1") is True
+    assert disagreements.compute_call(conn, "c-2", "v1", "v1") is True
+    assert _rows(conn) == want
+    conn.execute(
+        "UPDATE ax_model_judgments SET labels = ? WHERE call_uid = 'c-1'", (json.dumps(BASE),)
+    )
+    assert disagreements.compute_call(conn, "c-1", "v1", "v1") is False
+    assert [r["call_uid"] for r in _rows(conn)] == ["c-2"]

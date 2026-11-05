@@ -51,3 +51,14 @@ def test_effort_must_be_known_word(tmp_path, value):
     (tmp_path / "judge" / "v2.md").write_text(f"---\neffort: {value}\n---\n본문", "utf-8")
     with pytest.raises(ValueError, match="effort"):
         prompts.effort("judge", "v2", root=tmp_path)
+
+
+def test_summary_kinds_front_matter(tmp_path):
+    d = tmp_path / "classify" / "v9"
+    d.mkdir(parents=True)
+    (d / "labels.md").write_text("라벨", "utf-8")
+    (d / "summary.md").write_text("---\ntodo_kinds: true\n---\n요약", "utf-8")
+    assert prompts.summary_kinds("v9", root=tmp_path) is True
+    assert prompts.load("classify", "v9", root=tmp_path)["summary"] == "요약"
+    assert prompts.summary_kinds("v1") is False
+    assert prompts.summary_kinds("v2") is True

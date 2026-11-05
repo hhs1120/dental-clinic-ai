@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -33,6 +33,11 @@ disagreements:
 	$(if $(and $(A),$(B)),,$(error A=분류기 버전 B=판정기 버전 필요))
 	uv run python -m backend.classify_batch disagreements --a $(A) --b $(B)
 
+# 블라인드 LLM 쌍 비교(평가 설계 §2.4) — dev 블라인드 통화, 분류 버전 A vs B, 쌍 비교 프롬프트 버전 V
+blind-judge:
+	$(if $(and $(A),$(B),$(V)),,$(error A=분류 버전 B=분류 버전 V=쌍 비교 프롬프트 버전 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch blind --a $(A) --b $(B) --version $(V)
+
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:
 	uv run python docs/wireframe/export.py
@@ -63,6 +68,10 @@ dev: frontend/node_modules
 	trap 'kill 0' INT TERM EXIT; \
 	uv run $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
 	npm --prefix frontend run dev
+
+# 화면 E2E(Playwright) — data/ 복사본으로 API(8100)·화면(3100)을 띄운다. 실데이터가 필요해 CI에는 넣지 않는다
+e2e: frontend/node_modules
+	npm --prefix frontend run -s e2e
 
 # 검색 색인 (앱 설계 §3). 벡터는 모델마다 한 벌이고 없는 청크만 계산한다
 index:

@@ -69,6 +69,36 @@ CREATE TABLE ax_call_disagreements (
     PRIMARY KEY (call_uid, a_version, b_version)
 );
 
+-- 새로 추가한 통화(통화 화면 "새 통화 추가", 앱 설계 §1) — 앱이 만든 통화라 앱 DB. call_uid는 p-0001부터.
+-- 시각은 기준일 날짜 + 추가한 시각, 번호가 EMR 환자와 맞으면 patient_id(화면 표시에만 — 분류기 입력은 녹취록·방향뿐)
+CREATE TABLE ax_pasted_calls (
+    id           INTEGER PRIMARY KEY,
+    call_uid     TEXT NOT NULL UNIQUE,
+    direction    TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+    started_at   TEXT NOT NULL,
+    transcript   TEXT NOT NULL,
+    caller_phone TEXT,
+    patient_id   INTEGER,  -- source.sqlite emr_patients.id
+    added_by     TEXT NOT NULL,  -- 담당 파트
+    added_at     TEXT NOT NULL  -- 실제 시계
+);
+
+-- 판정 큐 상태(앱 설계 §6 "판정 큐 다음 건") — 엇갈림·표본이 정해질 때 pending으로 채운다
+CREATE TABLE ax_judge_state (
+    call_uid   TEXT PRIMARY KEY,
+    state      TEXT NOT NULL CHECK (state IN ('pending', 'skipped', 'done')),
+    updated_at TEXT NOT NULL
+);
+
+-- 할 일 체크(통화 화면 "오늘") — 분류 행의 todo 항목 번호(0부터) 단위. 끝낸 파트·실제 시계
+CREATE TABLE ax_todo_checks (
+    classification_id INTEGER NOT NULL REFERENCES ax_call_classifications(id),
+    item              INTEGER NOT NULL,
+    done_by           TEXT NOT NULL,
+    done_at           TEXT NOT NULL,
+    PRIMARY KEY (classification_id, item)
+);
+
 -- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3) — 운영 감사라 eval.py는 읽지 않는다. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
 CREATE TABLE ax_judgments (
     id        INTEGER PRIMARY KEY,
@@ -97,7 +127,7 @@ CREATE TABLE ax_model_blind_votes (
     UNIQUE (left_classification_id, right_classification_id, model_alias, prompt_version)
 );
 
--- 사람 블라인드 투표 — 최종 비교만 (평가 설계 §2.4). 좌·우 = 화면 배치
+-- 사람 블라인드 투표 — dev 블라인드는 blind_versions 쌍, test 블라인드는 최종 비교 때만 (평가 설계 §2.4). 좌·우 = 화면 배치
 CREATE TABLE ax_blind_votes (
     id                       INTEGER PRIMARY KEY,
     left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),
