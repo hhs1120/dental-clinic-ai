@@ -39,15 +39,14 @@ export function Transcript({
         })}
       </div>
     );
-  // 메신저처럼 화자가 바뀔 때 말풍선 아래에 작은 이름 — 색은 말풍선과 다르게(직원 브랜드색·상대 정보색)
+  // 화자가 바뀔 때 말풍선 위에 작은 이름 — 색은 말풍선과 다르게(직원 갈색 warn·상대 파랑 info)
   const who = (speaker: string) =>
     speaker === "환자" && counterpart ? `${counterpart}(환자)` : speaker || "—";
   return (
     <div className="flex flex-col gap-1.5 text-sm">
       {lines.map((l, i) => {
         const staff = l.speaker === "직원";
-        const last =
-          i === lines.length - 1 || lines[i + 1].speaker !== l.speaker;
+        const first = i === 0 || lines[i - 1].speaker !== l.speaker;
         return (
           <div
             key={i}
@@ -56,6 +55,16 @@ export function Transcript({
               !staff && "ml-auto items-end",
             )}
           >
+            {first && (
+              <span
+                className={cn(
+                  "px-1 text-xs font-bold",
+                  staff ? "text-status-warn-fg" : "text-status-info-fg",
+                )}
+              >
+                {who(l.speaker)}
+              </span>
+            )}
             <p
               className={cn(
                 "rounded-xl px-3 py-1.5",
@@ -64,16 +73,6 @@ export function Transcript({
             >
               {l.text}
             </p>
-            {last && (
-              <span
-                className={cn(
-                  "px-1 text-xs font-bold",
-                  staff ? "text-primary" : "text-status-info-fg",
-                )}
-              >
-                {who(l.speaker)}
-              </span>
-            )}
           </div>
         );
       })}
