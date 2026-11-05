@@ -32,6 +32,12 @@ const ITEM_NAME: Record<string, string> = {
   urgency: "급함",
 };
 
+// 직원이 먼저 봐야 할 항목 — 이름을 굵게, 해당하면(급함·예) 표시로 강조한다
+const KEY_ITEMS: string[] = ["urgency", "emergency", "has_todo"];
+const notable = (item: string, v: unknown) =>
+  (item === "urgency" && v === "urgent") ||
+  ((item === "emergency" || item === "has_todo") && (v === true || v === 1));
+
 /** 라벨 값 → 우리말 */
 function show(item: string, v: unknown, names: LabelNames | null): string {
   if (v === undefined || v === null) return "—";
@@ -163,11 +169,23 @@ export function CallDetail({
             judge[i] !== labels[i];
           return (
             <div key={i} className="contents">
-              <dt className="text-muted-foreground">
+              <dt
+                className={cn(
+                  KEY_ITEMS.includes(i)
+                    ? "font-bold text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
                 {ITEM_NAME[i] ?? names?.flag[i] ?? i}
               </dt>
               <dd>
-                {show(i, labels[i], names)}
+                {notable(i, labels[i]) ? (
+                  <Badge variant={i === "has_todo" ? "warn" : "danger"}>
+                    {show(i, labels[i], names)}
+                  </Badge>
+                ) : (
+                  show(i, labels[i], names)
+                )}
                 {differs && (
                   <span className="ml-2 text-xs font-bold text-status-danger-fg">
                     판정기: {show(i, judge[i], names)}

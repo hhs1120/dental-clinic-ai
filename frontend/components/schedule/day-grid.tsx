@@ -197,23 +197,38 @@ function ApptCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-1 text-left text-xs",
-        CARD[appt.type],
-        off && "opacity-50",
+        "flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-0.5 text-left text-xs",
+        // 취소·노쇼는 흐리게 하지 않고(다크 모드에서 안 읽힘) 점선 테두리·취소선으로 구분한다
+        off
+          ? "border border-dashed border-muted-foreground bg-transparent text-muted-foreground"
+          : CARD[appt.type],
         selected && "ring-2 ring-primary",
       )}
       style={{ ...style, height: `calc(${span} * ${ROW} - 0.25rem)` }}
     >
-      <span className="flex flex-wrap items-center gap-1">
-        <b className="truncate">
+      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 이름을 줄이며, 배지는 낮게 */}
+      <span className="flex min-w-0 items-center gap-1">
+        <b className={cn("min-w-0 truncate", off && "line-through")}>
           {appt.time} {appt.name}
         </b>
-        {appt.new_patient && <Badge variant="info">신환</Badge>}
-        {appt.unconfirmed && <Badge variant="warn">예약 미확인</Badge>}
+        {off && (
+          <Badge variant="muted" className="h-4 shrink-0 py-0">
+            {STATUS_LABEL[appt.status]}
+          </Badge>
+        )}
+        {appt.new_patient && (
+          <Badge variant="info" className="h-4 shrink-0 py-0">
+            신환
+          </Badge>
+        )}
+        {appt.unconfirmed && (
+          <Badge variant="warn" className="h-4 shrink-0 py-0">
+            예약 미확인
+          </Badge>
+        )}
       </span>
       <span className="truncate">
         {appt.procedure} · {appt.duration}분
-        {off ? ` · ${STATUS_LABEL[appt.status]}` : ""}
       </span>
       {appt.plan_step && span > 1 && (
         <span className="truncate">

@@ -37,7 +37,8 @@ export function CallsView() {
       if (v === null) next.delete(k);
       else next.set(k, v);
     }
-    router.push(`/calls${next.size ? `?${next}` : ""}`);
+    // 고른 통화·넓게 보기는 같은 화면 안의 상태라 스크롤을 맨 위로 올리지 않는다
+    router.push(`/calls${next.size ? `?${next}` : ""}`, { scroll: false });
   };
   const open = (uid: string) => go({ call: uid });
   const names = useLabels();
@@ -109,10 +110,20 @@ export function CallsView() {
             go({ tab: v === "today" ? null : v, call: null, wide: null })
           }
         >
-          <TabsList>
+          {/* 처음 보는 사람도 누를 곳으로 알아보게 버튼 모양 두 칸 — 고른 쪽은 채운다 */}
+          <TabsList className="h-11 gap-1 bg-transparent p-0">
             {TABS.map(([k, l]) => (
-              <TabsTrigger key={k} value={k}>
+              <TabsTrigger
+                key={k}
+                value={k}
+                className="h-11 rounded-lg border border-border bg-card px-5 text-base font-bold shadow-control hover:bg-muted data-active:border-primary data-active:bg-primary data-active:text-primary-foreground dark:data-active:border-primary dark:data-active:bg-primary"
+              >
                 {l}
+                {k === "today" && board.data && (
+                  <span className="rounded-full bg-background px-1.5 text-xs text-foreground">
+                    {board.data.internal.length + board.data.contact.length}
+                  </span>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>

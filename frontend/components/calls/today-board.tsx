@@ -37,6 +37,7 @@ export function TodayBoard({
           onOpen={onOpen}
           onCheck={onCheck}
           empty="남은 할 일이 없습니다"
+          tone="internal"
         />
         <Column
           title="연락할 사람"
@@ -46,10 +47,8 @@ export function TodayBoard({
           onOpen={onOpen}
           onCheck={onCheck}
           empty="연락할 사람이 없습니다"
-          note={(it) => {
-            const w = waitingFor(it);
-            return w ? `← 왼쪽 "${w.text}" 끝나면` : null;
-          }}
+          note={(it) => waitingFor(it)?.text ?? null}
+          tone="contact"
         />
       </div>
       <DoneList items={board.done} onOpen={onOpen} onCheck={onCheck} />
@@ -66,6 +65,7 @@ function Column({
   onCheck,
   empty,
   note,
+  tone,
 }: {
   title: string;
   hint: string;
@@ -75,14 +75,27 @@ function Column({
   onCheck: (item: BoardItem, done: boolean) => void;
   empty: string;
   note?: (it: BoardItem) => string | null;
+  tone: "internal" | "contact";
 }) {
+  // 두 칸을 글자만이 아니라 영역으로 구분한다 — 칸마다 바탕과 머리 띠 색
   return (
-    <section className="flex flex-col gap-2" aria-label={title}>
-      <h2 className="font-bold">
-        {title} {items.length}
-        <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-          {hint}
+    <section
+      className="flex flex-col gap-2 rounded-xl border bg-muted/40 p-3"
+      aria-label={title}
+    >
+      <h2
+        className={cn(
+          "flex items-center gap-2 rounded-lg px-3 py-2 font-bold",
+          tone === "contact"
+            ? "bg-accent text-accent-foreground"
+            : "bg-secondary text-secondary-foreground",
+        )}
+      >
+        {title}
+        <span className="rounded-full bg-background px-2 text-sm">
+          {items.length}
         </span>
+        <span className="text-sm font-normal opacity-80">{hint}</span>
       </h2>
       {items.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
@@ -149,7 +162,14 @@ function Row({
           {shortAt(item.at)} 통화{item.name ? ` · ${item.name}` : ""}
           {item.chart_no ? ` ${item.chart_no}` : ""}
         </span>
-        {note && <span className="text-xs text-muted-foreground">{note}</span>}
+        {note && (
+          <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium text-foreground">
+              먼저
+            </span>
+            {note}
+          </span>
+        )}
       </button>
     </div>
   );
