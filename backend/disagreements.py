@@ -1,11 +1,11 @@
 """분류기 vs 판정기 엇갈림 (앱 설계 §1, 분류기 설계 "엇갈림"). 두 버전 모두 ok인 통화마다 셋 중 하나면 1행:
-(가) 9항목 중 하나라도 다름 (나) 라벨·요약·판정 호출 중 하나라도 폴백 — 라벨이 같아도, 폴백 건은 자동 종결하지 않는다
+(가) 9항목 중 하나라도 다름(급함은 urgent 여부만 — shared.call_labels.differing_items) (나) 라벨·요약·판정 호출 중 하나라도 폴백 — 라벨이 같아도, 폴백 건은 자동 종결하지 않는다
 (다) 분류기 할 일 목록이 있는데 분류기 has_todo = 0 — 라벨과 할 일 목록을 다른 모델이 내므로
 """
 
 import json
 
-from shared.call_labels import CORE_ITEMS, ITEMS
+from shared.call_labels import CORE_ITEMS, differing_items
 
 
 def compute(conn, a_version: str, b_version: str) -> int:
@@ -25,7 +25,7 @@ def compute(conn, a_version: str, b_version: str) -> int:
     out = []
     for r in rows:
         a, b = json.loads(r["a"]), json.loads(r["b"])
-        items = [i for i in ITEMS if a[i] != b[i]]
+        items = differing_items(a, b)
         todo_mismatch = bool(json.loads(r["todo"] or "[]")) and not a["has_todo"]
         if items or r["fallback"] or todo_mismatch:
             out.append(

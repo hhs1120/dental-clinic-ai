@@ -98,6 +98,17 @@ def test_crosscheck_catch_and_lift(conn):
     assert (x["agree_error"]["k"], x["agree_error"]["n"]) == (0, 2)
 
 
+def test_crosscheck_urgency_urgent_or_not(conn):
+    """급함은 urgent 여부만 비교(평가 설계 §2.5) — 판정기 low·골드 low가 v1 normal과 달라도 엇갈림·오류가 아니다"""
+    conn.execute(
+        "UPDATE ax_model_judgments SET labels = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(labels("book", urgency="low")),),
+    )
+    conn.execute("UPDATE truth.truth_call_labels SET urgency = 'low' WHERE call_uid = 'c-0004'")
+    x = classification.crosscheck(conn, "dev", "v1", "v1")
+    assert x["disagree"]["k"] == 0 and x["catch"]["n"] == 1
+
+
 def test_crosscheck_excludes_fewshot_in_dev(conn):
     """분류 버전 A의 few-shot 예시 통화는 dev 집계에서 뺀다(평가 설계 §7) — 분류 채점과 같은 모수"""
     x = classification.crosscheck(conn, "dev", "v1", "v1", fewshot={"c-0002"})

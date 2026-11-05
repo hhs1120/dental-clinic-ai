@@ -73,6 +73,12 @@ def test_core_item(conn):
     assert r["items"] == ["urgency"] and r["is_core"] == 1
 
 
+def test_urgency_normal_low_no_row(conn):
+    """급함은 urgent 여부만 비교(평가 설계 §2.5) — normal ↔ low는 엇갈림이 아니다"""
+    _put(conn, "c-1", b={"urgency": "low"})
+    assert disagreements.compute(conn, "v1", "v1") == 0
+
+
 def test_fallback_marked(conn):
     _put(conn, "c-1", fb=(0, 0, 1))  # 판정 호출 폴백
     _put(conn, "c-2", fb=(0, 1, 0))  # 요약 호출 폴백

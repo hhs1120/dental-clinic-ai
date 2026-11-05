@@ -10,6 +10,7 @@ from itertools import combinations
 from evaluation import EvalRefused
 from evaluation.metrics import inverse_weights, macro_accuracy, mcnemar_exact, weighted_accuracy
 from generator.master import CALL_FLAGS
+from shared.call_labels import differing_items
 
 ITEMS = ("primary_purpose", "counterpart", "urgency") + CALL_FLAGS  # 9항목
 PURPOSE = "primary_purpose"
@@ -197,7 +198,7 @@ CORE = (PURPOSE, "urgency", "emergency")  # 핵심 엇갈림 — 앱 설계 §1 
 
 
 def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> dict:
-    """모델 2개 교차검증(평가 설계 §2.5) — 통화 단위로 9항목 중 하나라도 A ≠ B면 엇갈림, 양쪽 ok·폴백 아닌 골드 통화만.
+    """모델 2개 교차검증(평가 설계 §2.5) — 통화 단위로 9항목 중 하나라도 A ≠ B면 엇갈림(급함은 urgent 여부만 — A 오류도 같은 비교), 양쪽 ok·폴백 아닌 골드 통화만.
     fewshot = A의 예시 call_uid — dev 집계에서 뺀다(§7).
     일치 오류 = 엇갈림 없는 통화 중 골드와 다른 것, 포착 = A가 틀린 통화 중 엇갈림이 붙은 것, 향상 배수 = 포착률 ÷ 엇갈림 비율.
     가중은 골드 목적 카테고리의 역확률(§2.2)"""
@@ -215,8 +216,9 @@ def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> 
     )
     la = {c: rows_a[c]["labels"] for c in ids}
     lb = {c: rows_b[c]["labels"] for c in ids}
-    differs = {c for c in ids if any(la[c][i] != lb[c][i] for i in ITEMS)}
-    wrong = {c for c in ids if any(la[c][i] != calls[c]["gold"][i] for i in ITEMS)}
+    diff = {c: differing_items(la[c], lb[c]) for c in ids}
+    differs = {c for c in ids if diff[c]}
+    wrong = {c for c in ids if differing_items(la[c], calls[c]["gold"])}
 
     def rate(k_ids: set, n_ids) -> dict:
         n_ids = list(n_ids)
@@ -240,7 +242,7 @@ def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> 
         "b": b,
         "n": len(ids),
         "disagree": disagree,
-        "core": rate({c for c in differs if any(la[c][i] != lb[c][i] for i in CORE)}, ids),
+        "core": rate({c for c in differs if set(diff[c]) & set(CORE)}, ids),
         "agree_error": rate(wrong & set(agreed), agreed),
         "catch": catch,
         "lift": lift,
