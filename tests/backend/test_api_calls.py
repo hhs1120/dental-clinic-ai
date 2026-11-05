@@ -129,3 +129,44 @@ def test_accuracy(bclient):
     r = bclient.get("/metrics/accuracy").json()
     assert set(r) == {"agreement", "blind", "human_share", "versions"}
     assert r["versions"]["blind"] == ["v1", "v2"]
+
+
+def test_judgment_rejects_pool_call_and_bad_labels(client):
+    assert (
+        client.post(
+            "/judgments", json={"call_uid": "c-0002", "labels": LABELS, "part": "데스크"}
+        ).status_code
+        == 404
+    )
+    import sqlite3
+
+    paths = api.app.dependency_overrides[api.get_db_paths]()
+    c = sqlite3.connect(paths[0])
+    c.execute("INSERT INTO ax_judge_state VALUES ('c-0001', 'pending', 'x')")
+    c.commit()
+    c.close()
+    bad = client.post(
+        "/judgments",
+        json={"call_uid": "c-0001", "labels": {"urgency": "soon"}, "part": "데스크"},
+    )
+    assert bad.status_code == 422
+
+
+def test_add_call_gateway_exception_still_returns_uid(client):
+    class Boom:
+        def complete(self, alias, **kw):
+            raise RuntimeError("상한")
+
+    api.app.dependency_overrides[api.get_gateway_factory] = lambda: lambda conn: Boom()
+    r = client.post(
+        "/calls", json={"direction": "inbound", "transcript": "직원: 네", "part": "데스크"}
+    )
+    assert r.status_code == 200 and r.json() == {"call_uid": "p-0001"}
+    assert client.get("/calls/p-0001").json()["classification"]["status"] is None
+
+
+def test_blind_vote_not_offered_422(bclient):
+    r = bclient.post(
+        "/blind-votes", json={"left_id": 99999, "right_id": 99998, "choice": "tie", "part": "d"}
+    )
+    assert r.status_code == 422

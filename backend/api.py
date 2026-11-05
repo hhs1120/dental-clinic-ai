@@ -392,6 +392,10 @@ def save_judgment(body: Judgment, paths: Paths, now: Now) -> dict:
         return judge_queue.save(
             conn, body.call_uid, body.labels, body.note or None, part=body.part, at=_stamp(now)
         )
+    except KeyError as e:
+        raise HTTPException(404, "판정할 통화가 아닙니다") from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
     finally:
         conn.close()
 
@@ -423,14 +427,22 @@ class BlindVote(BaseModel):
 
 
 @app.post("/blind-votes")
-def blind_vote(body: BlindVote, paths: Paths, now: Now) -> dict:
+def blind_vote(body: BlindVote, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
     if body.choice not in PAIR_CHOICES:
         raise HTTPException(422, f"choice: {body.choice}")
     conn = _open_rw(paths)
     try:
         return blind.save_vote(
-            conn, body.left_id, body.right_id, body.choice, part=body.part, at=_stamp(now)
+            conn,
+            clinic,
+            body.left_id,
+            body.right_id,
+            body.choice,
+            part=body.part,
+            at=_stamp(now),
         )
+    except ValueError as e:
+        raise HTTPException(422, "보여 준 비교 쌍이 아닙니다") from e
     except sqlite3.IntegrityError as e:
         raise HTTPException(409, "이미 투표한 쌍입니다") from e
     finally:

@@ -29,6 +29,7 @@ def test_next_pair_dev_only(bconn):
     assert "version" not in json.dumps(p)
     out = blind.save_vote(
         bconn,
+        CLINIC,
         p["left"]["classification_id"],
         p["right"]["classification_id"],
         "left",
@@ -103,3 +104,15 @@ def test_run_pairs_uses_classifier_max_tokens(bconn):
 
     blind.run_pairs(bconn, Rec(SqliteLlmLog(bconn), scope="runtime"), CLINIC, "v1", "v2", "v1")
     assert seen == [cl.MAX_TOKENS, cl.MAX_TOKENS]
+
+
+def test_save_vote_only_offered_pairs(bconn):
+    """next_pair가 줄 수 있는 쌍(dev 블라인드·blind_versions)만 — 없는 id·test 쌍은 ValueError"""
+    ids = dict(
+        bconn.execute(
+            "SELECT prompt_version, id FROM ax_call_classifications WHERE call_uid = 'b-3'"
+        )
+    )
+    for left, right in ((99999, 99998), (ids["v1"], ids["v2"])):
+        with pytest.raises(ValueError):
+            blind.save_vote(bconn, CLINIC, left, right, "tie", part="데스크", at="x")

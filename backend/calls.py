@@ -4,6 +4,8 @@
 """
 
 import json
+import logging
+import re
 import sqlite3
 from datetime import date, datetime, timedelta
 from itertools import groupby
@@ -12,6 +14,7 @@ from backend import classify as cl
 from backend import db, disagreements
 from shared.call_labels import todo_items
 
+log = logging.getLogger(__name__)
 TODAY_WINDOW_DAYS = 7  # "오늘"에 올라오는 생성 통화 — 기준일 전 이 날수 안(설계 "오늘")
 CALLS_CTE = (
     "WITH calls AS ("
@@ -160,17 +163,22 @@ def list_calls(
     before: str | None,
     limit: int = 50,
 ) -> dict:
-    """통화 기록 — 날짜별 묶음. flt는 FILTERS 키, q는 이름·번호·차트번호 부분 일치, before는 그 시각보다 이전.
-    next = 다음 쪽의 before(더 없으면 None)"""
+    """통화 기록 — 날짜별 묶음. flt는 FILTERS 키, q는 이름·번호·차트번호 부분 일치(%·_는 글자 그대로),
+    before는 다음 쪽 기준 "시각|call_uid"(정렬 시각 내림·call_uid 오름의 키셋 — 같은 시각 통화가 쪽 경계에서
+    빠지지 않게). next = 다음 쪽의 before(더 없으면 None)"""
     if flt is not None and flt not in FILTERS:
         raise ValueError(f"filter: {flt}")
     where, params = [], {}
     if q and q.strip():
-        where.append("(calls.name LIKE :q OR calls.phone LIKE :q OR calls.chart_no LIKE :q)")
-        params["q"] = f"%{q.strip()}%"
+        where.append(
+            "(calls.name LIKE :q ESCAPE '\\' OR calls.phone LIKE :q ESCAPE '\\'"
+            " OR calls.chart_no LIKE :q ESCAPE '\\')"
+        )
+        params["q"] = "%" + re.sub(r"([\\%_])", r"\\\1", q.strip()) + "%"
     if before:
-        where.append("calls.at < :before")
-        params["before"] = before
+        at, _, uid = before.partition("|")
+        where.append("(calls.at < :at OR (calls.at = :at AND calls.call_uid > :uid))")
+        params |= {"at": at, "uid": uid}
     rows = _rows(conn, " AND ".join(where), params)
     checks = _checks(conn, [r["classification_id"] for r in rows if r["classification_id"]])
     cards = [_card(r, checks) for r in rows]
@@ -185,7 +193,8 @@ def list_calls(
         counts[c["at"][:10]] = counts.get(c["at"][:10], 0) + 1
     for d in days:
         d["count"] = counts[d["date"]]
-    return {"days": days, "next": page[-1]["at"] if more else None}
+    last = page[-1] if more else None
+    return {"days": days, "next": f"{last['at']}|{last['call_uid']}" if last else None}
 
 
 def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
@@ -270,13 +279,20 @@ def add_call(
     if not transcript.strip():
         raise ValueError("transcript: 통화 내용이 비어 있습니다")
     phone = (phone or "").strip() or None
-    patient = (
-        conn.execute("SELECT id FROM source.emr_patients WHERE phone = ?", (phone,)).fetchone()
-        if phone
-        else None
+    digits = re.sub(r"\D", "", phone or "")
+    # 번호를 같이 쓰는 가족은 누구인지 모르므로 정확히 한 명일 때만 연결한다
+    found = (
+        conn.execute(
+            "SELECT id FROM source.emr_patients WHERE replace(phone, '-', '') = ?", (digits,)
+        ).fetchall()
+        if digits
+        else []
     )
-    n = conn.execute("SELECT COUNT(*) FROM ax_pasted_calls").fetchone()[0] + 1
-    uid = f"p-{n:04d}"
+    patient = found[0] if len(found) == 1 else None
+    n = conn.execute(
+        "SELECT COALESCE(MAX(CAST(substr(call_uid, 3) AS INTEGER)), 0) FROM ax_pasted_calls"
+    ).fetchone()[0]
+    uid = f"p-{n + 1:04d}"
     conn.execute(
         "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, caller_phone,"
         " patient_id, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -292,7 +308,10 @@ def add_call(
         ),
     )
     conn.commit()
-    classify_one(conn, gw, uid)
+    try:
+        classify_one(conn, gw, uid)
+    except Exception:  # 하루 상한·키 없음 등 — 통화는 남기고 상세에서 다시 분류한다
+        log.exception("새 통화 %s 분류 실패", uid)
     return uid
 
 
@@ -309,6 +328,14 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
     cl.save_classification(
         conn, call_uid, a, cl.classify(gw, row["transcript"], row["direction"], a)
     )
+    # 할 일 목록이 바뀌므로 같은 분류 행에 걸린 체크는 지운다(항목 번호가 다른 일을 가리키게 되므로)
+    conn.execute(
+        "DELETE FROM ax_todo_checks WHERE classification_id IN (SELECT id FROM"
+        " ax_call_classifications WHERE call_uid = ? AND model_alias = 'classify'"
+        " AND prompt_version = ?)",
+        (call_uid, a),
+    )
+    conn.commit()
     if b:
         cl.save_judgment(conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b))
         disagreements.compute_call(conn, call_uid, a, b)

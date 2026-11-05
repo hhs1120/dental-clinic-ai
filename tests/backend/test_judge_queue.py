@@ -76,3 +76,41 @@ def test_counts_and_empty_queue(cconn, monkeypatch):
     jq.save(cconn, "c-0001", LABELS, None, part="데스크", at="2026-11-04 10:00:00")
     n = jq.next_call(cconn, "2026-11-05")
     assert (n["left"], n["done_today"], n["done_total"]) == (1, 0, 1)
+
+
+def test_skips_rotate_oldest_first(cconn, monkeypatch):
+    """건너뛴 건끼리는 먼저 건너뛴 것부터 — 모두 건너뛰어도 한 건에 갇히지 않는다"""
+    monkeypatch.setattr(jq, "is_sample", lambda uid: False)
+    for u in ("c-0001", "c-0003", "c-0004"):
+        _disagree(cconn, u, True)
+    jq.refresh(cconn, "v2", "v2")
+    seen = []
+    for i in range(6):
+        u = jq.next_call(cconn, "2026-11-05")["call_uid"]
+        seen.append(u)
+        jq.skip(cconn, u, f"2026-11-05 10:00:0{i}")
+    assert seen[3:] == seen[:3] and len(set(seen)) == 3
+
+
+def test_refresh_if_active_only(cconn, monkeypatch):
+    """지금 쓰는 버전 쌍이 아니면 큐를 채우지 않는다(실험으로 돌린 엇갈림 계산)"""
+    monkeypatch.setattr(jq, "is_sample", lambda uid: False)
+    _disagree(cconn, "c-0001", True)
+    assert jq.refresh_if_active(cconn, "v1", "v1") == 0
+    assert jq.refresh_if_active(cconn, "v2", "v2") == 1
+
+
+def test_save_rejects_non_target_and_bad_labels(cconn):
+    """대상이 아닌 통화(판정 풀·없는 통화·큐에 없는 통화)와 목록 밖 라벨은 받지 않는다"""
+    import pytest
+
+    _disagree(cconn, "c-0001", True)
+    jq.refresh(cconn, "v2", "v2")
+    for uid in ("c-0002", "nope", "c-0003"):
+        with pytest.raises(KeyError):
+            jq.save(cconn, uid, LABELS, None, part="데스크", at="x")
+    with pytest.raises(ValueError):
+        jq.save(cconn, "c-0001", {"primary_purpose": "lunch"}, None, part="데스크", at="x")
+    jq.save(
+        cconn, "c-0001", {"urgency": "low"}, None, part="데스크", at="x"
+    )  # 모르겠음은 키를 뺀다

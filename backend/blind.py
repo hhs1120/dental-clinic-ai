@@ -95,9 +95,22 @@ def _version(conn, classification_id: int) -> str:
 
 
 def save_vote(
-    conn: sqlite3.Connection, left_id: int, right_id: int, choice: str, *, part: str, at: str
+    conn: sqlite3.Connection,
+    clinic: Clinic,
+    left_id: int,
+    right_id: int,
+    choice: str,
+    *,
+    part: str,
+    at: str,
 ) -> dict:
-    """사람 투표 저장 → 좌우 버전 공개"""
+    """사람 투표 저장 → 좌우 버전 공개. next_pair가 줄 수 있는 쌍(dev 블라인드·blind_versions·좌우 배치)이
+    아니면 ValueError. 이미 투표한 쌍은 sqlite3.IntegrityError"""
+    versions = db.get_setting(conn, "blind_versions")
+    pairs = _pairs(conn, clinic, *versions) if versions else []
+    offered = {tuple(s["classification_id"] for s in _sides(r)) for r in pairs}
+    if (left_id, right_id) not in offered:
+        raise ValueError(f"blind pair: {left_id}/{right_id}")
     conn.execute(
         "INSERT INTO ax_blind_votes (left_classification_id, right_classification_id, choice,"
         " voted_by, voted_at) VALUES (?, ?, ?, ?, ?)",

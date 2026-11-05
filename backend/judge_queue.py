@@ -8,6 +8,8 @@ import json
 import sqlite3
 
 from backend.calls import CALLS_CTE, active_versions
+from backend.classify import ENUMS
+from shared.call_labels import FLAGS, ITEMS
 
 SAMPLE_SHARE = 0.05  # 엇갈림 없는 대상 중 표본 비율 — call_uid 해시로 고른다
 
@@ -43,6 +45,11 @@ def refresh(conn: sqlite3.Connection, a: str, b: str) -> int:
     return len(new)
 
 
+def refresh_if_active(conn: sqlite3.Connection, a: str, b: str) -> int:
+    """지금 쓰는 버전 쌍일 때만 refresh — 실험으로 다른 쌍의 엇갈림을 계산해도 사람 큐에 남지 않게"""
+    return refresh(conn, a, b) if (a, b) == active_versions(conn) else 0
+
+
 def refresh_call(conn: sqlite3.Connection, call_uid: str) -> None:
     """한 통화만(새 통화 추가·다시 분류 뒤) — 활성 버전 기준"""
     a, b = active_versions(conn)
@@ -68,7 +75,7 @@ def next_call(conn: sqlite3.Connection, day: str) -> dict | None:
         "  AND d.a_version = ? AND d.b_version = ?"
         " WHERE s.state IN ('pending', 'skipped')"
         " ORDER BY s.state = 'skipped', calls.source != 'pasted', NOT COALESCE(d.is_core, 0),"
-        "  d.call_uid IS NULL, calls.call_uid",
+        "  d.call_uid IS NULL, CASE WHEN s.state = 'skipped' THEN s.updated_at END, calls.call_uid",
         (a, a, b),
     ).fetchall()
     if not rows:
@@ -100,7 +107,19 @@ def _model_labels(conn, table: str, alias: str, call_uid: str, version: str) -> 
 def save(
     conn: sqlite3.Connection, call_uid: str, labels: dict, note: str | None, *, part: str, at: str
 ) -> dict:
-    """사람 판정 저장(통화당 1행, 재판정은 덮어씀) → 그 뒤에 두 모델 라벨을 돌려준다"""
+    """사람 판정 저장(통화당 1행, 재판정은 덮어씀) → 그 뒤에 두 모델 라벨을 돌려준다.
+    큐에 있는 대상 통화가 아니면 KeyError, 9항목 밖 키·목록 밖 값은 ValueError(모르겠음은 키를 뺀다)"""
+    in_queue = conn.execute(
+        CALLS_CTE + " SELECT 1 FROM ax_judge_state s JOIN calls ON calls.call_uid = s.call_uid"
+        " WHERE s.call_uid = ?",
+        (call_uid,),
+    ).fetchone()
+    if not in_queue:
+        raise KeyError(call_uid)
+    ok_enum = all(labels[k] in v for k, v in ENUMS.items() if k in labels)
+    ok_flag = all(labels[f] in (True, False) for f in FLAGS if f in labels)
+    if not set(labels) <= set(ITEMS) or not ok_enum or not ok_flag:
+        raise ValueError("labels: 9항목·목록 안 값만")
     conn.execute(
         "INSERT INTO ax_judgments (call_uid, labels, note, judged_by, judged_at)"
         " VALUES (?, ?, ?, ?, ?) ON CONFLICT (call_uid) DO UPDATE SET labels = excluded.labels,"

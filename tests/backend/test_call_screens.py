@@ -40,7 +40,7 @@ def test_list_calls_groups_by_day_and_filters(cconn):
         == "c-0001"
     )
     page = calls.list_calls(cconn, flt=None, q=None, before=None, limit=1)
-    assert page["next"] == "2026-11-30 09:00:00"
+    assert page["next"] == "2026-11-30 09:00:00|c-0004"
     nxt = calls.list_calls(cconn, flt=None, q=None, before=page["next"], limit=1)
     assert nxt["days"][0]["calls"][0]["call_uid"] == "c-0001"
 
@@ -191,3 +191,133 @@ def test_add_call_failed_then_reclassify(cconn):
     assert calls.call_detail(cconn, uid)["classification"]["status"] == "failed"
     calls.classify_one(cconn, _gw(cconn), uid)
     assert calls.call_detail(cconn, uid)["classification"]["status"] == "ok"
+
+
+def _src(conn, sql, params=()):
+    """읽기 전용으로 붙인 source.sqlite에 테스트 행을 넣는다"""
+    import sqlite3 as s3
+
+    path = conn.execute("PRAGMA database_list").fetchall()
+    src = next(r[2] for r in path if r[1] == "source")
+    c = s3.connect(src)
+    c.execute(sql, params)
+    c.commit()
+    c.close()
+
+
+def test_add_call_shared_phone_not_linked(cconn):
+    """가족이 같이 쓰는 번호는 누구인지 모르므로 연결하지 않는다 — 한 명일 때만"""
+    _src(
+        cconn,
+        "INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, registered_at)"
+        " VALUES (2, 'C-00002', '김영희', '1982-01-01', 'F', '010-1111-2222', '2024-01-01')",
+    )
+    uid = calls.add_call(
+        cconn,
+        _gw(cconn),
+        direction="inbound",
+        transcript="직원: 네",
+        phone="010-1111-2222",
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert calls.call_detail(cconn, uid)["call"]["chart_no"] is None
+
+
+def test_add_call_phone_digits_only(cconn):
+    """하이픈 없이 넣어도 같은 번호로 본다"""
+    uid = calls.add_call(
+        cconn,
+        _gw(cconn),
+        direction="inbound",
+        transcript="직원: 네",
+        phone="01011112222",
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert calls.call_detail(cconn, uid)["call"]["chart_no"] == "C-00001"
+
+
+def test_add_call_survives_gateway_exception(cconn):
+    """하루 상한·키 없음처럼 게이트웨이가 예외를 던져도 통화 번호를 돌려준다 — 상세에서 다시 분류"""
+
+    class Boom:
+        def complete(self, alias, **kw):
+            raise RuntimeError("상한")
+
+    uid = calls.add_call(
+        cconn,
+        Boom(),
+        direction="inbound",
+        transcript="직원: 네",
+        phone=None,
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert calls.call_detail(cconn, uid)["classification"]["status"] != "ok"
+    calls.classify_one(cconn, _gw(cconn), uid)
+    assert calls.call_detail(cconn, uid)["classification"]["status"] == "ok"
+
+
+def test_add_call_number_after_delete(cconn):
+    """번호는 지금까지의 최대 + 1 — 행이 지워져도 겹치지 않는다"""
+    for _ in range(2):
+        calls.add_call(
+            cconn,
+            _gw(cconn),
+            direction="inbound",
+            transcript="직원: 네",
+            phone=None,
+            part="데스크",
+            now=NOW,
+            today=TODAY,
+        )
+    cconn.execute("DELETE FROM ax_pasted_calls WHERE call_uid = 'p-0001'")
+    uid = calls.add_call(
+        cconn,
+        _gw(cconn),
+        direction="inbound",
+        transcript="직원: 네",
+        phone=None,
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert uid == "p-0003"
+
+
+def test_list_calls_same_time_page_boundary(cconn):
+    """같은 시각 통화가 쪽 경계에 걸려도 빠지지 않는다"""
+    _src(
+        cconn,
+        "INSERT INTO ax_calls (call_uid, source, direction, started_at, duration_sec,"
+        " has_transcript, transcript) VALUES ('c-0005', 'generated', 'inbound',"
+        " '2026-11-30 09:00:00', 60, 1, '직원: 네')",
+    )
+    seen, before = [], None
+    while True:
+        page = calls.list_calls(cconn, flt=None, q=None, before=before, limit=1)
+        seen += [c["call_uid"] for d in page["days"] for c in d["calls"]]
+        if not page["next"]:
+            break
+        before = page["next"]
+    assert sorted(seen) == ["c-0001", "c-0003", "c-0004", "c-0005"]
+
+
+def test_list_calls_search_wildcards_literal(cconn):
+    """검색어의 %·_는 글자 그대로"""
+    for q in ("_", "%"):
+        assert calls.list_calls(cconn, flt=None, q=q, before=None)["days"] == []
+
+
+def test_reclassify_clears_old_checks(cconn):
+    """다시 분류하면 할 일 목록이 바뀌므로 그 분류 행의 체크를 지운다"""
+    item = calls.today_board(cconn, TODAY)["internal"][0]
+    calls.set_todo_done(
+        cconn, item["classification_id"], item["item"], part="데스크", at="x", done=True
+    )
+    calls.classify_one(cconn, _gw(cconn), item["call_uid"])
+    assert cconn.execute("SELECT COUNT(*) FROM ax_todo_checks").fetchone()[0] == 0

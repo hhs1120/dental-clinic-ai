@@ -1,6 +1,6 @@
 """분류·판정 일괄 실행 (분류기 설계 "실행"). 대상은 source.ax_calls의 녹취록 있는 생성 통화 중 그 버전 행이 ok가 아닌 것
 (없거나 failed), call_uid 순. use_batch면 Anthropic 별칭은 Batch(단가 절반), Batch가 없는 프로바이더(Upstage)는 일반 호출.
-Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행의 대상으로 남는다. 붙여넣기 통화는 화면과 함께
+Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행의 대상으로 남는다. 새로 추가한 통화는 그때 분류한다(backend/calls.py)
 uv run --env-file .env python -m backend.classify_batch {classify|judge} --version v1 [--limit N] [--no-batch]
 [--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(몫은 생성 통화 전체의 call_uid 순 위치로 고정)
 uv run python -m backend.classify_batch disagreements --a v1 --b v1
@@ -143,7 +143,9 @@ def main(argv=None) -> None:
     db.init_schema(conn)
     if args.cmd == "disagreements":
         print(f"엇갈림 {disagreements.compute(conn, args.a, args.b)}건")
-        print(f"판정 큐 추가 {judge_queue.refresh(conn, args.a, args.b)}건")  # 앱 설계 §6
+        print(
+            f"판정 큐 추가 {judge_queue.refresh_if_active(conn, args.a, args.b)}건"
+        )  # 앱 설계 §6
         return
     from backend.harness.llm import make_gateway
 
