@@ -13,6 +13,7 @@ from shared.call_labels import FLAGS, LABEL_SCHEMA, SUMMARY_SCHEMA
 from shared.llm import LLMResult
 
 MAX_TOKENS = 1000  # 라벨 9항목·요약 하나·할 일 몇 줄
+REASONING_MAX_TOKENS = 16000  # 추론을 켜면 추론 토큰도 max_tokens 안(앱 설계 §7)
 
 
 @dataclass(frozen=True)
@@ -61,11 +62,16 @@ def summary_request(transcript: str, direction: str, version: str) -> dict:
 
 
 def judge_request(transcript: str, direction: str, version: str) -> dict:
-    return {
+    """프롬프트 머리말에 effort가 있으면 effort와 늘린 max_tokens도 넣는다"""
+    req = {
         "system": prompts.load("judge", version)["system"],
         "messages": [{"role": "user", "content": user_message(transcript, direction)}],
         "schema": LABEL_SCHEMA,
     }
+    effort = prompts.effort("judge", version)
+    if effort is not None:
+        req |= {"effort": effort, "max_tokens": REASONING_MAX_TOKENS}
+    return req
 
 
 def classification_from(label: LLMResult, summary_call: LLMResult) -> Classification:
@@ -99,9 +105,8 @@ def judge(gw, transcript: str, direction: str, version: str) -> Judgment:
     call = gw.complete(
         "judge",
         task="judge",
-        max_tokens=MAX_TOKENS,
         prompt_version=version,
-        **judge_request(transcript, direction, version),
+        **{"max_tokens": MAX_TOKENS, **judge_request(transcript, direction, version)},
     )
     return Judgment(call.ok, call.data if call.ok else None, call)
 

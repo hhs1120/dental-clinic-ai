@@ -5,13 +5,21 @@
 import re
 from pathlib import Path
 
+import yaml
+
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 CLASSIFY_PARTS = ("labels", "summary")
 
 
+FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---(?:\n|\Z)", re.S)
+
+
+def _text(path: Path) -> str:
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
 def _body(path: Path) -> str:
-    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
-    return re.sub(r"\A---\n.*?\n---(?:\n|\Z)", "", text, count=1, flags=re.S).strip()
+    return FRONT_MATTER.sub("", _text(path), count=1).strip()
 
 
 def load(task: str, version: str, root: Path = PROMPTS_DIR) -> dict[str, str]:
@@ -19,3 +27,9 @@ def load(task: str, version: str, root: Path = PROMPTS_DIR) -> dict[str, str]:
     if task == "classify":
         return {part: _body(root / task / version / f"{part}.md") for part in CLASSIFY_PARTS}
     return {"system": _body(root / task / f"{version}.md")}
+
+
+def effort(task: str, version: str, root: Path = PROMPTS_DIR) -> str | None:
+    """버전 파일 머리말의 effort(추론 단계, 앱 설계 §7) — 없으면 None. 분류기 버전 폴더는 아직 쓰지 않는다"""
+    m = FRONT_MATTER.match(_text(root / task / f"{version}.md"))
+    return (yaml.safe_load(m[1]) or {}).get("effort") if m else None

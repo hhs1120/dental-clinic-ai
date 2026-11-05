@@ -145,3 +145,29 @@ def test_direct_calls_saved_as_they_go(bconn):
     with pytest.raises(RuntimeError):
         classify_batch.run(bconn, Boom(SqliteLlmLog(bconn)), "judge", "v1", use_batch=False)
     assert _status(bconn, "ax_model_judgments") == {"c-0001": "ok", "c-0002": "ok"}
+
+
+def test_direct_judge_passes_effort(bconn):
+    class Rec(BatchFake):
+        def complete(self, alias, **kw):
+            self.kw = kw
+            return super().complete(alias, **kw)
+
+    gw = Rec(SqliteLlmLog(bconn))
+    classify_batch.run(bconn, gw, "judge", "v2", use_batch=False, limit=1)
+    assert (
+        gw.kw["effort"] == "low" and gw.kw["max_tokens"] == classify_batch.cl.REASONING_MAX_TOKENS
+    )
+
+
+def test_shards_split_targets(bconn):
+    """--shard K/N: 대상 목록(call_uid 순)의 K번째부터 N개 걸러 — 여러 프로세스가 겹치지 않게 나눈다"""
+    all_uids = [r["call_uid"] for r in classify_batch.targets(bconn, "judge", "v1", None)]
+    parts = [
+        [r["call_uid"] for r in classify_batch.targets(bconn, "judge", "v1", None, shard=(k, 2))]
+        for k in range(2)
+    ]
+    assert sorted(parts[0] + parts[1]) == all_uids and not set(parts[0]) & set(parts[1])
+    assert classify_batch._shard("1/2") == (1, 2)
+    with pytest.raises(ValueError):
+        classify_batch._shard("2/2")

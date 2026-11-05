@@ -89,6 +89,17 @@ def test_judge_saves_row(conn):
     assert all(json.loads(row["labels"])[f] in (0, 1) for f in call_labels.FLAGS)
 
 
+def test_judge_effort_from_prompt(conn):
+    """판정기 버전 머리말의 effort가 호출로 가고, 추론 토큰 몫만큼 max_tokens를 늘린다"""
+    gw = Recording(SqliteLlmLog(conn))
+    cl.judge(gw, "직원: 네\n환자: 아파요", "inbound", "v1")
+    cl.judge(gw, "직원: 네\n환자: 아파요", "inbound", "v2")
+    (_, v1), (_, v2) = gw.calls
+    assert "effort" not in v1 and v1["max_tokens"] == cl.MAX_TOKENS
+    assert v2["effort"] == "low" and v2["max_tokens"] == cl.REASONING_MAX_TOKENS
+    assert v2["system"] == v1["system"]
+
+
 def test_normalize_summary():
     assert (
         cl.normalize_summary("- 예약 변경 요청함\n\n**목요일** 3시로 옮김")

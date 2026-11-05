@@ -2,6 +2,7 @@
 (없거나 failed), call_uid 순. use_batch면 Anthropic 별칭은 Batch(단가 절반), Batch가 없는 프로바이더(Upstage)는 일반 호출.
 Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행의 대상으로 남는다. 붙여넣기 통화는 화면과 함께
 uv run --env-file .env python -m backend.classify_batch {classify|judge} --version v1 [--limit N] [--no-batch]
+[--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(동시에 시작해야 목록이 같다)
 uv run python -m backend.classify_batch disagreements --a v1 --b v1
 """
 
@@ -17,8 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TABLES = {"classify": "ax_call_classifications", "judge": "ax_model_judgments"}
 
 
-def targets(conn, task: str, version: str, limit: int | None) -> list:
-    """별칭 이름은 작업 이름과 같다(classify·judge)"""
+def targets(
+    conn, task: str, version: str, limit: int | None, shard: tuple[int, int] | None = None
+) -> list:
+    """별칭 이름은 작업 이름과 같다(classify·judge). shard=(k, n)이면 목록의 k번째부터 n개 걸러"""
     sql = (
         "SELECT call_uid, direction, transcript FROM source.ax_calls"
         " WHERE source = 'generated' AND transcript IS NOT NULL AND call_uid NOT IN"
@@ -27,7 +30,16 @@ def targets(conn, task: str, version: str, limit: int | None) -> list:
         " ORDER BY call_uid"
     )
     rows = conn.execute(sql, (task, version)).fetchall()
+    if shard:
+        rows = rows[shard[0] :: shard[1]]
     return rows[:limit] if limit else rows
+
+
+def _shard(text: str) -> tuple[int, int]:
+    k, n = (int(x) for x in text.split("/"))
+    if not 0 <= k < n:
+        raise ValueError(f"--shard {text}: 0 <= K < N")
+    return k, n
 
 
 def _batchable(gw, alias: str) -> bool:
@@ -60,9 +72,10 @@ def run(
     use_batch: bool,
     limit: int | None = None,
     poll_seconds: int = 30,
+    shard: tuple[int, int] | None = None,
 ) -> dict:
     """반환 {"done": ok로 저장, "failed": failed로 저장, "missing": Batch에서 빠져 저장 안 함}"""
-    rows = targets(conn, task, version, limit)
+    rows = targets(conn, task, version, limit, shard)
     if task == "classify":
         parts = {"classify": cl.label_request, "summarize": cl.summary_request}
     else:
@@ -84,7 +97,7 @@ def run(
             results[a].get(uid)
             if a in batched
             else gw.complete(
-                a, task=a, max_tokens=cl.MAX_TOKENS, prompt_version=version, **reqs[a][uid]
+                a, task=a, prompt_version=version, **{"max_tokens": cl.MAX_TOKENS, **reqs[a][uid]}
             )
             for a in parts
         ]
@@ -111,6 +124,7 @@ def main(argv=None) -> None:
         s.add_argument("--version", required=True)
         s.add_argument("--limit", type=int)
         s.add_argument("--no-batch", action="store_true")
+        s.add_argument("--shard", type=_shard)
     d = sub.add_parser("disagreements")
     d.add_argument("--a", required=True)
     d.add_argument("--b", required=True)
@@ -129,6 +143,7 @@ def main(argv=None) -> None:
         args.version,
         use_batch=not args.no_batch,
         limit=args.limit,
+        shard=args.shard,
     )
     print(out)
 

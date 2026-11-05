@@ -33,3 +33,12 @@ def test_repo_v1_prompts_load():
     c = prompts.load("classify", "v1")
     assert "has_todo = true" in c["labels"] and "명사형" in c["summary"]
     assert "has_todo = true" in prompts.load("judge", "v1")["system"]
+
+
+def test_effort_from_front_matter(tmp_path):
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "v2.md").write_text("---\neffort: low\n---\n판정 지시", "utf-8")
+    (tmp_path / "judge" / "v3.md").write_text("판정 지시", "utf-8")
+    assert prompts.effort("judge", "v2", root=tmp_path) == "low"
+    assert prompts.load("judge", "v2", root=tmp_path) == {"system": "판정 지시"}
+    assert prompts.effort("judge", "v3", root=tmp_path) is None
