@@ -161,7 +161,8 @@ export function CallDetail({
   );
   const table = labels && (
     <Section title="분류 9항목">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+      {/* 두 쌍씩(이름·값, 이름·값) — 9줄을 5줄로 줄인다 */}
+      <dl className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-3 gap-y-1 text-sm">
         {ITEMS.map((i) => {
           const differs =
             judge !== null &&
@@ -222,8 +223,11 @@ export function CallDetail({
             {todo}
             {summary}
             {diff}
-            {table}
-            {patient}
+            {/* 넓은 왼쪽 칸에서는 분류와 환자 정보를 반반 나란히 */}
+            <div className="grid gap-x-6 border-t xl:grid-cols-2 [&>section]:border-t-0">
+              {table}
+              {patient}
+            </div>
           </div>
           <div className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4">
             <Transcript
@@ -246,8 +250,8 @@ export function CallDetail({
       {summary}
       {diff}
       {table}
-      {transcript}
       {patient}
+      {transcript}
     </aside>
   );
 }
@@ -330,8 +334,15 @@ function Patient({
           )}
         </dd>
         <dt className="text-muted-foreground">주의사항</dt>
-        <dd>
-          {s.alerts.length ? s.alerts.map((a) => a.label).join(", ") : "없음"}
+        {/* 주의사항(알레르기·복용 약 등)은 빨간 배지로 */}
+        <dd className="flex flex-wrap gap-1">
+          {s.alerts.length
+            ? s.alerts.map((a) => (
+                <Badge key={a.code} variant="danger">
+                  {a.label}
+                </Badge>
+              ))
+            : "없음"}
         </dd>
       </dl>
       <Link
