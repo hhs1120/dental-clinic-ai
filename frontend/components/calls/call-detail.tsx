@@ -188,7 +188,7 @@ export function CallDetail({
                   show(i, labels[i], names)
                 )}
                 {differs && (
-                  <span className="ml-2 text-xs font-bold text-status-danger-fg">
+                  <span className="block text-xs font-bold text-status-danger-fg">
                     판정기: {show(i, judge[i], names)}
                   </span>
                 )}
@@ -224,7 +224,7 @@ export function CallDetail({
             {summary}
             {diff}
             {/* 넓은 왼쪽 칸에서는 분류와 환자 정보를 반반 나란히 */}
-            <div className="grid gap-x-6 border-t xl:grid-cols-2 [&>section]:border-t-0">
+            <div className="grid gap-x-6 border-t xl:grid-cols-[3fr_2fr] [&>section]:border-t-0">
               {table}
               {patient}
             </div>

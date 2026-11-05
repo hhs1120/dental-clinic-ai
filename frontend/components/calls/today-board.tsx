@@ -178,6 +178,11 @@ function CallCard({
                 className="text-left"
                 onClick={() => onOpen(it.call_uid)}
               >
+                {/* 연락 상대가 카드 머리 이름(환자)과 다르면 앞에 — 보호자·가족에게 거는 연락 */}
+                {it.kind === "contact" &&
+                  it.who &&
+                  it.who !== name &&
+                  it.who !== "환자" && <b>{it.who} · </b>}
                 {it.text}
               </button>
             </div>
