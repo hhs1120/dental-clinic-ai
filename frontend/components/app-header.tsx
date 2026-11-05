@@ -15,6 +15,7 @@ import {
 import { useClinic } from "@/lib/api";
 import { MENU, SPACES } from "@/lib/nav";
 import { PART_KEY, PARTS } from "@/lib/part";
+import { readTheme, saveTheme, type Theme, THEMES } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 /** 담당 파트 — 화면은 바뀌지 않는다(기능 정의 §4). 저장소가 막힌 브라우저에서도 동작한다 */
@@ -47,6 +48,37 @@ function PartSelect() {
         {PARTS.map((p) => (
           <SelectItem key={p} value={p}>
             {p}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** 화면 테마 — 시스템·라이트·다크(lib/theme) */
+function ThemeSelect() {
+  const [theme, setTheme] = useState<Theme | undefined>(undefined);
+  useEffect(() => {
+    // 첫 렌더는 서버 HTML과 같게 비워 두고 여기서 읽는다(하이드레이션 불일치 방지)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTheme(readTheme());
+  }, []);
+  const change = (value: string) => {
+    setTheme(value as Theme);
+    saveTheme(value as Theme);
+  };
+  return (
+    <Select value={theme} onValueChange={change}>
+      <SelectTrigger
+        aria-label="화면 테마"
+        className="w-24 bg-card shadow-control"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {THEMES.map(([v, l]) => (
+          <SelectItem key={v} value={v}>
+            {l}
           </SelectItem>
         ))}
       </SelectContent>
@@ -102,6 +134,7 @@ export function AppHeader() {
         </nav>
       )}
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <ThemeSelect />
         <PartSelect />
         <span>
           기준일{" "}

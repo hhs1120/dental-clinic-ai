@@ -2,8 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* dark: 변형은 OS 설정이 아니라 data-theme을 본다(화면 테마 선택) */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* 토큰 — 앱 뼈대 설계안 '스타일'. 색·모서리·글꼴·그림자는 여기서만 정하고 화면 코드는 이름으로 쓴다.
-   바탕·글자·그림자는 Graphite(oklch → sRGB), 강조색은 딥 틸. 다크는 OS 설정(prefers-color-scheme)을 따른다 */
+   바탕·글자·그림자는 Graphite(oklch → sRGB), 강조색은 딥 틸. 다크는 <html data-theme="dark"> — 머리 띠의 화면 테마(시스템이면 OS 설정을 따른다, app/layout.tsx 스크립트) */
 
 @theme inline {
   --color-background: var(--background);
@@ -126,46 +129,44 @@
   --emr-row-on: #fff7cc;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #1a1a1a;
-    --foreground: #d9d9d9;
-    --card: #202020;
-    --card-foreground: #d9d9d9;
-    --popover: #202020;
-    --popover-foreground: #d9d9d9;
-    --header: #1f1f1f;
-    --primary: #2bb3a3;
-    --primary-foreground: #062421;
-    --secondary: #303030;
-    --secondary-foreground: #d9d9d9;
-    --muted: #303030;
-    --muted-foreground: #808080;
-    --accent: #173a37;
-    --accent-foreground: #99e6da;
-    --destructive: #f87171;
-    --border: #353535;
-    --input: #303030;
-    --ring: rgba(43, 179, 163, 0.35);
-    --link: #5fd0c2;
-    --mark: #1c4743;
-    --status-warn-bg: #5c4410;
-    --status-warn-fg: #fde68a;
-    --status-warn-border: #b45309;
-    --status-warn-dot: #fbbf24;
-    --status-danger-bg: #5c1d1d;
-    --status-danger-fg: #fecaca;
-    --status-danger-border: #dc2626;
-    --status-danger-dot: #f87171;
-    --status-ok-bg: #14432a;
-    --status-ok-fg: #bbf7d0;
-    --status-ok-border: #16a34a;
-    --status-ok-dot: #4ade80;
-    --status-info-bg: #1e3a6e;
-    --status-info-fg: #bfdbfe;
-    --status-info-border: #2563eb;
-    --status-info-dot: #60a5fa;
-  }
+:root[data-theme="dark"] {
+  --background: #1a1a1a;
+  --foreground: #d9d9d9;
+  --card: #202020;
+  --card-foreground: #d9d9d9;
+  --popover: #202020;
+  --popover-foreground: #d9d9d9;
+  --header: #1f1f1f;
+  --primary: #2bb3a3;
+  --primary-foreground: #062421;
+  --secondary: #303030;
+  --secondary-foreground: #d9d9d9;
+  --muted: #303030;
+  --muted-foreground: #808080;
+  --accent: #173a37;
+  --accent-foreground: #99e6da;
+  --destructive: #f87171;
+  --border: #353535;
+  --input: #303030;
+  --ring: rgba(43, 179, 163, 0.35);
+  --link: #5fd0c2;
+  --mark: #1c4743;
+  --status-warn-bg: #5c4410;
+  --status-warn-fg: #fde68a;
+  --status-warn-border: #b45309;
+  --status-warn-dot: #fbbf24;
+  --status-danger-bg: #5c1d1d;
+  --status-danger-fg: #fecaca;
+  --status-danger-border: #dc2626;
+  --status-danger-dot: #f87171;
+  --status-ok-bg: #14432a;
+  --status-ok-fg: #bbf7d0;
+  --status-ok-border: #16a34a;
+  --status-ok-dot: #4ade80;
+  --status-info-bg: #1e3a6e;
+  --status-info-fg: #bfdbfe;
+  --status-info-border: #2563eb;
+  --status-info-dot: #60a5fa;
 }
 
 @layer base {
