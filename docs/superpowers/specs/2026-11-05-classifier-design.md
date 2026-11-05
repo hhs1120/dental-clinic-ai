@@ -81,7 +81,7 @@
 
 ## 엇갈림
 
-- 앱 설계 §1 그대로: 9항목 중 하나라도 A ≠ B면 `(call_uid, a_version, b_version)` 1행, 목적·급함·응급이 다르면 `is_core`, 어느 쪽이든 폴백이면 표시
+- 앱 설계 §1 그대로: 9항목 중 하나라도 A ≠ B면(급함은 urgent 여부만 — 평가 설계 §2.5) `(call_uid, a_version, b_version)` 1행, 목적·급함·응급이 다르면 `is_core`, 어느 쪽이든 폴백이면 표시
 - 추가 규칙: 분류기 할 일 목록이 비어 있지 않은데 분류기 라벨 `has_todo = 0`이면 판정기와 같아도 엇갈림으로 본다. 라벨과 할 일 목록을 다른 모델이 내므로 할 일이 적힌 통화가 자동 종결되지 않게 한다 — 내 판단. 이 경우를 구분하는 칸을 둔다(`todo_mismatch`)
 - 테이블 `ax_call_disagreements`는 이번에 `shared/app_schema.sql`에 만든다
 

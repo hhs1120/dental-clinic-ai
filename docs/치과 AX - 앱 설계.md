@@ -26,7 +26,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_call_classifications` | 분류기(모델 A)의 요약·할 일·분류 labels(9항목)·`status(ok/failed)`. 라벨 호출과 요약·할 일 호출이 따로라 호출마다 `model_actual`·`llm_call_id`(라벨)와 `summary_model_actual`·`summary_llm_call_id`(요약) — 둘 중 하나라도 실패면 `failed`. UNIQUE `(call_uid, model_alias, prompt_version)`. **`prompt_version`은 (프롬프트 텍스트 × 모델)의 버전** — 모델만 바꿔도 올림(`vN-final`). 대시보드는 버전마다 `model_actual` 표기 |
 | `ax_judgments` | 사람 판정(운영 구간 엇갈림·표본). `judged_at`은 실제 시계. `note`(메모, 선택) |
 | `ax_model_judgments` | 판정기(모델 B) 판정. 사람 판정과 섞지 않으려고 테이블을 나눈다. UNIQUE `(call_uid, model_alias, prompt_version)` |
-| `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행, `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시(`fallback`)하고 자동 종결하지 않는다. 분류기 할 일 목록이 있는데 분류기 `has_todo` = 0이면 라벨이 같아도 1행(`todo_mismatch`). 계산은 `backend/disagreements.py` |
+| `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행(급함은 urgent 여부만 비교 — [[치과 AX - 평가 설계]] §2.5), `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시(`fallback`)하고 자동 종결하지 않는다. 분류기 할 일 목록이 있는데 분류기 `has_todo` = 0이면 라벨이 같아도 1행(`todo_mismatch`). 계산은 `backend/disagreements.py` |
 | `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 엇갈림·표본이 정해질 때 채운다 |
 | `ax_pasted_calls` | 붙여넣기 통화 — 앱이 만든 통화라 앱 DB. 목록·색인·분류에서는 생성 통화와 합쳐 보인다 |
 | `ax_call_followups` | 후속 큐 처리 기록(처리한 파트·시각)과 후속 에이전트의 처리안(enum·근거·실행 id). 처리한 통화는 큐에서 빠짐 |
