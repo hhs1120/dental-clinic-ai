@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -19,6 +19,19 @@ llm-fill-api:
 
 verify:
 	uv run python -m generator.verify
+
+# ① 분류·판정 일괄(backend/classify_batch.py) — 생성 통화 전체, 이미 ok인 건은 건너뜀. NO_BATCH=1이면 일반 호출만
+classify:
+	$(if $(V),,$(error V=프롬프트 버전 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch classify --version $(V) $(if $(LIMIT),--limit $(LIMIT)) $(if $(NO_BATCH),--no-batch)
+
+judge:
+	$(if $(V),,$(error V=프롬프트 버전 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch judge --version $(V) $(if $(LIMIT),--limit $(LIMIT)) $(if $(NO_BATCH),--no-batch)
+
+disagreements:
+	$(if $(and $(A),$(B)),,$(error A=분류기 버전 B=판정기 버전 필요))
+	uv run python -m backend.classify_batch disagreements --a $(A) --b $(B)
 
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:

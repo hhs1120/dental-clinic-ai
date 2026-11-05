@@ -37,7 +37,9 @@ CREATE TABLE ax_call_classifications (
     labels         TEXT,
     summary        TEXT,
     todo           TEXT,
-    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
+    llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 라벨 호출. 폴백 여부를 여기서 읽는다
+    summary_model_actual TEXT,  -- 요약·할 일 호출(분류기 설계 "분류기")
+    summary_llm_call_id  INTEGER REFERENCES ax_llm_calls(id),
     UNIQUE (call_uid, model_alias, prompt_version)
 );
 
@@ -52,6 +54,19 @@ CREATE TABLE ax_model_judgments (
     labels         TEXT,
     llm_call_id    INTEGER NOT NULL REFERENCES ax_llm_calls(id),  -- 폴백 여부를 여기서 읽는다
     UNIQUE (call_uid, model_alias, prompt_version)
+);
+
+-- 분류기 vs 판정기 엇갈림 (앱 설계 §1). 9항목 중 하나라도 다름, 어느 쪽이든 폴백, 분류기 할 일 목록이 있는데
+-- has_todo = 0 중 하나면 1행(backend/disagreements.py)
+CREATE TABLE ax_call_disagreements (
+    call_uid      TEXT NOT NULL,  -- source.sqlite ax_calls.call_uid
+    a_version     TEXT NOT NULL,  -- 분류기 prompt_version
+    b_version     TEXT NOT NULL,  -- 판정기 prompt_version
+    is_core       INTEGER NOT NULL,  -- 목적·급함·응급 중 하나라도 다름
+    fallback      INTEGER NOT NULL,  -- 라벨·판정 호출 중 하나라도 폴백 — 자동 종결하지 않는다
+    todo_mismatch INTEGER NOT NULL,  -- 할 일 목록이 있는데 분류기 has_todo = 0
+    items         TEXT NOT NULL,  -- 다른 항목 이름 JSON 목록
+    PRIMARY KEY (call_uid, a_version, b_version)
 );
 
 -- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3) — 운영 감사라 eval.py는 읽지 않는다. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계

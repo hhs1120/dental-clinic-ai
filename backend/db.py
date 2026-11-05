@@ -23,11 +23,48 @@ def connect(app_path: Path, source_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
-    """빈 DB에만 스키마를 만든다"""
-    exists = conn.execute("SELECT 1 FROM main.sqlite_master WHERE name = 'ax_settings'").fetchone()
-    if not exists:
-        conn.executescript(SCHEMA.read_text(encoding="utf-8"))
+def init_schema(conn: sqlite3.Connection, schema: Path = SCHEMA) -> None:
+    """없는 테이블·인덱스·칸만 더한다 — 빈 DB면 전체, 스키마보다 앞선 DB면 모자란 것만(있던 행은 그대로).
+    더한 칸은 타입·NOT NULL·기본값만 옮긴다. NOT NULL에 기본값 없는 칸은 기존 행을 채울 수 없어 RuntimeError.
+    한 트랜잭션(BEGIN IMMEDIATE) — 동시에 연 프로세스와 겹치지 않고, 실패하면 아무것도 남기지 않는다"""
+    ref = sqlite3.connect(":memory:")
+    ref.executescript(schema.read_text(encoding="utf-8"))  # 스키마는 CREATE 문뿐
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for name, kind, create in ref.execute(
+            "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+        ).fetchall():
+            exists = conn.execute(
+                "SELECT 1 FROM main.sqlite_master WHERE name = ?", (name,)
+            ).fetchone()
+            if not exists:
+                # 가상 테이블의 그림자 테이블은 이때 같이 생겨 다음 차례에 있다
+                conn.execute(create)
+            elif kind == "table":
+                _add_columns(conn, ref, name)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        ref.close()
+
+
+def _add_columns(conn: sqlite3.Connection, ref: sqlite3.Connection, table: str) -> None:
+    have = {r[1] for r in conn.execute(f"PRAGMA main.table_info({table})")}
+    for _cid, col, type_, notnull, default, _pk in ref.execute(f"PRAGMA table_info({table})"):
+        if col in have:
+            continue
+        if notnull and default is None:
+            raise RuntimeError(
+                f"{table}.{col}: NOT NULL에 기본값 없는 칸은 기존 DB에 더할 수 없음"
+            )
+        conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN {col} {type_}"
+            + (" NOT NULL" if notnull else "")
+            + (f" DEFAULT {default}" if default is not None else "")
+        )
 
 
 def get_setting(conn: sqlite3.Connection, key: str, default=None):

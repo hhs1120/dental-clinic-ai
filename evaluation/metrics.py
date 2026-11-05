@@ -7,6 +7,9 @@ from math import comb
 TOP_K = 5  # Hit@5·MRR@5 (평가 설계 §3.3)
 MAX_TOOL_CALLS = 6  # 질문당 도구 호출 상한 (평가 설계 §3.2)
 DATE_FROM, DATE_TO = "date_from", "date_to"
+SILVER_MATERIAL_SHARE = (
+    0.7  # silver 재료 비율, 나머지는 검증(평가 설계 §2.7 — evaluation/splits.py)
+)
 
 
 def fraction(k: int, n: int) -> str:
