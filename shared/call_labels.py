@@ -47,7 +47,7 @@ PURPOSE_KO = {
     "emergency": "응급·통증",
     "complaint": "불만",
     "other": "기타",
-    "unknown": "모르겠음·애매",
+    "unknown": "알 수 없음(끊김·내용 없음)",  # 판정의 "모르겠음·애매"(키 00)와 다른 라벨 값
 }
 COUNTERPART_KO = {
     "patient": "환자",
