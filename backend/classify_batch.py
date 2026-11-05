@@ -51,13 +51,6 @@ def _collect(gw, batch_id: str, alias: str, version: str, schema, poll_seconds: 
     return gw.batch_results(batch_id, alias, task=alias, prompt_version=version, schema=schema)
 
 
-def _direct(gw, alias: str, version: str, reqs: dict) -> dict:
-    return {
-        uid: gw.complete(alias, task=alias, max_tokens=cl.MAX_TOKENS, prompt_version=version, **r)
-        for uid, r in reqs.items()
-    }
-
-
 def run(
     conn,
     gw,
@@ -79,17 +72,22 @@ def run(
         for alias, make in parts.items()
     }
     batched = {a for a in parts if use_batch and rows and _batchable(gw, a)}
-    batch_ids = {
-        a: _submit(gw, a, version, reqs[a]) for a in batched
-    }  # 먼저 내고 일반 호출 동안 처리
-    results = {a: _direct(gw, a, version, reqs[a]) for a in parts if a not in batched}
+    batch_ids = {a: _submit(gw, a, version, reqs[a]) for a in batched}
+    results = {}
     for a, bid in batch_ids.items():
         schema = reqs[a][rows[0]["call_uid"]]["schema"]
         results[a] = _collect(gw, bid, a, version, schema, poll_seconds)
     out = {"done": 0, "failed": 0, "missing": 0}
-    for r in rows:
+    for r in rows:  # 일반 호출은 통화마다 저장 — 도중에 멈춰도 끝난 통화는 남는다
         uid = r["call_uid"]
-        got = [results[a].get(uid) for a in parts]
+        got = [
+            results[a].get(uid)
+            if a in batched
+            else gw.complete(
+                a, task=a, max_tokens=cl.MAX_TOKENS, prompt_version=version, **reqs[a][uid]
+            )
+            for a in parts
+        ]
         if any(g is None for g in got):
             out["missing"] += 1
             continue

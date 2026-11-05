@@ -131,3 +131,17 @@ def test_limit(bconn):
     gw = BatchFake(SqliteLlmLog(bconn))
     assert classify_batch.run(bconn, gw, "judge", "v1", use_batch=True, limit=2)["done"] == 2
     assert list(_status(bconn, "ax_model_judgments")) == ["c-0001", "c-0002"]
+
+
+def test_direct_calls_saved_as_they_go(bconn):
+    """일반 호출 도중 예외가 나도 앞서 끝난 통화는 저장돼 있다(다시 돌리면 나머지만)"""
+
+    class Boom(BatchFake):
+        def complete(self, alias, **kw):
+            if "c-0003" in kw["messages"][0]["content"]:
+                raise RuntimeError("끊김")
+            return super().complete(alias, **kw)
+
+    with pytest.raises(RuntimeError):
+        classify_batch.run(bconn, Boom(SqliteLlmLog(bconn)), "judge", "v1", use_batch=False)
+    assert _status(bconn, "ax_model_judgments") == {"c-0001": "ok", "c-0002": "ok"}
