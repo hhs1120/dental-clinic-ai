@@ -69,7 +69,12 @@ export function PatientSummary({
             <p className="text-muted-foreground">남은 항목 · {remainingText}</p>
           )}
           <div className="mt-1 flex flex-wrap gap-1.5">
-            <Badge variant="muted">{STATUS_LABEL[appt.status]}</Badge>
+            {/* "예정"은 기준일 예약 대부분이라 숨기고, 완료·취소·노쇼만(취소·노쇼는 예약표 카드처럼 빨강) */}
+            {appt.status !== "scheduled" && (
+              <Badge variant={appt.status === "completed" ? "muted" : "danger"}>
+                {STATUS_LABEL[appt.status]}
+              </Badge>
+            )}
             {appt.unconfirmed && appt.confirm === "no_reply" && (
               <Badge variant="warn">예약 확인 문자 무응답</Badge>
             )}
