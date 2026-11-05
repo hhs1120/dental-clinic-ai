@@ -7,21 +7,20 @@ import json
 
 from shared.call_labels import CORE_ITEMS, differing_items
 
+PAIR_SQL = (
+    "SELECT c.call_uid, c.labels AS a, c.todo, j.labels AS b,"
+    " la.fallback_used OR COALESCE(ls.fallback_used, 0) OR lb.fallback_used AS fallback"
+    " FROM ax_call_classifications c"
+    " JOIN ax_model_judgments j ON j.call_uid = c.call_uid"
+    "  AND j.model_alias = 'judge' AND j.prompt_version = ? AND j.status = 'ok'"
+    " JOIN ax_llm_calls la ON la.id = c.llm_call_id"
+    " LEFT JOIN ax_llm_calls ls ON ls.id = c.summary_llm_call_id"
+    " JOIN ax_llm_calls lb ON lb.id = j.llm_call_id"
+    " WHERE c.model_alias = 'classify' AND c.prompt_version = ? AND c.status = 'ok'"
+)
 
-def compute(conn, a_version: str, b_version: str) -> int:
-    """그 버전 쌍의 행을 다시 쓰고 엇갈림 행 수를 돌려준다"""
-    rows = conn.execute(
-        "SELECT c.call_uid, c.labels AS a, c.todo, j.labels AS b,"
-        " la.fallback_used OR COALESCE(ls.fallback_used, 0) OR lb.fallback_used AS fallback"
-        " FROM ax_call_classifications c"
-        " JOIN ax_model_judgments j ON j.call_uid = c.call_uid"
-        "  AND j.model_alias = 'judge' AND j.prompt_version = ? AND j.status = 'ok'"
-        " JOIN ax_llm_calls la ON la.id = c.llm_call_id"
-        " LEFT JOIN ax_llm_calls ls ON ls.id = c.summary_llm_call_id"
-        " JOIN ax_llm_calls lb ON lb.id = j.llm_call_id"
-        " WHERE c.model_alias = 'classify' AND c.prompt_version = ? AND c.status = 'ok'",
-        (b_version, a_version),
-    ).fetchall()
+
+def _rows(conn, a_version: str, b_version: str, rows) -> list[tuple]:
     out = []
     for r in rows:
         a, b = json.loads(r["a"]), json.loads(r["b"])
@@ -39,6 +38,12 @@ def compute(conn, a_version: str, b_version: str) -> int:
                     json.dumps(items),
                 )
             )
+    return out
+
+
+def compute(conn, a_version: str, b_version: str) -> int:
+    """그 버전 쌍의 행을 다시 쓰고 엇갈림 행 수를 돌려준다"""
+    out = _rows(conn, a_version, b_version, conn.execute(PAIR_SQL, (b_version, a_version)))
     conn.execute(
         "DELETE FROM ax_call_disagreements WHERE a_version = ? AND b_version = ?",
         (a_version, b_version),
@@ -46,3 +51,16 @@ def compute(conn, a_version: str, b_version: str) -> int:
     conn.executemany("INSERT INTO ax_call_disagreements VALUES (?, ?, ?, ?, ?, ?, ?)", out)
     conn.commit()
     return len(out)
+
+
+def compute_call(conn, call_uid: str, a_version: str, b_version: str) -> bool:
+    """한 통화만 다시 계산(새 통화 추가·다시 분류) — 행이 생기면 True"""
+    found = conn.execute(PAIR_SQL + " AND c.call_uid = ?", (b_version, a_version, call_uid))
+    out = _rows(conn, a_version, b_version, found)
+    conn.execute(
+        "DELETE FROM ax_call_disagreements WHERE call_uid = ? AND a_version = ? AND b_version = ?",
+        (call_uid, a_version, b_version),
+    )
+    conn.executemany("INSERT INTO ax_call_disagreements VALUES (?, ?, ?, ?, ?, ?, ?)", out)
+    conn.commit()
+    return bool(out)

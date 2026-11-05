@@ -1,6 +1,9 @@
 """통화 화면 조회·쓰기 (backend/calls.py, 통화·② 판정 화면 설계 "통화 화면")."""
 
 import json
+from datetime import datetime
+
+import pytest
 
 from backend import calls
 from tests.backend.call_db import LABELS, TODAY, judge_row
@@ -77,3 +80,114 @@ def test_detail_v1_strings_as_internal(cconn):
 def test_detail_pool_call_is_none(cconn):
     assert calls.call_detail(cconn, "c-0002") is None
     assert calls.call_detail(cconn, "c-9999") is None
+
+
+def test_todo_check_moves_to_done_and_back(cconn):
+    b = calls.today_board(cconn, TODAY)
+    item = b["internal"][0]
+    calls.set_todo_done(
+        cconn,
+        item["classification_id"],
+        item["item"],
+        part="데스크",
+        at="2026-11-05 10:00:00",
+        done=True,
+    )
+    b2 = calls.today_board(cconn, TODAY)
+    done = b2["done"][0]
+    assert (done["call_uid"], done["done_by"]) == (item["call_uid"], "데스크")
+    calls.set_todo_done(
+        cconn, item["classification_id"], item["item"], part="데스크", at="x", done=False
+    )
+    assert calls.today_board(cconn, TODAY)["done"] == []
+
+
+def test_todo_check_idempotent_and_missing_item(cconn):
+    cid = calls.today_board(cconn, TODAY)["internal"][0]["classification_id"]
+    for _ in range(2):
+        calls.set_todo_done(cconn, cid, 0, part="데스크", at="2026-11-05 10:00:00", done=True)
+    assert cconn.execute("SELECT COUNT(*) FROM ax_todo_checks").fetchone()[0] == 1
+    with pytest.raises(KeyError):
+        calls.set_todo_done(cconn, cid, 9, part="데스크", at="x", done=True)
+    with pytest.raises(KeyError):
+        calls.set_todo_done(cconn, 99999, 0, part="데스크", at="x", done=True)
+
+
+def _gw(conn, fail=False):
+    from dataclasses import replace
+
+    from backend.harness.store import SqliteLlmLog
+    from shared.llm import FakeGateway
+
+    class G(FakeGateway):
+        def complete(self, alias, **kw):
+            r = super().complete(alias, **kw)
+            return replace(r, ok=False, data=None, error="실패") if fail else r
+
+    return G(SqliteLlmLog(conn), scope="runtime")
+
+
+NOW = datetime(2026, 11, 5, 14, 30, 0)
+
+
+def test_add_call_classifies_and_links_patient(cconn):
+    uid = calls.add_call(
+        cconn,
+        _gw(cconn),
+        direction="inbound",
+        transcript="직원: 네\n환자: 예약 바꿀게요",
+        phone="010-1111-2222",
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert uid == "p-0001"
+    d = calls.call_detail(cconn, uid)
+    assert d["call"]["at"] == "2026-12-01 14:30:00" and d["call"]["chart_no"] == "C-00001"
+    assert d["classification"]["status"] == "ok" and d["judge"] is not None
+    assert (
+        calls.add_call(
+            cconn,
+            _gw(cconn),
+            direction="outbound",
+            transcript="직원: 안내",
+            phone=None,
+            part="데스크",
+            now=NOW,
+            today=TODAY,
+        )
+        == "p-0002"
+    )
+    assert calls.call_detail(cconn, "p-0002")["call"]["chart_no"] is None
+
+
+def test_add_call_rejects_empty(cconn):
+    for direction, text in (("inbound", "   "), ("sideways", "직원: 네")):
+        with pytest.raises(ValueError):
+            calls.add_call(
+                cconn,
+                _gw(cconn),
+                direction=direction,
+                transcript=text,
+                phone=None,
+                part="데스크",
+                now=NOW,
+                today=TODAY,
+            )
+    assert cconn.execute("SELECT COUNT(*) FROM ax_pasted_calls").fetchone()[0] == 0
+
+
+def test_add_call_failed_then_reclassify(cconn):
+    uid = calls.add_call(
+        cconn,
+        _gw(cconn, fail=True),
+        direction="inbound",
+        transcript="직원: 네\n환자: 아파요",
+        phone=None,
+        part="데스크",
+        now=NOW,
+        today=TODAY,
+    )
+    assert calls.call_detail(cconn, uid)["classification"]["status"] == "failed"
+    calls.classify_one(cconn, _gw(cconn), uid)
+    assert calls.call_detail(cconn, uid)["classification"]["status"] == "ok"

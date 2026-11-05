@@ -5,10 +5,11 @@
 
 import json
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from itertools import groupby
 
-from backend import db
+from backend import classify as cl
+from backend import db, disagreements
 from shared.call_labels import todo_items
 
 TODAY_WINDOW_DAYS = 7  # "오늘"에 올라오는 생성 통화 — 기준일 전 이 날수 안(설계 "오늘")
@@ -223,3 +224,92 @@ def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
             else None
         ),
     }
+
+
+def set_todo_done(
+    conn: sqlite3.Connection, classification_id: int, item: int, *, part: str, at: str, done: bool
+) -> None:
+    """할 일 하나를 끝냄/되돌림 — 이미 같은 상태면 그대로. 없는 분류·항목은 KeyError"""
+    row = conn.execute(
+        "SELECT todo FROM ax_call_classifications WHERE id = ? AND status = 'ok'",
+        (classification_id,),
+    ).fetchone()
+    if row is None or not 0 <= item < len(json.loads(row["todo"] or "[]")):
+        raise KeyError(f"{classification_id}/{item}")
+    if done:
+        conn.execute(
+            "INSERT OR IGNORE INTO ax_todo_checks VALUES (?, ?, ?, ?)",
+            (classification_id, item, part, at),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM ax_todo_checks WHERE classification_id = ? AND item = ?",
+            (classification_id, item),
+        )
+    conn.commit()
+
+
+DIRECTIONS = ("inbound", "outbound")
+
+
+def add_call(
+    conn: sqlite3.Connection,
+    gw,
+    *,
+    direction: str,
+    transcript: str,
+    phone: str | None,
+    part: str,
+    now: datetime,
+    today: date,
+) -> str:
+    """새 통화 추가 — 시각은 기준일 날짜 + now의 시각, 번호가 EMR 환자와 맞으면 연결(화면 표시용). 저장 뒤 분류·판정.
+    빈 녹취록·잘못된 방향은 ValueError(통화를 만들지 않는다)"""
+    if direction not in DIRECTIONS:
+        raise ValueError(f"direction: {direction}")
+    if not transcript.strip():
+        raise ValueError("transcript: 통화 내용이 비어 있습니다")
+    phone = (phone or "").strip() or None
+    patient = (
+        conn.execute("SELECT id FROM source.emr_patients WHERE phone = ?", (phone,)).fetchone()
+        if phone
+        else None
+    )
+    n = conn.execute("SELECT COUNT(*) FROM ax_pasted_calls").fetchone()[0] + 1
+    uid = f"p-{n:04d}"
+    conn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, caller_phone,"
+        " patient_id, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            uid,
+            direction,
+            f"{today.isoformat()} {now.strftime('%H:%M:%S')}",
+            transcript.strip(),
+            phone,
+            patient[0] if patient else None,
+            part,
+            now.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    conn.commit()
+    classify_one(conn, gw, uid)
+    return uid
+
+
+def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
+    """한 통화를 활성 버전으로 분류·판정하고 엇갈림·판정 큐를 맞춘다(새 통화, 다시 분류)"""
+    from backend import judge_queue  # judge_queue가 이 모듈을 import한다
+
+    row = conn.execute(
+        CALLS_CTE + " SELECT * FROM calls WHERE call_uid = ?", (call_uid,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(call_uid)
+    a, b = active_versions(conn)
+    cl.save_classification(
+        conn, call_uid, a, cl.classify(gw, row["transcript"], row["direction"], a)
+    )
+    if b:
+        cl.save_judgment(conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b))
+        disagreements.compute_call(conn, call_uid, a, b)
+    judge_queue.refresh_call(conn, call_uid)
