@@ -1,7 +1,7 @@
 """Claude Code 훅 — 이 저장소 규칙을 도구 호출 앞뒤에 지킨다(.claude/settings.json과 읽기 전용 에이전트 머리말이 부른다).
 
 PreToolUse
-- Bash 막기: `git add`는 파일 이름으로만(-A·--all·-u·`.`·폴더·글롭 금지), `git commit -a` 금지 — CLAUDE.md '깃'.
+- Bash 막기: `git add`는 파일 이름으로만(-A·--all·-u·`.`·폴더·글롭 금지 — 글롭 문자가 든 실제 파일 이름은 허용), `git commit -a` 금지 — CLAUDE.md '깃'.
   `git commit` 전에 `make lint`가 통과해야 한다 — CLAUDE.md '코드 컨벤션'
 - Bash 확인 창: 과금·되돌리기 어려운 명령(push·PR 머지·LLM API 채우기·test 평가)은 사용자 승인
 - Edit·Write 막기: 생성물(LLM 캐시·DB·생성기가 쓰는 정답 JSON)은 손으로 고치지 않는다 — make data·make llm-import가 쓴다.
@@ -114,9 +114,9 @@ def _bulk_add(args: list[str], cwd: Path) -> str | None:
             return a
         if a == "--":
             continue
-        if not a.startswith("-") and (
-            a == "." or a.startswith(":") or any(c in a for c in "*?[") or (cwd / a).is_dir()
-        ):
+        # 글롭 문자가 있어도 그 이름의 파일이 있으면 파일 이름이다(예: Next.js 동적 경로 app/[screen]/page.tsx)
+        glob = any(c in a for c in "*?[") and not (cwd / a).is_file()
+        if not a.startswith("-") and (a == "." or a.startswith(":") or glob or (cwd / a).is_dir()):
             return a
     return None
 
