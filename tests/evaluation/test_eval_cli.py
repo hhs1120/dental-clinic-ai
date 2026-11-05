@@ -230,8 +230,8 @@ def test_no_app_skips_rag(conn, reports):
 
 def test_prompt_version_filter_and_fewshot(conn, reports, tmp_path):
     prompts = tmp_path / "prompts"
-    (prompts / "classify").mkdir(parents=True)
-    (prompts / "classify" / "v1.md").write_text(
+    (prompts / "classify" / "v1").mkdir(parents=True)
+    (prompts / "classify" / "v1" / "labels.md").write_text(
         "---\nfewshot_call_uids: [c-0001]\n---\n분류하라", encoding="utf-8"
     )
     data = _json(_run(conn, reports, split="dev", prompt_version="v1", prompts_dir=prompts))
@@ -242,8 +242,8 @@ def test_prompt_version_filter_and_fewshot(conn, reports, tmp_path):
 def test_fewshot_from_test_split_refused(conn, reports, tmp_path):
     """few-shot 예시에 test 통화(c-0003)를 쓰면 평가를 거부한다 — test 점수가 샌다"""
     prompts = tmp_path / "prompts"
-    (prompts / "classify").mkdir(parents=True)
-    (prompts / "classify" / "v1.md").write_text(
+    (prompts / "classify" / "v1").mkdir(parents=True)
+    (prompts / "classify" / "v1" / "labels.md").write_text(
         "---\nfewshot_call_uids: [c-0003]\n---\n분류하라", encoding="utf-8"
     )
     with pytest.raises(EvalRefused, match="test 통화"):

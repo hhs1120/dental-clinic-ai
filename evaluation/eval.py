@@ -210,7 +210,7 @@ def run(
                 key=classification.version_key,
             )
         )
-        fewshot = {v: fewshot_uids(prompts_dir / "classify" / f"{v}.md") for v in versions}
+        fewshot = {v: fewshot_uids(prompts_dir / "classify" / v / "labels.md") for v in versions}
         test_uids = {
             r[0]
             for r in conn.execute(
