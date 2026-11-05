@@ -15,7 +15,7 @@ from backend import db, disagreements
 from shared.call_labels import todo_items
 
 log = logging.getLogger(__name__)
-TODAY_WINDOW_DAYS = 7  # "오늘"에 올라오는 생성 통화 — 기준일 전 이 날수 안(설계 "오늘")
+TODAY_WINDOW_DAYS = 7  # "오늘 할 일"에 오르는 생성 통화 — 기준일 전 이 날수 안
 CALLS_CTE = (
     "WITH calls AS ("
     " SELECT a.call_uid, a.direction, a.started_at AS at, a.transcript, a.duration_sec,"
@@ -89,7 +89,7 @@ def _todo(r, checks: dict) -> list[dict]:
 
 
 def today_board(conn: sqlite3.Connection, today: date) -> dict:
-    """ "오늘" 두 칸 — 기준일 전 TODAY_WINDOW_DAYS일 안의 생성 통화 + 새로 추가한 통화(날짜 무관)의 할 일.
+    """ "오늘 할 일" 두 칸 — 기준일 전 TODAY_WINDOW_DAYS일 안의 생성 통화 + 새로 추가한 통화(날짜 무관)의 할 일.
     응급·급함 통화 먼저, 그다음 통화 시각 최근 순, 같은 통화 안은 항목 번호 순"""
     since = (today - timedelta(days=TODAY_WINDOW_DAYS)).isoformat()
     rows = _rows(

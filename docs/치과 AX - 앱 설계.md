@@ -29,7 +29,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행(급함은 urgent 여부만 비교 — [[치과 AX - 평가 설계]] §2.5), `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시(`fallback`)하고 자동 종결하지 않는다. 분류기 할 일 목록이 있는데 분류기 `has_todo` = 0이면 라벨이 같아도 1행(`todo_mismatch`). 계산은 `backend/disagreements.py` |
 | `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 채우는 때는 §6 판정 큐 |
 | `ax_pasted_calls` | 새로 추가한 통화(통화 화면 "새 통화 추가") — 앱이 만든 통화라 앱 DB. 목록·분류·판정에서는 생성 통화와 합쳐 보인다(`backend/calls.py`) |
-| `ax_todo_checks` | "오늘" 할 일 체크 — 분류 행의 할 일 항목 번호 단위로 끝낸 파트·시각. 되돌리면 지운다 |
+| `ax_todo_checks` | "오늘 할 일" 할 일 체크 — 분류 행의 할 일 항목 번호 단위로 끝낸 파트·시각. 되돌리면 지운다 |
 | `ax_call_followups` | 통화 단위 처리 기록과 후속 에이전트의 처리안(enum·근거·실행 id) — 후속 에이전트 착수 때 만든다 |
 | `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·쌍 비교 판정기(`blind_judge`) 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 | `ax_blind_votes` | 사람 블라인드 투표(대상은 [[치과 AX - 평가 설계]] §2.4). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
@@ -171,7 +171,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
   - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge만 읽는다
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
   - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다(지금은 `make classify`와 `ax_settings` 직접 설정 — 작업 API는 [[치과 AX - 기능 정의]] §9). 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
-  - **전환 뒤 상태**: 자동 종결의 되돌림은 통화 단위라 그대로 둔다. 자동 종결은 새 분류로 조건을 다시 계산해 못 넘는 통화의 종결을 풀고 "오늘"로 돌린다. 할 일 체크(`ax_todo_checks`)는 분류 행 단위라 버전을 바꾸면 이어지지 않는다(이어 붙일지는 [[치과 AX - 기능 정의]] §9 후속 에이전트)
+  - **전환 뒤 상태**: 자동 종결의 되돌림은 통화 단위라 그대로 둔다. 자동 종결은 새 분류로 조건을 다시 계산해 못 넘는 통화의 종결을 풀고 "오늘 할 일"로 돌린다. 할 일 체크(`ax_todo_checks`)는 분류 행 단위라 버전을 바꾸면 이어지지 않는다(이어 붙일지는 [[치과 AX - 기능 정의]] §9 후속 에이전트)
   - 되돌리기는 이전 버전으로 다시 설정한다. 이전 분류 행이 남아 있어 재분류가 필요 없다
 - **생성기**(`gen_transcript`·`gen_document`·`gen_chart`): 작업당 파일 하나 `prompts/<task>.md`를 고쳐 쓴다 — LLM 캐시 키에 그 파일 해시가 들어가 출력을 구분하고, 이력은 git
 
@@ -209,7 +209,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 |---|---|---|
 | `/` | 시작 화면 | 없음 |
 | `/today` | 오늘 | [[치과 AX - 기능 정의]] §4 앱 구성 |
-| `/calls` | 오늘(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
+| `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
 | `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
 | `/ask` | 질문하기, 기록 검색, 문서함 | [[치과 AX - 기능 정의]] §4 ③ |

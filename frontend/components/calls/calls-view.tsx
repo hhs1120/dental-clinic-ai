@@ -1,5 +1,6 @@
 "use client";
 
+import { History, ListChecks } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -20,8 +21,8 @@ import {
 import { readPart } from "@/lib/part";
 
 const TABS = [
-  ["today", "오늘"],
-  ["history", "통화 기록"],
+  ["today", "오늘 할 일", ListChecks],
+  ["history", "통화 기록", History],
 ] as const;
 
 /** 통화 화면 — 탭·고른 통화·넓게 보기는 URL에 둔다(/calls?tab=…&call=…&wide=1) */
@@ -110,17 +111,18 @@ export function CallsView() {
             go({ tab: v === "today" ? null : v, call: null, wide: null })
           }
         >
-          {/* 처음 보는 사람도 누를 곳으로 알아보게 버튼 모양 두 칸 — 고른 쪽은 채운다 */}
-          <TabsList className="h-11 gap-1 bg-transparent p-0">
-            {TABS.map(([k, l]) => (
+          {/* 한 상자 안의 두 칸(세그먼트) — 아이콘·글자를 키우고 고른 칸은 떠 있는 흰 카드로 */}
+          <TabsList className="h-12 gap-1 rounded-xl p-1">
+            {TABS.map(([k, l, Icon]) => (
               <TabsTrigger
                 key={k}
                 value={k}
-                className="h-11 rounded-lg border border-border bg-card px-5 text-base font-bold shadow-control hover:bg-muted data-active:border-primary data-active:bg-primary data-active:text-primary-foreground dark:data-active:border-primary dark:data-active:bg-primary"
+                className="h-full gap-2 rounded-lg px-5 text-base font-bold data-active:shadow-card"
               >
+                <Icon className="size-4" aria-hidden />
                 {l}
                 {k === "today" && board.data && (
-                  <span className="rounded-full bg-background px-1.5 text-xs text-foreground">
+                  <span className="rounded-full bg-primary px-2 text-xs leading-5 text-primary-foreground">
                     {board.data.internal.length + board.data.contact.length}
                   </span>
                 )}

@@ -164,9 +164,7 @@ function Row({
         </span>
         {note && (
           <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-medium text-foreground">
-              먼저
-            </span>
+            <Badge variant="warn">먼저</Badge>
             {note}
           </span>
         )}
