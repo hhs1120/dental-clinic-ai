@@ -143,17 +143,18 @@ function CallCard({
 }) {
   const head = items[0];
   const name = head.name ?? (head.kind === "contact" ? head.who : null);
+  // 카드 어디를 눌러도 상세가 열린다 — 키보드는 머리 버튼(클릭이 카드로 올라온다), 체크박스는 열지 않는다
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-card",
-        on && "border-primary",
+        "flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-card hover:border-primary/50",
+        on && "border-primary hover:border-primary",
       )}
+      onClick={() => onOpen(head.call_uid)}
     >
       <button
         type="button"
         className="flex flex-wrap items-center gap-1.5 text-left"
-        onClick={() => onOpen(head.call_uid)}
       >
         <b className="whitespace-nowrap">{name ?? "이름 없음"}</b>
         {head.emergency && <Badge variant="danger">응급</Badge>}
@@ -171,20 +172,17 @@ function CallCard({
                 className="mt-0.5"
                 checked={it.done}
                 onCheckedChange={(v) => onCheck(it, v === true)}
+                onClick={(e) => e.stopPropagation()}
                 aria-label={`${it.text} 끝냄`}
               />
-              <button
-                type="button"
-                className="text-left"
-                onClick={() => onOpen(it.call_uid)}
-              >
+              <span>
                 {/* 연락 상대가 카드 머리 이름(환자)과 다르면 앞에 — 보호자·가족에게 거는 연락 */}
                 {it.kind === "contact" &&
                   it.who &&
                   it.who !== name &&
                   it.who !== "환자" && <b>{it.who} · </b>}
                 {it.text}
-              </button>
+              </span>
             </div>
             {first && (
               <span className="ml-7 flex items-center gap-1.5 text-xs">
