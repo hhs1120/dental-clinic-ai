@@ -163,9 +163,10 @@ function Row({
           {item.chart_no ? ` ${item.chart_no}` : ""}
         </span>
         {note && (
-          <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="mt-1 flex items-center gap-1.5 text-xs">
             <Badge variant="warn">먼저</Badge>
-            {note}
+            {/* 먼저 끝낼 할 일 — 회색 맥락 글자와 구분되게 배지와 같은 계열 색 */}
+            <span className="font-medium text-status-warn-fg">{note}</span>
           </span>
         )}
       </button>
