@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 from backend import classify as cl
-from backend import db, disagreements
+from backend import db, disagreements, judge_queue
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLES = {"classify": "ax_call_classifications", "judge": "ax_model_judgments"}
@@ -136,6 +136,7 @@ def main(argv=None) -> None:
     db.init_schema(conn)
     if args.cmd == "disagreements":
         print(f"엇갈림 {disagreements.compute(conn, args.a, args.b)}건")
+        print(f"판정 큐 추가 {judge_queue.refresh(conn, args.a, args.b)}건")  # 앱 설계 §6
         return
     from backend.harness.llm import make_gateway
 
