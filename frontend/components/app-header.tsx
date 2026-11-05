@@ -14,10 +14,8 @@ import {
 } from "@/components/ui/select";
 import { useClinic } from "@/lib/api";
 import { MENU, SPACES } from "@/lib/nav";
+import { PART_KEY, PARTS } from "@/lib/part";
 import { cn } from "@/lib/utils";
-
-const PARTS = ["원장", "데스크", "상담실장"];
-const PART_KEY = "ax.part";
 
 /** 담당 파트 — 화면은 바뀌지 않는다(기능 정의 §4). 저장소가 막힌 브라우저에서도 동작한다 */
 function PartSelect() {
