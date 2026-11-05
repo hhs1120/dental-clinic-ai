@@ -22,7 +22,7 @@ from backend.vector_store import VectorStore
 from shared.clinic import Clinic
 
 SOURCE_SCHEMA = Path(__file__).parents[2] / "shared" / "source_schema.sql"
-CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1))
+CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1), eval_pool_size=150)
 LONG = "\n\n".join(f"문단 {i} " + "가나다라마바사 " * 12 for i in range(6))
 
 

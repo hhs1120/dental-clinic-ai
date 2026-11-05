@@ -18,7 +18,7 @@ from shared.clinic import Clinic
 from tests.backend.script import Script, answer, call
 
 SOURCE_SCHEMA = Path(__file__).parents[2] / "shared" / "source_schema.sql"
-CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1))
+CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1), eval_pool_size=150)
 
 
 @pytest.fixture
