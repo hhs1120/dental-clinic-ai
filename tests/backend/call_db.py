@@ -1,4 +1,4 @@
-"""통화 화면 테스트 DB — 생성 통화 몇 건과 활성 v2 분류(test_calls·test_judge_queue·test_blind 등이 같이 쓴다)."""
+"""통화 화면 테스트 DB — 생성 통화 몇 건과 활성 v2 분류(test_call_screens·test_judge_queue·test_blind 등이 같이 쓴다)."""
 
 import json
 import sqlite3
