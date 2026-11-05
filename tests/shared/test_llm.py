@@ -570,3 +570,120 @@ def test_tools_are_sent_to_fallback_model(tmp_path):
     client = StubClient(_status_error(anthropic.InternalServerError, 500), _tool_message())
     result = _gateway(tmp_path, client).complete("gen", task="t", messages=MSGS, tools=TOOLS)
     assert result.ok and result.fallback_used and client.calls[1][1]["tools"] == TOOLS
+
+
+# ── Upstage (Solar, OpenAI 호환 API — 분류기 설계 "게이트웨이") ─────────────────────
+
+import openai  # noqa: E402
+from openai.types.chat import ChatCompletion  # noqa: E402
+
+UP_CONFIG = {
+    "aliases": {"up": ["solar"], "up-then-b": ["solar", "model-b"]},
+    "models": {
+        "solar": {"input": 0.15, "output": 0.6, "provider": "upstage"},
+        "model-b": {"input": 1.0, "output": 5.0},
+    },
+    "daily_usd_limit": {"generator": 1.0, "runtime": 0.5},
+}
+LABELS_SCHEMA = {
+    "type": "object",
+    "properties": {"label": {"type": "string"}},
+    "required": ["label"],
+    "additionalProperties": False,
+}
+
+
+def _chat(text='{"label": "예약"}', model="solar-mini-250422", finish="stop", pt=1000, ct=100):
+    return ChatCompletion.model_validate(
+        {
+            "id": "chatcmpl-1",
+            "object": "chat.completion",
+            "created": 0,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": finish,
+                    "message": {"role": "assistant", "content": text},
+                }
+            ],
+            "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct},
+        }
+    )
+
+
+class UpstageStub:
+    """chat.completions.create — 결과는 순서대로 꺼낸다"""
+
+    def __init__(self, *outcomes):
+        self.calls, outcomes = [], list(outcomes)
+        self.chat = type("Chat", (), {"completions": _Messages(outcomes, self.calls, "upstage")})()
+
+
+def _up_gateway(tmp_path, upstage, client=None):
+    return llm.Gateway(
+        UP_CONFIG,
+        llm.JsonlLog(tmp_path / "calls.jsonl"),
+        scope="runtime",
+        client=client or StubClient(),
+        upstage_client=upstage,
+        clock=lambda: NOW,
+    )
+
+
+def test_upstage_complete_parses_json(tmp_path):
+    up = UpstageStub(_chat())
+    gw = _up_gateway(tmp_path, up)
+    r = gw.complete("up", task="classify", system="지시", messages=MSGS, schema=LABELS_SCHEMA)
+    assert r.ok and r.data == {"label": "예약"} and r.model == "solar-mini-250422"
+    assert not r.fallback_used and (r.input_tokens, r.output_tokens) == (1000, 100)
+    assert r.cost_usd == pytest.approx((1000 * 0.15 + 100 * 0.6) / 1e6)
+    ((_, kwargs),) = up.calls
+    assert kwargs["model"] == "solar"
+    assert kwargs["messages"] == [{"role": "system", "content": "지시"}, *MSGS]
+    fmt = kwargs["response_format"]
+    assert fmt["type"] == "json_schema" and fmt["json_schema"]["strict"] is True
+    assert fmt["json_schema"]["schema"] == LABELS_SCHEMA
+    (row,) = _log(tmp_path)
+    assert row["ok"] and row["model"] == "solar-mini-250422"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        openai.APIConnectionError(request=http.Request("POST", "https://api.upstage.ai/v1")),
+        openai.APIStatusError(
+            "오류",
+            response=http.Response(429, request=http.Request("POST", "https://api.upstage.ai")),
+            body=None,
+        ),
+    ],
+)
+def test_upstage_transient_error_recorded(tmp_path, error):
+    gw = _up_gateway(tmp_path, UpstageStub(error))
+    r = gw.complete("up", task="classify", messages=MSGS, schema=LABELS_SCHEMA)
+    assert not r.ok and "solar" in r.error
+    assert len(_log(tmp_path)) == 1
+
+    # 별칭에 다음 모델이 있으면 넘어간다
+    client = StubClient(_message(text='{"label": "x"}'))
+    gw = _up_gateway(tmp_path, UpstageStub(error), client)
+    r = gw.complete("up-then-b", task="classify", messages=MSGS, schema=LABELS_SCHEMA)
+    assert r.ok and r.fallback_used and r.model == "model-b"
+
+
+def test_upstage_length_cut_fails(tmp_path):
+    gw = _up_gateway(tmp_path, UpstageStub(_chat(finish="length")))
+    r = gw.complete("up-then-b", task="classify", messages=MSGS, schema=LABELS_SCHEMA)
+    assert not r.ok and "finish_reason length" in r.error and r.model == "solar-mini-250422"
+
+
+def test_upstage_batch_rejected(tmp_path):
+    gw = _up_gateway(tmp_path, UpstageStub())
+    with pytest.raises(ValueError):
+        gw.submit_batch("up", [{"custom_id": "k", "messages": MSGS}], task="classify")
+
+
+def test_log_id_is_none_for_jsonl_log(tmp_path):
+    gw = _up_gateway(tmp_path, UpstageStub(_chat()))
+    assert gw.complete("up", task="t", messages=MSGS, schema=LABELS_SCHEMA).log_id is None

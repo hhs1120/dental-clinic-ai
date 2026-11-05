@@ -135,8 +135,9 @@ class SqliteLlmLog:
     def __init__(self, conn: sqlite3.Connection, is_eval: bool = False):
         self.conn, self.is_eval = conn, is_eval
 
-    def write(self, record: dict) -> None:
-        self.conn.execute(
+    def write(self, record: dict) -> int:
+        """기록하고 행 id를 돌려준다(LLMResult.log_id)"""
+        cur = self.conn.execute(
             "INSERT INTO ax_llm_calls (task, model_alias, model_actual, prompt_version,"
             " fallback_used, ok, is_eval, created_at, input_tokens, output_tokens, cost_usd,"
             " latency_ms, error, ref_type, ref_id)"
@@ -160,6 +161,7 @@ class SqliteLlmLog:
             ),
         )
         self.conn.commit()
+        return cur.lastrowid
 
     def spent(self, day: date, scope: str) -> float:
         """앱 DB에는 한 범위(runtime)만 쓴다"""

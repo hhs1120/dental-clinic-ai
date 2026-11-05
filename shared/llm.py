@@ -1,22 +1,26 @@
-"""LLM 게이트웨이 — 생성기·앱의 모든 LLM 호출이 지나는 모듈 하나 (앱 설계 §7). Anthropic 공식 SDK를 직접 쓴다.
+"""LLM 게이트웨이 — 생성기·앱의 모든 LLM 호출이 지나는 모듈 하나 (앱 설계 §7). 프로바이더마다 공식 SDK를 직접 쓴다 —
+Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK). 모델의 프로바이더는 설정의 provider(없으면 anthropic).
 설정은 config/llm.yaml: 별칭 → 모델 순서, 모델별 단가, 일일 비용 상한.
 - 폴백: 일시 오류(연결·408·409·429·5xx — SDK 재시도를 다 쓴 뒤)나 거절이면 다음 모델로. 그 밖의 오류(400 등),
-  잘린 응답(stop_reason이 end_turn 아님), JSON 파싱 실패는 다른 모델로 가도 같아 거기서 실패
+  잘린 응답(stop_reason이 end_turn 아님, Upstage는 finish_reason이 stop 아님), JSON 파싱 실패는 다른 모델로 가도
+  같아 거기서 실패
 - 호출 1건 = 기록 1행(시도한 모델 전부의 토큰·비용 합, 예외가 나도 남김). 생성기는 JsonlLog, 앱은 ax_llm_calls(backend/harness/store.py SqliteLlmLog)
 - 그날 쓴 돈이 범위(generator/runtime)의 상한 이상이면 호출하지 않고 BudgetExceeded. 확인과 호출 사이 시차로
   동시 호출 수 × 1건 비용만큼 넘을 수 있다(허용)
 - FakeGateway는 같은 인터페이스로 입력 해시에서 결정적 응답 — 테스트·CI·fixture용(과금 없음)
-- Batch(생성기 API 채우기): 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
+- 결과의 log_id = 그 호출의 기록 행 id(SqliteLlmLog면 ax_llm_calls.id, JsonlLog면 None)
+- Batch(생성기 API 채우기·분류 일괄): Anthropic만, 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
   결과 1건 = 기록 1행. 처리 안 된 건(오류·취소·만료)은 기록하지 않고 None
-의존성: anthropic은 generator·backend 그룹
+의존성: anthropic은 generator·backend 그룹, openai는 backend 그룹(Upstage 모델을 처음 부를 때 import)
 """
 
 import hashlib
 import json
+import os
 import threading
 import time
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -32,6 +36,7 @@ CACHE_WRITE_SHARE = 1.25  # 캐시 쓰기 = input 단가의 이 배수
 TRANSIENT_STATUS = (408, 409, 429)  # + 5xx — SDK 재시도 기준과 같음
 ATTEMPT_ITERATIONS = ("message", "fallback_message")  # usage.iterations 중 모델 시도
 BATCH_PRICE_SHARE = 0.5  # Batch 단가 = 일반 단가의 이 배수
+UPSTAGE_BASE_URL = "https://api.upstage.ai/v1"
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -57,6 +62,7 @@ class LLMResult:
     stop_reason: str | None = None
     tool_calls: tuple = ()  # 도구 호출 {id, name, input}
     content: list | None = None  # 다음 턴에 그대로 넘길 assistant 블록(글·도구 호출)
+    log_id: int | None = None  # 기록 행 id (기록 저장소가 돌려준 값)
 
 
 class JsonlLog:
@@ -117,9 +123,10 @@ class _Base:
     def __init__(self, log, scope: str, clock=datetime.now):
         self.log, self.scope, self.clock = log, scope, clock
 
-    def _record(self, alias, task, prompt_version, ref, result: LLMResult) -> None:
+    def _record(self, alias, task, prompt_version, ref, result: LLMResult) -> LLMResult:
+        """기록하고 log_id를 채운 결과를 돌려준다"""
         ref_type, ref_id = ref if ref else (None, None)
-        self.log.write(
+        log_id = self.log.write(
             {
                 "at": self.clock().isoformat(timespec="seconds"),
                 "scope": self.scope,
@@ -138,13 +145,20 @@ class _Base:
                 "ref_id": ref_id,
             }
         )
+        return replace(result, log_id=log_id)
 
 
 class Gateway(_Base):
-    def __init__(self, config: dict, log, scope: str, client=None, clock=datetime.now):
+    def __init__(
+        self, config: dict, log, scope: str, client=None, upstage_client=None, clock=datetime.now
+    ):
         super().__init__(log, scope, clock)
         self.config = config
         self.client = client if client is not None else anthropic.Anthropic()
+        self.upstage_client = upstage_client  # 없으면 Upstage 모델을 처음 부를 때 만든다
+
+    def _provider(self, model: str) -> str:
+        return self.config["models"][model].get("provider", "anthropic")
 
     def _price(self, model: str, requested: str) -> dict:
         return (
@@ -189,6 +203,55 @@ class Gateway(_Base):
             )
         return self.client.messages.create(**params)
 
+    def _upstage(self, model: str, system, messages, max_tokens, schema, state) -> tuple:
+        """Upstage 한 시도 — 토큰·비용·오류는 state에 더하고 ("next" | "stop" | "ok", (text, data))를 돌려준다.
+        폴백 규칙은 Anthropic과 같다(일시 오류면 next, 그 밖의 오류·잘림·JSON 파싱 실패면 stop)"""
+        import openai
+
+        if self.upstage_client is None:
+            self.upstage_client = openai.OpenAI(
+                api_key=os.environ["UPSTAGE_API_KEY"], base_url=UPSTAGE_BASE_URL
+            )
+        head = [{"role": "system", "content": system}] if system is not None else []
+        params = {"model": model, "max_tokens": max_tokens, "messages": head + list(messages)}
+        if schema is not None:
+            params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "labels", "schema": schema, "strict": True},
+            }
+        try:
+            response = self.upstage_client.chat.completions.create(**params)
+        except openai.APIConnectionError as e:  # 타임아웃 포함
+            state["errors"].append(f"{model}: {type(e).__name__}")
+            return "next", None
+        except openai.APIStatusError as e:
+            state["errors"].append(f"{model}: {type(e).__name__} {e.status_code}")
+            transient = e.status_code in TRANSIENT_STATUS or e.status_code >= 500
+            return ("next" if transient else "stop"), None
+        price = self._price(response.model, model)
+        u = response.usage
+        state.update(
+            {
+                "in": state["in"] + u.prompt_tokens,
+                "out": state["out"] + u.completion_tokens,
+                "cost": state["cost"]
+                + (u.prompt_tokens * price["input"] + u.completion_tokens * price["output"]) / 1e6,
+                "model": response.model,
+            }
+        )
+        choice = response.choices[0]
+        if choice.finish_reason != "stop":
+            state["errors"].append(f"{model}: finish_reason {choice.finish_reason}")
+            return "stop", None
+        text = choice.message.content or ""
+        if schema is None:
+            return "ok", (text, None)
+        try:
+            return "ok", (text, json.loads(text))
+        except json.JSONDecodeError:
+            state["errors"].append(f"{model}: JSON 파싱 실패")
+            return "stop", None
+
     def complete(
         self,
         alias: str,
@@ -213,6 +276,9 @@ class Gateway(_Base):
             "cost": 0.0,
             "errors": [],
             "model": chain[0],
+            "tried": chain[
+                0
+            ],  # 지금 시도하는 별칭 모델 — 응답 모델명은 날짜 붙은 id일 수 있어 따로 둔다
             "server_fallback": False,
         }
 
@@ -223,7 +289,7 @@ class Gateway(_Base):
                 text,
                 data,
                 state["model"],
-                state["model"] != chain[0] or state["server_fallback"],
+                state["tried"] != chain[0] or state["server_fallback"],
                 state["in"],
                 state["out"],
                 state["cost"],
@@ -241,7 +307,16 @@ class Gateway(_Base):
         result = None
         try:
             for model in chain:
-                state["model"] = model
+                state["model"] = state["tried"] = model
+                if self._provider(model) == "upstage":
+                    outcome, got = self._upstage(
+                        model, system, messages, max_tokens, schema, state
+                    )
+                    if outcome == "next":
+                        continue
+                    if outcome == "ok":
+                        result = finish(True, *got)
+                    break
                 try:
                     response = self._call(
                         model, system, messages, max_tokens, output_config, tools
@@ -290,8 +365,7 @@ class Gateway(_Base):
             state["errors"].append(f"{state['model']}: {type(e).__name__}")
             self._record(alias, task, prompt_version, ref, finish(False))
             raise
-        self._record(alias, task, prompt_version, ref, result)
-        return result
+        return self._record(alias, task, prompt_version, ref, result)
 
     def _check_budget(self) -> None:
         limit = self.config["daily_usd_limit"][self.scope]
@@ -310,6 +384,8 @@ class Gateway(_Base):
         """requests: [{custom_id, system, messages, schema}] → 배치 id. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
         보고 제출한다(기능 정의 §7). 비용은 결과에서 기록"""
         model = self.config["aliases"][alias][0]
+        if self._provider(model) != "anthropic":
+            raise ValueError(f"{self._provider(model)}: batch 미지원")
         batch = []
         for r in requests:
             params = {"model": model, "max_tokens": max_tokens, "messages": r["messages"]}
@@ -389,8 +465,9 @@ class Gateway(_Base):
                     )
                 except json.JSONDecodeError:
                     result = fail("JSON 파싱 실패")
-            self._record(alias, task, prompt_version, ("batch", entry.custom_id), result)
-            out[entry.custom_id] = result
+            out[entry.custom_id] = self._record(
+                alias, task, prompt_version, ("batch", entry.custom_id), result
+            )
         return out
 
 
@@ -477,5 +554,4 @@ class FakeGateway(_Base):
             stop_reason="end_turn",
             content=[{"type": "text", "text": text}],
         )
-        self._record(alias, task, prompt_version, ref, result)
-        return result
+        return self._record(alias, task, prompt_version, ref, result)

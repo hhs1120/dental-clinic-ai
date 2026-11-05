@@ -131,3 +131,45 @@ def test_refused_run_keeps_callers_uncommitted_write(conn, clock):
 def test_missing_parent_is_not_reported_as_locked(conn, clock):
     with pytest.raises(sqlite3.IntegrityError):
         RunStore(conn, clock).create_run("a", "c-1", "v1", owner="x", parent_run_id=999)
+
+
+def test_log_id_from_sqlite_log(conn):
+    from shared import llm
+
+    fake = llm.FakeGateway(SqliteLlmLog(conn), scope="runtime")
+    first = fake.complete("classify", task="t", messages=[{"role": "user", "content": "a"}])
+    second = fake.complete("classify", task="t", messages=[{"role": "user", "content": "b"}])
+    ids = [r[0] for r in conn.execute("SELECT id FROM ax_llm_calls ORDER BY id")]
+    assert [first.log_id, second.log_id] == ids and len(set(ids)) == 2
+
+    class Client:
+        class messages:  # noqa: N801
+            @staticmethod
+            def create(**_):
+                from anthropic.types import Message
+
+                return Message.model_validate(
+                    {
+                        "id": "m",
+                        "type": "message",
+                        "role": "assistant",
+                        "model": "claude-haiku-5-5",
+                        "content": [{"type": "text", "text": "응"}],
+                        "stop_reason": "end_turn",
+                        "stop_sequence": None,
+                        "usage": {"input_tokens": 1, "output_tokens": 1},
+                    }
+                )
+
+    gw = llm.Gateway(
+        {
+            "aliases": {"a": ["claude-haiku-5-5"]},
+            "models": {"claude-haiku-5-5": {"input": 1.0, "output": 1.0}},
+            "daily_usd_limit": {"runtime": 15},
+        },
+        SqliteLlmLog(conn),
+        scope="runtime",
+        client=Client(),
+    )
+    r = gw.complete("a", task="t", messages=[{"role": "user", "content": "c"}])
+    assert r.log_id == conn.execute("SELECT MAX(id) FROM ax_llm_calls").fetchone()[0]
