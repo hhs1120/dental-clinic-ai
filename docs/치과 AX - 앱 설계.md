@@ -27,12 +27,12 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_judgments` | 사람 판정(운영 구간 엇갈림·표본). `judged_at`은 실제 시계. `note`(메모, 선택) |
 | `ax_model_judgments` | 판정기(모델 B) 판정. 사람 판정과 섞지 않으려고 테이블을 나눈다. UNIQUE `(call_uid, model_alias, prompt_version)` |
 | `ax_call_disagreements` | 엇갈림 `(call_uid, a_version, b_version)` 1행(급함은 urgent 여부만 비교 — [[치과 AX - 평가 설계]] §2.5), `is_core` = 목적·급함·응급 불일치. 어느 쪽이든 폴백이면 표시(`fallback`)하고 자동 종결하지 않는다. 분류기 할 일 목록이 있는데 분류기 `has_todo` = 0이면 라벨이 같아도 1행(`todo_mismatch`). 계산은 `backend/disagreements.py` |
-| `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 엇갈림·표본이 정해질 때 채운다 |
+| `ax_judge_state` | 판정 상태(pending / skipped / done) — 생성 DB가 아니라 앱 DB에 둔다. 채우는 때는 §6 판정 큐 |
 | `ax_pasted_calls` | 새로 추가한 통화(통화 화면 "새 통화 추가") — 앱이 만든 통화라 앱 DB. 목록·분류·판정에서는 생성 통화와 합쳐 보인다(`backend/calls.py`) |
 | `ax_todo_checks` | "오늘" 할 일 체크 — 분류 행의 할 일 항목 번호 단위로 끝낸 파트·시각. 되돌리면 지운다 |
 | `ax_call_followups` | 통화 단위 처리 기록과 후속 에이전트의 처리안(enum·근거·실행 id) — 후속 에이전트 착수 때 만든다 |
 | `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·쌍 비교 판정기(`blind_judge`) 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). 규칙은 [[치과 AX - 평가 설계]] §2.4 |
-| `ax_blind_votes` | 사람 블라인드 투표(최종 비교만). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
+| `ax_blind_votes` | 사람 블라인드 투표(대상은 [[치과 AX - 평가 설계]] §2.4). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
 ## 2. LLM 로그
 
@@ -146,7 +146,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | Chroma로 옮길 때 | 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때. 벡터는 `VectorStore`(`upsert(ids, vectors)`·`query(vector, where, k)`) 뒤에만 있어 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로 — 구현 하나 추가 + 필터용 메타데이터 복사·다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사) |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | Voyage — 모델은 `backend/rag_search.py` `DEFAULT_EMBEDDING`·`DEFAULT_RERANKER`, `haiku`는 비교용 조건(`backend/eval_hooks.py`). 근거는 [[치과 AX - AI 실험 기록]]. 리랭커가 실패하면 합친 순서로 답하고 로그를 남긴다(평가는 실패 횟수를 알린다). 벡터가 없는 청크가 있으면 검색기를 만들지 않는다(`MissingVectors`) |
-| 모델 (확정) | 프로바이더 **Anthropic**·**Upstage**(LLM). ① 분류기 라벨·요약·할 일 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) `solar-mini4`(분류기와 다른 계열 — 별칭은 `config/llm.yaml`), 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
+| 모델 (확정) | 프로바이더 **Anthropic**·**Upstage**(LLM). ① 분류기 라벨·요약·할 일 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) `solar-mini4`(분류기와 다른 계열 — 별칭은 `config/llm.yaml`), 쌍 비교 판정기는 `config/llm.yaml` `blind_judge`, 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
 | LLM | 게이트웨이 모듈 1개 `shared/llm.py` — §7.1 |
 | 프롬프트 | `prompts/` — §7.2 |
 | 테스트 fixture | **`make fixture`**: fake 게이트웨이로 생성한 데이터로 판정 풀 전체와 판정 풀 밖 일부 통화를 가짜 프롬프트 버전 v1·v2 두 벌로 분류하고 판정기 판정까지 적재(판정 큐에 엇갈림·표본이 생기고 블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
@@ -170,8 +170,8 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
   - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge만 읽는다
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
-  - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다. 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
-  - **전환 뒤 상태**: 처리함과 되돌림은 통화 단위라 그대로 둔다. 자동 종결은 새 분류로 조건을 다시 계산해 못 넘는 통화의 종결을 풀고 큐로 돌린다
+  - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다(지금은 `make classify`와 `ax_settings` 직접 설정 — 작업 API는 [[치과 AX - 기능 정의]] §9). 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
+  - **전환 뒤 상태**: 자동 종결의 되돌림은 통화 단위라 그대로 둔다. 자동 종결은 새 분류로 조건을 다시 계산해 못 넘는 통화의 종결을 풀고 "오늘"로 돌린다. 할 일 체크(`ax_todo_checks`)는 분류 행 단위라 버전을 바꾸면 이어지지 않는다(이어 붙일지는 [[치과 AX - 기능 정의]] §9 후속 에이전트)
   - 되돌리기는 이전 버전으로 다시 설정한다. 이전 분류 행이 남아 있어 재분류가 필요 없다
 - **생성기**(`gen_transcript`·`gen_document`·`gen_chart`): 작업당 파일 하나 `prompts/<task>.md`를 고쳐 쓴다 — LLM 캐시 키에 그 파일 해시가 들어가 출력을 구분하고, 이력은 git
 
@@ -201,7 +201,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 9. 프론트
 
-화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드는 [[치과 AX - 기능 정의]] §4가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
 
 **페이지**
 

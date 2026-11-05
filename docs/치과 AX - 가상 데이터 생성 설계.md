@@ -265,7 +265,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 | `transcript` | 화자 구분된 **순수 대화만**(prefix 없음, 차트번호 발화 없음) |
 | `in_eval_pool`·`eval_sort_order`, `in_blind_pool`·`blind_sort_order` | 생성기가 층화 추출해 마킹 — **카테고리 정보 없음**. 크기·순번·split 규칙은 [[치과 AX - 평가 설계]] §2.1 |
 
-판정 상태와 붙여넣기 통화는 앱이 쓰는 값이라 앱 DB에 둔다(앱 설계). 골드 라벨·노이즈는 `truth_call_labels`에만. **`ax_documents`**의 방해 여부·심은 사실은 `truth_doc_meta`에만.
+판정 상태와 새로 추가한 통화는 앱이 쓰는 값이라 앱 DB에 둔다(앱 설계). 골드 라벨·노이즈는 `truth_call_labels`에만. **`ax_documents`**의 방해 여부·심은 사실은 `truth_doc_meta`에만.
 
 ## 4. 비정형 생성
 
