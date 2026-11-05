@@ -16,8 +16,8 @@
 
 **이번에 만든다**
 - LLM 게이트웨이에 Upstage(Solar) 호출 경로
-- 분류기: `classify(transcript, direction)` — Solar 라벨 호출 + Haiku 요약·할 일 호출, 결과는 `ax_call_classifications` 1행
-- 판정기: `judge(transcript, direction)` — Haiku 라벨 호출, 결과는 `ax_model_judgments` 1행
+- 분류기: `classify(transcript, direction)` — 라벨 호출 + 요약·할 일 호출(둘 다 Haiku), 결과는 `ax_call_classifications` 1행
+- 판정기: `judge(transcript, direction)` — Solar 라벨 호출, 결과는 `ax_model_judgments` 1행
 - 엇갈림 계산: `ax_call_disagreements`
 - 일괄 실행: 전체 통화를 분류·판정하는 명령(아래 "실행")
 - `eval.py`로 dev 채점(분류기·판정기 vs 골드, 교차검증 지표)
@@ -43,26 +43,27 @@
 
 | 역할 | 지금 | Qwen 비교 뒤(정확도가 Solar·Haiku와 비슷할 때) |
 |---|---|---|
-| 분류기 라벨 | Solar Mini | Qwen(로컬) |
+| 분류기 라벨 | Haiku | Qwen(로컬) |
 | 분류기 요약·할 일 | Haiku | Haiku |
-| 판정기 라벨 | Haiku | Haiku |
+| 판정기 라벨 | Solar Mini 4 | Solar Mini 4 |
 
-- 판정기는 처음부터 끝까지 Haiku로 고정한다. 분류기 라벨 자리만 바꿔야 바꾼 효과가 판정기 변화와 섞이지 않는다
-- 분류기 라벨(Solar)과 판정기(Haiku)는 계열이 달라 교차검증 지표를 낸다(평가 설계 §2.5 "같아진 구성은 내지 않는다"에 걸리지 않음)
+- 판정기는 처음부터 끝까지 고정한다. 분류기 라벨 자리만 바꿔야 바꾼 효과가 판정기 변화와 섞이지 않는다
+- 분류기 라벨(Haiku)과 판정기(Solar)는 계열이 달라 교차검증 지표를 낸다(평가 설계 §2.5 "같아진 구성은 내지 않는다"에 걸리지 않음)
 - 요약·할 일은 분류기 쪽에 둔다. 블라인드 비교(평가 설계 §2.4)가 분류기 `prompt_version`끼리 요약을 비교하기 때문이다. 판정기 호출과 합치지 않는다
 - 착수 전 확인(Solar 맛보기): Solar Mini를 실험 기록 7의 v1 원문 그대로 dev 75건과 silver 1,350건에 돌려 같은 조건의 Haiku v1(silver 목적 1328/1350)과 비교한다(약 $0.4). 원문으로 돌리는 이유는 Haiku 수치와 같은 조건으로 비교하기 위해서다. 다음 중 하나라도 해당하면 자리를 바꾼다 — 분류기 라벨 Haiku, 판정기 Solar(이 문서의 배치 표와 별칭만 바뀐다)
   - silver 목적 Strict가 Haiku보다 2%p 넘게 낮다
   - silver 플래그 6개 평균 정확도가 Haiku보다 2%p 넘게 낮다
+  - 결과: Solar Mini 4 silver 목적 0.807·플래그 0.926, Haiku 0.984·0.990 — 둘 다 걸려 자리를 바꿨다(위 표가 바꾼 배치, 실험 기록 9)
 
 ## 분류기
 
 - 시그니처 `classify(transcript, direction) -> Classification` — 앱 설계 §1. 호출 두 번
-  1. **라벨**(Solar): 9항목. 구조화 출력(JSON 스키마). enum은 `generator/master.py`가 원본이지만 backend는 `generator/`를 import할 수 없으므로, 스키마 enum은 `shared/`의 상수로 옮겨 두 곳이 같은지 테스트로 비교한다 — 내 판단
+  1. **라벨**(Haiku): 9항목. 구조화 출력(JSON 스키마). enum은 `generator/master.py`가 원본이지만 backend는 `generator/`를 import할 수 없으므로, 스키마 enum은 `shared/`의 상수로 옮겨 두 곳이 같은지 테스트로 비교한다 — 내 판단
   2. **요약·할 일**(Haiku): 요약 1개와 할 일 목록
 - 요약 형식은 평가 설계 §2.4 그대로: 마크다운·글머리 금지, 명사형 종결(~함/~음), 공백 포함 80~110자 단일 문단, 코드 후처리로 줄바꿈·기호 정규화
 - 할 일: "누가 무엇을" 문장 목록. 없으면 빈 목록
 - 두 호출 중 하나라도 실패하면 `status = failed`
-- 저장(`ax_call_classifications`): `labels`는 Solar, `summary`·`todo`는 Haiku. 칸 추가 — `summary_model_actual`, `summary_llm_call_id`(요약 호출, `ax_llm_calls` 참조). 기존 `model_actual`·`llm_call_id`는 라벨 호출이다(앱 설계 §1 "나머지 칸만 착수 때 추가")
+- 저장(`ax_call_classifications`): `labels`는 라벨 호출, `summary`·`todo`는 요약 호출. 칸 추가 — `summary_model_actual`, `summary_llm_call_id`(요약 호출, `ax_llm_calls` 참조). 기존 `model_actual`·`llm_call_id`는 라벨 호출이다(앱 설계 §1 "나머지 칸만 착수 때 추가")
 - 폴백 제외: 라벨 채점·교차검증은 라벨 호출의 폴백을, 요약 블라인드 비교는 요약 호출의 폴백을 뺀다. `ax_settings.active_models`에는 요약 모델도 넣는다 — 내 판단
 - 프롬프트: `prompts/classify/<version>/labels.md`·`summary.md`. 폴더명이 `prompt_version`이고 두 파일을 함께 가리킨다. 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다 — 내 판단(앱 설계 §7.2의 "파일명이 곧 버전"을 classify만 폴더로)
 - 첫 버전 `v1`: 라벨은 실험 기록 7의 v1(`evaluation/finetune/aug/classify_v1.md`)에 아래 `has_todo` 기준을 더한 것. silver 오답을 보고 고친 프롬프트라는 점은 실험 기록 7에 있다
@@ -70,7 +71,7 @@
 ## 판정기
 
 - 시그니처 `judge(transcript, direction) -> Judgment` — 입력 제한은 분류기와 같다
-- Haiku 한 번, 라벨 9항목만. 판정 기준은 평가 설계 §2.3 플래그 판정 기준(원본)을 따른다
+- Solar 한 번, 라벨 9항목만. 판정 기준은 평가 설계 §2.3 플래그 판정 기준(원본)을 따른다
 - 프롬프트 `prompts/judge/v1.md`는 분류기 v1 문장을 옮기지 않고 평가 설계 §2.3과 라벨 정의(가상 데이터 생성 설계 §4.1)에서 따로 쓴다. 같은 문장이면 두 모델이 같은 쪽으로 틀려 교차검증 지표(오류 포착률)가 낮아진다. 판정 기준 자체(`has_todo` 기준, 주 목적 = 처음 꺼낸 용건 등)는 두 프롬프트에 같게 들어간다
 - 저장은 `ax_model_judgments`(칸 그대로)
 
@@ -88,14 +89,14 @@
 
 - `shared/llm.py`에 Upstage 경로를 더한다. `config/llm.yaml`의 모델 항목에 프로바이더를 적고(`provider: anthropic | upstage`, 없으면 anthropic), 별칭은 지금처럼 모델 순서다. 기록·비용·일일 상한·`FakeGateway`는 공통이다
 - Upstage는 OpenAI 호환 API다. SDK는 Upstage 문서가 안내하는 방식을 따르고 의존성은 `backend`·`generator` 그룹에 넣는다. 정확한 모델 id·단가·구조화 출력 방식·Batch 지원은 착수 전 확인(Solar 맛보기와 함께)에서 정한다
-- 별칭: `classify: [solar-mini]`(Upstage 하나라 폴백 없음), `summarize: [claude-haiku-5-5, claude-sonnet-5-5]`, `judge: [claude-haiku-5-5, claude-sonnet-5-5]`. 폴백 결과는 채점에서 빠진다(평가 설계 §1) — 내 판단
+- 별칭: `classify: [claude-haiku-5-5, claude-sonnet-5-5]`, `summarize: [claude-haiku-5-5, claude-sonnet-5-5]`, `judge: [solar-mini4]`(Upstage 하나라 폴백 없음). 폴백 결과는 채점에서 빠진다(평가 설계 §1) — 내 판단
 - 키는 `.env`의 `UPSTAGE_API_KEY`, `.env.example`에 빈 칸 추가
 
 ## 실행
 
 - 분류·판정 함수는 backend 모듈(예: `backend/classify.py`)에 두고, 일괄 실행은 그 함수를 부르는 명령으로 한다(`make classify`·`make judge`, 대상은 생성 통화 전체 — 붙여넣기 통화는 화면과 함께). 버전·대상 범위·재시도는 인자로 — 세부는 구현자
 - Haiku 일괄은 게이트웨이 Batch(`submit_batch`)로 돌린다(단가 절반). Upstage Batch가 없으면 Solar는 일반 호출로 돈다
-- 예상 비용(1,500건): Solar 라벨 약 $0.4, Haiku 요약 약 $0.3(Batch), Haiku 판정 약 $0.3(Batch). 런타임 일일 상한($15) 안
+- 예상 비용(1,500건): Haiku 라벨 약 $0.3(Batch), Haiku 요약 약 $0.3(Batch), Solar 판정 약 $0.2. 런타임 일일 상한($15) 안
 - 결과는 `app.sqlite`. 재실행은 UNIQUE `(call_uid, model_alias, prompt_version)`로 이미 `ok`인 건을 건너뛴다
 
 ## fixture
@@ -130,7 +131,7 @@
 
 ## 문서 변경
 
-- 앱 설계 §7 "모델 (확정)" 줄: ① 분류기 라벨 Solar Mini, 요약·할 일과 판정기 Haiku. 프로바이더 Anthropic·Upstage
+- 앱 설계 §7 "모델 (확정)" 줄: ① 분류기 라벨·요약·할 일 Haiku, 판정기 Solar Mini 4. 프로바이더 Anthropic·Upstage
 - 앱 설계 §7.1: 게이트웨이가 두 프로바이더를 쓴다(변환 계층 없이 각 SDK 직접)
 - 앱 설계 §7.2: classify 프롬프트는 버전 폴더(`labels.md`·`summary.md`)
 - 앱 설계 §1: `ax_call_classifications` 추가 칸, `ax_call_disagreements`의 `todo_mismatch`

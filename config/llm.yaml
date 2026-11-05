@@ -2,9 +2,9 @@
 # 별칭 → 모델 순서. 첫 모델이 기본, 오류(재시도 소진)·거절이면 다음 모델로 폴백
 aliases:
   gen: [claude-sonnet-5-5, claude-sonnet-5]        # 생성기 7·9·9b
-  classify: [solar-mini4]                          # ① 분류기 라벨 — 프로바이더 하나라 폴백 없음
+  classify: [claude-haiku-5-5, claude-sonnet-5-5]  # ① 분류기 라벨
   summarize: [claude-haiku-5-5, claude-sonnet-5-5] # ① 분류기 요약·할 일
-  judge: [claude-haiku-5-5, claude-sonnet-5-5]     # ① 판정기 라벨
+  judge: [solar-mini4]                             # ① 판정기 라벨 — 프로바이더 하나라 폴백 없음
   chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
   rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
