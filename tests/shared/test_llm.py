@@ -462,6 +462,24 @@ def test_batch_submit_uses_first_model_without_server_fallback(tmp_path):
     assert "fallbacks" not in params and params["output_config"]["format"]["type"] == "json_schema"
 
 
+def test_batch_submit_keeps_per_request_effort_and_max_tokens(tmp_path):
+    """요청에 effort·max_tokens가 있으면 그것으로 — 단건 호출과 같은 버전이 같은 설정으로 돈다(앱 설계 §7.2)"""
+    client = BatchClient()
+    gw = _gateway(tmp_path, client)
+    gw.submit_batch(
+        "gen",
+        [
+            {"custom_id": "k1", "messages": MSGS, "effort": "low", "max_tokens": 16000},
+            {"custom_id": "k2", "messages": MSGS},
+        ],
+        task="toy",
+        max_tokens=3000,
+    )
+    r1, r2 = (r["params"] for r in client.messages.batches.created)
+    assert r1["max_tokens"] == 16000 and r1["output_config"] == {"effort": "low"}
+    assert r2["max_tokens"] == 3000 and "output_config" not in r2
+
+
 def test_batch_results_priced_at_batch_share_and_logged(tmp_path):
     ok = _message(
         text='{"text": "사과"}', model="model-a", input_tokens=1000, output_tokens=200

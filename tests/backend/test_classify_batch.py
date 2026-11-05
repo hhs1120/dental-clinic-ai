@@ -168,6 +168,14 @@ def test_shards_split_targets(bconn):
         for k in range(2)
     ]
     assert sorted(parts[0] + parts[1]) == all_uids and not set(parts[0]) & set(parts[1])
+    # 한 샤드가 먼저 저장해도 다른 샤드의 몫은 그대로 — 늦게 띄우거나 다시 띄워도 겹치지 않는다
+    classify_batch.run(
+        bconn, BatchFake(SqliteLlmLog(bconn)), "judge", "v1", use_batch=False, shard=(0, 2)
+    )
+    again = [
+        r["call_uid"] for r in classify_batch.targets(bconn, "judge", "v1", None, shard=(1, 2))
+    ]
+    assert again == parts[1]
     assert classify_batch._shard("1/2") == (1, 2)
     with pytest.raises(ValueError):
         classify_batch._shard("2/2")

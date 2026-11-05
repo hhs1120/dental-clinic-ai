@@ -2,7 +2,7 @@
 (없거나 failed), call_uid 순. use_batch면 Anthropic 별칭은 Batch(단가 절반), Batch가 없는 프로바이더(Upstage)는 일반 호출.
 Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행의 대상으로 남는다. 붙여넣기 통화는 화면과 함께
 uv run --env-file .env python -m backend.classify_batch {classify|judge} --version v1 [--limit N] [--no-batch]
-[--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(동시에 시작해야 목록이 같다)
+[--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(몫은 생성 통화 전체의 call_uid 순 위치로 고정)
 uv run python -m backend.classify_batch disagreements --a v1 --b v1
 """
 
@@ -21,17 +21,20 @@ TABLES = {"classify": "ax_call_classifications", "judge": "ax_model_judgments"}
 def targets(
     conn, task: str, version: str, limit: int | None, shard: tuple[int, int] | None = None
 ) -> list:
-    """별칭 이름은 작업 이름과 같다(classify·judge). shard=(k, n)이면 목록의 k번째부터 n개 걸러"""
+    """별칭 이름은 작업 이름과 같다(classify·judge). shard=(k, n)이면 녹취록 있는 생성 통화 전체의 call_uid 순
+    위치 % n == k인 것만 — 끝난 건과 상관없이 몫이 고정돼 늦게 띄우거나 다시 띄워도 겹치지 않는다"""
     sql = (
-        "SELECT call_uid, direction, transcript FROM source.ax_calls"
-        " WHERE source = 'generated' AND transcript IS NOT NULL AND call_uid NOT IN"
+        "SELECT call_uid, direction, transcript, call_uid IN"
         f" (SELECT call_uid FROM {TABLES[task]}"
-        "  WHERE model_alias = ? AND prompt_version = ? AND status = 'ok')"
+        "  WHERE model_alias = ? AND prompt_version = ? AND status = 'ok') AS done"
+        " FROM source.ax_calls WHERE source = 'generated' AND transcript IS NOT NULL"
         " ORDER BY call_uid"
     )
-    rows = conn.execute(sql, (task, version)).fetchall()
-    if shard:
-        rows = rows[shard[0] :: shard[1]]
+    rows = [
+        r
+        for i, r in enumerate(conn.execute(sql, (task, version)))
+        if not r["done"] and (shard is None or i % shard[1] == shard[0])
+    ]
     return rows[:limit] if limit else rows
 
 

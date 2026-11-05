@@ -129,6 +129,8 @@ def test_valid_labels():
     assert not cl.valid_labels(good | {"extra": 1})
     assert not cl.valid_labels(good | {"urgency": "soon"})
     assert not cl.valid_labels(good | {"has_todo": "yes"})
+    assert not cl.valid_labels(good | {"has_todo": 1.0})
+    assert cl.valid_labels(good | {"has_todo": 1, "complaint": 0})
     assert not cl.valid_labels(None)
 
 

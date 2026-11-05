@@ -42,3 +42,12 @@ def test_effort_from_front_matter(tmp_path):
     assert prompts.effort("judge", "v2", root=tmp_path) == "low"
     assert prompts.load("judge", "v2", root=tmp_path) == {"system": "판정 지시"}
     assert prompts.effort("judge", "v3", root=tmp_path) is None
+
+
+@pytest.mark.parametrize("value", ["off", "lwo", "1"])
+def test_effort_must_be_known_word(tmp_path, value):
+    """YAML이 off를 False로 읽는 것·오타는 API 오류로 그 버전 전체가 failed가 되기 전에 막는다"""
+    (tmp_path / "judge").mkdir()
+    (tmp_path / "judge" / "v2.md").write_text(f"---\neffort: {value}\n---\n본문", "utf-8")
+    with pytest.raises(ValueError, match="effort"):
+        prompts.effort("judge", "v2", root=tmp_path)

@@ -50,8 +50,14 @@ def test_init_schema_refuses_not_null_column_without_default(conn, tmp_path):
         ),
         "utf-8",
     )
+    conn.execute("DROP TABLE ax_call_disagreements")
+    conn.commit()
     with pytest.raises(RuntimeError, match="ax_settings.extra"):
         db.init_schema(conn, schema)
+    # 한 트랜잭션 — 앞서 만든 테이블도 되돌린다(동시에 연 프로세스와 겹치지 않게)
+    gone = "SELECT 1 FROM sqlite_master WHERE name = 'ax_call_disagreements'"
+    assert conn.execute(gone).fetchone() is None
+    assert not conn.in_transaction
 
 
 def test_get_setting_default(conn):

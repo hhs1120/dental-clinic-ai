@@ -391,17 +391,22 @@ class Gateway(_Base):
         prompt_version: str | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> str:
-        """requests: [{custom_id, system, messages, schema}] → 배치 id. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
+        """requests: [{custom_id, system, messages, schema, effort?, max_tokens?}] → 배치 id. 요청의 effort·max_tokens가
+        있으면 그것으로(단건 호출과 같은 버전은 같은 설정 — 앱 설계 §7.2), max_tokens 인자는 없을 때의 기본값. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
         보고 제출한다(기능 정의 §7). 비용은 결과에서 기록"""
         model = self.config["aliases"][alias][0]
         if self._provider(model) != "anthropic":
             raise ValueError(f"{self._provider(model)}: batch 미지원")
         batch = []
         for r in requests:
-            params = {"model": model, "max_tokens": max_tokens, "messages": r["messages"]}
+            params = {
+                "model": model,
+                "max_tokens": r.get("max_tokens", max_tokens),
+                "messages": r["messages"],
+            }
             if r.get("system") is not None:
                 params["system"] = r["system"]
-            output_config = _output_config(r.get("schema"), None)
+            output_config = _output_config(r.get("schema"), r.get("effort"))
             if output_config is not None:
                 params["output_config"] = output_config
             batch.append({"custom_id": r["custom_id"], "params": params})

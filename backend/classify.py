@@ -93,7 +93,7 @@ def valid_labels(data) -> bool:
     if not isinstance(data, dict) or set(data) != set(ITEMS):
         return False
     return all(data[k] in v for k, v in ENUMS.items()) and all(
-        data[f] in (True, False) for f in FLAGS
+        type(data[f]) in (bool, int) and data[f] in (0, 1) for f in FLAGS
     )
 
 

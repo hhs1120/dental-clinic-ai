@@ -11,6 +11,7 @@ PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 CLASSIFY_PARTS = ("labels", "summary")
 
 
+EFFORTS = ("low", "medium", "high", "xhigh", "max")  # 두 프로바이더가 받는 추론 단계(앱 설계 §7.2)
 FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---(?:\n|\Z)", re.S)
 
 
@@ -32,4 +33,7 @@ def load(task: str, version: str, root: Path = PROMPTS_DIR) -> dict[str, str]:
 def effort(task: str, version: str, root: Path = PROMPTS_DIR) -> str | None:
     """버전 파일 머리말의 effort(추론 단계, 앱 설계 §7) — 없으면 None. 분류기 버전 폴더는 아직 쓰지 않는다"""
     m = FRONT_MATTER.match(_text(root / task / f"{version}.md"))
-    return (yaml.safe_load(m[1]) or {}).get("effort") if m else None
+    value = (yaml.safe_load(m[1]) or {}).get("effort") if m else None
+    if value is not None and value not in EFFORTS:  # YAML은 off·no를 False로 읽는다
+        raise ValueError(f"{task}/{version}: effort {value!r}는 {EFFORTS} 중 하나여야 함")
+    return value
