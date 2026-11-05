@@ -1,45 +1,21 @@
 """블라인드 비교 — 사람 투표와 LLM 쌍 비교 (backend/blind.py, 평가 설계 §2.4, 통화·② 판정 화면 설계 "블라인드 비교")."""
 
 import json
-import sqlite3
 from dataclasses import replace
-from datetime import date
 
 import pytest
 
-from backend import blind, db
+from backend import blind
 from backend.harness.store import SqliteLlmLog
-from shared.clinic import Clinic
 from shared.llm import FakeGateway
-from tests.backend.call_db import classify_row
-from tests.backend.conftest import SOURCE_SCHEMA
+from tests.backend.call_db import BLIND_CLINIC, make_blind_db
 
-CLINIC = Clinic(today=date(2026, 12, 1), range_start=date(2026, 1, 1), eval_pool_size=4)
-V2_TODO = [{"kind": "contact", "text": "회신 전화", "who": "환자", "after": -1}]
+CLINIC = BLIND_CLINIC
 
 
 @pytest.fixture
 def bconn(tmp_path):
-    """판정 풀 4건(정렬 1~4, dev = 1·2) — 블라인드는 b-1(dev)·b-3(test)·b-2(dev, v2 없음)"""
-    source = tmp_path / "source.sqlite"
-    s = sqlite3.connect(source)
-    s.executescript(SOURCE_SCHEMA.read_text(encoding="utf-8"))
-    for uid, order, blind_ in (("b-1", 1, 1), ("b-2", 2, 1), ("b-3", 3, 1), ("b-4", 4, 0)):
-        s.execute(
-            "INSERT INTO ax_calls (call_uid, source, direction, started_at, duration_sec,"
-            " has_transcript, transcript, in_eval_pool, eval_sort_order, in_blind_pool)"
-            " VALUES (?, 'generated', 'inbound', '2026-11-28 10:00:00', 60, 1, ?, 1, ?, ?)",
-            (uid, f"직원: 네\n환자: {uid} 문의", order, blind_),
-        )
-    s.commit()
-    s.close()
-    c = db.connect(tmp_path / "app.sqlite", source)
-    db.init_schema(c)
-    db.set_setting(c, "blind_versions", ["v1", "v2"])
-    for uid in ("b-1", "b-2", "b-3", "b-4"):
-        classify_row(c, uid, version="v1", todo=["원장님께 전달"], summary=f"{uid} v1 요약")
-    for uid in ("b-1", "b-3", "b-4"):
-        classify_row(c, uid, version="v2", todo=V2_TODO, summary=f"{uid} v2 요약")
+    c = make_blind_db(tmp_path)
     yield c
     c.close()
 
