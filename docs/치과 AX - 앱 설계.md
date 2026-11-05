@@ -19,7 +19,7 @@ tags:
 
 **분류기 입력 = `transcript` + `direction`만** (환자·번호·시각은 정답 힌트. 함수 시그니처 `classify(transcript, direction)`로 강제).
 
-eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`이 정한다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
+eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)은 `shared/app_schema.sql`이 정한다 — 앱은 그 칸을 그대로 쓰고 나머지 칸만 착수 때 추가한다. 스키마는 앱이 DB를 열 때 맞춘다 — 빈 DB면 전체, 앞선 DB면 없는 테이블·인덱스·칸만 더하고 있던 행은 그대로 둔다(NOT NULL에 기본값 없는 칸은 더하지 못해 멈춘다, `backend/db.py` `init_schema`). RAG 평가는 앱이 `evaluation/rag.py`의 `search`·`chat`을 `backend/eval_hooks.py`의 `make_app(app_db, source_db)`로 내준다.
 
 | 테이블 | 목적 · 핵심 제약 |
 |---|---|
