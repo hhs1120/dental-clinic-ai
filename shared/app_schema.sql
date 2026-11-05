@@ -127,7 +127,7 @@ CREATE TABLE ax_model_blind_votes (
     UNIQUE (left_classification_id, right_classification_id, model_alias, prompt_version)
 );
 
--- 사람 블라인드 투표 — 최종 비교만 (평가 설계 §2.4). 좌·우 = 화면 배치
+-- 사람 블라인드 투표 — dev 블라인드는 blind_versions 쌍, test 블라인드는 최종 비교 때만 (평가 설계 §2.4). 좌·우 = 화면 배치
 CREATE TABLE ax_blind_votes (
     id                       INTEGER PRIMARY KEY,
     left_classification_id   INTEGER NOT NULL REFERENCES ax_call_classifications(id),

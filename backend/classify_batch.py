@@ -4,6 +4,7 @@ Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행�
 uv run --env-file .env python -m backend.classify_batch {classify|judge} --version v1 [--limit N] [--no-batch]
 [--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(몫은 생성 통화 전체의 call_uid 순 위치로 고정)
 uv run python -m backend.classify_batch disagreements --a v1 --b v1
+uv run --env-file .env python -m backend.classify_batch blind --a v1 --b v2 --version v1
 """
 
 import argparse
@@ -11,8 +12,8 @@ import time
 from pathlib import Path
 from typing import Literal
 
+from backend import blind, db, disagreements, judge_queue
 from backend import classify as cl
-from backend import db, disagreements, judge_queue
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLES = {"classify": "ax_call_classifications", "judge": "ax_model_judgments"}
@@ -131,6 +132,12 @@ def main(argv=None) -> None:
     d = sub.add_parser("disagreements")
     d.add_argument("--a", required=True)
     d.add_argument("--b", required=True)
+    bl = sub.add_parser(
+        "blind"
+    )  # LLM 쌍 비교(평가 설계 §2.4) — dev 블라인드 통화, 분류 버전 a vs b
+    bl.add_argument("--a", required=True)
+    bl.add_argument("--b", required=True)
+    bl.add_argument("--version", required=True)  # blind_judge 프롬프트 버전
     args = p.parse_args(argv)
     conn = db.connect(ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite")
     db.init_schema(conn)
@@ -140,6 +147,12 @@ def main(argv=None) -> None:
         return
     from backend.harness.llm import make_gateway
 
+    if args.cmd == "blind":
+        from shared.clinic import load_clinic
+
+        gw = make_gateway(conn)
+        print(blind.run_pairs(conn, gw, load_clinic(), args.a, args.b, args.version))
+        return
     out = run(
         conn,
         make_gateway(conn),

@@ -126,6 +126,16 @@ SUMMARY_SCHEMA_KINDS = {
 }
 
 
+# LLM 쌍 비교 답(평가 설계 §2.4) — left = 요약 1, right = 요약 2
+PAIR_CHOICES = ("left", "right", "tie", "both_wrong")
+PAIR_SCHEMA = {
+    "type": "object",
+    "properties": {"choice": {"type": "string", "enum": list(PAIR_CHOICES)}},
+    "required": ["choice"],
+    "additionalProperties": False,
+}
+
+
 def todo_items(raw: list | None) -> list[dict]:
     """저장된 할 일 목록 → 항목 dict 목록. v1(문자열)은 전부 internal로 본다"""
     return [

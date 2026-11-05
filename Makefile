@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -32,6 +32,11 @@ judge:
 disagreements:
 	$(if $(and $(A),$(B)),,$(error A=분류기 버전 B=판정기 버전 필요))
 	uv run python -m backend.classify_batch disagreements --a $(A) --b $(B)
+
+# 블라인드 LLM 쌍 비교(평가 설계 §2.4) — dev 블라인드 통화, 분류 버전 A vs B, 쌍 비교 프롬프트 버전 V
+blind-judge:
+	$(if $(and $(A),$(B),$(V)),,$(error A=분류 버전 B=분류 버전 V=쌍 비교 프롬프트 버전 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch blind --a $(A) --b $(B) --version $(V)
 
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:
