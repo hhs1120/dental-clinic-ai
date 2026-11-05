@@ -7,9 +7,9 @@ import { useState } from "react";
 import { AddCallDialog } from "@/components/calls/add-call-dialog";
 import { CallDetail } from "@/components/calls/call-detail";
 import { CallHistory } from "@/components/calls/call-history";
+import { ScreenTabs } from "@/components/screen-tabs";
 import { TodayBoard } from "@/components/calls/today-board";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorText, useFetch } from "@/lib/api";
 import {
   fetchBoard,
@@ -19,11 +19,6 @@ import {
   useLabels,
 } from "@/lib/calls-api";
 import { readPart } from "@/lib/part";
-
-const TABS = [
-  ["today", "오늘 할 일", ListChecks],
-  ["history", "통화 기록", History],
-] as const;
 
 /** 통화 화면 — 탭·고른 통화·넓게 보기는 URL에 둔다(/calls?tab=…&call=…&wide=1) */
 export function CallsView() {
@@ -105,31 +100,23 @@ export function CallsView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <Tabs
+        <ScreenTabs
+          tabs={[
+            {
+              key: "today",
+              label: "오늘 할 일",
+              icon: ListChecks,
+              count: board.data
+                ? board.data.internal.length + board.data.contact.length
+                : undefined,
+            },
+            { key: "history", label: "통화 기록", icon: History },
+          ]}
           value={tab}
-          onValueChange={(v) =>
+          onChange={(v) =>
             go({ tab: v === "today" ? null : v, call: null, wide: null })
           }
-        >
-          {/* 한 상자 안의 두 칸(세그먼트) — 아이콘·글자를 키우고 고른 칸은 떠 있는 흰 카드로 */}
-          <TabsList className="h-12 gap-1 rounded-xl p-1">
-            {TABS.map(([k, l, Icon]) => (
-              <TabsTrigger
-                key={k}
-                value={k}
-                className="h-full gap-2 rounded-lg px-5 text-base font-bold data-active:shadow-card"
-              >
-                <Icon className="size-4" aria-hidden />
-                {l}
-                {k === "today" && board.data && (
-                  <span className="rounded-full bg-primary px-2 text-xs leading-5 text-primary-foreground">
-                    {board.data.internal.length + board.data.contact.length}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        />
         <span className="flex-1" />
         <AddCallDialog
           onAdded={(uid) => {
