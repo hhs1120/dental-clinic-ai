@@ -28,6 +28,32 @@ def test_init_schema_twice_keeps_rows(conn):
     assert db.get_setting(conn, "auto_policy") == {"x": True}
 
 
+def test_init_schema_adds_missing_table_and_column(conn):
+    """스키마보다 앞선 DB — 없는 테이블·칸만 더하고 있던 행은 그대로(앱 설계 §6)"""
+    db.set_setting(conn, "auto_policy", {"x": True})
+    conn.execute("DROP TABLE ax_call_disagreements")
+    conn.execute("ALTER TABLE ax_call_classifications DROP COLUMN summary_llm_call_id")
+    conn.commit()
+    db.init_schema(conn)
+    assert db.get_setting(conn, "auto_policy") == {"x": True}
+    conn.execute("SELECT is_core FROM ax_call_disagreements").fetchall()
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(ax_call_classifications)")}
+    assert "summary_llm_call_id" in cols
+
+
+def test_init_schema_refuses_not_null_column_without_default(conn, tmp_path):
+    """NOT NULL이고 기본값 없는 칸은 기존 행에 채울 값이 없어 더하지 못한다 — 조용히 넘기지 않는다"""
+    schema = tmp_path / "s.sql"
+    schema.write_text(
+        db.SCHEMA.read_text(encoding="utf-8").replace(
+            "CREATE TABLE ax_settings (", "CREATE TABLE ax_settings (\n    extra TEXT NOT NULL,"
+        ),
+        "utf-8",
+    )
+    with pytest.raises(RuntimeError, match="ax_settings.extra"):
+        db.init_schema(conn, schema)
+
+
 def test_get_setting_default(conn):
     assert db.get_setting(conn, "없음", {}) == {}
 

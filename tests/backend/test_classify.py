@@ -100,6 +100,38 @@ def test_judge_effort_from_prompt(conn):
     assert v2["system"] == v1["system"]
 
 
+class BadLabels(FakeGateway):
+    """JSON은 맞지만 라벨이 틀린 응답 — 항목 빠짐(classify)·목록 밖 값(judge)"""
+
+    def complete(self, alias, **kw):
+        r = super().complete(alias, **kw)
+        if alias == "classify":
+            return replace(r, data={k: v for k, v in r.data.items() if k != "urgency"})
+        if alias == "judge":
+            return replace(r, data=r.data | {"primary_purpose": "lunch"})
+        return r
+
+
+def test_invalid_labels_are_failed(conn):
+    """9항목이 다 있고 값이 목록 안일 때만 ok — 아니면 failed로 남아 다음 실행이 다시 한다"""
+    gw = BadLabels(SqliteLlmLog(conn), scope="runtime")
+    assert not cl.classify(gw, "직원: 네\n환자: 예약", "inbound", "v1").ok
+    assert not cl.judge(gw, "직원: 네\n환자: 예약", "inbound", "v1").ok
+
+
+def test_valid_labels():
+    good = dict.fromkeys(call_labels.FLAGS, False) | {
+        "primary_purpose": "book",
+        "counterpart": "patient",
+        "urgency": "low",
+    }
+    assert cl.valid_labels(good)
+    assert not cl.valid_labels(good | {"extra": 1})
+    assert not cl.valid_labels(good | {"urgency": "soon"})
+    assert not cl.valid_labels(good | {"has_todo": "yes"})
+    assert not cl.valid_labels(None)
+
+
 def test_normalize_summary():
     assert (
         cl.normalize_summary("- 예약 변경 요청함\n\n**목요일** 3시로 옮김")

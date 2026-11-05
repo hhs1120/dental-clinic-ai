@@ -1,5 +1,6 @@
 """분류기(모델 A)·판정기(모델 B) — 입력은 녹취록과 방향뿐(앱 설계 §1, 분류기 설계 "분류기"·"판정기").
 분류기는 호출 둘: 라벨(별칭 classify)과 요약·할 일(별칭 summarize). 둘 중 하나라도 실패하면 failed.
+라벨은 9항목이 다 있고 값이 목록 안일 때만 ok — 아니면 failed로 남겨 다음 실행이 다시 한다.
 판정기는 라벨 한 호출(별칭 judge). 저장은 ax_call_classifications·ax_model_judgments, 같은 (통화, 별칭, 버전)은 덮어쓴다.
 labels JSON의 플래그는 0/1(shared/app_schema.sql)
 """
@@ -9,10 +10,20 @@ import re
 from dataclasses import dataclass
 
 from backend import prompts
-from shared.call_labels import FLAGS, LABEL_SCHEMA, SUMMARY_SCHEMA
+from shared.call_labels import (
+    COUNTERPARTS,
+    FLAGS,
+    ITEMS,
+    LABEL_SCHEMA,
+    PURPOSES,
+    SUMMARY_SCHEMA,
+    URGENCIES,
+)
 from shared.llm import LLMResult
 
-MAX_TOKENS = 1000  # 라벨 9항목·요약 하나·할 일 몇 줄
+MAX_TOKENS = (
+    3000  # Haiku 기본 생각 토큰 포함 — 1,000에 잘린 요약을 다시 보낸 최대 1,486(AI 실험 기록 §11)
+)
 REASONING_MAX_TOKENS = 16000  # 추론을 켜면 추론 토큰도 max_tokens 안(앱 설계 §7)
 
 
@@ -74,8 +85,25 @@ def judge_request(transcript: str, direction: str, version: str) -> dict:
     return req
 
 
+ENUMS = {"primary_purpose": PURPOSES, "counterpart": COUNTERPARTS, "urgency": URGENCIES}
+
+
+def valid_labels(data) -> bool:
+    """9항목이 정확히 있고 enum 값은 목록 안, 플래그는 참/거짓(0/1)"""
+    if not isinstance(data, dict) or set(data) != set(ITEMS):
+        return False
+    return all(data[k] in v for k, v in ENUMS.items()) and all(
+        data[f] in (True, False) for f in FLAGS
+    )
+
+
+def judgment_from(call: LLMResult) -> Judgment:
+    ok = call.ok and valid_labels(call.data)
+    return Judgment(ok, call.data if ok else None, call)
+
+
 def classification_from(label: LLMResult, summary_call: LLMResult) -> Classification:
-    if not (label.ok and summary_call.ok):
+    if not (label.ok and summary_call.ok and valid_labels(label.data)):
         return Classification(False, None, None, None, label, summary_call)
     s = summary_call.data
     return Classification(
@@ -108,7 +136,7 @@ def judge(gw, transcript: str, direction: str, version: str) -> Judgment:
         prompt_version=version,
         **{"max_tokens": MAX_TOKENS, **judge_request(transcript, direction, version)},
     )
-    return Judgment(call.ok, call.data if call.ok else None, call)
+    return judgment_from(call)
 
 
 def _labels_json(labels: dict | None) -> str | None:

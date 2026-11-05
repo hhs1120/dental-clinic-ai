@@ -171,3 +171,17 @@ def test_shards_split_targets(bconn):
     assert classify_batch._shard("1/2") == (1, 2)
     with pytest.raises(ValueError):
         classify_batch._shard("2/2")
+
+
+def test_invalid_judge_labels_saved_failed(bconn):
+    """일괄 실행 경로도 라벨을 검사한다 — 틀린 라벨은 failed로 저장돼 다음 실행의 대상"""
+    from dataclasses import replace
+
+    class Bad(BatchFake):
+        def complete(self, alias, **kw):
+            r = super().complete(alias, **kw)
+            return replace(r, data={"primary_purpose": "book"})
+
+    out = classify_batch.run(bconn, Bad(SqliteLlmLog(bconn)), "judge", "v1", use_batch=False)
+    assert out["done"] == 0 and out["failed"] > 0
+    assert set(_status(bconn, "ax_model_judgments").values()) == {"failed"}

@@ -109,7 +109,7 @@ def run(
             cl.save_classification(conn, uid, version, c)
             ok = c.ok
         else:
-            j = cl.Judgment(got[0].ok, got[0].data if got[0].ok else None, got[0])
+            j = cl.judgment_from(got[0])
             cl.save_judgment(conn, uid, version, j)
             ok = j.ok
         out["done" if ok else "failed"] += 1
