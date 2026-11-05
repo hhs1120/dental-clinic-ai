@@ -687,3 +687,12 @@ def test_upstage_batch_rejected(tmp_path):
 def test_log_id_is_none_for_jsonl_log(tmp_path):
     gw = _up_gateway(tmp_path, UpstageStub(_chat()))
     assert gw.complete("up", task="t", messages=MSGS, schema=LABELS_SCHEMA).log_id is None
+
+
+def test_upstage_effort_sent_as_reasoning_effort(tmp_path):
+    up = UpstageStub(_chat(), _chat())
+    gw = _up_gateway(tmp_path, up)
+    gw.complete("up", task="t", messages=MSGS, schema=LABELS_SCHEMA, effort="low")
+    gw.complete("up", task="t", messages=MSGS, schema=LABELS_SCHEMA)
+    (_, with_effort), (_, without) = up.calls
+    assert with_effort["reasoning_effort"] == "low" and "reasoning_effort" not in without

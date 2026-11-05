@@ -1,10 +1,12 @@
 """Solar 맛보기 — 분류기 라벨 자리 모델을 실험 기록 7의 v1 라벨 프롬프트 원문으로 dev·silver에 돌려 Haiku v1과
 비교한다(분류기 설계 "모델 배치"). test는 SQL에서 뺀다. 결과·호출 기록은 evaluation/finetune/spike/.
-uv run --env-file .env python evaluation/finetune/spike_labels.py run <model> <dev|silver> [limit]
-uv run python evaluation/finetune/spike_labels.py score <model> <dev|silver>
+uv run --env-file .env python evaluation/finetune/spike_labels.py run <model[@effort]> <dev|silver> [limit] [prompt]
+uv run python evaluation/finetune/spike_labels.py score <model[@effort]> <dev|silver>
+effort는 추론 단계(Upstage reasoning_effort, 실험 기록 11) — 결과 파일 이름에 붙는다. prompt를 주면 그 파일을 지시로 쓴다
 """
 
 import json
+import os
 import sqlite3
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -36,13 +38,14 @@ def load_calls(split: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def run(model: str, split: str, limit=None) -> None:
+def run(tag: str, split: str, limit=None, prompt=None) -> None:
+    model, _, effort = tag.partition("@")
     config = load_config()
     config["aliases"]["spike"] = [model]
     OUT.mkdir(exist_ok=True)
     gw = Gateway(config, JsonlLog(OUT / "llm_log.jsonl"), "runtime")
-    system = PROMPT.read_text()
-    out_path = OUT / f"{model}_{split}.jsonl"
+    system = Path(prompt).read_text() if prompt else PROMPT.read_text()
+    out_path = OUT / f"{tag}_{split}.jsonl"
     done = set()
     if out_path.exists():
         done = {r["call_uid"] for r in map(json.loads, out_path.read_text().splitlines())}
@@ -56,7 +59,8 @@ def run(model: str, split: str, limit=None) -> None:
             task="spike-labels",
             system=system,
             schema=SCHEMA,
-            max_tokens=1000,
+            max_tokens=int(os.environ.get("SPIKE_MAX_TOKENS", 12000)) if effort else 1000,
+            effort=effort or None,
             messages=[{"role": "user", "content": f"방향: {c['direction']}\n\n{c['transcript']}"}],
         )
         return {
@@ -70,13 +74,16 @@ def run(model: str, split: str, limit=None) -> None:
             "error": r.error,
         }
 
-    with ThreadPoolExecutor(4) as ex, out_path.open("a") as f:
+    with (
+        ThreadPoolExecutor(int(os.environ.get("SPIKE_WORKERS", 4))) as ex,
+        out_path.open("a") as f,
+    ):
         for i, row in enumerate(ex.map(one, calls)):
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             f.flush()
             if i % 200 == 0:
                 print(i, flush=True)
-    score(model, split)
+    score(tag, split)
 
 
 def score(model: str, split: str) -> dict:
@@ -101,8 +108,16 @@ def score(model: str, split: str) -> dict:
     for i in ITEMS:
         print(f"  {i}: {hits[i]}/{n}")
     print(f"  목적 Strict {hits['primary_purpose'] / n:.4f}, 플래그 평균 {flags:.4f}")
-    cost = sum(r.get("cost") or 0 for r in rows.values() if r["call_uid"] in gold)
-    print(f"  비용 ${cost:.3f}")
+    mine = [r for r in rows.values() if r["call_uid"] in gold]
+    cost = sum(r.get("cost") or 0 for r in mine)
+    outs = sorted(r.get("out") or 0 for r in mine)
+    print(
+        f"  비용 ${cost:.3f} — 건당 ${cost / len(mine):.5f}, 1,500건 환산 ${cost / len(mine) * 1500:.2f}"
+    )
+    print(
+        f"  토큰 — 입력 평균 {sum(r.get('in') or 0 for r in mine) // len(mine)},"
+        f" 출력 평균 {sum(outs) // len(outs)}·중앙 {outs[len(outs) // 2]}·최대 {outs[-1]}"
+    )
     return {"purpose": hits["primary_purpose"] / n, "flags": flags, "hits": hits, "n": n}
 
 

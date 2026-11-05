@@ -210,9 +210,10 @@ class Gateway(_Base):
             )
         return self.client.messages.create(**params)
 
-    def _upstage(self, model: str, system, messages, max_tokens, schema, state) -> tuple:
+    def _upstage(self, model: str, system, messages, max_tokens, schema, effort, state) -> tuple:
         """Upstage 한 시도 — 토큰·비용·오류는 state에 더하고 ("next" | "stop" | "ok", (text, data))를 돌려준다.
-        폴백 규칙은 Anthropic과 같다(일시 오류면 next, 그 밖의 오류·잘림·JSON 파싱 실패면 stop)"""
+        폴백 규칙은 Anthropic과 같다(일시 오류면 next, 그 밖의 오류·잘림·JSON 파싱 실패면 stop).
+        effort는 reasoning_effort로 보낸다(없으면 추론 꺼짐 — 추론 토큰도 max_tokens 안)"""
         import openai
 
         if self.upstage_client is None:
@@ -226,6 +227,8 @@ class Gateway(_Base):
                 "type": "json_schema",
                 "json_schema": {"name": "labels", "schema": schema, "strict": True},
             }
+        if effort is not None:
+            params["reasoning_effort"] = effort
         try:
             response = self.upstage_client.chat.completions.create(**params)
         except openai.APIConnectionError as e:  # 타임아웃 포함
@@ -317,7 +320,7 @@ class Gateway(_Base):
                 state["model"] = state["tried"] = model
                 if self._provider(model) == "upstage":
                     outcome, got = self._upstage(
-                        model, system, messages, max_tokens, schema, state
+                        model, system, messages, max_tokens, schema, effort, state
                     )
                     if outcome == "next":
                         continue
