@@ -95,13 +95,13 @@ tags:
 ### 2.4 블라인드 비교
 
 - **채점은 LLM 쌍 비교**(`prompts/blind_judge/`, 앱 작업 `POST /jobs/blind-judge-batch`): 쌍 비교 판정기가 블라인드 풀의 두 요약을 좌우를 바꿔 두 번 판정하고, 두 판정이 같으면 그 선택, 다르면 `tie`로 센다(위치 편향 보정). 입력은 녹취록과 두 요약뿐이다. 프롬프트 버전이 나올 때마다 dev 블라인드 통화에 다시 돌리고, 앱 화면·`--split dev`도 dev만 보인다. test 블라인드 통화는 최종 비교(vN vs vN-final) 한 번만, 사람 최종 투표 때 함께 돌린다. test 분류 묶음(§7)은 그 `--prompt-version`이 낀 쌍만 보인다
-- **사람 투표는 최종 비교만**: vN vs vN-final 한 번만, 데모 고정 직전에 블라인드 풀 전체에서 사람이 투표하고(split별로 보고), 같은 쌍에서 LLM 쌍 비교와 사람의 일치율을 쌍 비교 판정기 버전별로 함께 낸다 — LLM 쌍 비교를 믿을 근거
+- **사람 투표**: dev 블라인드 통화는 `ax_settings.blind_versions` 쌍(앱 블라인드 탭), test 블라인드 통화는 최종 비교 vN vs vN-final 한 번만(데모 고정 직전, split별로 보고). 같은 쌍에서 LLM 쌍 비교와 사람의 일치율을 쌍 비교 판정기 버전별로 함께 낸다 — LLM 쌍 비교를 믿을 근거. 화면은 녹취록을 함께 보인다(둘 다 틀렸는지는 원래 통화로만 판단된다)
 - 두 `prompt_version` 요약을 버전 가리고 제시 — 기본은 같은 모델의 v1 vs vN(자동 개선의 요약 쪽 효과), 최종은 vN vs vN-final(경량 → 상위 모델, 모델 교체 효과) → `left / right / tie / both_wrong`
 - **문체 누출 방지**: 요약 프롬프트에서 출력 형식 고정(마크다운·글머리 금지, 명사형 종결 '~함/~음', 공백 포함 80~110자 단일 문단) + 코드 후처리로 줄바꿈·기호 정규화
 - **좌우 배치** `hash(transcript, seed) % 2` — 새로고침·재생성에도 불변, 50:50
 - 집계는 좌우 `(prompt_version, model_actual)` **쌍별**. 서로 다른 비교(v1 vs vN, vN vs vN-final)의 투표가 섞이지 않음
 - 리포트에 **위치 편향 지표**(left/right 선택 비율) 병기 — 50:50에서 벗어나면 문체 누출 의심
-- **블라인드 큐**(원본은 여기, 사람 투표): `in_blind_pool = 1`이고 `ax_settings.blind_versions`(비교할 두 버전)의 분류 ID 쌍에 대한 `ax_blind_votes`가 `NOT EXISTS`인 건
+- **블라인드 큐**(원본은 여기, 사람 투표): dev 블라인드 통화(`in_blind_pool = 1`이고 dev 판정 풀 — [[치과 AX - 앱 설계]] §6)이고 `ax_settings.blind_versions`(비교할 두 버전)의 분류 ID 쌍에 대한 `ax_blind_votes`가 `NOT EXISTS`인 건. 쌍 비교 판정기 모델은 `config/llm.yaml` 별칭 `blind_judge` — 요약을 쓴 모델과 같으면 자기 글 쪽으로 기울 수 있어 사람 투표 일치율과 함께 본다
 
 ### 2.5 모델 2개 교차검증
 
