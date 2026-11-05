@@ -1,6 +1,5 @@
 "use client";
 
-import { History, ListChecks } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -105,12 +104,11 @@ export function CallsView() {
             {
               key: "today",
               label: "오늘 할 일",
-              icon: ListChecks,
               count: board.data
                 ? board.data.internal.length + board.data.contact.length
                 : undefined,
             },
-            { key: "history", label: "통화 기록", icon: History },
+            { key: "history", label: "통화 기록" },
           ]}
           value={tab}
           onChange={(v) =>
