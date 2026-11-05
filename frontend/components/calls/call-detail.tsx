@@ -319,7 +319,16 @@ function Patient({
         <dt className="text-muted-foreground">마지막 내원</dt>
         <dd>{s.last_visit ?? "없음"}</dd>
         <dt className="text-muted-foreground">미수</dt>
-        <dd>{s.balance > 0 ? won(s.balance) : "없음"}</dd>
+        {/* 미수가 있으면 통화 중에 챙기도록 빨간 굵은 글자 */}
+        <dd>
+          {s.balance > 0 ? (
+            <span className="font-bold text-status-danger-fg">
+              {won(s.balance)}
+            </span>
+          ) : (
+            "없음"
+          )}
+        </dd>
         <dt className="text-muted-foreground">주의사항</dt>
         <dd>
           {s.alerts.length ? s.alerts.map((a) => a.label).join(", ") : "없음"}
