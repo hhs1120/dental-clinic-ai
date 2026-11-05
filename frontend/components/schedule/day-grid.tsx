@@ -200,7 +200,7 @@ function ApptCard({
         "flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-0.5 text-left text-xs",
         // 취소·노쇼는 흐리게 하지 않고(다크 모드에서 안 읽힘) 점선 테두리·취소선으로 구분한다
         off
-          ? "border border-dashed border-status-danger-border bg-status-danger-bg text-status-danger-fg"
+          ? "border border-l-4 border-border border-l-status-danger-dot bg-hatch text-muted-foreground"
           : CARD[appt.type],
         selected && "ring-2 ring-primary",
       )}

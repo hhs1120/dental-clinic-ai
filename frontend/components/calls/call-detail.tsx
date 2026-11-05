@@ -223,7 +223,11 @@ export function CallDetail({
             {patient}
           </div>
           <div className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4">
-            <Transcript text={call.transcript} bubbles />
+            <Transcript
+              text={call.transcript}
+              bubbles
+              counterpart={call.name}
+            />
           </div>
         </div>
       </div>

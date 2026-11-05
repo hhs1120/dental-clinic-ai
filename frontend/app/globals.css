@@ -183,3 +183,12 @@
     @apply font-sans;
   }
 }
+
+/* 빗금 바탕 — 예약표의 취소·노쇼 카드(빈 자리로 읽히게). 색은 토큰 */
+@utility bg-hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--muted) 0 6px,
+    var(--card) 6px 12px
+  );
+}
