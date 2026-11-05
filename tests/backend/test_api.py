@@ -208,3 +208,13 @@ def test_bad_date_detail_is_short(client):
         "detail"
     ]
     assert "date_from" in detail and "pydantic.dev" not in detail and "\n" not in detail
+
+
+def test_db_paths_follow_data_dir_env(monkeypatch, tmp_path):
+    """AX_DATA_DIR — Playwright가 data/ 복사본으로 API를 띄울 때(진짜 판정 DB를 더럽히지 않게)"""
+    from backend.api import get_db_paths
+
+    monkeypatch.setenv("AX_DATA_DIR", str(tmp_path))
+    assert get_db_paths() == (tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    monkeypatch.delenv("AX_DATA_DIR")
+    assert get_db_paths()[0].parent.name == "data"

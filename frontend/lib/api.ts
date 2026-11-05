@@ -94,7 +94,12 @@ export const errorText = (e: unknown) =>
 export function useFetch<T>(
   key: string | null,
   load: (signal: AbortSignal) => Promise<T>,
-): { data: T | null; error: string | null; reload: () => void } {
+): {
+  data: T | null;
+  error: string | null;
+  loading: boolean; // 다시 불러오는 중(이전 값을 보이는 동안 포함)
+  reload: () => void;
+} {
   const [tick, setTick] = useState(0);
   const [state, setState] = useState<{
     key: string;
@@ -119,6 +124,7 @@ export function useFetch<T>(
   return {
     data: same ? (state.data ?? null) : null,
     error: same ? (state.error ?? null) : null,
+    loading: key !== null && state?.key !== `${key}#${tick}`,
     reload: () => setTick((t) => t + 1),
   };
 }

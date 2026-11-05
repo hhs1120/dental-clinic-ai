@@ -3,6 +3,7 @@ sqlite3 연결은 만든 스레드에 묶이고 의존성과 핸들러는 다른
 연결·Searcher는 핸들러 안에서 만들어 닫는다. 임베더·리랭커만 프로세스에 하나 둔다."""
 
 import datetime as dt
+import os
 import sqlite3
 from functools import lru_cache
 from pathlib import Path
@@ -57,7 +58,9 @@ class GuardedEmbedder:
 
 
 def get_db_paths() -> tuple[Path, Path]:
-    return ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite"
+    """환경 변수 AX_DATA_DIR이 있으면 그 폴더 — Playwright가 data/ 복사본으로 띄운다(make e2e)"""
+    data = Path(os.environ.get("AX_DATA_DIR") or ROOT / "data")
+    return data / "app.sqlite", data / "source.sqlite"
 
 
 @lru_cache

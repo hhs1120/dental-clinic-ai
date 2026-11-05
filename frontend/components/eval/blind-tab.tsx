@@ -29,7 +29,7 @@ export function BlindTab() {
   const [fail, setFail] = useState<string | null>(null);
 
   const vote = async (choice: Choice) => {
-    if (!pair || versions) return;
+    if (!pair || versions || next.loading) return;
     setPicked(choice);
     setFail(null);
     try {
@@ -55,7 +55,7 @@ export function BlindTab() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!pair) return;
+      if (!pair || next.loading) return; // 다음 쌍을 불러오는 동안 이전 쌍에 다시 투표하지 않게
       if (e.key === "Enter" && versions) {
         e.preventDefault();
         advance();
@@ -118,7 +118,7 @@ export function BlindTab() {
               <Button
                 key={k}
                 variant={picked === c ? "default" : "outline"}
-                disabled={!!versions}
+                disabled={!!versions || next.loading}
                 onClick={() => vote(c)}
               >
                 <kbd className="text-xs opacity-70">{k}</kbd> {l}

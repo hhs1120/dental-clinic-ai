@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -68,6 +68,10 @@ dev: frontend/node_modules
 	trap 'kill 0' INT TERM EXIT; \
 	uv run $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
 	npm --prefix frontend run dev
+
+# 화면 E2E(Playwright) — data/ 복사본으로 API(8100)·화면(3100)을 띄운다. 실데이터가 필요해 CI에는 넣지 않는다
+e2e: frontend/node_modules
+	npm --prefix frontend run -s e2e
 
 # 검색 색인 (앱 설계 §3). 벡터는 모델마다 한 벌이고 없는 청크만 계산한다
 index:

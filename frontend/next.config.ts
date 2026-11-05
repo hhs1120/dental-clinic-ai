@@ -14,7 +14,11 @@ const nextConfig: NextConfig = {
   // API는 같은 출처로 프록시한다 — CORS를 쓰지 않는다(앱 뼈대 설계안 'API 연결')
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: "http://localhost:8000/:path*" },
+      {
+        source: "/api/:path*",
+        // AX_API_URL — Playwright가 복사본 데이터로 띄운 API(make e2e)
+        destination: `${process.env.AX_API_URL ?? "http://localhost:8000"}/:path*`,
+      },
     ];
   },
   experimental: {

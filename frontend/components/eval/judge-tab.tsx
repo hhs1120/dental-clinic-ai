@@ -88,8 +88,19 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
   const call = next.data?.n ?? null;
   const list = useMemo(() => (names ? items(names) : []), [names]);
   const [answers, setAnswers] = useState<Record<string, Opt>>({});
-  const [active, setActive] = useState(0);
-  const [buf, setBuf] = useState("");
+  // 현재 항목·입력 중인 숫자 — 키를 빠르게 이어 치면 다시 그리기 전에 다음 키가 오므로 ref가 원본, state는 화면용
+  const [active, setActiveState] = useState(0);
+  const [buf, setBufState] = useState("");
+  const activeRef = useRef(0);
+  const bufRef = useRef("");
+  const setActive = (f: number | ((a: number) => number)) => {
+    activeRef.current = typeof f === "function" ? f(activeRef.current) : f;
+    setActiveState(activeRef.current);
+  };
+  const setBuf = (v: string) => {
+    bufRef.current = v;
+    setBufState(v);
+  };
   const [memo, setMemo] = useState("");
   const [revealed, setRevealed] = useState<Revealed | null>(null);
   const [fail, setFail] = useState<string | null>(null);
@@ -111,7 +122,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
     setActive(Math.min(i + 1, list.length - 1));
   };
   const save = async () => {
-    if (!call || !done || busy) return;
+    if (!call || !done || busy || next.loading) return;
     setBusy(true);
     setFail(null);
     try {
@@ -142,7 +153,7 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
   // 렌더마다 다시 건다 — 핸들러가 늘 지금 상태를 본다
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!call || list.length === 0) return;
+      if (!call || list.length === 0 || next.loading) return; // 다음 건을 불러오는 동안 이전 건에 저장하지 않게
       const typing = document.activeElement === memoRef.current;
       if (e.key === "Enter") {
         e.preventDefault();
@@ -163,14 +174,14 @@ export function JudgeTab({ names }: { names: LabelNames | null }) {
         setActive((a) => Math.max(a - 1, 0));
         setBuf("");
       } else if (/^[0-9]$/.test(e.key)) {
-        const it = list[active];
-        const typed = buf + e.key;
+        const it = list[activeRef.current];
+        const typed = bufRef.current + e.key;
         if (typed.length < it.digits) {
           setBuf(typed);
           return;
         }
         const opt = it.opts.find((o) => o.key === typed);
-        if (opt) pick(active, opt);
+        if (opt) pick(activeRef.current, opt);
         else setBuf("");
       }
     };
