@@ -37,9 +37,8 @@ export function CallsView() {
   };
   const open = (uid: string) => go({ call: uid });
   const names = useLabels();
-  const board = useFetch(tab === "today" ? "board" : null, (s) =>
-    fetchBoard(s),
-  );
+  // 통화 기록 탭에서도 불러온다 — "오늘 할 일" 탭의 할 일 수가 사라지지 않게
+  const board = useFetch("board", (s) => fetchBoard(s));
   const detail = useFetch(call, (s) => fetchCall(call as string, s));
   const [version, setVersion] = useState(0);
   const [busy, setBusy] = useState(false);
