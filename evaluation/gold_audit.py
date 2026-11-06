@@ -238,6 +238,47 @@ def sample(records: list[dict], n: int = GOLD_AUDIT_SAMPLE) -> list[str]:
     return picked + rest[: n - len(picked)]
 
 
+def errors(records: list[dict]) -> set[tuple[str, str]]:
+    """골드 오류 추정 (통화, 항목) — 중재가 판정기 쪽이나 둘 다 아님을 고른 항목. 사람 답은 쓰지 않는다(골드 점검 설계)"""
+    return {
+        (r["call_uid"], i)
+        for r in records
+        for i, v in r["items"].items()
+        if v["arbiter"] in ("judge", "neither")
+    }
+
+
+def summarize(records: list[dict]) -> dict:
+    """리포트 숫자 — 항목별 중재 선택 수, 중재 vs 사람 일치(사람이 고른 항목만), 표본 안 사람 기준 오류 추정(참고)"""
+    arbiter, agree = {}, {}
+    human_errors = {"judge": 0, "neither": 0}
+    for r in records:
+        for i, v in r["items"].items():
+            arbiter.setdefault(i, {"gold": 0, "judge": 0, "neither": 0})[v["arbiter"]] += 1
+            if v["human"] is None:
+                continue
+            a = agree.setdefault(i, {"k": 0, "n": 0})
+            a["n"] += 1
+            a["k"] += v["human"] == v["arbiter"]
+            if v["human"] in human_errors:
+                human_errors[v["human"]] += 1
+    of = {r["call_uid"]: r for r in records}
+    pending = sum(
+        any(v["human"] is None for v in of[u]["items"].values()) for u in sample(records)
+    )
+    return {
+        "calls": len(records),
+        "arbiter": arbiter,
+        "agreement": agree,
+        "agreement_total": {
+            "k": sum(a["k"] for a in agree.values()),
+            "n": sum(a["n"] for a in agree.values()),
+        },
+        "human_errors": human_errors,
+        "human_pending": pending,
+    }
+
+
 KEYS = {"1": "가", "2": "나", "3": NEITHER}
 
 

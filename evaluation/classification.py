@@ -51,11 +51,20 @@ def _classifications(conn) -> list[dict]:
     return [dict(r, labels=json.loads(r["labels"]) if r["labels"] else None) for r in rows]
 
 
-def _score(ids, pred: dict, ref: dict, calls: dict, population: Counter) -> dict:
-    """ids의 통화를 pred vs ref로 — 항목별 k/n, 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적)"""
+def _score(
+    ids, pred: dict, ref: dict, calls: dict, population: Counter, drop: set | None = None
+) -> dict:
+    """ids의 통화를 pred vs ref로 — 항목별 k/n, 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적).
+    drop = 모수에서 뺄 (통화, 항목) — 골드 점검의 골드 오류 추정(평가 설계 §2.3, dev만)"""
     ids = sorted(i for i in ids if i in pred and i in ref)
-    items = {i: {"k": sum(pred[c][i] == ref[c][i] for c in ids), "n": len(ids)} for i in ITEMS}
-    rows = [(calls[c]["gold"][PURPOSE], pred[c][PURPOSE] == ref[c][PURPOSE]) for c in ids]
+    drop = drop or set()
+    keep = {i: [c for c in ids if (c, i) not in drop] for i in ITEMS}
+    items = {
+        i: {"k": sum(pred[c][i] == ref[c][i] for c in keep[i]), "n": len(keep[i])} for i in ITEMS
+    }
+    rows = [
+        (calls[c]["gold"][PURPOSE], pred[c][PURPOSE] == ref[c][PURPOSE]) for c in keep[PURPOSE]
+    ]
     sample = Counter(cat for cat, _ in rows)
     weights = inverse_weights(population, sample)
     by_category = {
@@ -87,6 +96,7 @@ def evaluate(
     versions: list[str] | None = None,
     fewshot: dict | None = None,
     dump: bool = False,
+    gold_drop: set | None = None,
 ) -> dict:
     """split = dev|test. versions 없으면 분류가 있는 버전 전부. fewshot = {버전: {call_uid}} — dev 집계에서 뺀다.
     사람 판정은 운영 구간 감사라 채점하지 않는다(평가 설계 §2.3)"""
@@ -120,6 +130,11 @@ def evaluate(
         out["versions"][v] = {
             "model_actual": sorted({r["model_actual"] for r in mine}),
             "model_vs_gold": _score(gold_ids, ok, gold, calls, population),
+            **(
+                {"model_vs_gold_audited": _score(gold_ids, ok, gold, calls, population, gold_drop)}
+                if gold_drop is not None
+                else {}
+            ),
             "excluded": {
                 "fallback": sum(r["status"] == "ok" and bool(r["fallback"]) for r in in_gold),
                 "failed": sum(r["status"] == "failed" for r in in_gold),
@@ -161,7 +176,9 @@ def _usable(rows: list[dict], v: str, calls: dict) -> dict:
     return {r["call_uid"]: r for r in mine if r["status"] == "ok" and not r["fallback"]}
 
 
-def evaluate_judge(conn, split: str, versions: list[str] | None = None) -> dict:
+def evaluate_judge(
+    conn, split: str, versions: list[str] | None = None, gold_drop: set | None = None
+) -> dict:
     """판정기 vs 골드(평가 설계 §2.6) — 판정기 버전별, 분할은 모델 vs 골드와 같다"""
     calls = _calls(conn)
     population = Counter(c["gold"][PURPOSE] for c in calls.values())
@@ -170,16 +187,15 @@ def evaluate_judge(conn, split: str, versions: list[str] | None = None) -> dict:
     out = {}
     for v in versions or sorted({r["prompt_version"] for r in rows}, key=version_key):
         ok = _usable(rows, v, calls)
+        pred = {c: r["labels"] for c, r in ok.items()}
         out[v] = {
             "model_actual": sorted({r["model_actual"] for r in rows if r["prompt_version"] == v}),
-            "judge_vs_gold": _score(
-                _gold_ids(calls, split),
-                {c: r["labels"] for c, r in ok.items()},
-                gold,
-                calls,
-                population,
-            ),
+            "judge_vs_gold": _score(_gold_ids(calls, split), pred, gold, calls, population),
         }
+        if gold_drop is not None:
+            out[v]["judge_vs_gold_audited"] = _score(
+                _gold_ids(calls, split), pred, gold, calls, population, gold_drop
+            )
     return out
 
 

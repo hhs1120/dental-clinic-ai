@@ -306,3 +306,48 @@ def test_audit_refuses_until_arbitration_complete(conn, tmp_path):
     _set_judge(conn, "c-0004", urgency="urgent")  # 중재 안 된 대상이 생김
     with pytest.raises(SystemExit, match="gold-arbitrate"):
         gold_audit.audit(conn, p, "v1", read=_keys(), write=lambda s: None)
+
+
+def _rec2(uid, items, version="v1", sha="x"):
+    """items = {항목: (arbiter, human)}"""
+    return {
+        "call_uid": uid,
+        "judge_version": version,
+        "transcript_sha": sha,
+        "items": {
+            i: {"gold": 1, "judge": 0, "arbiter": a, "human": h} for i, (a, h) in items.items()
+        },
+    }
+
+
+def test_errors_from_arbiter_only():
+    rec = _rec2("c-0002", {"primary_purpose": ("judge", "gold"), "complaint": ("gold", "judge")})
+    assert gold_audit.errors([rec]) == {("c-0002", "primary_purpose")}
+    rec = _rec2("c-0002", {"counterpart": ("neither", None)})
+    assert gold_audit.errors([rec]) == {("c-0002", "counterpart")}
+
+
+def test_summarize_agreement():
+    recs = [
+        _rec2("c-1", {"primary_purpose": ("judge", "judge"), "has_todo": ("gold", "judge")}),
+        _rec2("c-2", {"has_todo": ("neither", None)}),
+    ]
+    s = gold_audit.summarize(recs)
+    assert s["calls"] == 2
+    assert s["arbiter"]["has_todo"] == {"gold": 1, "judge": 0, "neither": 1}
+    assert s["agreement"]["has_todo"] == {"k": 0, "n": 1}
+    assert s["agreement"]["primary_purpose"] == {"k": 1, "n": 1}
+    assert s["agreement_total"] == {"k": 1, "n": 2}
+    assert s["human_errors"] == {"judge": 2, "neither": 0}
+    assert s["human_pending"] == 1  # 사람이 아직 안 본 통화
+
+
+def test_stale_records_are_skipped(conn):
+    """재생성으로 녹취록이 바뀐 기록은 빠지고 수만 남는다"""
+    ok = _rec2(
+        "c-0002", {"complaint": ("judge", None)}, sha=gold_audit.transcript_sha("환자: 통화 2")
+    )
+    old = _rec2("c-0004", {"urgency": ("judge", None)}, sha="옛 녹취록")
+    cur, stale = gold_audit.current([ok, old], conn, "v1")
+    assert cur == [ok] and stale == 1
+    assert gold_audit.errors(cur) == {("c-0002", "complaint")}

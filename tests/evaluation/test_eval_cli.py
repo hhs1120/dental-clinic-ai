@@ -420,3 +420,66 @@ def test_main_reports_app_refusal_without_traceback(conn, tmp_path, monkeypatch,
         ]
     )
     assert code != 0 and "벡터 없는 청크" in capsys.readouterr().out
+
+
+def _audit_file(tmp_path, arbiter="judge"):
+    """c-0002(dev) 용건을 중재가 판정기 쪽으로 고른 기록 — 골드 오류 추정 1"""
+    from evaluation import gold_audit
+
+    p = tmp_path / "gold_audit.jsonl"
+    gold_audit.save(
+        p,
+        [
+            {
+                "call_uid": "c-0002",
+                "judge_version": "v1",
+                "transcript_sha": gold_audit.transcript_sha("환자: 통화 2"),
+                "items": {
+                    "primary_purpose": {
+                        "gold": "complaint",
+                        "judge": "book",
+                        "arbiter": arbiter,
+                        "human": "judge",
+                    }
+                },
+            }
+        ],
+    )
+    return p
+
+
+def test_dev_report_drops_gold_errors(conn, reports, tmp_path):
+    out = _run(conn, reports, split="dev", gold_audit_path=_audit_file(tmp_path))
+    r = _json(out)
+    j = r["judge"]["v1"]
+    assert j["judge_vs_gold_audited"]["purpose"]["n"] == j["judge_vs_gold"]["purpose"]["n"] - 1
+    assert (
+        j["judge_vs_gold_audited"]["items"]["complaint"]["n"]
+        == j["judge_vs_gold"]["items"]["complaint"]["n"]
+    )
+    c = r["classification"]["versions"]["v1"]
+    assert c["model_vs_gold_audited"]["purpose"]["n"] == c["model_vs_gold"]["purpose"]["n"] - 1
+    assert r["gold_audit"]["summary"]["calls"] == 1 and r["gold_audit"]["stale"] == 0
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert "## 골드 점검" in md and "오류 추정 제외" in md
+
+
+def test_test_report_keeps_original_gold(conn, reports, tmp_path):
+    r = _json(
+        _run(
+            conn,
+            reports,
+            split="test",
+            section="judge",
+            prompt_version="v1",
+            gold_audit_path=_audit_file(tmp_path),
+        )
+    )
+    assert "judge_vs_gold_audited" not in r["judge"]["v1"]
+    assert r["gold_audit"]["summary"]["calls"] == 1
+
+
+def test_report_without_audit_file(conn, reports, tmp_path):
+    out = _run(conn, reports, split="dev", gold_audit_path=tmp_path / "없음.jsonl")
+    assert _json(out)["gold_audit"] is None
+    assert "골드 점검 전" in out["report_path"].read_text(encoding="utf-8")

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from evaluation import EvalRefused, classification, rag
+from evaluation import EvalRefused, classification, gold_audit, rag
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
 
@@ -101,6 +101,7 @@ def run(
     condition: str | None = None,
     force: bool = False,
     prompts_dir: Path | None = None,
+    gold_audit_path: Path | None = None,
 ) -> dict:
     """section = test 묶음(SECTIONS 하나). dev는 없으면 전부(--retrieval-only면 챗 빼고)"""
     reports_dir, prompts_dir = reports_dir or REPORTS, prompts_dir or PROMPTS
@@ -195,7 +196,19 @@ def run(
         "judge": None,
         "crosscheck": None,
         "rag": None,
+        "gold_audit": None,
     }
+    gold_drop = None
+    if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
+        jv = prompt_version if section == "judge" else classification.judge_version(conn)
+        if jv:  # 골드 점검(평가 설계 §2.3) — 오류 추정 제외는 dev만, test는 원래 골드 수치뿐
+            cur, stale = gold_audit.current(gold_audit.load(gold_audit_path), conn, jv)
+            result["gold_audit"] = {
+                "judge_version": jv,
+                "summary": gold_audit.summarize(cur),
+                "stale": stale,
+            }
+            gold_drop = gold_audit.errors(cur) if dev else None
     if do_cls:
         versions = (
             [prompt_version]
@@ -221,11 +234,11 @@ def run(
         if leaked:  # test 통화를 프롬프트 예시로 쓰면 test 점수가 새는 셈 — 평가 설계 §2.1
             raise EvalRefused(f"few-shot에 test 통화가 있음: {', '.join(leaked)}")
         result["classification"] = classification.evaluate(
-            conn, split, versions, fewshot, dump=dev
+            conn, split, versions, fewshot, dump=dev, gold_drop=gold_drop
         )
     if dev or section == "judge":
         result["judge"] = classification.evaluate_judge(
-            conn, split, [prompt_version] if section == "judge" else None
+            conn, split, [prompt_version] if section == "judge" else None, gold_drop
         )
     if dev or section == "crosscheck":
         jv = classification.judge_version(conn)
@@ -320,6 +333,7 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_classification(r["classification"])
     if r["judge"] is not None:
         out += _render_judge(r["judge"])
+        out += _render_gold_audit(r["gold_audit"])
     if r["crosscheck"] is not None:
         out += _render_crosscheck(r["crosscheck"])
     if r["rag"] is not None or app_missing:
@@ -337,6 +351,7 @@ def _render_classification(c: dict) -> list[str]:
             f"### {v} ({', '.join(x['model_actual'])})",
             "",
             f"목적 Strict — 모델 vs 골드 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])} · 단순 평균 {_pct(g['purpose']['macro'])}",
+            *_audited_line(x.get("model_vs_gold_audited")),
             "카테고리별 n(모델 vs 골드) — "
             + " · ".join(f"{c} {_kn(d)}" for c, d in g["purpose"]["by_category"].items()),
             "",
@@ -403,10 +418,49 @@ def _render_judge(j: dict) -> list[str]:
         g = x["judge_vs_gold"]
         out += [
             f"### {v} ({', '.join(x['model_actual'])}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}",
+            *_audited_line(x.get("judge_vs_gold_audited")),
             "",
             " · ".join(f"{i} {_kn(g['items'][i])}" for i in classification.ITEMS),
             "",
         ]
+    return out
+
+
+def _audited_line(g: dict | None) -> list[str]:
+    """골드 오류 추정을 뺀 수치(dev만) — 원래 골드가 주 수치(평가 설계 §2.3)"""
+    if g is None:
+        return []
+    return [
+        f"골드 오류 추정 제외 — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
+    ]
+
+
+def _render_gold_audit(a: dict | None) -> list[str]:
+    out = ["## 골드 점검", ""]
+    if a is None:
+        return out + ["골드 점검 전", ""]
+    s = a["summary"]
+    out += [
+        f"판정기 {a['judge_version']} · 대상 {s['calls']}통화"
+        + (f" · 녹취록이 바뀐 기록 {a['stale']}" if a["stale"] else ""),
+        "",
+        "| 항목 | 중재: 골드 쪽 | 판정기 쪽 | 둘 다 아님 | 중재 vs 사람 |",
+        "|---|---|---|---|---|",
+    ]
+    for i, c in s["arbiter"].items():
+        ag = s["agreement"].get(i)
+        out.append(
+            f"| {i} | {c['gold']} | {c['judge']} | {c['neither']} | {_kn(ag) if ag else '—'} |"
+        )
+    t, h = s["agreement_total"], s["human_errors"]
+    out += [
+        "",
+        f"골드 오류 추정(중재) — 판정기 쪽 {sum(c['judge'] for c in s['arbiter'].values())}"
+        f" · 둘 다 아님 {sum(c['neither'] for c in s['arbiter'].values())}",
+        f"중재 vs 사람 전체 {_kn(t) if t['n'] else '—'} · 사람 기준 오류 추정(표본, 참고) 판정기 쪽 {h['judge']}"
+        f" · 둘 다 아님 {h['neither']} · 사람 미판정 {s['human_pending']}통화",
+        "",
+    ]
     return out
 
 
@@ -556,6 +610,7 @@ def main(argv=None) -> int:
             prompt_version=args.prompt_version,
             condition=args.condition,
             force=args.force,
+            gold_audit_path=gold_audit.AUDIT_PATH,
         )
     except AlreadyRun as e:
         print(e)
