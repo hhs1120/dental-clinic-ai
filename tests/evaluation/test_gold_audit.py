@@ -1,11 +1,14 @@
 """골드 점검 (평가 설계 §2.3, 골드 점검 설계) — fixture는 eval_db 머리말(판정기 v1: 통화 2 dev·3 test가 골드와 다름)."""
 
+import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from evaluation import gold_audit
-from tests.evaluation.eval_db import make_db
+from shared.llm import FakeGateway, JsonlLog
+from tests.evaluation.eval_db import labels, make_db
 
 ROOT = Path(__file__).resolve().parents[2]
 HIDDEN = ("골드", "gold", "정답", "판정기", "judge")
@@ -103,3 +106,89 @@ def test_sample_constant():
     from evaluation.metrics import GOLD_AUDIT_SAMPLE
 
     assert GOLD_AUDIT_SAMPLE == 50
+
+
+class Fake(FakeGateway):
+    """fail_uids의 통화는 실패, answers가 있으면 그 답을 돌려준다(통화 → {항목: 선택})"""
+
+    def __init__(self, tmp_path, fail_uids=(), answers=None):
+        super().__init__(JsonlLog(tmp_path / "llm.jsonl"), scope="runtime")
+        self.fail_uids, self.answers, self.seen = set(fail_uids), answers or {}, []
+
+    def complete(self, alias, **kw):
+        msg = kw["messages"][0]["content"]
+        uid = next(u for u in ("c-0002", "c-0004", "c-0005", "c-0001") if f"통화 {u[-1]}" in msg)
+        self.seen.append((alias, uid))
+        r = super().complete(alias, **kw)
+        if uid in self.fail_uids:
+            return replace(r, ok=False, data=None, error="실패")
+        if uid in self.answers:
+            return replace(r, data=self.answers[uid])
+        return r
+
+
+def test_arbitrate_writes_records(conn, tmp_path):
+    p = tmp_path / "a.jsonl"
+    gw = Fake(tmp_path)
+    r = gold_audit.arbitrate(gw, conn, p, "v1")
+    assert (r["done"], r["failed"]) == (1, 0)
+    assert gw.seen == [("gold_audit", "c-0002")]
+    [rec] = gold_audit.load(p)
+    assert (rec["call_uid"], rec["judge_version"], rec["prompt_version"]) == ("c-0002", "v1", "v1")
+    assert rec["transcript_sha"] == gold_audit.transcript_sha("환자: 통화 2")
+    assert set(rec["items"]) == {"primary_purpose", "complaint"}
+    pp = rec["items"]["primary_purpose"]
+    assert (pp["gold"], pp["judge"], pp["human"]) == ("complaint", "book", None)
+    assert pp["gold_side"] == gold_audit.gold_side("c-0002", "primary_purpose")
+    assert all(v["arbiter"] in ("gold", "judge", "neither") for v in rec["items"].values())
+
+
+def test_failed_calls_retry_only_missing(conn, tmp_path):
+    p = tmp_path / "a.jsonl"
+    _set_judge(conn, "c-0004", urgency="urgent")
+    r = gold_audit.arbitrate(Fake(tmp_path, fail_uids={"c-0004"}), conn, p, "v1")
+    assert (r["done"], r["failed"]) == (1, 1)
+    assert [x["call_uid"] for x in gold_audit.load(p)] == ["c-0002"]
+    gw = Fake(tmp_path)
+    assert gold_audit.arbitrate(gw, conn, p, "v1")["done"] == 1
+    assert gw.seen == [("gold_audit", "c-0004")]
+    assert [x["call_uid"] for x in gold_audit.load(p)] == ["c-0002", "c-0004"]
+
+
+def test_invalid_choice_is_failure(conn, tmp_path):
+    p = tmp_path / "a.jsonl"
+    bad = {"c-0002": {"primary_purpose": "가", "complaint": "둘 다 아님"}}
+    r = gold_audit.arbitrate(Fake(tmp_path, answers=bad), conn, p, "v1")
+    assert (r["done"], r["failed"]) == (0, 1)
+    assert gold_audit.load(p) == []
+
+
+def test_new_judge_version_gets_new_lines(conn, tmp_path):
+    p = tmp_path / "a.jsonl"
+    gold_audit.arbitrate(Fake(tmp_path), conn, p, "v1")
+    for cid, uid in ((4, "c-0004"), (2, "c-0002")):
+        conn.execute(
+            "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+            " VALUES (?, 'judge', 'judge', 'solar-mini4', 'v2', 1, '2026-12-02 09:00:00')",
+            (300 + cid,),
+        )
+        conn.execute(
+            "INSERT INTO ax_model_judgments (call_uid, model_alias, model_actual, prompt_version, status,"
+            " labels, llm_call_id) VALUES (?, 'judge', 'solar-mini4', 'v2', 'ok', ?, ?)",
+            (uid, json.dumps(labels("reschedule")), 300 + cid),
+        )
+    gw = Fake(tmp_path)
+    assert gold_audit.arbitrate(gw, conn, p, "v2")["done"] == 2
+    recs = gold_audit.load(p)
+    assert [(x["call_uid"], x["judge_version"]) for x in recs] == [
+        ("c-0002", "v1"),
+        ("c-0002", "v2"),
+        ("c-0004", "v2"),
+    ]
+
+
+def test_arbitrate_does_not_write_app_db(conn, tmp_path):
+    before = conn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0]
+    gold_audit.arbitrate(Fake(tmp_path), conn, tmp_path / "a.jsonl", "v1")
+    assert conn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0] == before
+    assert (tmp_path / "llm.jsonl").exists()

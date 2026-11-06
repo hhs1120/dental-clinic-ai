@@ -3,14 +3,25 @@
 골드를 보므로 evaluation/에서만 돌고, 기록·호출 로그도 evaluation/에 쓴다(app.sqlite에 쓰지 않는다 — CLAUDE.md 절대 규칙).
 """
 
+import argparse
 import hashlib
+import json
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from evaluation.classification import _calls, _judgments, _usable
+from evaluation.classification import _calls, _judgments, _usable, judge_version
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, differing_items
+from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
-PROMPT_DIR = ROOT / "prompts" / "gold_audit"
+PROMPT_VERSION = "v1"
+PROMPT = ROOT / "prompts" / "gold_audit" / f"{PROMPT_VERSION}.md"
+AUDIT_PATH = ROOT / "evaluation" / "gold_audit.jsonl"
+LLM_LOG = (
+    ROOT / "evaluation" / "gold_audit_llm.jsonl"
+)  # 중재 입력에 골드가 들어 있어 ax_llm_calls에 쓰지 않는다
+ALIAS = "gold_audit"
 
 ITEM_KO = {
     "primary_purpose": "용건",
@@ -120,3 +131,99 @@ def decode(target: dict, answer: dict) -> dict[str, str]:
             else ("gold" if a == gold_side(target["call_uid"], item) else "judge")
         )
     return out
+
+
+def load(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def save(path: Path, records: list[dict]) -> None:
+    """통째로 다시 쓴다 — (통화, 판정기 버전) 순"""
+    records = sorted(records, key=lambda r: (r["call_uid"], r["judge_version"]))
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8"
+    )
+
+
+def arbitrate(gw, conn, path: Path, version: str, workers: int = 4) -> dict:
+    """그 판정기 버전 줄이 없는 대상만 중재한다. 실패·선택지 밖 답은 기록하지 않아 다음 실행에서 다시 돈다"""
+    records = load(path)
+    have = {(r["call_uid"], r["judge_version"]) for r in records}
+    todo = [t for t in targets(conn, version) if (t["call_uid"], version) not in have]
+    system = PROMPT.read_text(encoding="utf-8")
+
+    def one(t):
+        msg, schema = arbiter_request(t)
+        r = gw.complete(
+            ALIAS,
+            task="gold-audit",
+            system=system,
+            schema=schema,
+            prompt_version=PROMPT_VERSION,
+            messages=[{"role": "user", "content": msg}],
+        )
+        if not r.ok:
+            return None, r.cost_usd
+        try:
+            picked = decode(t, r.data)
+        except (ValueError, AttributeError):
+            return None, r.cost_usd
+        items = {
+            i: {
+                **v,
+                "gold_side": gold_side(t["call_uid"], i),
+                "arbiter": picked[i],
+                "human": None,
+            }
+            for i, v in t["items"].items()
+        }
+        return {
+            "call_uid": t["call_uid"],
+            "judge_version": version,
+            "transcript_sha": t["transcript_sha"],
+            "prompt_version": PROMPT_VERSION,
+            "arbiter_model": r.model,
+            "items": items,
+        }, r.cost_usd
+
+    with ThreadPoolExecutor(workers) as ex:
+        results = list(ex.map(one, todo))
+    new = [rec for rec, _ in results if rec]
+    save(path, records + new)
+    return {
+        "done": len(new),
+        "failed": len(todo) - len(new),
+        "cost_usd": round(sum(c or 0 for _, c in results), 4),
+    }
+
+
+def connect(app: Path, source: Path, truth: Path) -> sqlite3.Connection:
+    """읽기 전용으로 연다 — 골드 점검은 앱·생성·정답 DB에 쓰지 않는다"""
+    conn = sqlite3.connect(f"file:{app}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("ATTACH DATABASE ? AS source", (f"file:{source}?mode=ro",))
+    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{truth}?mode=ro",))
+    return conn
+
+
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("arbitrate",))
+    parser.add_argument("--judge-version", help="기본은 활성 판정기 버전")
+    parser.add_argument("--db", type=Path, default=ROOT / "data" / "app.sqlite")
+    parser.add_argument("--source", type=Path, default=ROOT / "data" / "source.sqlite")
+    parser.add_argument("--truth", type=Path, default=ROOT / "ground_truth" / "truth.sqlite")
+    args = parser.parse_args(argv)
+    conn = connect(args.db, args.source, args.truth)
+    version = args.judge_version or judge_version(conn)
+    if not version:
+        raise SystemExit("판정기 버전을 못 정함 — --judge-version")
+    gw = Gateway(load_config(), JsonlLog(LLM_LOG), "runtime")
+    r = arbitrate(gw, conn, AUDIT_PATH, version)
+    print(f"판정기 {version}: 중재 {r['done']}건, 실패 {r['failed']}건, ${r['cost_usd']}")
+
+
+if __name__ == "__main__":
+    main()
