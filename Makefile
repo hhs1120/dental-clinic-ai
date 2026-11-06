@@ -42,6 +42,9 @@ blind-judge:
 gold-arbitrate:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gold_audit arbitrate
 
+gold-audit:
+	uv run python -m evaluation.gold_audit audit
+
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:
 	uv run python docs/wireframe/export.py

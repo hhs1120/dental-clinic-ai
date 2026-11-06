@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from evaluation.classification import _calls, _judgments, _usable, judge_version
+from evaluation.metrics import GOLD_AUDIT_SAMPLE
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, differing_items
 from shared.llm import Gateway, JsonlLog, load_config
 
@@ -199,6 +200,86 @@ def arbitrate(gw, conn, path: Path, version: str, workers: int = 4) -> dict:
     }
 
 
+def current(records: list[dict], conn, version: str) -> tuple[list[dict], int]:
+    """그 판정기 버전이고 녹취록이 기록 때와 같은 줄, 그리고 녹취록이 바뀐(또는 사라진) 줄 수 — 재생성 뒤 해시로 다시 붙인다"""
+    sha = {
+        uid: transcript_sha(t)
+        for uid, t in conn.execute("SELECT call_uid, transcript FROM source.ax_calls")
+        if t is not None
+    }
+    mine = [r for r in records if r["judge_version"] == version]
+    ok = [r for r in mine if sha.get(r["call_uid"]) == r["transcript_sha"]]
+    return ok, len(mine) - len(ok)
+
+
+def group(record: dict) -> str:
+    """표본 묶음 — 판정기 쪽 항목이 하나라도 있으면 judge, 없고 둘 다 아님이 있으면 neither, 그 밖 gold(평가 설계 §2.3)"""
+    picked = {v["arbiter"] for v in record["items"].values()}
+    return "judge" if "judge" in picked else "neither" if "neither" in picked else "gold"
+
+
+def _hash_order(uid: str) -> str:
+    return hashlib.sha256(uid.encode()).hexdigest()
+
+
+def sample(records: list[dict], n: int = GOLD_AUDIT_SAMPLE) -> list[str]:
+    """묶음마다 고르게 call_uid 해시 순으로 — 모자란 묶음의 몫은 남은 묶음에서 해시 순으로 채운다"""
+    groups = {g: [] for g in ("judge", "neither", "gold")}
+    for r in records:
+        groups[group(r)].append(r["call_uid"])
+    for g in groups.values():
+        g.sort(key=_hash_order)
+    quota = [n // 3 + (1 if i < n % 3 else 0) for i in range(3)]
+    picked, rest = [], []
+    for q, g in zip(quota, groups.values(), strict=True):
+        picked += g[:q]
+        rest += g[q:]
+    rest.sort(key=_hash_order)
+    return picked + rest[: n - len(picked)]
+
+
+KEYS = {"1": "가", "2": "나", "3": NEITHER}
+
+
+def audit(conn, path: Path, version: str, read=input, write=print) -> None:
+    """사람 표본 판정 — 한 통화씩 녹취록과 가린 두 답을 보이고 항목마다 고른다. 통화마다 저장, 중재 결과는 저장 뒤에만"""
+    by_uid = {t["call_uid"]: t for t in targets(conn, version)}
+    records = load(path)
+    cur, stale = current(records, conn, version)
+    missing = set(by_uid) - {r["call_uid"] for r in cur}
+    if missing:
+        raise SystemExit(f"중재가 끝나지 않음({len(missing)}통화) — make gold-arbitrate 먼저")
+    rec_of = {r["call_uid"]: r for r in cur}
+    picks = sample(cur)
+    todo = [u for u in picks if any(v["human"] is None for v in rec_of[u]["items"].values())]
+    if stale:
+        write(f"녹취록이 바뀐 기록 {stale}줄은 건너뜀")
+    write(f"표본 {len(picks)}통화 중 남은 {len(todo)}통화")
+    for k, uid in enumerate(todo, len(picks) - len(todo) + 1):
+        t, rec = by_uid[uid], rec_of[uid]
+        write(f"\n[{k}/{len(picks)}] {uid} · {t['direction']}\n")
+        write(t["transcript"])
+        answer = {}
+        for item in t["items"]:
+            p = pair(t, item)
+            keys = " · ".join(f"{key} {KEYS[key]}" for key in list(KEYS)[: len(choices(item))])
+            write(f"\n{ITEM_KO[item]} — 가: {p['가']} / 나: {p['나']}")
+            while True:
+                key = read(f"  {keys} > ").strip()
+                if key in KEYS and KEYS[key] in choices(item):
+                    answer[item] = KEYS[key]
+                    break
+                write("  다시 고르세요")
+        for item, side in decode(t, answer).items():
+            rec["items"][item]["human"] = side
+        save(path, records)
+        names = {"gold": "골드 쪽", "judge": "판정기 쪽", "neither": NEITHER}
+        write(
+            "저장 — 중재: "
+            + ", ".join(f"{ITEM_KO[i]} {names[v['arbiter']]}" for i, v in rec["items"].items())
+        )
+
+
 def connect(app: Path, source: Path, truth: Path) -> sqlite3.Connection:
     """읽기 전용으로 연다 — 골드 점검은 앱·생성·정답 DB에 쓰지 않는다"""
     conn = sqlite3.connect(f"file:{app}?mode=ro", uri=True)
@@ -210,7 +291,7 @@ def connect(app: Path, source: Path, truth: Path) -> sqlite3.Connection:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("arbitrate",))
+    parser.add_argument("command", choices=("arbitrate", "audit"))
     parser.add_argument("--judge-version", help="기본은 활성 판정기 버전")
     parser.add_argument("--db", type=Path, default=ROOT / "data" / "app.sqlite")
     parser.add_argument("--source", type=Path, default=ROOT / "data" / "source.sqlite")
@@ -220,6 +301,12 @@ def main(argv=None) -> None:
     version = args.judge_version or judge_version(conn)
     if not version:
         raise SystemExit("판정기 버전을 못 정함 — --judge-version")
+    if args.command == "audit":
+        try:
+            audit(conn, AUDIT_PATH, version)
+        except (EOFError, KeyboardInterrupt):
+            print("\n중단 — 다시 실행하면 이어서 한다")
+        return
     gw = Gateway(load_config(), JsonlLog(LLM_LOG), "runtime")
     r = arbitrate(gw, conn, AUDIT_PATH, version)
     print(f"판정기 {version}: 중재 {r['done']}건, 실패 {r['failed']}건, ${r['cost_usd']}")
