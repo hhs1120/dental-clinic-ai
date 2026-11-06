@@ -28,6 +28,9 @@ dev = [
     "pytest",
     "ruff==0.16.10",
 ]
+finetune = [
+    "mlx-lm>=0.32.2",
+]
 
 [tool.uv]
 default-groups = ["generator", "backend", "dev"]  # uv sync·uv run 기본
