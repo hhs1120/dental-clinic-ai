@@ -40,7 +40,7 @@ blind-judge:
 
 # 골드 점검(평가 설계 §2.3) — 중재(과금, 빠진 건만)·사람 표본 터미널 화면. 골드를 보므로 evaluation/에서
 gold-arbitrate:
-	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gold_audit arbitrate
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gold_audit arbitrate $(if $(BATCH),--batch)
 
 gold-audit:
 	uv run python -m evaluation.gold_audit audit

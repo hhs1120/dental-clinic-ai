@@ -418,13 +418,15 @@ def test_effort_and_limit(conn, tmp_path):
     p = tmp_path / "a.jsonl"
     gw = Fake(tmp_path)
     assert gold_audit.arbitrate(gw, conn, p, "v1", limit=1)["done"] == 1
-    assert gw.kwargs[0]["effort"] == "low"
-    assert gold_audit.load(p)[0]["effort"] == "low"
+    default = gold_audit.prompts.effort("gold_audit", "v1")
+    assert default and gw.kwargs[0]["effort"] == default
+    assert gold_audit.load(p)[0]["effort"] == default
+    other = "low" if default != "low" else "high"
     p2 = tmp_path / "b.jsonl"
     gw = Fake(tmp_path)
-    gold_audit.arbitrate(gw, conn, p2, "v1", effort="medium")
-    assert {k["effort"] for k in gw.kwargs} == {"medium"}
-    assert {r["effort"] for r in gold_audit.load(p2)} == {"medium"}
+    gold_audit.arbitrate(gw, conn, p2, "v1", effort=other)
+    assert {k["effort"] for k in gw.kwargs} == {other}
+    assert {r["effort"] for r in gold_audit.load(p2)} == {other}
 
 
 def test_pending_order_mixes_groups():
@@ -451,3 +453,73 @@ def test_sample_fill_is_even_whatever_ids():
         n1 = sum(u.startswith(pre + "1") for u in s)
         n2 = sum(u.startswith(pre + "2") for u in s)
         assert n1 + n2 == 45 and abs(n1 - n2) <= 1
+
+
+class BatchFake(FakeGateway):
+    """Batch 흉내 — missing의 custom_id는 결과 None, status가 'in_progress'면 아직 안 끝남"""
+
+    def __init__(self, tmp_path, missing=(), status="ended"):
+        super().__init__(JsonlLog(tmp_path / "llm.jsonl"), scope="runtime")
+        self.missing, self.status, self.batches = set(missing), status, {}
+
+    def submit_batch(self, alias, requests, *, task, prompt_version=None, max_tokens=None):
+        bid = f"b{len(self.batches)}"
+        self.batches[bid] = (alias, requests)
+        return bid
+
+    def batch_status(self, batch_id):
+        return self.status
+
+    def batch_results(self, batch_id, alias, *, task, prompt_version=None, schema=None):
+        _, requests = self.batches[batch_id]
+        return {
+            r["custom_id"]: None
+            if r["custom_id"] in self.missing
+            else FakeGateway.complete(
+                self,
+                alias,
+                task=task,
+                system=r["system"],
+                messages=r["messages"],
+                schema=r["schema"],
+            )
+            for r in requests
+        }
+
+
+def test_batch_writes_records_and_retries_missing(conn, tmp_path):
+    """배치는 같은 입력·추론 단계로 제출하고, 결과 없는 건은 기록하지 않아 다음에 다시"""
+    _set_judge(conn, "c-0004", urgency="urgent")
+    p, state = tmp_path / "a.jsonl", tmp_path / "batch.json"
+    gw = BatchFake(tmp_path, missing={"c-0004"})
+    r = gold_audit.arbitrate_batch(gw, conn, p, "v1", state_path=state, poll_seconds=0)
+    assert (r["done"], r["failed"]) == (1, 1)
+    [(alias, reqs)] = gw.batches.values()
+    assert alias == "gold_audit" and {q["custom_id"] for q in reqs} == {"c-0002", "c-0004"}
+    assert all(q["effort"] == gold_audit.prompts.effort("gold_audit", "v1") for q in reqs)
+    assert [x["call_uid"] for x in gold_audit.load(p)] == ["c-0002"]
+    assert not state.exists()  # 끝나면 진행 상태 파일을 지운다
+    gw2 = BatchFake(tmp_path)
+    assert (
+        gold_audit.arbitrate_batch(gw2, conn, p, "v1", state_path=state, poll_seconds=0)["done"]
+        == 1
+    )
+    [(_, reqs2)] = gw2.batches.values()
+    assert [q["custom_id"] for q in reqs2] == ["c-0004"]
+
+
+def test_batch_resumes_submitted(conn, tmp_path):
+    """제출해 둔 배치가 있으면 다시 제출하지 않고 그 결과를 받는다(중간에 끊겨도 비용이 두 번 나가지 않게)"""
+    p, state = tmp_path / "a.jsonl", tmp_path / "batch.json"
+    gw = BatchFake(tmp_path, status="in_progress")
+    with pytest.raises(TimeoutError):
+        gold_audit.arbitrate_batch(
+            gw, conn, p, "v1", state_path=state, poll_seconds=0, max_polls=2
+        )
+    assert state.exists() and len(gw.batches) == 1
+    gw.status = "ended"
+    assert (
+        gold_audit.arbitrate_batch(gw, conn, p, "v1", state_path=state, poll_seconds=0)["done"]
+        == 1
+    )
+    assert len(gw.batches) == 1

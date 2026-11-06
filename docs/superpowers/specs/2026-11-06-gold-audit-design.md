@@ -15,7 +15,7 @@
 ## 사람이 정함
 
 - **대상의 급함 비교는 급함 여부만**: 판정기 라벨과 골드를 `shared/call_labels.py` `differing_items`(엇갈림 계산과 같은 규칙 — urgent냐 아니냐만)로 비교한다. 3값 비교는 대상 935통화 중 급함 814항목이 골드 추첨값(normal/low)이라 쓰지 않는다. 지금 데이터로 대상 **250통화·315항목**(test 판정 풀 제외, 판정기 v2)
-- **중재 판정기 모델은 Opus, 추론 low**(`claude-opus-5-5`, 프롬프트 머리말 `effort: low`): 판정기(Solar)·생성기(Sonnet) 모두와 다른 모델. 게이트웨이 별칭 `gold_audit: [claude-opus-5-5]`, 서버 측 폴백 응답은 실패로 보고 다시 돈다(섞이면 중재가 바뀐다). low는 본 실행 전 20통화를 low·medium으로 맞대 보고 정한다. 판정기 버전이 같으면 한 번만 드는 비용
+- **중재 판정기 모델은 Opus, 추론 medium**(`claude-opus-5-5`, 프롬프트 머리말 `effort: medium`): 판정기(Solar)·생성기(Sonnet) 모두와 다른 모델. 게이트웨이 별칭 `gold_audit: [claude-opus-5-5]`, 서버 측 폴백 응답은 실패로 보고 다시 돈다(섞이면 중재가 바뀐다). 20통화를 low·medium으로 맞대 보니 26항목 중 25개가 같고 갈린 1건(직원 안내만 한 통화의 예약 희망)은 medium만 맞아, 비용 차이가 작은 medium으로 한다. 판정기 버전이 같으면 한 번만 드는 비용
 - **사람 표본 50통화는 사용자가 직접**(평가 설계 §2.3 그대로). 값 `GOLD_AUDIT_SAMPLE = 50`은 `evaluation/metrics.py`
 
 ## 구현에서 정함
