@@ -1,0 +1,21 @@
+# Qwen LoRA 학습 설정(mlx-lm lora) — 분류기 설계 "Qwen 비교"(하이퍼파라미터는 구현자). iters는 train.py가 행 수 × 에폭으로 넘긴다
+# 18GB Mac: 선형 어텐션 층은 학습 때 토큰마다 상태를 남겨 batch 2부터 메모리 부족 — batch 1 + 기울기 누적 4(실효 batch 4)
+model: mlx-community/Qwen3.5-2B-bf16
+fine_tune_type: lora
+num_layers: -1
+lora_parameters:
+  rank: 16
+  dropout: 0.05
+  scale: 20.0
+batch_size: 1
+grad_accumulation_steps: 4
+learning_rate: 2.0e-5
+mask_prompt: true
+grad_checkpoint: true
+max_seq_length: 2048
+clear_cache_threshold: 1000000000  # MLX 캐시가 1GB를 넘으면 비운다 — 몇 시간 돌 때 캐시가 쌓여 한도(14.3GB)에 닿지 않게
+steps_per_report: 20
+steps_per_eval: 500  # heldout 325건 손실 계산이 2~3분이라 체크포인트(100)보다 드물게
+val_batches: -1
+save_every: 100  # 단계 = 샘플 하나(batch 1). 멈추면 마지막 체크포인트부터 이어 간다
+seed: 0

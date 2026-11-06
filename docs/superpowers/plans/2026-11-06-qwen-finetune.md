@@ -128,8 +128,9 @@
 **Interfaces:**
 - Consumes: Task 1 `INSTRUCTION`·`parse_labels`·`mlx_row`, 데이터 폴더
 - Produces:
-  - `lora.yaml` — `model: mlx-community/Qwen3.5-2B-bf16`, `fine_tune_type: lora`, `num_layers: -1`, `lora_parameters: {rank: 16, dropout: 0.05, scale: 20.0}`, `batch_size: 4`, `learning_rate: 1e-4`, `mask_prompt: true`, `grad_checkpoint: true`, `max_seq_length: 2048`, `steps_per_eval: 100`, `steps_per_report: 10`, `save_every: 100`, `seed: 0`. 에폭 2(iters는 `train.py`가 train 행 수 × 2 / batch로 계산)
-  - `train.run(name: str, epochs: int = 2, iters: int | None = None) -> Path` — `name` ∈ `full`·`half`·`speed`, `mlx_lm.lora`를 `-c lora.yaml --data data/<name> --adapter-path adapters/<name>`로 subprocess 실행하고 출력(손실·it/s·Peak mem)을 `out/train_<name>.log`에 저장
+  - `lora.yaml` — `model: mlx-community/Qwen3.5-2B-bf16`, `num_layers: -1`, `lora_parameters: {rank: 16, dropout: 0.05, scale: 20.0}`, `batch_size: 1`, `grad_accumulation_steps: 4`, `learning_rate: 2.0e-5`, `mask_prompt: true`, `grad_checkpoint: true`, `clear_cache_threshold: 1e9`, `steps_per_eval: 500`, `save_every: 100`, `seed: 0`
+  - > 측정으로 바꾼 것: batch 4·2는 메모리 부족(선형 어텐션 층이 학습 때 토큰마다 상태를 남김) → batch 1 + 기울기 누적 4. 학습률 1e-4는 100건 200단계에서 목적 1/20으로 무너져 2e-5(19/20). 결과 `out/lr_test/`
+  - `train.train(name, epochs=1, cont=False, overrides=None, runner=None) -> Path` — part마다 자식 프로세스(`_part`)로 `mlx_lm.lora.run`, 메모리 부족(`OOM_EXIT`)·외부 종료면 마지막 체크포인트부터 다시(`MAX_RETRIES` 3), 그 밖의 오류는 바로 멈춤. 진행 `adapters/<name>/progress.json`, 로그 `out/train_<name>.log`(JSON 줄). `train.status(name)` — 명령 `status <name> --watch`
   - `infer.render_prompt(tokenizer, transcript: str, direction: str) -> str` — `apply_chat_template([system, user], add_generation_prompt=True, enable_thinking=False, tokenize=False)`
   - `infer.predict(rows: list[dict], out_path: Path, generate: Callable[[dict], str]) -> None` — `out_path`에 이미 있는 id는 건너뛰고 행마다 `{"id", "text", "labels": parse_labels(text), "sec"}`를 한 줄씩 append·flush
   - `infer.mlx_generate(model_id: str, adapter: Path | None) -> Callable[[dict], str]` — `mlx_lm.load` + 탐욕 디코딩(temp 0), `max_tokens=256`
@@ -170,7 +171,7 @@
 - Modify: `evaluation/finetune/qwen/__main__.py`(명령 `score`)
 - Create(산출물): `out/pred_full.jsonl`, `out/pred_half.jsonl`, `out/train_{full,half}.log`, `out/report.md`
 
-- [ ] **Step 1: 학습** — `train half` → `train full`. 로그에서 heldout 손실 최저 체크포인트를 고른다(`adapters/<name>/<iters>_adapters.safetensors`를 `adapters.safetensors`로). 고른 iters를 로그 끝에 적는다
+- [ ] **Step 1: 학습** — `train full epochs=2`(약 14시간, 한 번에) → `train half epochs=2`(약 7시간). `caffeinate -i`로 감싸 잠자기를 막는다. 로그에서 heldout 손실 최저 체크포인트를 고른다(`adapters/<name>/<iters>_adapters.safetensors`를 `adapters.safetensors`로). 고른 iters를 로그 끝에 적는다
 - [ ] **Step 2: 추론** — `predict --adapter half`, `predict --adapter full`(셋 다섯 개, 705건씩)
 - [ ] **Step 3: 채점** — `score` → 모델 4개(Qwen half·full, Haiku v2, Solar v2) × 셋 5개를 `score_set`(검증은 population=None, 나머지는 생성 통화 전체 목적 건수), Qwen 둘에 `criteria(…, Haiku v2 validation)`, `report` → `out/report.md`와 화면 출력
 - [ ] **Step 4: 재료 충분성 판단 메모** — half vs full 차이(검증 목적·플래그·문체 최저). 판단 문장은 사용자와 정한다(설계: 거의 같으면 충분, full이 확실히 높으면 희귀 통화 바꿔 쓰기 보강)

@@ -175,3 +175,24 @@ def test_mlx_row():
     assert msgs[0]["content"] == data.INSTRUCTION
     assert msgs[1]["content"] == "방향: inbound\n\n직원: 네."
     assert msgs[2]["content"] == data.target_json(row["labels"])
+
+
+def test_predict_resumes(tmp_path):
+    from evaluation.finetune.qwen import infer
+
+    labels = _example()
+    rows = [{"id": f"c-{i}", "set": "dev", "direction": "inbound", "transcript": "x"}
+            for i in range(3)]  # fmt: skip
+    out = tmp_path / "pred.jsonl"
+    out.write_text("".join(json.dumps({"id": f"c-{i}"}) + "\n" for i in range(2)))
+    calls = []
+
+    def fake(row):
+        calls.append(row["id"])
+        return data.target_json(labels)
+
+    infer.predict(rows, out, fake)
+    lines = [json.loads(line) for line in out.read_text().splitlines()]
+    assert calls == ["c-2"]
+    assert [r["id"] for r in lines] == ["c-0", "c-1", "c-2"]
+    assert lines[-1]["labels"] == labels and lines[-1]["set"] == "dev"

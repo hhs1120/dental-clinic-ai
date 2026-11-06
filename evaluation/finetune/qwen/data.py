@@ -20,7 +20,9 @@ HELDOUT_SHARE = (
     0.1  # 재료 구간 중 valid로 떼는 몫 — 검증 구간은 교체 기준 채점 셋이라 학습 중 보지 않는다
 )
 HALF_SHARE = 0.5  # 재료 충분성 비교(분류기 설계 "Qwen 비교")
+SPEED_TRAIN, SPEED_VALID = 100, 20  # 속도·메모리 측정용 작은 셋(full·heldout의 id 해시 순 앞쪽)
 STYLES = ("s1", "s2", "s3")  # 문체 dev 벌(AI 실험 기록 §8)
+SETS = ("validation", "dev") + STYLES  # 평가 셋
 
 HERE = Path(__file__).parent
 AUG = HERE.parent / "aug"
@@ -181,13 +183,24 @@ def _write(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
 
 
+def _by_hash(rows: list[dict], n: int) -> list[dict]:
+    return sorted(rows, key=lambda r: hashlib.sha256(r["id"].encode()).hexdigest())[:n]
+
+
 def write_all(root: Path) -> dict[str, int]:
-    """data/{full,half}/{train,valid}.jsonl(valid = heldout) · data/eval.jsonl(행에 set) → 셋별 건수"""
+    """data/{full,half,speed}/{train,valid}.jsonl(valid = heldout) · data/eval.jsonl(행에 set) → 셋별 건수"""
     silver, dev, aug, style = load_rows(root)
     sets = build_sets(silver, aug)
     for name in ("full", "half"):
         _write(DATA / name / "train.jsonl", [mlx_row(r) for r in sets[name]])
         _write(DATA / name / "valid.jsonl", [mlx_row(r) for r in sets["heldout"]])
+    _write(
+        DATA / "speed" / "train.jsonl", [mlx_row(r) for r in _by_hash(sets["full"], SPEED_TRAIN)]
+    )
+    _write(
+        DATA / "speed" / "valid.jsonl",
+        [mlx_row(r) for r in _by_hash(sets["heldout"], SPEED_VALID)],
+    )
     evals = eval_sets(silver, dev, style)
     _write(DATA / "eval.jsonl", [dict(r, set=s) for s, rows in evals.items() for r in rows])
     counts = {k: len(v) for k, v in sets.items()} | {k: len(v) for k, v in evals.items()}

@@ -5,13 +5,12 @@
 
 from collections import Counter
 
+from evaluation.finetune.qwen.data import SETS, STYLES
 from evaluation.metrics import inverse_weights, macro_accuracy, weighted_accuracy
 from shared.call_labels import FLAGS, ITEMS
 
 MARGIN_VALIDATION = 0.02  # 교체 기준 1·2 — 지금 분류기 라벨 모델보다 이만큼 넘게 낮으면 탈락
 MARGIN_STYLE = 0.05  # 교체 기준 3 — 문체 dev 최저 벌이 원본 dev보다 이만큼 넘게 떨어지면 탈락
-SETS = ("validation", "dev", "s1", "s2", "s3")
-STYLE_SETS = ("s1", "s2", "s3")
 PURPOSE = "primary_purpose"
 
 
@@ -49,7 +48,7 @@ def criteria(qwen: dict[str, dict], ref_validation: dict) -> dict:
     q, r = qwen["validation"], ref_validation
     c1 = q["purpose"]["strict"] >= r["purpose"]["strict"] - MARGIN_VALIDATION
     c2 = q["flags_mean"] >= r["flags_mean"] - MARGIN_VALIDATION
-    worst = min(STYLE_SETS, key=lambda s: qwen[s]["purpose"]["weighted"])
+    worst = min(STYLES, key=lambda s: qwen[s]["purpose"]["weighted"])
     dev = qwen["dev"]["purpose"]["weighted"]
     c3 = qwen[worst]["purpose"]["weighted"] >= dev - MARGIN_STYLE
     return {
