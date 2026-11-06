@@ -359,7 +359,8 @@ tags:
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
-- [ ] 착수 순서 — 골드 점검 → 후속 에이전트·평가 정답·자동 종결 → ③ 챗 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
+- [ ] 골드 점검 사람 표본 — `make gold-audit`로 표본을 끝까지 판정하고 `evaluation/gold_audit.jsonl`을 커밋
+- [ ] 착수 순서 — 후속 에이전트·평가 정답·자동 종결 → ③ 챗 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
 - [ ] 평가 정답 추가 — `truth_call_actions`·시나리오 DB·`truth_scenarios`(verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다. ① 후속 규칙 기준선은 `truth_call_actions`와 같은 파생을 쓰지 않는다(같으면 기준선이 만점)
 - [ ] 자동 개선 착수 시 — 관문 값, 반복 상한, 표본 비율을 첫 실행 전에 고정([[치과 AX - 평가 설계]] §2.3·§2.7). AI 평가 화면에 자동 개선 탭
 - [ ] 후속 에이전트 착수 시 — `ax_call_followups`(통화 단위 처리·처리안)를 만들고 "오늘 할 일"의 할 일 체크(`ax_todo_checks`)와 어떻게 맞물릴지, 분류 버전을 바꿀 때 체크를 이어 붙일지 정한다
