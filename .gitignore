@@ -28,3 +28,6 @@ frontend/next-env.d.ts
 *.swp
 *.swo
 *~
+# Qwen 파인튜닝 — 학습 데이터(재생성 가능)·어댑터(가중치). 기본 모델은 HF 캐시(저장소 밖)
+evaluation/finetune/qwen/data/
+evaluation/finetune/qwen/adapters/
