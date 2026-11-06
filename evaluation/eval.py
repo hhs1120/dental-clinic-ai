@@ -201,14 +201,17 @@ def run(
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
         jv = prompt_version if section == "judge" else classification.judge_version(conn)
-        if jv:  # 골드 점검(평가 설계 §2.3) — 오류 추정 제외는 dev만, test는 원래 골드 수치뿐
+        if not jv:
+            result["gold_audit"] = {"error": "판정기 버전을 못 정함"}
+        else:  # 골드 점검(평가 설계 §2.3) — 오류 추정 제외는 dev만, test는 원래 골드 수치뿐
             cur, stale = gold_audit.current(gold_audit.load(gold_audit_path), conn, jv)
             result["gold_audit"] = {
                 "judge_version": jv,
                 "summary": gold_audit.summarize(cur),
                 "stale": stale,
+                "missing": len(gold_audit.targets(conn, jv)) - len(cur),
             }
-            gold_drop = gold_audit.errors(cur) if dev else None
+            gold_drop = gold_audit.errors(cur) if dev and cur else None
     if do_cls:
         versions = (
             [prompt_version]
@@ -330,9 +333,12 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         "",
     ]
     if r["classification"] is not None:
-        out += _render_classification(r["classification"])
+        out += _render_classification(
+            r["classification"], (r.get("gold_audit") or {}).get("judge_version")
+        )
+    audit_jv = (r.get("gold_audit") or {}).get("judge_version")
     if r["judge"] is not None:
-        out += _render_judge(r["judge"])
+        out += _render_judge(r["judge"], audit_jv)
         out += _render_gold_audit(r["gold_audit"])
     if r["crosscheck"] is not None:
         out += _render_crosscheck(r["crosscheck"])
@@ -341,7 +347,7 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
     return "\n".join(out) + "\n"
 
 
-def _render_classification(c: dict) -> list[str]:
+def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
     out = ["## ① 분류", ""]
     if not c["versions"]:
         out += ["분류 기록 없음", ""]
@@ -351,7 +357,7 @@ def _render_classification(c: dict) -> list[str]:
             f"### {v} ({', '.join(x['model_actual'])})",
             "",
             f"목적 Strict — 모델 vs 골드 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])} · 단순 평균 {_pct(g['purpose']['macro'])}",
-            *_audited_line(x.get("model_vs_gold_audited")),
+            *_audited_line(x.get("model_vs_gold_audited"), audit_jv),
             "카테고리별 n(모델 vs 골드) — "
             + " · ".join(f"{c} {_kn(d)}" for c, d in g["purpose"]["by_category"].items()),
             "",
@@ -410,7 +416,7 @@ def _render_classification(c: dict) -> list[str]:
     return out
 
 
-def _render_judge(j: dict) -> list[str]:
+def _render_judge(j: dict, audit_jv: str | None = None) -> list[str]:
     out = ["## ② 판정기 vs 골드", ""]
     if not j:
         out += ["판정기 결과 없음", ""]
@@ -418,7 +424,7 @@ def _render_judge(j: dict) -> list[str]:
         g = x["judge_vs_gold"]
         out += [
             f"### {v} ({', '.join(x['model_actual'])}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}",
-            *_audited_line(x.get("judge_vs_gold_audited")),
+            *_audited_line(x.get("judge_vs_gold_audited"), audit_jv),
             "",
             " · ".join(f"{i} {_kn(g['items'][i])}" for i in classification.ITEMS),
             "",
@@ -426,12 +432,12 @@ def _render_judge(j: dict) -> list[str]:
     return out
 
 
-def _audited_line(g: dict | None) -> list[str]:
-    """골드 오류 추정을 뺀 수치(dev만) — 원래 골드가 주 수치(평가 설계 §2.3)"""
+def _audited_line(g: dict | None, audit_jv: str | None) -> list[str]:
+    """골드 오류 추정을 뺀 수치(dev만) — 원래 골드가 주 수치(평가 설계 §2.3). 어느 판정기 버전의 점검인지 함께"""
     if g is None:
         return []
     return [
-        f"골드 오류 추정 제외 — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
+        f"골드 오류 추정 제외(점검 판정기 {audit_jv}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
     ]
 
 
@@ -439,16 +445,21 @@ def _render_gold_audit(a: dict | None) -> list[str]:
     out = ["## 골드 점검", ""]
     if a is None:
         return out + ["골드 점검 전", ""]
+    if "error" in a:
+        return out + [f"골드 점검 — {a['error']}", ""]
     s = a["summary"]
     out += [
         f"판정기 {a['judge_version']} · 대상 {s['calls']}통화"
-        + (f" · 녹취록이 바뀐 기록 {a['stale']}" if a["stale"] else ""),
+        + (f" · 낡은 기록(녹취록·값이 바뀜) {a['stale']}" if a["stale"] else "")
+        + (f" · 중재 안 된 대상 {a['missing']}" if a["missing"] else ""),
         "",
         "| 항목 | 중재: 골드 쪽 | 판정기 쪽 | 둘 다 아님 | 중재 vs 사람 |",
         "|---|---|---|---|---|",
     ]
-    for i, c in s["arbiter"].items():
-        ag = s["agreement"].get(i)
+    for i in classification.ITEMS:
+        if i not in s["arbiter"]:
+            continue
+        c, ag = s["arbiter"][i], s["agreement"].get(i)
         out.append(
             f"| {i} | {c['gold']} | {c['judge']} | {c['neither']} | {_kn(ag) if ag else '—'} |"
         )

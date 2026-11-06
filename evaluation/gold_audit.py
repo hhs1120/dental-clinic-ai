@@ -7,17 +7,19 @@ import argparse
 import hashlib
 import json
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from backend import prompts
 from evaluation.classification import _calls, _judgments, _usable, judge_version
 from evaluation.metrics import GOLD_AUDIT_SAMPLE
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, differing_items
 from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
+TASK = "gold_audit"  # prompts/gold_audit/<버전>.md — 머리말 effort가 추론 단계(앱 설계 §7.2)
 PROMPT_VERSION = "v1"
-PROMPT = ROOT / "prompts" / "gold_audit" / f"{PROMPT_VERSION}.md"
+REASONING_MAX_TOKENS = 16000  # 추론 토큰도 max_tokens 안(backend/classify.py와 같은 값)
 AUDIT_PATH = ROOT / "evaluation" / "gold_audit.jsonl"
 LLM_LOG = (
     ROOT / "evaluation" / "gold_audit_llm.jsonl"
@@ -148,24 +150,45 @@ def save(path: Path, records: list[dict]) -> None:
     )
 
 
-def arbitrate(gw, conn, path: Path, version: str, workers: int = 4) -> dict:
-    """그 판정기 버전 줄이 없는 대상만 중재한다. 실패·선택지 밖 답은 기록하지 않아 다음 실행에서 다시 돈다"""
+def arbitrate(
+    gw,
+    conn,
+    path: Path,
+    version: str,
+    workers: int = 4,
+    limit: int | None = None,
+    effort: str | None = None,
+) -> dict:
+    """그 판정기 버전에 지금 맞는 기록이 없는 대상만 중재한다(녹취록·값이 바뀐 낡은 줄은 새 줄로 바꾼다).
+    실패·예외·폴백·선택지 밖 답은 기록하지 않아 다음 실행에서 다시 돈다. 끝나는 대로 저장한다.
+    limit = 해시 순 앞에서 N통화(맛보기), effort = 프롬프트 머리말 대신 쓸 추론 단계"""
     records = load(path)
-    have = {(r["call_uid"], r["judge_version"]) for r in records}
-    todo = [t for t in targets(conn, version) if (t["call_uid"], version) not in have]
-    system = PROMPT.read_text(encoding="utf-8")
+    cur, _ = current(records, conn, version)
+    have = {r["call_uid"] for r in cur}
+    todo = sorted(
+        (t for t in targets(conn, version) if t["call_uid"] not in have),
+        key=lambda t: _hash_order(t["call_uid"]),
+    )[:limit]
+    system = prompts.load(TASK, PROMPT_VERSION)["system"]
+    effort = effort or prompts.effort(TASK, PROMPT_VERSION)
 
     def one(t):
         msg, schema = arbiter_request(t)
-        r = gw.complete(
-            ALIAS,
-            task="gold-audit",
-            system=system,
-            schema=schema,
-            prompt_version=PROMPT_VERSION,
-            messages=[{"role": "user", "content": msg}],
-        )
-        if not r.ok:
+        try:
+            r = gw.complete(
+                ALIAS,
+                task="gold-audit",
+                system=system,
+                schema=schema,
+                prompt_version=PROMPT_VERSION,
+                messages=[{"role": "user", "content": msg}],
+                **({"effort": effort, "max_tokens": REASONING_MAX_TOKENS} if effort else {}),
+            )
+        except Exception:  # noqa: BLE001 — 한 건의 예외로 끝난 결과를 잃지 않게 실패로 센다
+            return None, 0
+        if (
+            not r.ok or r.fallback_used
+        ):  # 폴백은 다른 모델의 중재라 섞이지 않게(평가 설계 §1 원칙 5)
             return None, r.cost_usd
         try:
             picked = decode(t, r.data)
@@ -186,29 +209,39 @@ def arbitrate(gw, conn, path: Path, version: str, workers: int = 4) -> dict:
             "transcript_sha": t["transcript_sha"],
             "prompt_version": PROMPT_VERSION,
             "arbiter_model": r.model,
+            "effort": effort,
             "items": items,
         }, r.cost_usd
 
+    done, cost = 0, 0.0
     with ThreadPoolExecutor(workers) as ex:
-        results = list(ex.map(one, todo))
-    new = [rec for rec, _ in results if rec]
-    save(path, records + new)
-    return {
-        "done": len(new),
-        "failed": len(todo) - len(new),
-        "cost_usd": round(sum(c or 0 for _, c in results), 4),
-    }
+        for fut in as_completed([ex.submit(one, t) for t in todo]):
+            rec, c = fut.result()
+            cost += c or 0
+            if rec is None:
+                continue
+            key = (rec["call_uid"], version)
+            records = [r for r in records if (r["call_uid"], r["judge_version"]) != key] + [rec]
+            save(path, records)
+            done += 1
+    return {"done": done, "failed": len(todo) - done, "cost_usd": round(cost, 4)}
 
 
 def current(records: list[dict], conn, version: str) -> tuple[list[dict], int]:
-    """그 판정기 버전이고 녹취록이 기록 때와 같은 줄, 그리고 녹취록이 바뀐(또는 사라진) 줄 수 — 재생성 뒤 해시로 다시 붙인다"""
-    sha = {
-        uid: transcript_sha(t)
-        for uid, t in conn.execute("SELECT call_uid, transcript FROM source.ax_calls")
-        if t is not None
-    }
+    """그 판정기 버전이고 녹취록·항목·골드·판정기 값이 지금과 같은 줄, 그리고 낡은 줄 수 — 재생성 뒤 해시로 다시 붙인다"""
+    now = {t["call_uid"]: t for t in targets(conn, version)}
+
+    def fresh(r):
+        t = now.get(r["call_uid"])
+        return (
+            t is not None
+            and t["transcript_sha"] == r["transcript_sha"]
+            and {i: (v["gold"], v["judge"]) for i, v in r["items"].items()}
+            == {i: (v["gold"], v["judge"]) for i, v in t["items"].items()}
+        )
+
     mine = [r for r in records if r["judge_version"] == version]
-    ok = [r for r in mine if sha.get(r["call_uid"]) == r["transcript_sha"]]
+    ok = [r for r in mine if fresh(r)]
     return ok, len(mine) - len(ok)
 
 
@@ -223,7 +256,7 @@ def _hash_order(uid: str) -> str:
 
 
 def sample(records: list[dict], n: int = GOLD_AUDIT_SAMPLE) -> list[str]:
-    """묶음마다 고르게 call_uid 해시 순으로 — 모자란 묶음의 몫은 남은 묶음에서 해시 순으로 채운다"""
+    """묶음마다 고르게 call_uid 해시 순으로 — 모자란 묶음의 몫은 남은 묶음에 돌아가며 채운다"""
     groups = {g: [] for g in ("judge", "neither", "gold")}
     for r in records:
         groups[group(r)].append(r["call_uid"])
@@ -233,9 +266,21 @@ def sample(records: list[dict], n: int = GOLD_AUDIT_SAMPLE) -> list[str]:
     picked, rest = [], []
     for q, g in zip(quota, groups.values(), strict=True):
         picked += g[:q]
-        rest += g[q:]
-    rest.sort(key=_hash_order)
-    return picked + rest[: n - len(picked)]
+        rest.append(g[q:])
+    while len(picked) < n and any(rest):  # 모자란 몫은 남은 묶음에 돌아가며
+        for g in rest:
+            if g and len(picked) < n:
+                picked.append(g.pop(0))
+    return picked
+
+
+def pending(records: list[dict]) -> list[str]:
+    """사람이 아직 안 본 표본 통화 — 해시 순(묶음 순으로 보이면 중재 결과가 미리 샌다)"""
+    of = {r["call_uid"]: r for r in records}
+    return sorted(
+        (u for u in sample(records) if any(v["human"] is None for v in of[u]["items"].values())),
+        key=_hash_order,
+    )
 
 
 def errors(records: list[dict]) -> set[tuple[str, str]]:
@@ -292,7 +337,7 @@ def audit(conn, path: Path, version: str, read=input, write=print) -> None:
         raise SystemExit(f"중재가 끝나지 않음({len(missing)}통화) — make gold-arbitrate 먼저")
     rec_of = {r["call_uid"]: r for r in cur}
     picks = sample(cur)
-    todo = [u for u in picks if any(v["human"] is None for v in rec_of[u]["items"].values())]
+    todo = pending(cur)
     if stale:
         write(f"녹취록이 바뀐 기록 {stale}줄은 건너뜀")
     write(f"표본 {len(picks)}통화 중 남은 {len(todo)}통화")
@@ -334,6 +379,9 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("arbitrate", "audit"))
     parser.add_argument("--judge-version", help="기본은 활성 판정기 버전")
+    parser.add_argument("--limit", type=int, help="arbitrate: 해시 순 앞에서 N통화(맛보기)")
+    parser.add_argument("--effort", help="arbitrate: 프롬프트 머리말 대신 쓸 추론 단계")
+    parser.add_argument("--out", type=Path, default=AUDIT_PATH, help="기록 파일(맛보기는 따로)")
     parser.add_argument("--db", type=Path, default=ROOT / "data" / "app.sqlite")
     parser.add_argument("--source", type=Path, default=ROOT / "data" / "source.sqlite")
     parser.add_argument("--truth", type=Path, default=ROOT / "ground_truth" / "truth.sqlite")
@@ -344,12 +392,12 @@ def main(argv=None) -> None:
         raise SystemExit("판정기 버전을 못 정함 — --judge-version")
     if args.command == "audit":
         try:
-            audit(conn, AUDIT_PATH, version)
+            audit(conn, args.out, version)
         except (EOFError, KeyboardInterrupt):
             print("\n중단 — 다시 실행하면 이어서 한다")
         return
     gw = Gateway(load_config(), JsonlLog(LLM_LOG), "runtime")
-    r = arbitrate(gw, conn, AUDIT_PATH, version)
+    r = arbitrate(gw, conn, args.out, version, limit=args.limit, effort=args.effort)
     print(f"판정기 {version}: 중재 {r['done']}건, 실패 {r['failed']}건, ${r['cost_usd']}")
 
 

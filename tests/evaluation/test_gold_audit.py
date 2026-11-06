@@ -109,19 +109,25 @@ def test_sample_constant():
 
 
 class Fake(FakeGateway):
-    """fail_uids의 통화는 실패, answers가 있으면 그 답을 돌려준다(통화 → {항목: 선택})"""
+    """fail_uids는 실패, raise_uids는 예외, fallback_uids는 폴백 응답, answers는 그 답(통화 → {항목: 선택})"""
 
-    def __init__(self, tmp_path, fail_uids=(), answers=None):
+    def __init__(self, tmp_path, fail_uids=(), answers=None, raise_uids=(), fallback_uids=()):
         super().__init__(JsonlLog(tmp_path / "llm.jsonl"), scope="runtime")
         self.fail_uids, self.answers, self.seen = set(fail_uids), answers or {}, []
+        self.raise_uids, self.fallback_uids, self.kwargs = set(raise_uids), set(fallback_uids), []
 
     def complete(self, alias, **kw):
         msg = kw["messages"][0]["content"]
         uid = next(u for u in ("c-0002", "c-0004", "c-0005", "c-0001") if f"통화 {u[-1]}" in msg)
         self.seen.append((alias, uid))
+        self.kwargs.append(kw)
+        if uid in self.raise_uids:
+            raise RuntimeError("예상 밖 오류")
         r = super().complete(alias, **kw)
         if uid in self.fail_uids:
             return replace(r, ok=False, data=None, error="실패")
+        if uid in self.fallback_uids:
+            return replace(r, fallback_used=True)
         if uid in self.answers:
             return replace(r, data=self.answers[uid])
         return r
@@ -249,11 +255,38 @@ def test_sample_takes_all_when_few():
     assert sorted(gold_audit.sample(recs, 50)) == [r["call_uid"] for r in recs]
 
 
+def _real(arbiter="judge", human=None, version="v1"):
+    """대상 c-0002의 실제 항목(용건 complaint↔book, 불만 1↔0)으로 만든 기록"""
+    return {
+        "call_uid": "c-0002",
+        "judge_version": version,
+        "transcript_sha": gold_audit.transcript_sha("환자: 통화 2"),
+        "items": {
+            "primary_purpose": {
+                "gold": "complaint",
+                "judge": "book",
+                "arbiter": arbiter,
+                "human": human,
+            },
+            "complaint": {"gold": 1, "judge": 0, "arbiter": "gold", "human": human and "gold"},
+        },
+    }
+
+
 def test_current_skips_other_version_and_stale(conn):
-    sha = gold_audit.transcript_sha("환자: 통화 2")
-    recs = [_rec("c-0002", sha=sha), _rec("c-0002", version="v2", sha=sha), _rec("c-0004")]
+    recs = [_real(), _real(version="v2"), _rec("c-0004")]
     cur, stale = gold_audit.current(recs, conn, "v1")
     assert [r["call_uid"] for r in cur] == ["c-0002"] and stale == 1
+
+
+def test_current_rejects_changed_items(conn):
+    """녹취록은 같아도 골드·판정기 값이나 항목이 기록 때와 다르면 낡은 기록"""
+    rec = _real()
+    rec["items"]["primary_purpose"]["judge"] = "cancel"
+    assert gold_audit.current([rec], conn, "v1") == ([], 1)
+    rec = _real()
+    del rec["items"]["complaint"]
+    assert gold_audit.current([rec], conn, "v1") == ([], 1)
 
 
 def test_audit_saves_per_call_and_resumes(conn, tmp_path):
@@ -344,10 +377,77 @@ def test_summarize_agreement():
 
 def test_stale_records_are_skipped(conn):
     """재생성으로 녹취록이 바뀐 기록은 빠지고 수만 남는다"""
-    ok = _rec2(
-        "c-0002", {"complaint": ("judge", None)}, sha=gold_audit.transcript_sha("환자: 통화 2")
-    )
+    ok = _real()
     old = _rec2("c-0004", {"urgency": ("judge", None)}, sha="옛 녹취록")
     cur, stale = gold_audit.current([ok, old], conn, "v1")
     assert cur == [ok] and stale == 1
-    assert gold_audit.errors(cur) == {("c-0002", "complaint")}
+    assert gold_audit.errors(cur) == {("c-0002", "primary_purpose")}
+
+
+def test_stale_target_is_rearbitrated(conn, tmp_path):
+    """녹취록이 바뀐 대상은 다시 중재해 옛 줄을 바꾼다 — 안 그러면 audit이 영원히 막힌다"""
+    p = tmp_path / "a.jsonl"
+    old = _real()
+    old["transcript_sha"] = "옛 녹취록"
+    gold_audit.save(p, [old])
+    assert gold_audit.arbitrate(Fake(tmp_path), conn, p, "v1")["done"] == 1
+    [rec] = gold_audit.load(p)
+    assert rec["transcript_sha"] == gold_audit.transcript_sha("환자: 통화 2")
+    gold_audit.audit(conn, p, "v1", read=_keys("1", "1"), write=lambda s: None)
+
+
+def test_exception_keeps_finished_results(conn, tmp_path):
+    """호출 하나가 예외를 내도 끝난 결과는 남고 실패로 센다"""
+    p = tmp_path / "a.jsonl"
+    _set_judge(conn, "c-0004", urgency="urgent")
+    r = gold_audit.arbitrate(Fake(tmp_path, raise_uids={"c-0004"}), conn, p, "v1")
+    assert (r["done"], r["failed"]) == (1, 1)
+    assert [x["call_uid"] for x in gold_audit.load(p)] == ["c-0002"]
+
+
+def test_fallback_is_failure(conn, tmp_path):
+    """서버 측 폴백으로 다른 모델이 답하면 중재가 섞이므로 실패로 보고 다시 돈다"""
+    p = tmp_path / "a.jsonl"
+    r = gold_audit.arbitrate(Fake(tmp_path, fallback_uids={"c-0002"}), conn, p, "v1")
+    assert (r["done"], r["failed"]) == (0, 1) and gold_audit.load(p) == []
+
+
+def test_effort_and_limit(conn, tmp_path):
+    """추론 단계는 프롬프트 머리말(기본), 인자로 덮어쓰면 그 값 — 기록에 남는다. limit은 해시 순 앞에서 N통화"""
+    _set_judge(conn, "c-0004", urgency="urgent")
+    p = tmp_path / "a.jsonl"
+    gw = Fake(tmp_path)
+    assert gold_audit.arbitrate(gw, conn, p, "v1", limit=1)["done"] == 1
+    assert gw.kwargs[0]["effort"] == "low"
+    assert gold_audit.load(p)[0]["effort"] == "low"
+    p2 = tmp_path / "b.jsonl"
+    gw = Fake(tmp_path)
+    gold_audit.arbitrate(gw, conn, p2, "v1", effort="medium")
+    assert {k["effort"] for k in gw.kwargs} == {"medium"}
+    assert {r["effort"] for r in gold_audit.load(p2)} == {"medium"}
+
+
+def test_pending_order_mixes_groups():
+    """사람 화면 순서는 해시 순 — 묶음(중재 결과) 순으로 보이면 결과가 미리 샌다"""
+    recs = (
+        [_rec(f"c-0{i:03d}", "judge") for i in range(20)]
+        + [_rec(f"c-1{i:03d}", "neither") for i in range(20)]
+        + [_rec(f"c-2{i:03d}", "gold") for i in range(20)]
+    )
+    order = gold_audit.pending(recs)
+    assert sorted(order) == sorted(gold_audit.sample(recs))
+    assert len({u[2] for u in order[:10]}) > 1
+
+
+def test_sample_fill_is_even_whatever_ids():
+    """모자란 묶음의 몫을 남은 묶음에 돌아가며 채운다 — uid 모양과 상관없이"""
+    for pre in ("c-", "x-", "q9-"):
+        recs = (
+            [_rec(f"{pre}0{i:03d}", "judge") for i in range(5)]
+            + [_rec(f"{pre}1{i:03d}", "neither") for i in range(40)]
+            + [_rec(f"{pre}2{i:03d}", "gold") for i in range(40)]
+        )
+        s = gold_audit.sample(recs, 50)
+        n1 = sum(u.startswith(pre + "1") for u in s)
+        n2 = sum(u.startswith(pre + "2") for u in s)
+        assert n1 + n2 == 45 and abs(n1 - n2) <= 1

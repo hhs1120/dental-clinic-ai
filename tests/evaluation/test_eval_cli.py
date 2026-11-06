@@ -440,7 +440,8 @@ def _audit_file(tmp_path, arbiter="judge"):
                         "judge": "book",
                         "arbiter": arbiter,
                         "human": "judge",
-                    }
+                    },
+                    "complaint": {"gold": 1, "judge": 0, "arbiter": "gold", "human": "gold"},
                 },
             }
         ],
@@ -460,8 +461,34 @@ def test_dev_report_drops_gold_errors(conn, reports, tmp_path):
     c = r["classification"]["versions"]["v1"]
     assert c["model_vs_gold_audited"]["purpose"]["n"] == c["model_vs_gold"]["purpose"]["n"] - 1
     assert r["gold_audit"]["summary"]["calls"] == 1 and r["gold_audit"]["stale"] == 0
+    assert r["gold_audit"]["missing"] == 0
     md = out["report_path"].read_text(encoding="utf-8")
-    assert "## 골드 점검" in md and "오류 추정 제외" in md
+    assert "## 골드 점검" in md and "골드 오류 추정 제외(점검 판정기 v1)" in md
+    table = [
+        line
+        for line in md.splitlines()
+        if line.startswith("| primary_purpose") or line.startswith("| complaint")
+    ]
+    assert table[0].startswith("| primary_purpose")  # ITEMS 순
+
+
+def test_report_shows_unarbitrated_targets(conn, reports, tmp_path):
+    """중재가 덜 끝났으면 '중재 안 된 대상'을 보인다"""
+    from evaluation import gold_audit
+
+    p = tmp_path / "gold_audit.jsonl"
+    gold_audit.save(p, [])
+    out = _run(conn, reports, split="dev", gold_audit_path=p)
+    assert _json(out)["gold_audit"]["missing"] == 1
+    assert "중재 안 된 대상 1" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_report_when_judge_version_unknown(conn, reports, tmp_path, monkeypatch):
+    from evaluation import classification
+
+    monkeypatch.setattr(classification, "judge_version", lambda conn: None)
+    out = _run(conn, reports, split="dev", gold_audit_path=_audit_file(tmp_path))
+    assert "골드 점검 — 판정기 버전을 못 정함" in out["report_path"].read_text(encoding="utf-8")
 
 
 def test_test_report_keeps_original_gold(conn, reports, tmp_path):
