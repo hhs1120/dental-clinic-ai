@@ -6,6 +6,8 @@ uv run --group finetune python -m evaluation.finetune.qwen train <full|half|spee
 uv run python -m evaluation.finetune.qwen status <full|half|speed> [--watch]  (30초마다 갱신)
 uv run --group finetune python -m evaluation.finetune.qwen predict <full|half|speed|none> [셋,…] [limit]
   셋 기본 validation,dev,s1,s2,s3 · limit은 셋마다 앞 N건 · none은 학습 전 기본 모델
+uv run --env-file .env python -m evaluation.finetune.qwen baselines [--run-style [N]]
+  Haiku v2·Solar v2 → out/baseline.jsonl. 검증·dev는 app.sqlite(읽기만), 문체 dev는 --run-style일 때 API 호출(과금, N건만 가능)
 """
 
 import json
@@ -33,6 +35,41 @@ def _predict(name: str, sets: str = ",".join(data.SETS), limit: str | None = Non
     secs = sorted(r["sec"] for r in mine if r["id"] in {p["id"] for p in picked})
     print(f"{out.name}: {len(secs)}건, 건당 중앙 {secs[len(secs) // 2]}초·최대 {secs[-1]}초,"
           f" 파싱 실패 {sum(r['labels'] is None for r in mine)}, Peak mem {infer.peak_memory_gb():.2f}GB")  # fmt: skip
+
+
+def _baselines(args: list[str]) -> None:
+    from evaluation.finetune.qwen import baselines, train
+
+    rows = [json.loads(line) for line in (data.DATA / "eval.jsonl").read_text().splitlines()]
+    style_path = train.OUT / "baseline_style.jsonl"
+    style = [r for r in rows if r["set"] in data.STYLES]
+    if "--run-style" in args:
+        from shared.llm import Gateway, JsonlLog, load_config
+
+        rest = args[args.index("--run-style") + 1 :]
+        before = sum(json.loads(x)["cost"] for x in style_path.read_text().splitlines()) if (
+            style_path.exists()) else 0.0  # fmt: skip
+        gw = Gateway(load_config(), JsonlLog(train.OUT / "llm_log.jsonl"), "runtime")
+        baselines.run_style(style[: int(rest[0])] if rest else style, style_path, gw)
+        lines = [json.loads(x) for x in style_path.read_text().splitlines()]
+        for m in baselines.MODELS:
+            mine = [r for r in lines if r["model"] == m]
+            print(f"{m}: 호출 {len(mine)}건 누적 ${sum(r['cost'] for r in mine):.4f}")
+        print(f"이번 실행 ${sum(r['cost'] for r in lines) - before:.4f}")
+    app = baselines.from_app(ROOT / "data" / "app.sqlite",
+                             {r["call_uid"] for r in rows if r["set"] not in data.STYLES})  # fmt: skip
+    got = baselines.latest(style_path)
+    out = []
+    for r in rows:
+        for m in baselines.MODELS:
+            labels = got.get((r["id"], m)) if r["set"] in data.STYLES else app[m][r["call_uid"]]
+            out.append({"id": r["id"], "set": r["set"], "model": m, "labels": labels})
+    path = train.OUT / "baseline.jsonl"
+    path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in out))
+    for m in baselines.MODELS:
+        miss = {s: sum(x["labels"] is None for x in out if x["model"] == m and x["set"] == s)
+                for s in data.SETS}  # fmt: skip
+        print(f"{path.name} {m} 라벨 없음(오답): {miss}")
 
 
 def main(argv: list[str]) -> None:
@@ -72,8 +109,10 @@ def main(argv: list[str]) -> None:
         sys.exit(train.part_main(args[0]))
     elif cmd == "predict":
         _predict(*args)
+    elif cmd == "baselines":
+        _baselines(args)
     else:
-        raise SystemExit("명령: data | lengths | train | status | predict")
+        raise SystemExit("명령: data | lengths | train | status | predict | baselines")
 
 
 if __name__ == "__main__":
