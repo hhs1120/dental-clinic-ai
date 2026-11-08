@@ -15,8 +15,8 @@ CLEAN = {
 }
 
 
-def _r(ok=True, fallback=False, **over):
-    return {"labels": CLEAN | over, "ok": ok, "fallback": fallback}
+def _r(ok=True, fallback=False, todo=(), **over):
+    return {"labels": CLEAN | over, "ok": ok, "fallback": fallback, "todo": list(todo)}
 
 
 def test_clean_pair_closes():
@@ -45,6 +45,12 @@ def test_missing_failed_fallback_block():
     assert autoclose_reason(_r(), None) is None
     assert autoclose_reason(None, _r()) is None
     assert autoclose_reason(_r(ok=False), _r()) is None
+
+
+def test_todo_list_blocks():
+    """두 모델 모두 has_todo 0이어도 분류기 할 일 목록이 있으면 엇갈림(앱의 todo_mismatch)이라 닫지 않는다"""
+    todo = [{"kind": "internal", "text": "원장님께 여쭙기", "who": "", "after": -1}]
+    assert autoclose_reason(_r(todo=todo), _r()) is None
 
 
 def test_fallback_blocks():
@@ -144,6 +150,16 @@ def test_human_revert_sticks(conn):
         "SELECT reverted_at FROM ax_auto_actions WHERE target = 'c-0001'"
     ).fetchone()
     assert row["reverted_at"] and "c-0001" not in _closed(conn)
+
+
+def test_todo_list_call_not_closed(conn):
+    conn.execute(
+        "UPDATE ax_call_classifications SET todo = ? WHERE call_uid = 'c-0001'",
+        (json.dumps([{"kind": "contact", "text": "회신", "who": "", "after": -1}]),),
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn)
 
 
 def test_fallback_pair_not_closed(conn):

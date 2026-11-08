@@ -19,7 +19,9 @@ REASON = "두 모델 모두 할 일 없음 · 응급·불만·급함·엇갈림 
 
 
 def autoclose_reason(cls: dict | None, judge: dict | None) -> str | None:
-    """cls·judge = {"labels", "ok", "fallback"} 또는 None. 조건을 다 넘으면 종결 이유, 하나라도 못 넘으면 None"""
+    """cls·judge = {"labels", "ok", "fallback"} 또는 None, cls에는 할 일 목록 "todo"도. 조건을 다 넘으면 종결 이유,
+    하나라도 못 넘으면 None. 엇갈림은 앱 엇갈림 규칙(backend/disagreements.py)과 같다 — 9항목 차이(급함은 urgent
+    여부만)와, has_todo가 거짓인데 할 일 목록이 있는 todo_mismatch"""
     if cls is None or judge is None:
         return None
     if not (cls["ok"] and judge["ok"]) or cls["fallback"] or judge["fallback"]:
@@ -28,7 +30,7 @@ def autoclose_reason(cls: dict | None, judge: dict | None) -> str | None:
     for lab in (a, b):
         if lab["has_todo"] or lab["emergency"] or lab["complaint"] or lab["urgency"] == "urgent":
             return None
-    if differing_items(a, b):
+    if differing_items(a, b) or cls.get("todo"):
         return None
     return REASON
 
@@ -40,11 +42,12 @@ def pair(conn: sqlite3.Connection, call_uid: str) -> tuple[dict | None, dict | N
     """활성 분류·판정기 결과를 autoclose_reason 인자 모양으로 — 폴백은 그 결과의 LLM 호출 기록에서"""
     a, b = calls.active_versions(conn)
 
-    def one(table: str, alias: str, version: str | None) -> dict | None:
+    def one(table: str, alias: str, version: str | None, todo: str) -> dict | None:
         if version is None:
             return None
         r = conn.execute(
-            f"SELECT t.status, t.labels, COALESCE(l.fallback_used, 0) AS fallback FROM {table} t"
+            f"SELECT t.status, t.labels, {todo} AS todo, COALESCE(l.fallback_used, 0) AS fallback"
+            f" FROM {table} t"
             " LEFT JOIN ax_llm_calls l ON l.id = t.llm_call_id"
             " WHERE t.call_uid = ? AND t.model_alias = ? AND t.prompt_version = ?",
             (call_uid, alias, version),
@@ -56,9 +59,13 @@ def pair(conn: sqlite3.Connection, call_uid: str) -> tuple[dict | None, dict | N
             "labels": json.loads(r["labels"]) if ok else None,
             "ok": ok,
             "fallback": bool(r["fallback"]),
+            "todo": json.loads(r["todo"] or "[]") if ok else [],
         }
 
-    return one("ax_call_classifications", "classify", a), one("ax_model_judgments", "judge", b)
+    return (
+        one("ax_call_classifications", "classify", a, "t.todo"),
+        one("ax_model_judgments", "judge", b, "NULL"),
+    )
 
 
 def _blocked(conn, call_uid: str, result: dict) -> str | None:
