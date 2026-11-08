@@ -31,7 +31,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_pasted_calls` | 새로 추가한 통화(통화 화면 "새 통화 추가") — 앱이 만든 통화라 앱 DB. 목록·분류·판정에서는 생성 통화와 합쳐 보인다(`backend/calls.py`) |
 | `ax_todo_checks` | "오늘 할 일" 할 일 체크 — 분류 행의 할 일 항목 번호 단위로 끝낸 파트·시각. 되돌리면 지운다 |
 | (정확도 뷰) | 정확도 표의 집계 — `backend/metrics.py`. `agreement`: 분류 버전 × 항목 9개 행(모델 vs 판정기 `k/n`, 모수는 분류·판정기 모두 ok인 dev 판정 풀, 급함 3값). `blind_rates`: 버전 쌍마다 LLM 쌍 비교·사람 투표의 B 나음·A 나음·비슷·둘 다 틀림·좌우 선택과 같은 쌍에서 둘의 일치(모수는 dev 블라인드 통화). `human_share`: 판정 큐 대상 중 사람이 볼 몫(엇갈림 또는 표본) `k/n`. 테이블이 아니라 고정 쿼리 |
-| `ax_call_followups` | 통화 단위 처리 기록과 후속 에이전트의 처리안(enum·근거·실행 id) — 후속 에이전트 착수 때 만든다 |
+| `ax_call_followups` | 후속 에이전트 처리안 — 분류 행 단위 1행(분류 버전이 바뀌면 새 처리안): 처리 종류(`shared/followup.py` `ACTIONS`)·요지·근거·실행 id·`done`/`failed`와 이유. 할 일 체크(`ax_todo_checks`)와 따로 — 처리안이 체크를 대신하지 않는다. 쓰는 곳은 `backend/followup.py` |
 | `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·쌍 비교 판정기(`blind_judge`) 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 | `ax_blind_votes` | 사람 블라인드 투표(대상은 [[치과 AX - 평가 설계]] §2.4). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
@@ -167,7 +167,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ### 7.2 프롬프트
 
-- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
+- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `followup`(후속 에이전트), `call_actions`(처리 정답 라벨 — `evaluation/`에서만), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
   - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge·gold_audit만 읽는다
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
