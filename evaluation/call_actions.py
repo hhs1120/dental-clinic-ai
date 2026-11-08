@@ -45,18 +45,32 @@ def classifier_todo(conn) -> set[str]:
     }
 
 
-def gold_todo_calls(conn) -> dict[str, list[str]]:
-    """골드 has_todo인 통화 — dev 판정 풀 / silver 검증 구간(분류기와 상관없이 — 분류기가 놓친 수를 세는 데)"""
-    rows = conn.execute(
-        "SELECT l.call_uid, l.split, l.has_todo, l.primary_purpose, l.emergency, l.complaint,"
-        " c.in_eval_pool FROM truth.truth_call_labels l JOIN source.ax_calls c USING (call_uid)"
-    ).fetchall()
-    silver = [dict(r) for r in rows if r["split"] == "silver"]
+def split_population(conn) -> dict[str, list[dict]]:
+    """구간별 통화(골드 행) — dev = dev 판정 풀, validation = silver 검증 구간"""
+    rows = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT l.call_uid, l.split, l.has_todo, l.primary_purpose, l.emergency, l.complaint,"
+            " c.in_eval_pool FROM truth.truth_call_labels l JOIN source.ax_calls c USING (call_uid)"
+        )
+    ]
+    silver = [r for r in rows if r["split"] == "silver"]
     validation = {u for u, part in silver_split(silver).items() if part == "validation"}
-    pick = lambda keep: sorted(r["call_uid"] for r in rows if r["has_todo"] and keep(r))  # noqa: E731
     return {
-        "dev": pick(lambda r: r["split"] == "dev" and r["in_eval_pool"]),
-        "validation": pick(lambda r: r["call_uid"] in validation),
+        "dev": sorted(
+            (r for r in rows if r["split"] == "dev" and r["in_eval_pool"]),
+            key=lambda r: r["call_uid"],
+        ),
+        "validation": sorted(
+            (r for r in rows if r["call_uid"] in validation), key=lambda r: r["call_uid"]
+        ),
+    }
+
+
+def gold_todo_calls(conn) -> dict[str, list[str]]:
+    """골드 has_todo인 통화 — 분류기와 상관없이(분류기가 놓친 수를 세는 데)"""
+    return {
+        k: [r["call_uid"] for r in v if r["has_todo"]] for k, v in split_population(conn).items()
     }
 
 

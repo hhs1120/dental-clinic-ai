@@ -312,6 +312,12 @@ export function CallDetail({
   );
 }
 
+const TOOL_NAME: Record<string, string> = {
+  query_patient: "환자 조회",
+  query_schedule: "예약 조회",
+  search_docs: "문서 검색",
+};
+
 /** 에이전트가 부른 조회 도구 — 접어 두고 "과정 보기"로 */
 function Trace({
   trace,
@@ -329,7 +335,11 @@ function Trace({
         <ol className="mt-1 list-decimal pl-5">
           {trace.map((t, i) => (
             <li key={i}>
-              {t.tool} {JSON.stringify(t.args)}
+              {TOOL_NAME[t.tool] ?? t.tool}
+              {Object.keys(t.args).length > 0 &&
+                ` — ${Object.values(t.args)
+                  .filter((v) => v !== null && v !== "")
+                  .join(" · ")}`}
             </li>
           ))}
         </ol>

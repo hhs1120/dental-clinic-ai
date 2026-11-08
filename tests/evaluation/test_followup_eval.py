@@ -119,3 +119,75 @@ def test_dev_report_has_followup(tmp_path):
     )
     md = out["report_path"].read_text(encoding="utf-8")
     assert "## ① 후속 처리" in md
+
+
+def test_new_prompt_version_runs_again(paths):
+    """줄이 있어도 프롬프트 버전이 다르면 다시 돈다 — 건너뛰는 키는 (통화, 분류 행, 프롬프트 버전)"""
+    _run(paths, {})
+    rows = ev_followup.load(paths / "runs.jsonl")
+    old = [dict(r, prompt_version="v0") for r in rows]
+    (paths / "runs.jsonl").write_text("".join(__import__("json").dumps(r) + "\n" for r in old))
+    assert _run(paths, {})["done"] == len(rows)
+
+
+def test_retry_cost_is_summed(paths):
+    """후검증 실패로 두 번 돌면 두 실행의 비용을 합친다"""
+    bad = SUBMIT | {"summary": "2031년 7월 9일 회신"}
+    box = {}
+    ev_followup.run(
+        paths / "app.sqlite",
+        paths / "source.sqlite",
+        paths / "truth.sqlite",
+        out=paths / "runs.jsonl",
+        copy=paths / "runs" / "copy.sqlite",
+        state=paths / "runs" / "s.json",
+        gw_factory=lambda c: box.setdefault(
+            "gw",
+            BatchScript(
+                c, [("tool", "submit_followup", bad)], [("tool", "submit_followup", SUBMIT)]
+            ),
+        ),
+        min_batch=0,
+        poll_seconds=0,
+    )
+    import sqlite3
+
+    rows = ev_followup.load(paths / "runs.jsonl")
+    c = sqlite3.connect(paths / "runs" / "copy.sqlite")
+    total = c.execute("SELECT SUM(cost_usd) FROM ax_agent_runs").fetchone()[0]
+    assert abs(sum(r["cost_usd"] for r in rows) - total) < 1e-9
+
+
+def test_score_by_version_extra_and_reasons(paths):
+    import sqlite3
+
+    c = sqlite3.connect(paths / "app.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS source", (str(paths / "source.sqlite"),))
+    c.execute("ATTACH DATABASE ? AS truth", (str(paths / "truth.sqlite"),))
+    c.execute(  # 분류기만 할 일(골드는 할 일 없음) — c-0002는 dev 풀
+        "UPDATE ax_call_classifications SET labels = json_set(labels, '$.has_todo', 1)"
+        " WHERE call_uid = 'c-0002' AND prompt_version = 'v1'"
+    )
+    runs = [
+        {
+            "call_uid": "c-0001",
+            "action": "other",
+            "status": "done",
+            "cost_usd": 0,
+            "prompt_version": "v1",
+        },
+        {
+            "call_uid": "c-0001",
+            "action": None,
+            "status": "failed",
+            "reason": "후검증 실패 — x",
+            "cost_usd": 0,
+            "prompt_version": "v2",
+        },
+    ]
+    s1 = ev_followup.score(c, runs, {"c-0001": "other"}, {"dev": ["c-0001"]}, prompt_version="v1")
+    s2 = ev_followup.score(c, runs, {"c-0001": "other"}, {"dev": ["c-0001"]}, prompt_version="v2")
+    assert s1["dev"]["agent"]["k"] == 1 and s2["dev"]["agent"]["k"] == 0
+    assert s2["dev"]["failed_by_reason"] == {"후검증 실패": 1}
+    assert s1["dev"]["extra_by_classifier"] == 1

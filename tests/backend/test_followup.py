@@ -29,6 +29,8 @@ class Script(FakeGateway):
 
     def complete(self, alias, **kw):
         r = super().complete(alias, **kw)
+        if not kw.get("ref"):  # 분류·판정 호출 — 가짜 응답 그대로
+            return r
         run = kw["ref"][1]
         order = sorted(self.pos | {run: 0})
         steps = self.runs[min(order.index(run), len(self.runs) - 1)]
@@ -125,3 +127,81 @@ def test_max_tool_calls_matches_eval():
     from evaluation.metrics import MAX_TOOL_CALLS
 
     assert followup.FOLLOWUP_MAX_TOOL_CALLS == MAX_TOOL_CALLS
+
+
+# ── 리뷰 반영 ────────────────────────────────────────────────────────────
+
+
+def test_input_has_call_time_and_today():
+    t = followup.input_text(
+        {
+            "chart_no": "C-1",
+            "direction": "inbound",
+            "transcript": "환자: 네",
+            "at": "2026-11-28 10:00:00",
+        },
+        {"labels": LABELS, "summary": "요약", "todo": []},
+        date(2026, 12, 1),
+    )
+    assert "통화 일시: 2026-11-28 10:00" in t and "오늘: 2026-12-01" in t
+
+
+def test_tool_args_and_input_count_as_evidence(conn):
+    """조회 인자의 날짜·입력의 오늘 날짜를 쓴 근거는 지어낸 것이 아니다"""
+    sub = SUBMIT | {"summary": "2026-12-20 예약 없음 — 오늘 2026-12-01 기준 회신"}
+    gw = Script(
+        conn,
+        [
+            ("tool", "query_schedule", {"date_from": "2026-12-20", "date_to": "2026-12-20"}),
+            ("tool", "submit_followup", sub),
+        ],
+    )
+    assert followup.run_for_call(conn, gw, "c-0001", CLINIC)["status"] == "done"
+
+
+def test_reclassify_drops_old_plan(conn):
+    """같은 버전으로 다시 분류하면 그 분류 행의 옛 처리안을 지우고 새로 낸다"""
+    from backend import calls
+
+    followup.run_for_call(
+        conn, Script(conn, [("tool", "submit_followup", SUBMIT)]), "c-0001", CLINIC
+    )
+    gw = Script(conn, [("tool", "submit_followup", SUBMIT | {"action": "billing"})])
+    calls.classify_one(conn, gw, "c-0001")
+    rows = conn.execute(
+        "SELECT action FROM ax_call_followups WHERE call_uid = 'c-0001'"
+    ).fetchall()
+    assert [r["action"] for r in rows] != ["doctor_reply"]  # 옛 처리안이 그대로 남지 않는다
+
+
+def test_stuck_run_is_closed_and_retried(conn):
+    """끊긴 실행(잠금 만료)이 남아 있어도 막히지 않는다 — 실패로 닫고 새로 돈다"""
+    conn.execute(
+        "INSERT INTO ax_agent_runs (agent, target, status, prompt_version, locked_by, heartbeat_at, started_at)"
+        " VALUES ('call_followup', 'c-0001', 'running', 'v1', 'old', '2000-01-01 00:00:00', '2000-01-01 00:00:00')"
+    )
+    conn.commit()
+    out = followup.run_for_call(
+        conn, Script(conn, [("tool", "submit_followup", SUBMIT)]), "c-0001", CLINIC
+    )
+    assert out["status"] == "done"
+    assert (
+        conn.execute(
+            "SELECT status FROM ax_agent_runs WHERE locked_by IS NULL AND started_at = '2000-01-01 00:00:00'"
+        ).fetchone()["status"]
+        == "failed"
+    )
+
+
+def test_prompts_carry_action_definitions():
+    from pathlib import Path
+
+    from shared.followup import ACTION_DESC
+
+    root = Path(__file__).resolve().parents[2] / "prompts"
+    for f in (
+        root / "followup" / f"{followup.PROMPT_VERSION}.md",
+        root / "call_actions" / "v1.md",
+    ):
+        text = f.read_text(encoding="utf-8")
+        assert all(f"- {a} — {d}" in text for a, d in ACTION_DESC.items()), f

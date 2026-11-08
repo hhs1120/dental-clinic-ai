@@ -102,3 +102,34 @@ def test_rounds_outcome_matches_direct(conn, tmp_path):
     rounds.run_rounds(runner, gw, [rid], tmp_path / "s.json", min_batch=0, poll_seconds=0)
     args, _ = followup._submitted(runner.store, rid)
     assert args == SUBMIT
+
+
+def test_locked_by_other_is_skipped(conn, tmp_path):
+    """다른 프로세스가 잠근(만료 전) 실행은 건드리지 않고 넘어간다"""
+    gw = BatchScript(conn, [("tool", "submit_followup", SUBMIT)])
+    runner = _runner(conn, gw)
+    (rid,) = _start(conn, runner, ["c-0001"])
+    conn.execute(
+        "UPDATE ax_agent_runs SET locked_by = 'other', heartbeat_at = '2999-01-01 00:00:00' WHERE id = ?",
+        (rid,),
+    )
+    conn.commit()
+    assert (
+        rounds.run_rounds(runner, gw, [rid], tmp_path / "s.json", min_batch=0, poll_seconds=0)
+        == {}
+    )
+
+
+def test_batch_none_goes_direct_next(conn, tmp_path):
+    """배치에서 결과가 없던(None) 실행은 다음 라운드에 일반 호출로 — 재제출이 끝없이 반복되지 않게"""
+
+    class Drop(BatchScript):
+        def batch_results(self, bid, alias, **kw):
+            out = super().batch_results(bid, alias, **kw)
+            return {k: None for k in out}
+
+    gw = Drop(conn, [("tool", "submit_followup", SUBMIT)])
+    runner = _runner(conn, gw)
+    ids = _start(conn, runner, ["c-0001", "c-0003"])
+    out = rounds.run_rounds(runner, gw, ids, tmp_path / "s.json", min_batch=0, poll_seconds=0)
+    assert all(o.reason == "submitted" for o in out.values()) and len(gw.batches) == 1

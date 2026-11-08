@@ -11,6 +11,7 @@ from pathlib import Path
 
 from backend.harness.loop import Outcome, Runner, external
 from backend.harness.store import RunLocked
+from shared.llm import BudgetExceeded
 
 ROUND_BATCH_MIN = 30  # 남은 실행이 이 수 이하면 그 라운드부터 일반 호출(사람이 정함)
 
@@ -63,16 +64,21 @@ def run_rounds(
     rec = _Recorder()
     driver = replace(runner, gateway=rec)
     store = runner.store
+    mine = []
     for run in run_ids:  # 다른 프로세스가 만든(끊긴) 실행은 잠금을 가져온다
         try:
             with store.conn:
                 store.take_over(run, runner.owner)
         except RunLocked:
-            pass  # 이미 이 실행기의 잠금이거나 끝난 실행
-    active = [r for r in run_ids if store.run(r)["status"] == "running"]
-    out = {r: Outcome(r, store.run(r)["status"]) for r in run_ids if r not in active}
+            pass  # 이미 이 실행기의 잠금이거나 끝난 실행 — 아래에서 가린다
+        row = store.run(run)
+        if row["status"] != "running" or row["locked_by"] == runner.owner:
+            mine.append(run)  # 다른 프로세스가 잠근(만료 전) 실행은 건드리지 않는다
+    active = [r for r in mine if store.run(r)["status"] == "running"]
+    out = {r: Outcome(r, store.run(r)["status"]) for r in mine if r not in active}
+    direct = set()  # 배치에서 결과가 없던 실행 — 다음 라운드는 일반 호출로(재제출 반복을 막는다)
     if state_path.exists():  # 끊기기 전에 제출한 배치부터 받는다
-        _collect(gw, runner, rec, json.loads(state_path.read_text()), poll_seconds, max_polls)
+        direct |= _collect(gw, rec, json.loads(state_path.read_text()), poll_seconds, max_polls)
         state_path.unlink()
     while active:
         for run in list(active):
@@ -84,6 +90,15 @@ def run_rounds(
         if not active:
             break
         wanted, rec.wanted = rec.wanted, {}
+        now = {r: v for r, v in wanted.items() if r in direct}
+        wanted = {r: v for r, v in wanted.items() if r not in direct}
+        try:
+            for run, (alias, kw) in now.items():
+                rec.ready[run] = gw.complete(alias, **kw)
+        except BudgetExceeded:
+            break  # 하루 상한 — 남은 실행은 running으로 남아 다음에 이어 간다
+        if not wanted:
+            continue
         if len(wanted) > min_batch:
             alias = next(iter(wanted.values()))[0]
             kw0 = next(iter(wanted.values()))[1]
@@ -100,15 +115,19 @@ def run_rounds(
                 "prompt_version": kw0.get("prompt_version"),
             }
             state_path.write_text(json.dumps(state))
-            _collect(gw, runner, rec, state, poll_seconds, max_polls)
+            direct |= _collect(gw, rec, state, poll_seconds, max_polls)
             state_path.unlink()
         else:
-            for run, (alias, kw) in wanted.items():
-                rec.ready[run] = gw.complete(alias, **kw)
+            try:
+                for run, (alias, kw) in wanted.items():
+                    rec.ready[run] = gw.complete(alias, **kw)
+            except BudgetExceeded:
+                break
     return out
 
 
-def _collect(gw, runner, rec, state: dict, poll_seconds: int, max_polls: int | None) -> None:
+def _collect(gw, rec, state: dict, poll_seconds: int, max_polls: int | None) -> set[int]:
+    """배치 결과를 채운다 — 결과가 없던 실행 id를 돌려준다(다음 라운드는 일반 호출)"""
     polls = 0
     while gw.batch_status(state["batch_id"]) != "ended":
         polls += 1
@@ -121,8 +140,11 @@ def _collect(gw, runner, rec, state: dict, poll_seconds: int, max_polls: int | N
         task=state["task"],
         prompt_version=state.get("prompt_version"),
     )
+    missing = set()
     for cid, r in results.items():
         run = int(cid)
-        if r is None:  # 처리 안 된 건 — 다음 라운드에 다시 모인다
+        if r is None:  # 처리 안 된 건 — 다음 라운드에 일반 호출로
+            missing.add(run)
             continue
         rec.ready[run] = r
+    return missing

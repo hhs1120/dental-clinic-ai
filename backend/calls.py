@@ -385,6 +385,12 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
         " AND prompt_version = ?)",
         (call_uid, a),
     )
+    conn.execute(  # 처리안도 그 분류 행 단위 — 새 분류로 다시 낸다
+        "DELETE FROM ax_call_followups WHERE classification_id IN (SELECT id FROM"
+        " ax_call_classifications WHERE call_uid = ? AND model_alias = 'classify'"
+        " AND prompt_version = ?)",
+        (call_uid, a),
+    )
     conn.commit()
     from backend import autoclose  # autoclose가 이 모듈을 import한다
 
@@ -401,6 +407,7 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
     from backend import followup  # followup이 이 모듈을 import한다
 
     try:  # 할 일이 있으면 처리안 — 실패해도 분류 흐름은 막지 않는다(실패는 처리안 행에 남는다)
-        followup.run_for_call(conn, gw, call_uid)
+        followup.run_for_call(conn, gw, call_uid, searcher=followup.app_searcher(conn))
     except Exception:  # noqa: BLE001
         conn.rollback()
+        log.exception("처리안 실패 %s", call_uid)

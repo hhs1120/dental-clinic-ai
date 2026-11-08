@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from backend import calls, db, prompts
 from backend.harness.loop import AgentSpec, Runner
-from backend.harness.store import RunStore, SqliteLlmLog
+from backend.harness.store import RunLocked, RunStore, SqliteLlmLog
 from backend.harness.tools import Tool, ToolRegistry
 from backend.query_tools import query_tools
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, URGENCY_KO
@@ -25,7 +25,9 @@ from shared.llm import Gateway, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT, ALIAS, TASK = "call_followup", "followup", "followup"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = (
+    "v2"  # v2: 입력에 통화 일시·오늘 날짜(v1은 연도를 스스로 계산해 후검증에서 많이 막힘)
+)
 # 평가의 질문당 도구 호출 상한과 같게(평가 설계 §3.2 — tests/backend/test_followup.py가 비교)
 FOLLOWUP_MAX_TOOL_CALLS = 6
 FOLLOWUP_MAX_USD = 0.5  # 실행당 비용 상한 — 넘으면 사람에게 넘긴다
@@ -79,12 +81,15 @@ def spec(names: tuple[str, ...]) -> AgentSpec:
     )
 
 
-def input_text(call: dict, cls: dict) -> str:
-    """에이전트 입력 — 통화(방향·녹취록)와 활성 분류 결과, 차트 번호(통화 화면과 같은 발신번호 매칭 값)"""
+def input_text(call: dict, cls: dict, today: date | None = None) -> str:
+    """에이전트 입력 — 통화(일시·방향·녹취록)와 활성 분류 결과, 차트 번호(통화 화면과 같은 발신번호 매칭 값),
+    오늘 날짜(조회 도구가 오늘 기준이라 연도·남은 예약 계산이 맞게)"""
     lab = cls["labels"]
     flags = [FLAG_KO[f] for f in FLAG_KO if lab.get(f)]
     todo = cls.get("todo") or []
     lines = [
+        f"오늘: {(today or load_clinic().today).isoformat()}",
+        f"통화 일시: {(call.get('at') or '')[:16]}",
         f"차트 번호: {call.get('chart_no') or '차트 없음'}",
         f"방향: {call['direction']}",
         f"용건: {PURPOSE_KO.get(lab['primary_purpose'], lab['primary_purpose'])}"
@@ -115,7 +120,8 @@ def active(conn, call_uid: str, include_pool: bool = False) -> tuple[dict, dict]
     """(통화, 활성 분류) — 앱은 판정 풀 밖 통화만(CALLS_CTE). 평가 실행만 include_pool로 판정 풀 통화도"""
     a, _ = calls.active_versions(conn)
     sql = (
-        "SELECT a.call_uid, a.direction, a.transcript, p.chart_no FROM source.ax_calls a"
+        "SELECT a.call_uid, a.direction, a.transcript, a.started_at AS at, p.chart_no"
+        " FROM source.ax_calls a"
         " LEFT JOIN source.emr_patients p ON p.id = a.patient_id WHERE a.call_uid = ?"
         if include_pool
         else calls.CALLS_CTE + " SELECT * FROM calls WHERE call_uid = ?"
@@ -138,16 +144,19 @@ def active(conn, call_uid: str, include_pool: bool = False) -> tuple[dict, dict]
 
 
 def _submitted(store: RunStore, run_id: int) -> tuple[dict | None, list[str]]:
-    """제출 인자와 이 실행의 도구 결과(후검증 근거)"""
-    args, results = None, []
+    """제출 인자와 후검증 근거 — 입력 글(녹취록·통화 일시·오늘), 도구 인자와 결과"""
+    args, sources = None, []
     for s in store.steps(run_id):
-        if s["kind"] != "tool":
+        if s["kind"] == "input":
+            sources.append(str(s["result"]))
+        if s["kind"] != "tool" or s["is_error"]:
             continue
-        if s["tool"] == SUBMIT and not s["is_error"]:
+        if s["tool"] == SUBMIT:
             args = s["args"]
-        elif not s["is_error"]:
-            results.append(json.dumps(s["result"], ensure_ascii=False, default=str))
-    return args, results
+        else:
+            sources.append(json.dumps(s["args"], ensure_ascii=False, default=str))
+            sources.append(json.dumps(s["result"], ensure_ascii=False, default=str))
+    return args, sources
 
 
 def judge_run(
@@ -175,12 +184,15 @@ def run_for_call(
     ).fetchone():
         return None
     conn.commit()  # Runner.start가 거절되면 미커밋 쓰기가 되돌아가므로
-    reg, names = registry(clinic or load_clinic(), searcher)
+    clinic = clinic or load_clinic()
+    reg, names = registry(clinic, searcher)
     store = RunStore(conn)
     runner = Runner(spec(names), gw, store, reg)
+    if not _close_stuck(store, runner, call_uid):
+        return None  # 다른 프로세스가 지금 돌리는 중
     status, reason, args, run_id = "failed", None, None, None
     for _ in range(ATTEMPTS):  # 후검증 실패만 다시 돈다 — 제출이 없으면 다시 돌려도 같은 길
-        run_id = runner.start(call_uid, input_text(call, cls)).run_id
+        run_id = runner.start(call_uid, input_text(call, cls, clinic.today)).run_id
         status, args, reason = judge_run(store, run_id, call["transcript"])
         if status != "unverified":
             break
@@ -205,6 +217,24 @@ def run_for_call(
     return row
 
 
+def _close_stuck(store: RunStore, runner: Runner, call_uid: str) -> bool:
+    """끊긴 실행(잠금 만료)은 실패로 닫는다 — 고유 색인 때문에 새 실행이 영영 못 생기지 않게.
+    살아 있는 다른 실행이면 False"""
+    row = store.conn.execute(
+        "SELECT id FROM ax_agent_runs WHERE agent = ? AND target = ? AND status = 'running'",
+        (AGENT, call_uid),
+    ).fetchone()
+    if row is None:
+        return True
+    try:
+        with store.conn:
+            store.take_over(row[0], runner.owner)
+            store.finish(row[0], "failed", runner.owner, reason="끊긴 실행")
+    except RunLocked:
+        return False
+    return True
+
+
 def targets(conn: sqlite3.Connection, today: date) -> list[str]:
     """오늘 할 일에 오른 통화 중 그 분류 행의 처리안이 없는 것"""
     board = calls.today_board(conn, today)
@@ -216,16 +246,24 @@ def targets(conn: sqlite3.Connection, today: date) -> list[str]:
     return sorted(u for u, cid in seen.items() if cid not in have)
 
 
-def _searcher(conn, clinic):
+def _searcher(conn, clinic, quiet: bool = False):
     """검색 화면과 같은 모델 — 키·색인이 없으면 문서 검색 없이 돈다"""
     try:
         from backend.api import _models
         from backend.rag_search import Searcher
 
+        if not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+            raise ValueError("색인 없음 — make index")
         return Searcher(conn, clinic, *_models())
     except Exception as e:  # noqa: BLE001
-        print(f"문서 검색 없이 진행: {e}")
+        if not quiet:
+            print(f"문서 검색 없이 진행: {e}")
         return None
+
+
+def app_searcher(conn):
+    """앱 흐름(새 통화·다시 분류)도 평가·make followups와 같은 도구 구성으로"""
+    return _searcher(conn, load_clinic(), quiet=True)
 
 
 def main(argv=None) -> None:
@@ -240,7 +278,12 @@ def main(argv=None) -> None:
     print(f"처리안 대상 {len(todo)}통화")
     counts = {"done": 0, "failed": 0}
     for uid in todo:
-        r = run_for_call(conn, gw, uid, clinic, searcher)
+        try:
+            r = run_for_call(conn, gw, uid, clinic, searcher)
+        except Exception as e:  # noqa: BLE001 — 한 통화 때문에 나머지가 멈추지 않게
+            conn.rollback()
+            print(f"{uid}: {type(e).__name__}: {e}")
+            continue
         if r:
             counts[r["status"]] += 1
     print(f"처리안 {counts}")

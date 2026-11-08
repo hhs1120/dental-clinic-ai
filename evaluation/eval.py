@@ -286,10 +286,14 @@ def run(
         # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
         acts = call_actions.load(call_actions_path)
         runs = followup.load(followup_runs) if followup_runs else []
+        truth, split_calls = call_actions.truth(acts), call_actions.eval_calls(conn)
+        versions = sorted({r["prompt_version"] for r in runs if r.get("prompt_version")})
         result["followup"] = {
-            "score": followup.score(
-                conn, runs, call_actions.truth(acts), call_actions.eval_calls(conn)
-            ),
+            "prompt_version": followup.followup_version(),
+            "score": followup.score(conn, runs, truth, split_calls),
+            "by_version": {  # 버전 비교 — 같은 통화·같은 정답으로
+                v: followup.score(conn, runs, truth, split_calls, v) for v in versions
+            },
             "labels": len(acts),
             "agreement": call_actions.agreement(acts),
         }
@@ -543,15 +547,29 @@ def _render_followup(f: dict) -> list[str]:
         "",
         f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}",
         "",
-        "| 구간 | 통화 | 에이전트 | 규칙 기준선 | 실패 | 실행 전 | 비용 | 분류기가 놓친 할 일 통화 |",
-        "|---|---|---|---|---|---|---|---|",
+        f"후속 에이전트 {f['prompt_version']}",
+        "",
+        "| 구간 | 통화 | 에이전트 | 규칙 기준선 | 실패(이유) | 실행 전 | 비용 | 분류기 놓침 | 분류기만 할 일 |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for sp, x in f["score"].items():
+        why = ", ".join(f"{k} {n}" for k, n in x["failed_by_reason"].items())
         out.append(
             f"| {sp} | {x['n']} | {_kn(x['agent'])} | {_kn(x['baseline'])} | {x['failed']}"
-            f" | {x['not_run']} | ${x['cost_usd']} | {x['missed_by_classifier']} |"
+            + (f"({why})" if why else "")
+            + f" | {x['not_run']} | ${x['cost_usd']} | {x['missed_by_classifier']}"
+            f" | {x['extra_by_classifier']} |"
         )
     out.append("")
+    if len(f.get("by_version", {})) > 1:  # 버전 비교 — 같은 통화·같은 정답
+        out.append(
+            "버전 비교 — "
+            + " / ".join(
+                f"{v}: " + ", ".join(f"{sp} {_kn(x['agent'])}" for sp, x in sc.items())
+                for v, sc in f["by_version"].items()
+            )
+        )
+        out.append("")
     for sp, x in f["score"].items():
         rows = [
             f"{a} 에이전트 {_kn(x['agent']['by_action'][a])} · 기준선 {_kn(x['baseline']['by_action'][a])}"

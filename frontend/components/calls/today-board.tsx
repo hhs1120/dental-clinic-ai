@@ -215,7 +215,10 @@ function CallCard({
           <button
             type="button"
             className="flex items-center gap-1.5 rounded-md border-l-2 border-primary bg-accent/40 px-2 py-1 text-left text-xs"
-            onClick={() => onOpen(head.call_uid)}
+            onClick={(e) => {
+              e.stopPropagation(); // 카드가 이미 연다 — 두 번 열지 않게
+              onOpen(head.call_uid);
+            }}
           >
             <Badge variant="kind">
               {names?.action[plan.action ?? ""] ?? plan.action}
