@@ -105,3 +105,36 @@ def test_agreement():
     a = call_actions.agreement(recs)
     assert (a["k"], a["n"]) == (1, 2) and a["by_action"]["billing"] == {"k": 1, "n": 1}
     assert json.loads(json.dumps(a))
+
+
+def test_new_prompt_version_relabels_and_keeps_human(conn, tmp_path, monkeypatch):
+    """라벨 프롬프트 버전이 바뀌면 다시 라벨하고, 사람 답은 남긴다"""
+    p, state = tmp_path / "a.jsonl", tmp_path / "s.json"
+    call_actions.label(BatchFake(tmp_path), conn, p, state_path=state, poll_seconds=0)
+    recs = call_actions.load(p)
+    recs[0]["human_action"] = "billing"
+    for r in recs:
+        r["prompt_version"] = "v0"
+    call_actions._save(p, recs)
+    gw = BatchFake(tmp_path)
+    assert call_actions.label(gw, conn, p, state_path=state, poll_seconds=0)["done"] == len(recs)
+    after = {r["call_uid"]: r for r in call_actions.load(p)}
+    assert after[recs[0]["call_uid"]]["human_action"] == "billing"
+    assert {r["prompt_version"] for r in after.values()} == {call_actions.PROMPT_VERSION}
+
+
+def test_reopen_human(tmp_path):
+    """사람 답이 특정 종류인 표본만 다시 판정 대상으로"""
+    p = tmp_path / "a.jsonl"
+    call_actions._save(
+        p,
+        [
+            {"call_uid": "a", "llm_action": "appointment", "human_action": "other"},
+            {"call_uid": "b", "llm_action": "billing", "human_action": "billing"},
+        ],
+    )
+    assert call_actions.reopen_human(p, "other") == 1
+    assert {r["call_uid"]: r["human_action"] for r in call_actions.load(p)} == {
+        "a": None,
+        "b": "billing",
+    }

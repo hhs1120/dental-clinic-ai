@@ -196,12 +196,13 @@ def test_stuck_run_is_closed_and_retried(conn):
 def test_prompts_carry_action_definitions():
     from pathlib import Path
 
+    from evaluation.call_actions import PROMPT_VERSION as LABEL_VERSION
     from shared.followup import ACTION_DESC
 
     root = Path(__file__).resolve().parents[2] / "prompts"
     for f in (
         root / "followup" / f"{followup.PROMPT_VERSION}.md",
-        root / "call_actions" / "v1.md",
+        root / "call_actions" / f"{LABEL_VERSION}.md",
     ):
         text = f.read_text(encoding="utf-8")
         assert all(f"- {a} — {d}" in text for a, d in ACTION_DESC.items()), f

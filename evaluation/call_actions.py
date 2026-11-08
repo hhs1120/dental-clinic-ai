@@ -17,7 +17,7 @@ from shared.followup import ACTION_DESC, ACTION_KO, ACTIONS
 from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
-TASK, PROMPT_VERSION, ALIAS = "call_actions", "v1", "action_label"
+TASK, PROMPT_VERSION, ALIAS = "call_actions", "v2", "action_label"  # v2: 원장님께 전달 추가(8가지)
 ACTIONS_PATH = ROOT / "evaluation" / "call_actions.jsonl"
 LLM_LOG = ROOT / "evaluation" / "call_actions_llm.jsonl"
 BATCH_STATE = ROOT / "evaluation" / "call_actions_batch.json"  # 커밋 안 함
@@ -109,6 +109,7 @@ def label(gw, conn, path: Path, state_path: Path = BATCH_STATE, poll_seconds: in
             for u in uids
             if u not in records
             or records[u]["transcript_sha"] != transcript_sha(calls[u]["transcript"])
+            or records[u].get("prompt_version") != PROMPT_VERSION  # 종류 목록이 바뀐 라벨
         ]
         if not todo:
             return {"done": 0, "failed": 0, "cost_usd": 0.0}
@@ -142,7 +143,7 @@ def label(gw, conn, path: Path, state_path: Path = BATCH_STATE, poll_seconds: in
             "call_uid": u,
             "transcript_sha": transcript_sha(calls[u]["transcript"]),
             "llm_action": action,
-            "human_action": None,
+            "human_action": (records.get(u) or {}).get("human_action"),  # 사람 답은 남긴다
             "prompt_version": PROMPT_VERSION,
         }
         done += 1
@@ -186,6 +187,18 @@ def audit(conn, path: Path, read=input, write=print, n: int = ACTION_AUDIT_SAMPL
         write(f"저장 — 모델 라벨: {ACTION_KO[rec['llm_action']]}")
 
 
+def reopen_human(path: Path, action: str) -> int:
+    """사람 답이 그 종류인 표본을 다시 판정 대상으로(종류 목록이 바뀌었을 때) — 연 수"""
+    records = load(path)
+    n = 0
+    for r in records:
+        if r["human_action"] == action:
+            r["human_action"] = None
+            n += 1
+    _save(path, records)
+    return n
+
+
 def truth(records: list[dict]) -> dict[str, str]:
     """정답 — 사람 답이 있으면 사람, 없으면 모델 라벨"""
     return {r["call_uid"]: r["human_action"] or r["llm_action"] for r in records}
@@ -208,13 +221,17 @@ def agreement(records: list[dict]) -> dict:
 
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m evaluation.call_actions")
-    p.add_argument("command", choices=("label", "audit"))
+    p.add_argument("command", choices=("label", "audit", "reopen"))
+    p.add_argument("--action", help="reopen: 사람 답이 이 종류인 표본을 다시 판정 대상으로")
     args = p.parse_args(argv)
     conn = connect(
         ROOT / "data" / "app.sqlite",
         ROOT / "data" / "source.sqlite",
         ROOT / "ground_truth" / "truth.sqlite",
     )
+    if args.command == "reopen":
+        print(f"다시 판정할 표본 {reopen_human(ACTIONS_PATH, args.action)}통화")
+        return
     if args.command == "audit":
         try:
             audit(conn, ACTIONS_PATH)

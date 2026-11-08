@@ -191,3 +191,9 @@ def test_score_by_version_extra_and_reasons(paths):
     assert s1["dev"]["agent"]["k"] == 1 and s2["dev"]["agent"]["k"] == 0
     assert s2["dev"]["failed_by_reason"] == {"후검증 실패": 1}
     assert s1["dev"]["extra_by_classifier"] == 1
+
+
+def test_baseline_doctor_note():
+    b = ev_followup.baseline
+    assert b([{"text": "원장님께 앞니 파절 상황 미리 전달하기"}]) == "doctor_note"
+    assert b([{"text": "원장님께 전달하고 회신 전화"}]) == "doctor_reply"

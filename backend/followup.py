@@ -25,9 +25,7 @@ from shared.llm import Gateway, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT, ALIAS, TASK = "call_followup", "followup", "followup"
-PROMPT_VERSION = (
-    "v2"  # v2: 입력에 통화 일시·오늘 날짜(v1은 연도를 스스로 계산해 후검증에서 많이 막힘)
-)
+PROMPT_VERSION = "v3"  # v2: 입력에 통화 일시·오늘 날짜 · v3: 원장님께 전달 추가(8가지)
 # 평가의 질문당 도구 호출 상한과 같게(평가 설계 §3.2 — tests/backend/test_followup.py가 비교)
 FOLLOWUP_MAX_TOOL_CALLS = 6
 FOLLOWUP_MAX_USD = 0.5  # 실행당 비용 상한 — 넘으면 사람에게 넘긴다

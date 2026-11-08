@@ -168,9 +168,14 @@ BASELINE_RULES = (
 )
 
 
+REPLY_WORDS = ("회신", "안내", "전화", "문자", "연락")
+
+
 def baseline(todo: list) -> str:
     """규칙 기준선 — 할 일 문장 낱말 규칙(평가 설계 §5, 기능 정의 §8 "에이전트 vs 규칙 기준선")"""
     text = " ".join(t["text"] if isinstance(t, dict) else str(t) for t in todo)
+    if "전달" in text and not any(w in text for w in REPLY_WORDS):
+        return "doctor_note"  # 원장님께 전달만 하고 환자에게 회신은 없음
     for action, words in BASELINE_RULES:
         if any(w in text for w in words):
             return action
