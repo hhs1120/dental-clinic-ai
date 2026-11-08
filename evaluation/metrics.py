@@ -1,5 +1,6 @@
 """평가 지표 순수 함수 — 정의는 docs/치과 AX - 평가 설계.md §2.2(분류)·§3.2·§3.3(RAG)."""
 
+import math
 import re
 from collections import defaultdict
 from math import comb
@@ -11,6 +12,17 @@ SILVER_MATERIAL_SHARE = (
     0.7  # silver 재료 비율, 나머지는 검증(평가 설계 §2.7 — evaluation/splits.py)
 )
 GOLD_AUDIT_SAMPLE = 50  # 골드 점검 사람 표본 통화 수(평가 설계 §2.3 — evaluation/gold_audit.py)
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """비율 k/n의 Wilson 95% 구간 — 모수가 작은 test 자동 종결 오류율용(평가 설계 §5). n=0이면 None"""
+    if n == 0:
+        return None
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return (max(0.0, c - h), min(1.0, c + h))
 
 
 def fraction(k: int, n: int) -> str:

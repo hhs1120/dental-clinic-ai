@@ -1,13 +1,13 @@
 """eval.py — 평가 실행. 정의는 docs/치과 AX - 평가 설계.md §7.
 
   uv run python -m evaluation.eval --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|retrieval|chat [--prompt-version v2] [--condition …] [--force]
+  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|auto|retrieval|chat [--prompt-version v2] [--condition …] [--force]
   → reports/eval_<split>_<condition>_<시각>.md + 같은 이름 .json(make gate가 읽음) + reports/eval_runs.jsonl 1줄
 
 - DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
   backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛰고, 앱 경고(rag 색인·리랭커)가 있으면 test를 거절한다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
-- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
+- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·자동 종결·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
   이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from evaluation import EvalRefused, classification, gold_audit, rag
+from evaluation import EvalRefused, autoclose, classification, gold_audit, rag
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
 
@@ -35,10 +35,11 @@ SECTIONS = (
     "classification",
     "judge",
     "crosscheck",
+    "auto",
     "retrieval",
     "chat",
-)  # test 묶음 — 분류·판정·교차검증은 버전, 검색·챗은 조건 단위로 1회
-VERSIONED = ("classification", "judge", "crosscheck")
+)  # test 묶음 — 분류·판정·교차검증·자동 종결은 버전, 검색·챗은 조건 단위로 1회
+VERSIONED = ("classification", "judge", "crosscheck", "auto")
 
 
 class AlreadyRun(Exception):
@@ -60,6 +61,19 @@ def fewshot_uids(path: Path) -> set[str]:
     if not isinstance(uids, list) or not all(isinstance(u, str) for u in uids):
         raise EvalRefused(f"{path}: fewshot_call_uids는 call_uid 목록이어야 함")
     return set(uids)
+
+
+def _active_classify(conn) -> str | None:
+    """활성 분류 버전 — ax_settings.active_prompt_version, 없으면 분류 기록의 마지막 버전(앱 설계 §6)"""
+    row = conn.execute(
+        "SELECT value FROM ax_settings WHERE key = 'active_prompt_version'"
+    ).fetchone()
+    if row:
+        return json.loads(row[0])
+    versions = [
+        r[0] for r in conn.execute("SELECT DISTINCT prompt_version FROM ax_call_classifications")
+    ]
+    return max(versions, key=classification.version_key) if versions else None
 
 
 def _history(reports_dir: Path) -> list[dict]:
@@ -118,7 +132,7 @@ def run(
         section = section or ("retrieval" if retrieval_only else None)
         if section not in SECTIONS:
             raise EvalRefused(
-                "test는 --section 하나(classification·judge·crosscheck·retrieval·chat)만 돌린다 (평가 설계 §7)"
+                "test는 --section 하나(classification·judge·crosscheck·auto·retrieval·chat)만 돌린다 (평가 설계 §7)"
             )
         if section in VERSIONED and not prompt_version:
             raise EvalRefused(f"test {section}는 --prompt-version 하나")
@@ -159,6 +173,11 @@ def run(
                     f"교차검증 {prompt_version}×{jv}: {x.get('skipped') or '판정기와 겹치는 통화가 없음'}"
                 )
             pv = f"{prompt_version}×{jv}"
+        if section == "auto":
+            jv = classification.judge_version(conn)
+            if not jv:
+                raise EvalRefused("자동 종결을 잴 판정기 버전을 못 정함")
+            pv = f"{prompt_version}×{jv}"
         if section not in VERSIONED and app is None:
             raise EvalRefused("앱 없음 — test RAG는 앱(backend/eval_hooks.py)이 생긴 뒤에")
         history = [
@@ -197,6 +216,7 @@ def run(
         "crosscheck": None,
         "rag": None,
         "gold_audit": None,
+        "autoclose": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -258,6 +278,11 @@ def run(
             if jv
             else []
         )
+    if dev or section == "auto":  # 자동 종결 오류율(평가 설계 §5) — dev는 활성 분류 × 활성 판정기
+        jv = classification.judge_version(conn)
+        a = prompt_version if section == "auto" else _active_classify(conn)
+        if jv and a:
+            result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -342,6 +367,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_gold_audit(r["gold_audit"])
     if r["crosscheck"] is not None:
         out += _render_crosscheck(r["crosscheck"])
+    if r.get("autoclose") is not None:
+        out += _render_autoclose(r["autoclose"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -481,6 +508,20 @@ def _render_gold_audit(a: dict | None) -> list[str]:
         "",
     ]
     return out
+
+
+def _render_autoclose(a: dict) -> list[str]:
+    e, ci = a["errors"], a["errors"]["ci"]
+    names = {"has_todo": "할 일", "emergency": "응급", "complaint": "불만", "urgent": "급함"}
+    return [
+        f"## ① 자동 종결 — {a['pair']}",
+        "",
+        f"대상 {a['n']}통화 · 조건을 넘은 통화 {a['closed']} ({_pct(a['rate'])})",
+        f"오류(골드가 할 일·응급·불만·급함) {_kn(e)}"
+        + (f" · 95% 구간 {_pct(ci[0])}~{_pct(ci[1])}" if ci else ""),
+        "항목별 — " + " · ".join(f"{names[i]} {k}" for i, k in a["by_item"].items()),
+        "",
+    ]
 
 
 def _render_crosscheck(xs: list[dict]) -> list[str]:
