@@ -420,3 +420,97 @@ def test_main_reports_app_refusal_without_traceback(conn, tmp_path, monkeypatch,
         ]
     )
     assert code != 0 and "벡터 없는 청크" in capsys.readouterr().out
+
+
+def _audit_file(tmp_path, arbiter="judge"):
+    """c-0002(dev) 용건을 중재가 판정기 쪽으로 고른 기록 — 골드 오류 추정 1"""
+    from evaluation import gold_audit
+
+    p = tmp_path / "gold_audit.jsonl"
+    gold_audit.save(
+        p,
+        [
+            {
+                "call_uid": "c-0002",
+                "judge_version": "v1",
+                "transcript_sha": gold_audit.transcript_sha("환자: 통화 2"),
+                "items": {
+                    "primary_purpose": {
+                        "gold": "complaint",
+                        "judge": "book",
+                        "arbiter": arbiter,
+                        "human": "judge",
+                    },
+                    "complaint": {"gold": 1, "judge": 0, "arbiter": "gold", "human": "gold"},
+                },
+            }
+        ],
+    )
+    return p
+
+
+def test_dev_report_drops_gold_errors(conn, reports, tmp_path):
+    out = _run(conn, reports, split="dev", gold_audit_path=_audit_file(tmp_path))
+    r = _json(out)
+    j = r["judge"]["v1"]
+    assert j["judge_vs_gold_audited"]["purpose"]["n"] == j["judge_vs_gold"]["purpose"]["n"] - 1
+    assert (
+        j["judge_vs_gold_audited"]["items"]["complaint"]["n"]
+        == j["judge_vs_gold"]["items"]["complaint"]["n"]
+    )
+    c = r["classification"]["versions"]["v1"]
+    assert c["model_vs_gold_audited"]["purpose"]["n"] == c["model_vs_gold"]["purpose"]["n"] - 1
+    assert r["gold_audit"]["summary"]["calls"] == 1 and r["gold_audit"]["stale"] == 0
+    assert r["gold_audit"]["missing"] == 0
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert (
+        "## 골드 점검" in md
+        and "골드 오류 추정 제외(중재 기준·참고, 점검 판정기 v1)" in md
+        and "중재 선택별 사람 일치" in md
+    )
+    table = [
+        line
+        for line in md.splitlines()
+        if line.startswith("| primary_purpose") or line.startswith("| complaint")
+    ]
+    assert table[0].startswith("| primary_purpose")  # ITEMS 순
+
+
+def test_report_shows_unarbitrated_targets(conn, reports, tmp_path):
+    """중재가 덜 끝났으면 '중재 안 된 대상'을 보인다"""
+    from evaluation import gold_audit
+
+    p = tmp_path / "gold_audit.jsonl"
+    gold_audit.save(p, [])
+    out = _run(conn, reports, split="dev", gold_audit_path=p)
+    assert _json(out)["gold_audit"]["missing"] == 1
+    assert "중재 안 된 대상 1" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_report_when_judge_version_unknown(conn, reports, tmp_path, monkeypatch):
+    from evaluation import classification
+
+    monkeypatch.setattr(classification, "judge_version", lambda conn: None)
+    out = _run(conn, reports, split="dev", gold_audit_path=_audit_file(tmp_path))
+    assert "골드 점검 — 판정기 버전을 못 정함" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_test_report_keeps_original_gold(conn, reports, tmp_path):
+    r = _json(
+        _run(
+            conn,
+            reports,
+            split="test",
+            section="judge",
+            prompt_version="v1",
+            gold_audit_path=_audit_file(tmp_path),
+        )
+    )
+    assert "judge_vs_gold_audited" not in r["judge"]["v1"]
+    assert r["gold_audit"]["summary"]["calls"] == 1
+
+
+def test_report_without_audit_file(conn, reports, tmp_path):
+    out = _run(conn, reports, split="dev", gold_audit_path=tmp_path / "없음.jsonl")
+    assert _json(out)["gold_audit"] is None
+    assert "골드 점검 전" in out["report_path"].read_text(encoding="utf-8")

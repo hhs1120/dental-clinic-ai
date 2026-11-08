@@ -16,6 +16,8 @@ reports/eval_dev_*
 reports/tune_*
 # 개선 에이전트 실행 기록 — 골드가 들어 있다
 evaluation/runs/
+# 골드 점검 배치 진행 상태(끝나면 지워짐)
+evaluation/gold_audit_batch.json
 
 # 프론트 의존성·빌드 결과
 frontend/node_modules

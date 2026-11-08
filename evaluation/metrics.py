@@ -10,6 +10,7 @@ DATE_FROM, DATE_TO = "date_from", "date_to"
 SILVER_MATERIAL_SHARE = (
     0.7  # silver 재료 비율, 나머지는 검증(평가 설계 §2.7 — evaluation/splits.py)
 )
+GOLD_AUDIT_SAMPLE = 50  # 골드 점검 사람 표본 통화 수(평가 설계 §2.3 — evaluation/gold_audit.py)
 
 
 def fraction(k: int, n: int) -> str:

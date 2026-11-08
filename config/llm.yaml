@@ -8,8 +8,10 @@ aliases:
   chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
   blind_judge: [claude-haiku-5-5]                  # ② 블라인드 LLM 쌍 비교(평가 설계 §2.4) — 요약을 쓴 모델과 같아 자기 글 쏠림은 사람 투표 일치율로 본다
   rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
+  gold_audit: [claude-opus-5-5]                    # 골드 점검 중재(평가 설계 §2.3) — 생성기(Sonnet)·판정기(Solar)와 다른 모델, 폴백 없음(섞이면 중재가 바뀐다)
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
 models:
+  claude-opus-5-5: { input: 4.00, output: 20.00, cache_read: 0.20 }  # 서버 측 폴백 안 씀 — 골드 점검 중재만
   claude-sonnet-5-5: { input: 2.00, output: 10.00, cache_read: 0.20, server_fallback: true }
   claude-sonnet-5: { input: 2.00, output: 10.00, cache_read: 0.20 }
   claude-haiku-5-5: { input: 0.10, output: 0.50 }   # 프롬프트 10만 토큰 이하 단가(넘으면 0.50/2.50 — 분류 입력은 통화 하나라 해당 없음)

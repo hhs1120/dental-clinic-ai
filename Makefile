@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -37,6 +37,13 @@ disagreements:
 blind-judge:
 	$(if $(and $(A),$(B),$(V)),,$(error A=분류 버전 B=분류 버전 V=쌍 비교 프롬프트 버전 필요))
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch blind --a $(A) --b $(B) --version $(V)
+
+# 골드 점검(평가 설계 §2.3) — 중재(과금, 빠진 건만)·사람 표본 터미널 화면. 골드를 보므로 evaluation/에서
+gold-arbitrate:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gold_audit arbitrate $(if $(BATCH),--batch)
+
+gold-audit:
+	uv run python -m evaluation.gold_audit audit
 
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:
