@@ -8,10 +8,13 @@ uv run --group finetune python -m evaluation.finetune.qwen predict <full|half|sp
   셋 기본 validation,dev,s1,s2,s3 · limit은 셋마다 앞 N건 · none은 학습 전 기본 모델
 uv run --env-file .env python -m evaluation.finetune.qwen baselines [--run-style [N]]
   Haiku v2·Solar v2 → out/baseline.jsonl. 검증·dev는 app.sqlite(읽기만), 문체 dev는 --run-style일 때 API 호출(과금, N건만 가능)
+uv run python -m evaluation.finetune.qwen score  → out/report.md (있는 Qwen 예측 half·full과 기준선)
 """
 
 import json
+import sqlite3
 import sys
+from collections import Counter
 from pathlib import Path
 
 from evaluation.finetune.qwen import data
@@ -72,6 +75,51 @@ def _baselines(args: list[str]) -> None:
         print(f"{path.name} {m} 라벨 없음(오답): {miss}")
 
 
+def _population() -> Counter:
+    """역확률 가중의 모집단 — 생성 통화 전체의 골드 목적 건수(evaluation/classification.py와 같다, 평가 설계 §2.2)"""
+    conn = sqlite3.connect(f"file:{ROOT}/data/source.sqlite?mode=ro", uri=True)
+    conn.execute(f"ATTACH 'file:{ROOT}/ground_truth/truth.sqlite?mode=ro' AS truth")
+    rows = conn.execute(
+        "SELECT l.primary_purpose, COUNT(*) FROM ax_calls c JOIN truth.truth_call_labels l"
+        " USING (call_uid) WHERE c.source = 'generated' GROUP BY 1"
+    ).fetchall()
+    conn.close()
+    return Counter(dict(rows))
+
+
+def _score() -> None:
+    from evaluation.finetune.qwen import score, train
+
+    rows = [json.loads(line) for line in (data.DATA / "eval.jsonl").read_text().splitlines()]
+    preds = {}
+    for name in ("half", "full"):
+        path = train.OUT / f"pred_{name}.jsonl"
+        if path.exists():
+            preds[f"qwen_{name}"] = {
+                r["id"]: r["labels"] for r in map(json.loads, path.read_text().splitlines())
+            }
+    for r in map(json.loads, (train.OUT / "baseline.jsonl").read_text().splitlines()):
+        preds.setdefault(r["model"], {})[r["id"]] = r["labels"]
+    population = _population()
+    results = {
+        m: {
+            s: score.score_set(
+                p, [r for r in rows if r["set"] == s], None if s == "validation" else population
+            )
+            for s in data.SETS
+        }
+        for m, p in preds.items()
+    }
+    crit = {
+        m: score.criteria(results[m], results["haiku_v2"]["validation"])
+        for m in results
+        if m.startswith("qwen_")
+    }
+    text = score.report(results, crit)
+    (train.OUT / "report.md").write_text(text)
+    print(text)
+
+
 def main(argv: list[str]) -> None:
     cmd, *args = argv or [""]
     if cmd == "data":
@@ -111,8 +159,10 @@ def main(argv: list[str]) -> None:
         _predict(*args)
     elif cmd == "baselines":
         _baselines(args)
+    elif cmd == "score":
+        _score()
     else:
-        raise SystemExit("명령: data | lengths | train | status | predict | baselines")
+        raise SystemExit("명령: data | lengths | train | status | predict | baselines | score")
 
 
 if __name__ == "__main__":
