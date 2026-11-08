@@ -340,3 +340,7 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
         cl.save_judgment(conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b))
         disagreements.compute_call(conn, call_uid, a, b)
     judge_queue.refresh_call(conn, call_uid)
+    from backend import autoclose  # autoclose가 이 모듈을 import한다
+
+    autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로
+    conn.commit()

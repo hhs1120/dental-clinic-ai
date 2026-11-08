@@ -132,6 +132,13 @@ def save(
         (call_uid, at),
     )
     conn.commit()
+    if any(labels.get(k) for k in ("has_todo", "emergency", "complaint")) or (
+        labels.get("urgency") == "urgent"
+    ):  # 자동 종결된 통화면 푼다 — 사람 되돌림이라 다시 닫히지 않는다(기능 정의 §4 ①)
+        from backend import autoclose  # autoclose가 calls를 거쳐 이 모듈과 얽힌다
+
+        if autoclose.unclose_by_human(conn, call_uid, part):
+            conn.commit()
     a, b = active_versions(conn)
     return {
         "classifier": _model_labels(conn, "ax_call_classifications", "classify", call_uid, a),
