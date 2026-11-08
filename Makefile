@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -55,6 +55,10 @@ action-audit:
 # ① 후속 에이전트(backend/followup.py) — 오늘 할 일에 오른 통화 중 처리안 없는 것(일반 호출, 과금)
 followups:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run
+
+# ① 후속 처리 평가 실행(evaluation/followup.py) — 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
+followup-eval:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.followup run $(if $(NO_BATCH),--no-batch)
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:

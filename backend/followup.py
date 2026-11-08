@@ -111,11 +111,16 @@ def verify_facts(summary: str, facts: list[str], sources: list[str]) -> bool:
     return _numbers(" ".join([summary, *facts])) <= have
 
 
-def _active(conn, call_uid: str) -> tuple[dict, dict] | None:
+def active(conn, call_uid: str, include_pool: bool = False) -> tuple[dict, dict] | None:
+    """(통화, 활성 분류) — 앱은 판정 풀 밖 통화만(CALLS_CTE). 평가 실행만 include_pool로 판정 풀 통화도"""
     a, _ = calls.active_versions(conn)
-    call = conn.execute(
-        calls.CALLS_CTE + " SELECT * FROM calls WHERE call_uid = ?", (call_uid,)
-    ).fetchone()
+    sql = (
+        "SELECT a.call_uid, a.direction, a.transcript, p.chart_no FROM source.ax_calls a"
+        " LEFT JOIN source.emr_patients p ON p.id = a.patient_id WHERE a.call_uid = ?"
+        if include_pool
+        else calls.CALLS_CTE + " SELECT * FROM calls WHERE call_uid = ?"
+    )
+    call = conn.execute(sql, (call_uid,)).fetchone()
     k = conn.execute(
         "SELECT id, status, labels, summary, todo FROM ax_call_classifications"
         " WHERE call_uid = ? AND model_alias = 'classify' AND prompt_version = ?",
@@ -145,11 +150,23 @@ def _submitted(store: RunStore, run_id: int) -> tuple[dict | None, list[str]]:
     return args, results
 
 
+def judge_run(
+    store: RunStore, run_id: int, transcript: str
+) -> tuple[str, dict | None, str | None]:
+    """실행 하나 → (done | unverified | failed, 제출 인자, 이유). 평가 실행(라운드 배치)도 같이 쓴다"""
+    args, results = _submitted(store, run_id)
+    if args is None:
+        return "failed", None, store.run(run_id)["reason"] or "처리안을 내지 않음"
+    if verify_facts(args["summary"], args["facts"], [transcript, *results]):
+        return "done", args, None
+    return "unverified", args, "후검증 실패 — 근거의 숫자가 조회 결과·녹취록에 없음"
+
+
 def run_for_call(
     conn: sqlite3.Connection, gw, call_uid: str, clinic: Clinic | None = None, searcher=None
 ) -> dict | None:
     """활성 분류가 ok이고 할 일이 있는 통화에 처리안 — 그 분류 행에 이미 있으면 아무것도 하지 않는다"""
-    found = _active(conn, call_uid)
+    found = active(conn, call_uid)
     if found is None or not found[1]["labels"].get("has_todo"):
         return None
     call, cls = found
@@ -162,17 +179,13 @@ def run_for_call(
     store = RunStore(conn)
     runner = Runner(spec(names), gw, store, reg)
     status, reason, args, run_id = "failed", None, None, None
-    for _ in range(ATTEMPTS):
-        out = runner.start(call_uid, input_text(call, cls))
-        run_id = out.run_id
-        args, results = _submitted(store, run_id)
-        if args is None:
-            reason = out.reason or "처리안을 내지 않음"
-            break  # 제출이 없으면 다시 돌려도 같은 길 — 후검증 실패만 다시 돈다
-        if verify_facts(args["summary"], args["facts"], [call["transcript"], *results]):
-            status, reason = "done", None
+    for _ in range(ATTEMPTS):  # 후검증 실패만 다시 돈다 — 제출이 없으면 다시 돌려도 같은 길
+        run_id = runner.start(call_uid, input_text(call, cls)).run_id
+        status, args, reason = judge_run(store, run_id, call["transcript"])
+        if status != "unverified":
             break
-        reason = "후검증 실패 — 근거의 숫자가 조회 결과·녹취록에 없음"
+    if status == "unverified":
+        status = "failed"
     row = {
         "call_uid": call_uid,
         "classification_id": cls["id"],
