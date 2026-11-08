@@ -30,7 +30,8 @@ CALLS_CTE = (
 )
 ROWS_SQL = (
     CALLS_CTE + " SELECT calls.*, k.id AS classification_id, k.status, k.labels, k.summary,"
-    " k.todo, j.labels AS judge_labels, d.items AS disagree_items, d.is_core"
+    " k.todo, j.labels AS judge_labels, d.items AS disagree_items, d.is_core,"
+    " auto.id AS close_id, auto.reason AS close_reason, auto.created_at AS closed_at"
     " FROM calls"
     " LEFT JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
     "  AND k.model_alias = 'classify' AND k.prompt_version = :a"
@@ -38,6 +39,9 @@ ROWS_SQL = (
     "  AND j.model_alias = 'judge' AND j.prompt_version = :b AND j.status = 'ok'"
     " LEFT JOIN ax_call_disagreements d ON d.call_uid = calls.call_uid"
     "  AND d.a_version = :a AND d.b_version = :b"
+    # 되돌리지 않은 자동 종결 — 앱 상태는 이 행 자체(backend/autoclose.py)
+    " LEFT JOIN ax_auto_actions auto ON auto.kind = 'call_autoclose'"
+    "  AND auto.target = calls.call_uid AND auto.reverted_at IS NULL"
 )
 
 
@@ -94,7 +98,8 @@ def today_board(conn: sqlite3.Connection, today: date) -> dict:
     since = (today - timedelta(days=TODAY_WINDOW_DAYS)).isoformat()
     rows = _rows(
         conn,
-        "k.status = 'ok' AND (calls.source = 'pasted' OR calls.at >= :since)",
+        "k.status = 'ok' AND auto.id IS NULL"  # 자동 종결된 통화는 오르지 않는다(기능 정의 §4 ①)
+        " AND (calls.source = 'pasted' OR calls.at >= :since)",
         {"since": since},
     )
     checks = _checks(conn, [r["classification_id"] for r in rows])
@@ -152,6 +157,7 @@ def _card(r, checks: dict) -> dict:
         "todo_total": len(todo),
         "todo_left": sum(not t["done"] for t in todo),
         "summary": r["summary"],
+        "closed": r["close_id"] is not None,
     }
 
 
@@ -230,6 +236,11 @@ def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
         "disagree": (
             {"items": json.loads(r["disagree_items"]), "is_core": bool(r["is_core"])}
             if r["disagree_items"] is not None
+            else None
+        ),
+        "autoclose": (
+            {"id": r["close_id"], "reason": r["close_reason"], "at": r["closed_at"]}
+            if r["close_id"] is not None
             else None
         ),
     }

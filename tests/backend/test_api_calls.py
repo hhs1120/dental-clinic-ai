@@ -178,3 +178,58 @@ def test_list_calls_limit(client):
     assert sum(len(d["calls"]) for d in r["days"]) == 1 and r["next"]
     assert client.get("/calls", params={"limit": 0}).status_code == 422
     assert client.get("/calls", params={"limit": 501}).status_code == 422
+
+
+def _close(tmp_path, uid):
+    """자동 종결 행을 바로 넣는다(조건 계산은 test_autoclose가 본다)"""
+    from backend import autoclose, db
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    c.execute(
+        "INSERT INTO ax_auto_actions (kind, target, result, reason, created_at)"
+        " VALUES (?, ?, '{}', ?, '2026-11-05 09:00:00')",
+        (autoclose.KIND, uid, autoclose.REASON),
+    )
+    c.commit()
+    aid = c.execute("SELECT max(id) FROM ax_auto_actions").fetchone()[0]
+    c.close()
+    return aid
+
+
+def test_board_hides_closed(client, tmp_path):
+    _close(tmp_path, "c-0001")
+    b = client.get("/calls/today").json()
+    uids = {i["call_uid"] for col in ("internal", "contact", "done") for i in b[col]}
+    assert "c-0001" not in uids and "c-0004" in uids
+
+
+def test_list_and_detail_show_closed(client, tmp_path):
+    _close(tmp_path, "c-0001")
+    cards = [c for d in client.get("/calls").json()["days"] for c in d["calls"]]
+    closed = {c["call_uid"]: c["closed"] for c in cards}
+    assert closed["c-0001"] is True and closed["c-0004"] is False
+    d = client.get("/calls/c-0001").json()
+    assert d["autoclose"]["reason"] and d["autoclose"]["at"] == "2026-11-05 09:00:00"
+    assert client.get("/calls/c-0004").json()["autoclose"] is None
+
+
+def test_revert_returns_to_board(client, tmp_path):
+    aid = _close(tmp_path, "c-0001")
+    r = client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"})
+    assert r.status_code == 200
+    b = client.get("/calls/today").json()
+    assert "c-0001" in {i["call_uid"] for i in b["internal"]}
+    assert client.get("/calls/c-0001").json()["autoclose"] is None
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 409
+    assert client.post("/auto-actions/999/revert", json={"part": "데스크"}).status_code == 404
+
+
+def test_detail_and_revert_pasted(client, tmp_path):
+    uid = client.post(
+        "/calls",
+        json={"direction": "inbound", "transcript": "직원: 네\n환자: 확인이요", "part": "데스크"},
+    ).json()["call_uid"]
+    aid = _close(tmp_path, uid)
+    assert client.get(f"/calls/{uid}").json()["autoclose"]["id"] == aid
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 200
+    assert client.get(f"/calls/{uid}").json()["autoclose"] is None
