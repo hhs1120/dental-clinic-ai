@@ -203,7 +203,7 @@ tags:
 
 **재발 방지**(하네스가 실수를 환경 수정으로 바꾼 결과): 규칙 수, 규칙별 차단 횟수, 재현 테스트 통과율, 같은 유형 재발 건수. 차단이 많다고 좋은 규칙은 아니므로 차단된 건 표본의 오차단율을 함께 본다
 
-**① 후속 처리**: 처리안 정확도(`truth_call_actions`)를 규칙 기준선과 나란히. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 분류 `--prompt-version` × 판정기 버전 한 쌍으로 잰다(`evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 판정 풀은 앱이 자동 처리하지 않으므로 `eval.py`가 같은 조건 함수와 평가 실행으로 재고 결과는 리포트에만 남긴다
+**① 후속 처리**: 처리안 정확도(`truth_call_actions`)를 규칙 기준선과 나란히. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 잰다(묶음 키는 §7, `evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 앱의 종결 기록을 읽지 않고 `eval.py`가 같은 조건 함수로 다시 재며(test 판정 풀은 앱이 자동 처리하지 않는다) 결과는 리포트에만 남긴다
 
 **시나리오 평가**(⑥·운영 에이전트): 생성 데이터에 정답이 없어 시나리오 DB로 잰다. ⑥은 이상 원인 정확도, 운영 에이전트는 심은 환자 묶음의 재현율·정밀도를 고정 순서 기준선과 나란히. 시나리오는 dev/test로 나누고 test는 묶음마다 1회
 
@@ -269,7 +269,7 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - 자동 처리 값도 `eval.py`가 낸다(§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
-- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류·자동 처리는 분류 `--prompt-version` 하나, 판정은 판정기 `--prompt-version` 하나, 교차검증은 분류 `--prompt-version` 하나 × 판정기 버전(하나뿐이면 그것, 여럿이면 `ax_settings.prompt_versions`의 judge), RAG는 검색·챗 중 하나와 조건 하나). 분류 묶음에는 판정기 수치를 내지 않는다. 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있거나, 교차검증에서 판정기와 겹치는 통화가 없거나 모델 A·B가 같으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
+- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류는 분류 `--prompt-version` 하나, 판정은 판정기 `--prompt-version` 하나, 교차검증·자동 종결은 분류 `--prompt-version` 하나 × 판정기 버전(하나뿐이면 그것, 여럿이면 `ax_settings.prompt_versions`의 judge), RAG는 검색·챗 중 하나와 조건 하나). 분류 묶음에는 판정기 수치를 내지 않는다. 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있거나, 교차검증에서 판정기와 겹치는 통화가 없거나 모델 A·B가 같으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
 - **`--condition`**: `embedding=<모델>,reranker=<off·haiku·rerank-…>` 형식이고 빠진 키는 기본값이다(`backend/rag_search.py` `parse_condition`). 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다)
 - **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록 — dev 판정 풀만, 골드 기준. 비풀은 관문 검증 구간이라 건별로 보이지 않는다, §2.7)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
 - **few-shot 예시 제외**: 예시는 사람이 판정한 운영 판정 건에서만 고르고(골드 점검 표본은 골드로 뽑은 통화라 쓰지 않는다), 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`, classify는 버전 폴더의 `labels.md`)의 예시 `call_uid`를 dev 집계와 관문 모수에서 뺀다. 자동 개선은 few-shot을 추가하지 않는다
