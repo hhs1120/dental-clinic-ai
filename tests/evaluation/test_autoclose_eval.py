@@ -47,3 +47,18 @@ def test_error_counts_gold_todo(conn):
 def test_test_split_is_test_pool_only(conn):
     r = autoclose.evaluate(conn, "test", "v2", "v1")
     assert r["n"] == 1 and r["closed"] == 0  # 통화 3 — 목적 엇갈림
+
+
+def test_summary_fallback_blocks(conn):
+    """앱과 같게 요약 호출이 폴백한 분류는 조건을 못 넘는다"""
+    conn.execute(
+        "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, fallback_used, ok, created_at)"
+        " VALUES (900, 'summarize', 'summarize', 'sonnet', 'v2', 1, 1, '2026-12-01 09:00:00')"
+    )
+    conn.execute(
+        "UPDATE ax_call_classifications SET summary_llm_call_id = 900"
+        " WHERE prompt_version = 'v2' AND call_uid IN ('c-0001', 'c-0004')"
+    )
+    conn.execute("UPDATE truth.truth_call_labels SET split = 'silver' WHERE call_uid = 'c-0001'")
+    r = autoclose.evaluate(conn, "dev", "v2", "v1")
+    assert r["closed"] == 0

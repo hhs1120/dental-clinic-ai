@@ -1,4 +1,4 @@
-"""① 자동 종결 (기능 정의 §4 ①·§3 원칙 1, 앱 설계 §3b·§7.3). 확인할 것이 없는 통화 — 두 모델 모두 할 일 없음이고
+"""① 자동 종결 (기능 정의 §4 ①·§3 원칙 1, 앱 설계 §3b·§7.2). 확인할 것이 없는 통화 — 두 모델 모두 할 일 없음이고
 응급·불만·급함·엇갈림·폴백이 없는 통화 — 를 `auto_policy`가 켜졌을 때 `apply_auto_action`으로 닫는다.
 조건 함수 `autoclose_reason`은 eval.py의 자동 종결 오류율도 같이 쓴다(평가 설계 §5)."""
 
@@ -10,6 +10,7 @@ from pathlib import Path
 
 from backend import calls, db
 from backend.harness.auto import AutoKind, apply_auto_action, revert_auto_action
+from backend.harness.policy import check_source
 from shared.call_labels import differing_items
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,20 +36,23 @@ def autoclose_reason(cls: dict | None, judge: dict | None) -> str | None:
     return REASON
 
 
-# ── 실행·풀기 (make autoclose, 새 통화, 사람 판정 — 앱 설계 §3b·§7.3) ─────────────
+# ── 실행·풀기 (make autoclose, 새 통화, 사람 판정 — 앱 설계 §3b·§7.2) ─────────────
 
 
 def pair(conn: sqlite3.Connection, call_uid: str) -> tuple[dict | None, dict | None]:
-    """활성 분류·판정기 결과를 autoclose_reason 인자 모양으로 — 폴백은 그 결과의 LLM 호출 기록에서"""
+    """활성 분류·판정기 결과를 autoclose_reason 인자 모양으로 — 폴백은 그 결과의 LLM 호출 기록에서. 분류는 라벨·요약
+    두 호출 중 하나라도 폴백이면 폴백(backend/disagreements.py와 같은 규칙)"""
     a, b = calls.active_versions(conn)
 
-    def one(table: str, alias: str, version: str | None, todo: str) -> dict | None:
+    def one(table: str, alias: str, version: str | None, todo: str, extra: str) -> dict | None:
         if version is None:
             return None
         r = conn.execute(
-            f"SELECT t.status, t.labels, {todo} AS todo, COALESCE(l.fallback_used, 0) AS fallback"
+            f"SELECT t.status, t.labels, {todo} AS todo,"
+            " COALESCE(l.fallback_used, 0) OR COALESCE(s.fallback_used, 0) AS fallback"
             f" FROM {table} t"
             " LEFT JOIN ax_llm_calls l ON l.id = t.llm_call_id"
+            f" LEFT JOIN ax_llm_calls s ON s.id = {extra}"
             " WHERE t.call_uid = ? AND t.model_alias = ? AND t.prompt_version = ?",
             (call_uid, alias, version),
         ).fetchone()
@@ -63,8 +67,8 @@ def pair(conn: sqlite3.Connection, call_uid: str) -> tuple[dict | None, dict | N
         }
 
     return (
-        one("ax_call_classifications", "classify", a, "t.todo"),
-        one("ax_model_judgments", "judge", b, "NULL"),
+        one("ax_call_classifications", "classify", a, "t.todo", "t.summary_llm_call_id"),
+        one("ax_model_judgments", "judge", b, "NULL", "NULL"),
     )
 
 
@@ -86,6 +90,21 @@ def _row(conn, call_uid: str):
     ).fetchone()
 
 
+HUMAN_FLAGS = ("has_todo", "emergency", "complaint")
+
+
+def human_flag(conn, call_uid: str) -> str | None:
+    """사람 판정이 할 일·응급·불만·급함 중 하나를 켰으면 판정한 파트 — 그런 통화는 닫지 않는다(기능 정의 §4 ①)"""
+    row = conn.execute(
+        "SELECT labels, judged_by FROM ax_judgments WHERE call_uid = ?", (call_uid,)
+    ).fetchone()
+    if row is None:
+        return None
+    lab = json.loads(row["labels"])
+    hit = any(lab.get(k) for k in HUMAN_FLAGS) or lab.get("urgency") == "urgent"
+    return row["judged_by"] if hit else None
+
+
 def policy_on(conn) -> bool:
     return bool(db.get_setting(conn, "auto_policy", {}).get(KIND))
 
@@ -97,6 +116,11 @@ def refresh_call(conn: sqlite3.Connection, call_uid: str, clock=datetime.now) ->
         return "off"
     row = _row(conn, call_uid)
     if row and row["reverted_at"]:
+        return "kept"
+    if by := human_flag(conn, call_uid):  # 종결 전후 어느 쪽이든 사람이 켰으면 사람 되돌림으로
+        if row:
+            revert_auto_action(conn, KINDS, row["id"], by, clock)
+            return "opened"
         return "kept"
     reason = autoclose_reason(*pair(conn, call_uid))
     if reason and not row:
@@ -144,7 +168,13 @@ def main(argv=None) -> None:
     pol.add_argument("kind")
     pol.add_argument("state", choices=("on", "off"))
     args = p.parse_args(argv)
-    conn = db.connect(ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite")
+    source = ROOT / "data" / "source.sqlite"
+    conn = db.connect(ROOT / "data" / "app.sqlite", source)
+    if check_source(
+        conn, source
+    ):  # 생성 데이터가 바뀌면 정책을 전부 끈다(앱 설계 §7.3) — 야간 실행 전의 대신
+        conn.commit()
+        print("생성 데이터가 바뀌어 auto_policy를 모두 껐다 — 다시 측정한 뒤 켠다")
     if args.cmd == "policy":
         set_policy(conn, args.kind, args.state == "on")
         print(f"auto_policy {args.kind} = {args.state}")

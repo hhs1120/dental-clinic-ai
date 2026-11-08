@@ -202,3 +202,113 @@ def test_human_judgment_unclose(conn):
         "SELECT reverted_by FROM ax_auto_actions WHERE target = 'c-0001'"
     ).fetchone()
     assert row["reverted_by"] == "데스크"
+
+
+# ── 리뷰 반영: 요약 폴백, 먼저 들어온 사람 판정, 판정 예외, 새 통화 경로 ─────────────
+
+from dataclasses import replace  # noqa: E402
+from datetime import date, datetime  # noqa: E402
+
+from shared.llm import BudgetExceeded  # noqa: E402
+
+CLEAN_B = {k: (bool(v) if isinstance(v, int) else v) for k, v in CLEAN.items()}
+
+
+class Clean(FakeGateway):
+    """분류·판정 라벨은 깨끗하게, 요약은 할 일 없이 — raise_judge면 판정에서 하루 상한 예외"""
+
+    def __init__(self, conn, raise_judge=False, labels=None, todo=()):
+        super().__init__(SqliteLlmLog(conn), scope="runtime")
+        self.raise_judge, self.labels, self.todo = raise_judge, labels or CLEAN_B, list(todo)
+
+    def complete(self, alias, **kw):
+        if alias == "judge" and self.raise_judge:
+            raise BudgetExceeded("하루 상한")
+        r = super().complete(alias, **kw)
+        if alias in ("classify", "judge"):
+            return replace(r, data=dict(self.labels))
+        if alias == "summarize":
+            return replace(r, data={"summary": "요약", "todo": self.todo})
+        return r
+
+
+def test_summary_fallback_blocks(conn):
+    """요약 호출만 폴백해도 앱 엇갈림 규칙처럼 닫지 않는다"""
+    conn.execute(  # 라벨 호출과 다른 요약 호출 행 — fixture는 둘이 같은 행을 가리킨다
+        "INSERT INTO ax_llm_calls (task, model_alias, model_actual, ok, fallback_used, created_at)"
+        " VALUES ('summarize', 'summarize', 'sonnet', 1, 1, '2026-11-05 09:00:00')"
+    )
+    conn.execute(
+        "UPDATE ax_call_classifications SET summary_llm_call_id = (SELECT max(id) FROM ax_llm_calls)"
+        " WHERE call_uid = 'c-0001'"
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn) and "c-0003" in _closed(conn)
+
+
+def test_prior_human_judgment_blocks(conn):
+    """종결 전에 사람이 할 일 있음으로 판정한 통화는 닫지 않는다"""
+    conn.execute(
+        "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at)"
+        " VALUES ('c-0001', ?, '데스크', '2026-11-05 10:00:00')",
+        (json.dumps({"has_todo": True}),),
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn) and "c-0003" in _closed(conn)
+
+
+def test_judgment_after_close_without_save_unclose(conn):
+    """판정 행이 save 밖에서 들어와도 다음 계산에서 사람 되돌림으로 푼다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    conn.execute(
+        "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at)"
+        " VALUES ('c-0001', ?, '원장', '2026-11-05 10:00:00')",
+        (json.dumps({"urgency": "urgent"}),),
+    )
+    autoclose.run(conn)
+    row = conn.execute(
+        "SELECT reverted_by FROM ax_auto_actions WHERE target = 'c-0001'"
+    ).fetchone()
+    assert row["reverted_by"] == "원장"
+
+
+def test_classify_one_judge_exception_still_reopens(conn):
+    """다시 분류로 할 일이 생겼는데 판정이 예외로 끝나도 옛 종결은 풀린다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    gw = Clean(
+        conn,
+        raise_judge=True,
+        labels=CLEAN_B | {"has_todo": True},
+        todo=[{"kind": "contact", "text": "회신", "who": "", "after": -1}],
+    )
+    with pytest.raises(BudgetExceeded):
+        calls.classify_one(conn, gw, "c-0001")
+    assert "c-0001" not in _closed(conn)
+
+
+def test_classify_one_closes_after_judgment(conn):
+    """판정까지 들어오면 classify_one 흐름에서 바로 닫힌다"""
+    conn.execute("DELETE FROM ax_model_judgments WHERE call_uid = 'c-0003'")
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    calls.classify_one(conn, Clean(conn), "c-0003")
+    assert "c-0003" in _closed(conn)
+
+
+def test_pasted_call_closes(conn):
+    """새로 추가한 통화도 같은 조건으로 닫힌다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    uid = calls.add_call(
+        conn,
+        Clean(conn),
+        direction="inbound",
+        transcript="직원: 네\n환자: 그날 갈게요",
+        phone=None,
+        part="데스크",
+        now=datetime(2026, 11, 5, 14, 30),
+        today=date(2026, 12, 1),
+    )
+    assert uid in _closed(conn)

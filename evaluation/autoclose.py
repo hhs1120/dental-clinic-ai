@@ -28,14 +28,15 @@ def _population(calls: dict, split: str) -> set:
     return {u for u, part in silver_split(silver).items() if part == "validation"}
 
 
-def _arg(row: dict | None, todo=None) -> dict | None:
+def _arg(row: dict | None, todo=None, summary_fallback=False) -> dict | None:
+    """앱 backend/autoclose.py pair()와 같은 모양 — 분류는 라벨·요약 호출 중 하나라도 폴백이면 폴백"""
     if row is None:
         return None
     ok = row["status"] == "ok" and row["labels"] is not None
     return {
         "labels": row["labels"],
         "ok": ok,
-        "fallback": bool(row["fallback"]),
+        "fallback": bool(row["fallback"]) or summary_fallback,
         "todo": todo or [],
     }
 
@@ -46,16 +47,20 @@ def evaluate(conn, split: str, a: str, b: str) -> dict:
     pop = _population(calls, split)
     cls = {r["call_uid"]: r for r in _classifications(conn) if r["prompt_version"] == a}
     jud = {r["call_uid"]: r for r in _judgments(conn) if r["prompt_version"] == b}
-    todo = {
-        u: json.loads(t) if t else []
-        for u, t in conn.execute(
-            "SELECT call_uid, todo FROM ax_call_classifications"
-            " WHERE model_alias = 'classify' AND prompt_version = ?",
-            (a,),
-        )
-    }
+    todo, summary_fb = {}, {}
+    for u, t, fb in conn.execute(
+        "SELECT k.call_uid, k.todo, COALESCE(s.fallback_used, 0) FROM ax_call_classifications k"
+        " LEFT JOIN ax_llm_calls s ON s.id = k.summary_llm_call_id"
+        " WHERE k.model_alias = 'classify' AND k.prompt_version = ?",
+        (a,),
+    ):
+        todo[u], summary_fb[u] = (json.loads(t) if t else []), bool(fb)
     closed = [
-        u for u in sorted(pop) if autoclose_reason(_arg(cls.get(u), todo.get(u)), _arg(jud.get(u)))
+        u
+        for u in sorted(pop)
+        if autoclose_reason(
+            _arg(cls.get(u), todo.get(u), summary_fb.get(u, False)), _arg(jud.get(u))
+        )
     ]
     by_item = {i: 0 for i in ERROR_ITEMS}
     wrong = 0

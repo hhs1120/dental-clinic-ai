@@ -39,9 +39,11 @@ ROWS_SQL = (
     "  AND j.model_alias = 'judge' AND j.prompt_version = :b AND j.status = 'ok'"
     " LEFT JOIN ax_call_disagreements d ON d.call_uid = calls.call_uid"
     "  AND d.a_version = :a AND d.b_version = :b"
-    # 되돌리지 않은 자동 종결 — 앱 상태는 이 행 자체(backend/autoclose.py)
+    # 되돌리지 않은 자동 종결 — 앱 상태는 이 행 자체(backend/autoclose.py). 정책이 켜져 있고 지금 활성 버전 쌍으로
+    # 닫은 것만 종결로 본다 — 정책을 끄거나 버전을 바꾼 뒤 make autoclose 전의 낡은 종결이 할 일을 숨기지 않게
     " LEFT JOIN ax_auto_actions auto ON auto.kind = 'call_autoclose'"
-    "  AND auto.target = calls.call_uid AND auto.reverted_at IS NULL"
+    "  AND auto.target = calls.call_uid AND auto.reverted_at IS NULL AND :closing = 1"
+    "  AND json_extract(auto.result, '$.versions') = json_array(:a, :b)"
 )
 
 
@@ -56,7 +58,8 @@ def _rows(conn, where: str = "", params: dict | None = None) -> list[sqlite3.Row
     sql = (
         ROWS_SQL + (f" WHERE {where}" if where else "") + " ORDER BY calls.at DESC, calls.call_uid"
     )
-    return conn.execute(sql, {"a": a, "b": b, **(params or {})}).fetchall()
+    closing = int(bool(db.get_setting(conn, "auto_policy", {}).get("call_autoclose")))
+    return conn.execute(sql, {"a": a, "b": b, "closing": closing, **(params or {})}).fetchall()
 
 
 def _checks(conn, classification_ids: list[int]) -> dict:
@@ -347,11 +350,15 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
         (call_uid, a),
     )
     conn.commit()
-    if b:
-        cl.save_judgment(conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b))
-        disagreements.compute_call(conn, call_uid, a, b)
-    judge_queue.refresh_call(conn, call_uid)
     from backend import autoclose  # autoclose가 이 모듈을 import한다
 
-    autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로
-    conn.commit()
+    try:
+        if b:
+            cl.save_judgment(
+                conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b)
+            )
+            disagreements.compute_call(conn, call_uid, a, b)
+        judge_queue.refresh_call(conn, call_uid)
+    finally:  # 판정이 예외(하루 상한 등)로 끝나도 새 분류로 다시 계산 — 낡은 종결이 할 일을 숨기지 않게
+        autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로
+        conn.commit()

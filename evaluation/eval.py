@@ -24,6 +24,7 @@ from pathlib import Path
 
 import yaml
 
+from backend.calls import active_versions
 from evaluation import EvalRefused, autoclose, classification, gold_audit, rag
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
@@ -61,19 +62,6 @@ def fewshot_uids(path: Path) -> set[str]:
     if not isinstance(uids, list) or not all(isinstance(u, str) for u in uids):
         raise EvalRefused(f"{path}: fewshot_call_uids는 call_uid 목록이어야 함")
     return set(uids)
-
-
-def _active_classify(conn) -> str | None:
-    """활성 분류 버전 — ax_settings.active_prompt_version, 없으면 분류 기록의 마지막 버전(앱 설계 §6)"""
-    row = conn.execute(
-        "SELECT value FROM ax_settings WHERE key = 'active_prompt_version'"
-    ).fetchone()
-    if row:
-        return json.loads(row[0])
-    versions = [
-        r[0] for r in conn.execute("SELECT DISTINCT prompt_version FROM ax_call_classifications")
-    ]
-    return max(versions, key=classification.version_key) if versions else None
 
 
 def _history(reports_dir: Path) -> list[dict]:
@@ -280,7 +268,7 @@ def run(
         )
     if dev or section == "auto":  # 자동 종결 오류율(평가 설계 §5) — dev는 활성 분류 × 활성 판정기
         jv = classification.judge_version(conn)
-        a = prompt_version if section == "auto" else _active_classify(conn)
+        a = prompt_version if section == "auto" else active_versions(conn)[0]  # 앱과 같은 기본값
         if jv and a:
             result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
     if parts and app is not None:

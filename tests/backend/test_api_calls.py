@@ -1,5 +1,6 @@
 """통화·판정·블라인드·정확도 API (backend/api.py, 통화·② 판정 화면 설계 "API")."""
 
+import json
 from datetime import date, datetime
 
 import pytest
@@ -180,20 +181,48 @@ def test_list_calls_limit(client):
     assert client.get("/calls", params={"limit": 501}).status_code == 422
 
 
-def _close(tmp_path, uid):
-    """자동 종결 행을 바로 넣는다(조건 계산은 test_autoclose가 본다)"""
+def _close(tmp_path, uid, *, versions=("v2", "v2"), policy=True):
+    """자동 종결 행을 바로 넣는다(조건 계산은 test_autoclose가 본다). versions = 닫을 때의 활성 버전 쌍"""
     from backend import autoclose, db
 
     c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
     c.execute(
         "INSERT INTO ax_auto_actions (kind, target, result, reason, created_at)"
-        " VALUES (?, ?, '{}', ?, '2026-11-05 09:00:00')",
-        (autoclose.KIND, uid, autoclose.REASON),
+        " VALUES (?, ?, ?, ?, '2026-11-05 09:00:00')",
+        (autoclose.KIND, uid, json.dumps({"versions": list(versions)}), autoclose.REASON),
     )
-    c.commit()
+    autoclose.set_policy(c, autoclose.KIND, policy)
     aid = c.execute("SELECT max(id) FROM ax_auto_actions").fetchone()[0]
     c.close()
     return aid
+
+
+def _closed_cards(client) -> dict:
+    return {
+        c["call_uid"]: c["closed"] for d in client.get("/calls").json()["days"] for c in d["calls"]
+    }
+
+
+def test_list_and_detail_show_closed(client, tmp_path):
+    _close(tmp_path, "c-0001")
+    closed = _closed_cards(client)
+    assert closed["c-0001"] is True and closed["c-0004"] is False
+    d = client.get("/calls/c-0001").json()
+    assert d["autoclose"]["reason"] and d["autoclose"]["at"] == "2026-11-05 09:00:00"
+    assert client.get("/calls/c-0004").json()["autoclose"] is None
+
+
+def test_stale_close_is_not_shown(client, tmp_path):
+    """정책을 껐거나 활성 버전이 바뀐 뒤의 종결은 종결로 보지 않는다 — 할 일을 숨기지 않게"""
+    _close(tmp_path, "c-0001", policy=False)
+    assert _closed_cards(client)["c-0001"] is False
+    assert "c-0001" in {i["call_uid"] for i in client.get("/calls/today").json()["internal"]}
+    assert client.get("/calls/c-0001").json()["autoclose"] is None
+
+
+def test_close_from_other_versions_is_not_shown(client, tmp_path):
+    _close(tmp_path, "c-0001", versions=("v1", "v2"))
+    assert _closed_cards(client)["c-0001"] is False
 
 
 def test_board_hides_closed(client, tmp_path):
@@ -203,22 +232,11 @@ def test_board_hides_closed(client, tmp_path):
     assert "c-0001" not in uids and "c-0004" in uids
 
 
-def test_list_and_detail_show_closed(client, tmp_path):
-    _close(tmp_path, "c-0001")
-    cards = [c for d in client.get("/calls").json()["days"] for c in d["calls"]]
-    closed = {c["call_uid"]: c["closed"] for c in cards}
-    assert closed["c-0001"] is True and closed["c-0004"] is False
-    d = client.get("/calls/c-0001").json()
-    assert d["autoclose"]["reason"] and d["autoclose"]["at"] == "2026-11-05 09:00:00"
-    assert client.get("/calls/c-0004").json()["autoclose"] is None
-
-
-def test_revert_returns_to_board(client, tmp_path):
+def test_revert_clears_badge(client, tmp_path):
+    """되돌리면 딱지·상세 줄이 빠진다(다시 닫히지 않는 것은 test_autoclose.test_human_revert_sticks)"""
     aid = _close(tmp_path, "c-0001")
-    r = client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"})
-    assert r.status_code == 200
-    b = client.get("/calls/today").json()
-    assert "c-0001" in {i["call_uid"] for i in b["internal"]}
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 200
+    assert _closed_cards(client)["c-0001"] is False
     assert client.get("/calls/c-0001").json()["autoclose"] is None
     assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 409
     assert client.post("/auto-actions/999/revert", json={"part": "데스크"}).status_code == 404
