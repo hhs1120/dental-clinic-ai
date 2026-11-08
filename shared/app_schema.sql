@@ -145,6 +145,20 @@ CREATE TABLE ax_settings (
     value TEXT NOT NULL  -- JSON
 );
 
+-- 후속 에이전트 처리안(기능 정의 §4 ①) — 분류 행 단위(분류 버전이 바뀌면 새 처리안). 실패면 action 없이 이유
+CREATE TABLE ax_call_followups (
+    id                INTEGER PRIMARY KEY,
+    call_uid          TEXT NOT NULL,
+    classification_id INTEGER NOT NULL UNIQUE REFERENCES ax_call_classifications(id),
+    action            TEXT,  -- shared/followup.py ACTIONS
+    summary           TEXT,
+    facts             TEXT NOT NULL DEFAULT '[]',  -- 근거 문장 JSON
+    run_id            INTEGER,  -- ax_agent_runs.id(실행 기록은 다시 만들 수 있어 외래 키 없음)
+    status            TEXT NOT NULL CHECK (status IN ('done', 'failed')),
+    reason            TEXT,
+    created_at        TEXT NOT NULL
+);
+
 CREATE TABLE ax_agent_runs (
     id             INTEGER PRIMARY KEY,
     agent          TEXT NOT NULL,

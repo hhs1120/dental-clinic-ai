@@ -362,3 +362,9 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
     finally:  # 판정이 예외(하루 상한 등)로 끝나도 새 분류로 다시 계산 — 낡은 종결이 할 일을 숨기지 않게
         autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로
         conn.commit()
+    from backend import followup  # followup이 이 모듈을 import한다
+
+    try:  # 할 일이 있으면 처리안 — 실패해도 분류 흐름은 막지 않는다(실패는 처리안 행에 남는다)
+        followup.run_for_call(conn, gw, call_uid)
+    except Exception:  # noqa: BLE001
+        conn.rollback()

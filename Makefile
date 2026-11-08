@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -51,6 +51,10 @@ action-label:
 
 action-audit:
 	uv run python -m evaluation.call_actions audit
+
+# ① 후속 에이전트(backend/followup.py) — 오늘 할 일에 오른 통화 중 처리안 없는 것(일반 호출, 과금)
+followups:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:
