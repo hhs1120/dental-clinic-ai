@@ -168,7 +168,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
-  - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge만 읽는다
+  - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge·gold_audit만 읽는다
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
   - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다(지금은 `make classify`와 `ax_settings` 직접 설정 — 작업 API는 [[치과 AX - 기능 정의]] §9). 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
   - **전환 뒤 상태**: 자동 종결의 되돌림은 통화 단위라 그대로 둔다. 자동 종결은 새 분류로 조건을 다시 계산해 못 넘는 통화의 종결을 풀고 "오늘 할 일"로 돌린다. 할 일 체크(`ax_todo_checks`)는 분류 행 단위라 버전을 바꾸면 이어지지 않는다(이어 붙일지는 [[치과 AX - 기능 정의]] §9 후속 에이전트)

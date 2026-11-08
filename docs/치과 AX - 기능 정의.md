@@ -336,7 +336,7 @@ tags:
 | ① 자동 종결 | — | 자동 처리율·자동 처리 오류율 |
 | ① 후속 처리 | 에이전트 vs 규칙 기준선 | 처리안 정확도 |
 | ② 판정 | 판정기 vs 골드 | 항목별 일치율·운영 구간에서 사람이 보는 비율 |
-| ② 골드 점검 | 중재 판정기 vs 사람(표본) | 항목별 일치율·골드 오류 추정 건수 |
+| ② 골드 점검 | 중재 판정기 vs 사람(표본) | 항목별·중재 선택별 일치율·골드 오류 건수(사람 표본 기준) |
 | ① 요약 | 프롬프트 v1 vs vN (같은 모델) | 블라인드 승률(LLM 쌍 비교) |
 | ① 요약 | vN vs vN-final (경량 → 상위 모델) | 블라인드 승률(LLM 쌍 비교·사람 투표)·둘의 일치율 |
 | ③ 검색 | 리랭커 off → on | Hit@5·MRR·최신성(`--retrieval-only`) |
@@ -359,7 +359,6 @@ tags:
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
-- [ ] 골드 점검 — `make gold-arbitrate`(과금)로 중재를 채운 뒤 `make gold-audit`로 사람 표본을 끝까지 판정하고 `evaluation/gold_audit.jsonl`·`gold_audit_llm.jsonl`을 커밋
 - [ ] 착수 순서 — 후속 에이전트·평가 정답·자동 종결 → ③ 챗 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
 - [ ] 평가 정답 추가 — `truth_call_actions`·시나리오 DB·`truth_scenarios`(verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다. ① 후속 규칙 기준선은 `truth_call_actions`와 같은 파생을 쓰지 않는다(같으면 기준선이 만점)
 - [ ] 자동 개선 착수 시 — 관문 값, 반복 상한, 표본 비율을 첫 실행 전에 고정([[치과 AX - 평가 설계]] §2.3·§2.7). AI 평가 화면에 자동 개선 탭
