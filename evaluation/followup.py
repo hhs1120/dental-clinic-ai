@@ -8,10 +8,11 @@ import sqlite3
 from pathlib import Path
 
 from backend import db, followup
+from backend.calls import active_versions
 from backend.harness import rounds
 from backend.harness.loop import Runner
 from backend.harness.store import RunStore, SqliteLlmLog
-from evaluation.call_actions import eval_calls
+from evaluation.call_actions import classifier_todo, eval_calls, gold_todo_calls
 from shared.clinic import load_clinic
 from shared.llm import Gateway, load_config
 
@@ -128,6 +129,69 @@ def run(
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     counts["cost_usd"] = round(total_cost, 4)
     return counts
+
+
+# ── 규칙 기준선·채점 ─────────────────────────────────────────────────
+
+# 위에서부터 먼저 맞는 규칙 — 분류기 할 일 문장의 낱말만 본다(정답을 만든 녹취록 라벨과 다른 입력·규칙)
+BASELINE_RULES = (
+    ("scaling_timing", ("스케일링",)),
+    ("document", ("영수증", "진단서", "소견서", "서류", "사본")),
+    ("billing", ("미납", "수납", "결제", "남은 금액", "잔액")),
+    ("insurance_cost", ("보험", "실손", "비용", "금액", "가격")),
+    ("appointment", ("예약", "일정", "날짜", "시간", "변경", "취소")),
+    ("doctor_reply", ("원장",)),
+)
+
+
+def baseline(todo: list) -> str:
+    """규칙 기준선 — 할 일 문장 낱말 규칙(평가 설계 §5, 기능 정의 §8 "에이전트 vs 규칙 기준선")"""
+    text = " ".join(t["text"] if isinstance(t, dict) else str(t) for t in todo)
+    for action, words in BASELINE_RULES:
+        if any(w in text for w in words):
+            return action
+    return "other"
+
+
+def _kn(hits: list[tuple[str, bool]]) -> dict:
+    by = {}
+    for action, ok in hits:
+        b = by.setdefault(action, {"k": 0, "n": 0})
+        b["n"] += 1
+        b["k"] += ok
+    return {"k": sum(ok for _, ok in hits), "n": len(hits), "by_action": by}
+
+
+def score(conn, runs: list[dict], truth: dict[str, str], split_calls: dict) -> dict:
+    """구간마다 에이전트 vs 기준선 정확도(정답 종류별), 실패 수, 비용, 분류기가 놓친·더한 할 일 통화 수. 실패는 오답"""
+    a = active_versions(conn)[0]
+    todo = {
+        u: json.loads(t) if t else []
+        for u, t in conn.execute(
+            "SELECT call_uid, todo FROM ax_call_classifications"
+            " WHERE model_alias = 'classify' AND prompt_version = ?",
+            (a,),
+        )
+    }
+    by_run = {r["call_uid"]: r for r in runs}
+    gold = gold_todo_calls(conn)
+    cls = classifier_todo(conn)
+    out = {}
+    for sp, uids in split_calls.items():
+        ids = [u for u in uids if u in truth]
+        agent = [(truth[u], (by_run.get(u) or {}).get("action") == truth[u]) for u in ids]
+        base = [(truth[u], baseline(todo.get(u, [])) == truth[u]) for u in ids]
+        mine = [by_run[u] for u in ids if u in by_run]
+        out[sp] = {
+            "n": len(ids),
+            "agent": _kn(agent),
+            "baseline": _kn(base),
+            "failed": sum(r["status"] != "done" for r in mine),
+            "not_run": sum(u not in by_run for u in ids),
+            "cost_usd": round(sum(r.get("cost_usd") or 0 for r in mine), 4),
+            "missed_by_classifier": sum(u not in cls for u in gold.get(sp, [])),
+        }
+    return out
 
 
 def main(argv=None) -> None:

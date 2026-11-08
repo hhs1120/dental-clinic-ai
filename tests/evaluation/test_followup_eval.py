@@ -60,3 +60,62 @@ def test_run_writes_jsonl_and_skips_done(paths):
         .fetchone()[0]
     )
     assert before == after  # 원본 앱 DB에는 실행 기록을 쓰지 않는다
+
+
+def test_baseline_rules():
+    b = ev_followup.baseline
+    assert b([{"text": "스케일링 보험 적용 시기 회신"}]) == "scaling_timing"
+    assert b(["영수증 재발급해서 보내기"]) == "document"
+    assert b([{"text": "남은 금액 확인 후 회신"}]) == "billing"
+    assert b([{"text": "실손 청구 가능 여부 회신"}]) == "insurance_cost"
+    assert b([{"text": "예약 날짜 다시 잡아 안내"}]) == "appointment"
+    assert b([{"text": "원장님께 여쭙고 회신"}]) == "doctor_reply"
+    assert b([{"text": "업체에 다시 전화"}]) == "other"
+
+
+def test_score(paths):
+    import sqlite3
+
+    c = sqlite3.connect(paths / "app.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS source", (str(paths / "source.sqlite"),))
+    c.execute("ATTACH DATABASE ? AS truth", (str(paths / "truth.sqlite"),))
+    c.execute(
+        "UPDATE ax_call_classifications SET todo = ? WHERE call_uid = 'c-0001' AND prompt_version = 'v1'",
+        ('[{"kind": "contact", "text": "원장님께 여쭙고 회신", "who": "", "after": -1}]',),
+    )
+    runs = [
+        {"call_uid": "c-0001", "action": "doctor_reply", "status": "done", "cost_usd": 0.01},
+        {"call_uid": "c-0004", "action": "billing", "status": "done", "cost_usd": 0.01},
+        {"call_uid": "c-0005", "action": None, "status": "failed", "cost_usd": 0.01},
+    ]
+    truth = {"c-0001": "doctor_reply", "c-0004": "appointment", "c-0005": "appointment"}
+    split_calls = {"dev": ["c-0001"], "validation": ["c-0004", "c-0005"]}
+    s = ev_followup.score(c, runs, truth, split_calls)
+    assert s["dev"]["agent"]["k"] == 1 and s["dev"]["baseline"]["k"] == 1
+    assert s["validation"]["agent"] == {
+        "k": 0,
+        "n": 2,
+        "by_action": {"appointment": {"k": 0, "n": 2}},
+    }
+    assert s["validation"]["failed"] == 1
+
+
+def test_dev_report_has_followup(tmp_path):
+    from evaluation import eval as ev
+    from tests.evaluation.test_rag import FakeApp, make_rag_db
+
+    conn = make_rag_db(tmp_path)
+    runs, acts = tmp_path / "runs.jsonl", tmp_path / "acts.jsonl"
+    runs.write_text('{"call_uid": "c-0001", "action": "other", "status": "done", "cost_usd": 0}\n')
+    acts.write_text('{"call_uid": "c-0001", "llm_action": "other", "human_action": null}\n')
+    out = ev.run(
+        conn,
+        reports_dir=tmp_path / "r",
+        app=FakeApp(),
+        split="dev",
+        followup_runs=runs,
+        call_actions_path=acts,
+    )
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert "## ① 후속 처리" in md

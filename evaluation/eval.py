@@ -25,7 +25,15 @@ from pathlib import Path
 import yaml
 
 from backend.calls import active_versions
-from evaluation import EvalRefused, autoclose, classification, gold_audit, rag
+from evaluation import (
+    EvalRefused,
+    autoclose,
+    call_actions,
+    classification,
+    followup,
+    gold_audit,
+    rag,
+)
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
 
@@ -104,6 +112,8 @@ def run(
     force: bool = False,
     prompts_dir: Path | None = None,
     gold_audit_path: Path | None = None,
+    followup_runs: Path | None = None,
+    call_actions_path: Path | None = None,
 ) -> dict:
     """section = test 묶음(SECTIONS 하나). dev는 없으면 전부(--retrieval-only면 챗 빼고)"""
     reports_dir, prompts_dir = reports_dir or REPORTS, prompts_dir or PROMPTS
@@ -205,6 +215,7 @@ def run(
         "rag": None,
         "gold_audit": None,
         "autoclose": None,
+        "followup": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -271,6 +282,17 @@ def run(
         a = prompt_version if section == "auto" else active_versions(conn)[0]  # 앱과 같은 기본값
         if jv and a:
             result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
+    if dev and call_actions_path and call_actions_path.exists():
+        # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
+        acts = call_actions.load(call_actions_path)
+        runs = followup.load(followup_runs) if followup_runs else []
+        result["followup"] = {
+            "score": followup.score(
+                conn, runs, call_actions.truth(acts), call_actions.eval_calls(conn)
+            ),
+            "labels": len(acts),
+            "agreement": call_actions.agreement(acts),
+        }
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -357,6 +379,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_crosscheck(r["crosscheck"])
     if r.get("autoclose") is not None:
         out += _render_autoclose(r["autoclose"])
+    if r.get("followup") is not None:
+        out += _render_followup(r["followup"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -512,6 +536,32 @@ def _render_autoclose(a: dict) -> list[str]:
     ]
 
 
+def _render_followup(f: dict) -> list[str]:
+    ag = f["agreement"]
+    out = [
+        "## ① 후속 처리",
+        "",
+        f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}",
+        "",
+        "| 구간 | 통화 | 에이전트 | 규칙 기준선 | 실패 | 실행 전 | 비용 | 분류기가 놓친 할 일 통화 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for sp, x in f["score"].items():
+        out.append(
+            f"| {sp} | {x['n']} | {_kn(x['agent'])} | {_kn(x['baseline'])} | {x['failed']}"
+            f" | {x['not_run']} | ${x['cost_usd']} | {x['missed_by_classifier']} |"
+        )
+    out.append("")
+    for sp, x in f["score"].items():
+        rows = [
+            f"{a} 에이전트 {_kn(x['agent']['by_action'][a])} · 기준선 {_kn(x['baseline']['by_action'][a])}"
+            for a in x["agent"]["by_action"]
+        ]
+        if rows:
+            out += [f"{sp} 종류별 — " + " / ".join(rows), ""]
+    return out
+
+
 def _render_crosscheck(xs: list[dict]) -> list[str]:
     out = ["## ① 교차검증 (모델 A × 판정기)", ""]
     if not xs:
@@ -659,6 +709,8 @@ def main(argv=None) -> int:
             condition=args.condition,
             force=args.force,
             gold_audit_path=gold_audit.AUDIT_PATH,
+            followup_runs=followup.OUT,
+            call_actions_path=call_actions.ACTIONS_PATH,
         )
     except AlreadyRun as e:
         print(e)

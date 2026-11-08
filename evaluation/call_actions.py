@@ -27,8 +27,14 @@ __all__ = ["load", "save"]
 
 def eval_calls(conn) -> dict[str, list[str]]:
     """채점 모수 — 골드 has_todo와 활성 분류 has_todo가 모두 참인 통화. dev = dev 판정 풀, validation = silver 검증 구간"""
+    cls_todo = classifier_todo(conn)
+    return {k: [u for u in v if u in cls_todo] for k, v in gold_todo_calls(conn).items()}
+
+
+def classifier_todo(conn) -> set[str]:
+    """활성 분류가 ok이고 has_todo인 통화"""
     a = active_versions(conn)[0]
-    cls_todo = {
+    return {
         u
         for u, lab in conn.execute(
             "SELECT call_uid, labels FROM ax_call_classifications"
@@ -37,15 +43,17 @@ def eval_calls(conn) -> dict[str, list[str]]:
         )
         if lab and json.loads(lab).get("has_todo")
     }
+
+
+def gold_todo_calls(conn) -> dict[str, list[str]]:
+    """골드 has_todo인 통화 — dev 판정 풀 / silver 검증 구간(분류기와 상관없이 — 분류기가 놓친 수를 세는 데)"""
     rows = conn.execute(
         "SELECT l.call_uid, l.split, l.has_todo, l.primary_purpose, l.emergency, l.complaint,"
         " c.in_eval_pool FROM truth.truth_call_labels l JOIN source.ax_calls c USING (call_uid)"
     ).fetchall()
     silver = [dict(r) for r in rows if r["split"] == "silver"]
     validation = {u for u, part in silver_split(silver).items() if part == "validation"}
-    pick = lambda keep: sorted(  # noqa: E731
-        r["call_uid"] for r in rows if r["has_todo"] and r["call_uid"] in cls_todo and keep(r)
-    )
+    pick = lambda keep: sorted(r["call_uid"] for r in rows if r["has_todo"] and keep(r))  # noqa: E731
     return {
         "dev": pick(lambda r: r["split"] == "dev" and r["in_eval_pool"]),
         "validation": pick(lambda r: r["call_uid"] in validation),
