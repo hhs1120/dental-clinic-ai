@@ -463,7 +463,11 @@ def test_dev_report_drops_gold_errors(conn, reports, tmp_path):
     assert r["gold_audit"]["summary"]["calls"] == 1 and r["gold_audit"]["stale"] == 0
     assert r["gold_audit"]["missing"] == 0
     md = out["report_path"].read_text(encoding="utf-8")
-    assert "## 골드 점검" in md and "골드 오류 추정 제외(점검 판정기 v1)" in md
+    assert (
+        "## 골드 점검" in md
+        and "골드 오류 추정 제외(중재 기준·참고, 점검 판정기 v1)" in md
+        and "중재 선택별 사람 일치" in md
+    )
     table = [
         line
         for line in md.splitlines()

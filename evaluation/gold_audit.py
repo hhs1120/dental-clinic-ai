@@ -360,8 +360,8 @@ def errors(records: list[dict]) -> set[tuple[str, str]]:
 
 
 def summarize(records: list[dict]) -> dict:
-    """리포트 숫자 — 항목별 중재 선택 수, 중재 vs 사람 일치(사람이 고른 항목만), 표본 안 사람 기준 오류 추정(참고)"""
-    arbiter, agree = {}, {}
+    """리포트 숫자 — 항목별 중재 선택 수, 중재 vs 사람 일치(사람이 고른 항목만, 항목별·중재 선택별), 표본 안 사람 기준 오류 추정(참고)"""
+    arbiter, agree, by_arbiter = {}, {}, {}
     human_errors = {"judge": 0, "neither": 0}
     for r in records:
         for i, v in r["items"].items():
@@ -371,6 +371,9 @@ def summarize(records: list[dict]) -> dict:
             a = agree.setdefault(i, {"k": 0, "n": 0})
             a["n"] += 1
             a["k"] += v["human"] == v["arbiter"]
+            b = by_arbiter.setdefault(v["arbiter"], {"k": 0, "n": 0})
+            b["n"] += 1
+            b["k"] += v["human"] == v["arbiter"]
             if v["human"] in human_errors:
                 human_errors[v["human"]] += 1
     of = {r["call_uid"]: r for r in records}
@@ -385,6 +388,7 @@ def summarize(records: list[dict]) -> dict:
             "k": sum(a["k"] for a in agree.values()),
             "n": sum(a["n"] for a in agree.values()),
         },
+        "by_arbiter": by_arbiter,
         "human_errors": human_errors,
         "human_pending": pending,
     }

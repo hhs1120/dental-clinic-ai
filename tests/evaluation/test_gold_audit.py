@@ -372,6 +372,8 @@ def test_summarize_agreement():
     assert s["agreement"]["primary_purpose"] == {"k": 1, "n": 1}
     assert s["agreement_total"] == {"k": 1, "n": 2}
     assert s["human_errors"] == {"judge": 2, "neither": 0}
+    # 중재 선택별 사람 일치 — 중재가 판정기 쪽을 고른 항목을 사람이 얼마나 따랐나
+    assert s["by_arbiter"] == {"judge": {"k": 1, "n": 1}, "gold": {"k": 0, "n": 1}}
     assert s["human_pending"] == 1  # 사람이 아직 안 본 통화
 
 

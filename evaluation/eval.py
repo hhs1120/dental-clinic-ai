@@ -437,7 +437,7 @@ def _audited_line(g: dict | None, audit_jv: str | None) -> list[str]:
     if g is None:
         return []
     return [
-        f"골드 오류 추정 제외(점검 판정기 {audit_jv}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
+        f"골드 오류 추정 제외(중재 기준·참고, 점검 판정기 {audit_jv}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
     ]
 
 
@@ -464,8 +464,16 @@ def _render_gold_audit(a: dict | None) -> list[str]:
             f"| {i} | {c['gold']} | {c['judge']} | {c['neither']} | {_kn(ag) if ag else '—'} |"
         )
     t, h = s["agreement_total"], s["human_errors"]
+    names = {"gold": "골드 쪽", "judge": "판정기 쪽", "neither": "둘 다 아님"}
     out += [
         "",
+        "중재 선택별 사람 일치 — "
+        + (
+            " · ".join(
+                f"{names[k]} {_kn(s['by_arbiter'][k])}" for k in names if k in s["by_arbiter"]
+            )
+            or "—"
+        ),
         f"골드 오류 추정(중재) — 판정기 쪽 {sum(c['judge'] for c in s['arbiter'].values())}"
         f" · 둘 다 아님 {sum(c['neither'] for c in s['arbiter'].values())}",
         f"중재 vs 사람 전체 {_kn(t) if t['n'] else '—'} · 사람 기준 오류 추정(표본, 참고) 판정기 쪽 {h['judge']}"
