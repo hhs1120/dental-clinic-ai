@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -44,6 +44,14 @@ gold-arbitrate:
 
 gold-audit:
 	uv run python -m evaluation.gold_audit audit
+
+# ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
+autoclose:
+	uv run python -m backend.autoclose run
+
+auto-policy:
+	$(if $(and $(KIND),$(ON)),,$(error KIND=작업 종류 ON=1|0 필요))
+	uv run python -m backend.autoclose policy $(KIND) $(if $(filter 1,$(ON)),on,off)
 
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:

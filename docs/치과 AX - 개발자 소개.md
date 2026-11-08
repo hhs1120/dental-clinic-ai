@@ -28,7 +28,7 @@ tags:
 | LLM 게이트웨이 | Anthropic·Upstage 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭 | 완성 |
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
 | 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
-| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·FastAPI 검색·EMR 조회·통화·판정·블라인드 API 구현, SSE·작업 폴링은 설계 완료 |
+| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·FastAPI 검색·EMR 조회·통화·판정·블라인드 API 구현, SSE·작업 폴링은 설계 완료 |
 | 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색·일별 예약표·전환 전 EMR·통화·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포·UI 테스트 | `docker compose` 로컬 배포 · Playwright | 앱 착수 뒤 |

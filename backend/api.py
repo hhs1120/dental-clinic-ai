@@ -12,8 +12,9 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, ValidationError
 
-from backend import blind, calls, db, emr, judge_queue, metrics
+from backend import autoclose, blind, calls, db, emr, judge_queue, metrics
 from backend.embeddings import make_embedder
+from backend.harness.auto import revert_auto_action
 from backend.rag_search import (
     DEFAULT_EMBEDDING,
     DEFAULT_RERANKER,
@@ -369,6 +370,28 @@ def todo_done(call_uid: str, item: int, body: TodoDone, paths: Paths, now: Now) 
             )
         except KeyError as e:
             raise HTTPException(404, "할 일을 찾을 수 없습니다") from e
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+class Revert(BaseModel):
+    part: str
+
+
+@app.post("/auto-actions/{action_id}/revert")
+def revert_auto(action_id: int, body: Revert, paths: Paths, now: Now) -> dict:
+    """자동 처리 되돌리기(앱 설계 §3b) — 앱 상태만 복원하고 해당 큐로 돌려보낸다"""
+    conn = _open_rw(paths)
+    try:
+        row = conn.execute(
+            "SELECT kind FROM ax_auto_actions WHERE id = ?", (action_id,)
+        ).fetchone()
+        if row is None or row["kind"] not in autoclose.KINDS:
+            raise HTTPException(404, "자동 처리를 찾을 수 없습니다")
+        if not revert_auto_action(conn, autoclose.KINDS, action_id, body.part, clock=lambda: now):
+            raise HTTPException(409, "이미 되돌린 자동 처리입니다")
+        conn.commit()
         return {"ok": True}
     finally:
         conn.close()

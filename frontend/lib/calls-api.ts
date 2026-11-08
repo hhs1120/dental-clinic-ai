@@ -49,6 +49,7 @@ export interface CallCard {
   todo_total: number;
   todo_left: number;
   summary: string | null;
+  closed: boolean;
 }
 
 export interface CallList {
@@ -77,6 +78,8 @@ export interface CallDetail {
   };
   judge: Labels | null;
   disagree: { items: string[]; is_core: boolean } | null;
+  /** 되돌리지 않은 자동 종결(기능 정의 §4 ①) */
+  autoclose: { id: number; reason: string; at: string } | null;
 }
 
 export interface LabelNames {
@@ -119,6 +122,8 @@ export const addCall = (body: {
   phone: string | null;
   part: string;
 }) => postJson<{ call_uid: string }>("/calls", body);
+export const revertAuto = (id: number, part: string) =>
+  postJson(`/auto-actions/${id}/revert`, { part });
 export const reclassify = (uid: string) =>
   postJson<CallDetail>(`/calls/${encodeURIComponent(uid)}/classify`);
 

@@ -514,3 +514,16 @@ def test_report_without_audit_file(conn, reports, tmp_path):
     out = _run(conn, reports, split="dev", gold_audit_path=tmp_path / "없음.jsonl")
     assert _json(out)["gold_audit"] is None
     assert "골드 점검 전" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_auto_section_test_once(conn, reports):
+    r = _json(_run(conn, reports, split="test", section="auto", prompt_version="v2"))
+    assert r["prompt_version"] == "v2×v1" and r["autoclose"]["pair"] == "v2×v1"
+    with pytest.raises(ev.AlreadyRun):
+        _run(conn, reports, split="test", section="auto", prompt_version="v2")
+
+
+def test_dev_report_has_autoclose(conn, reports):
+    out = _run(conn, reports, split="dev")
+    assert _json(out)["autoclose"]["pair"].endswith("×v1")
+    assert "## ① 자동 종결" in out["report_path"].read_text(encoding="utf-8")
