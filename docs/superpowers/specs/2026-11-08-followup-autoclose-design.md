@@ -39,11 +39,14 @@
 - **오류율** `eval.py --section auto`(test 묶음, 키는 교차검증처럼 `분류 버전×판정기 버전` — 한 쌍) / dev 기본 포함(활성 쌍): 조건을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율. dev는 silver 검증 구간(`silver_split`), test는 test 판정 풀. 분수와 95% 신뢰구간(Wilson). 자동 처리율(대상 중 종결 비율)도 함께. 판정 풀은 앱이 종결하지 않으므로 조건 함수를 직접 돌려 잰다
 - **정확도 뷰**: 기능 정의 §9 "자동 종결 착수 시" 줄의 정확도 뷰 목록 정의는 이번 범위 — 앱 설계 §1에 이름·모수·컬럼을 적고 §4 ② 완료 기준의 뷰 개수·행 수를 맞춘다(구현은 이미 있는 `backend/metrics.py` 기준으로 문서만 맞추는 것이 목표)
 
-### PR ② 처리 정답
+### PR ② 처리 정답 (사람이 정함: LLM 라벨 + 사람 표본)
 
-- **위치**: 생성기 평가 전용 단계(`make scenarios` — 가상 데이터 생성 설계 §5.1). LLM 없이 `source.sqlite`·골드를 읽어 `truth_call_actions(call_uid, action, split)`를 쓴다. 기존 테이블은 바꾸지 않는다. verify 검사 먼저: 기존 테이블 해시 그대로, 골드 `has_todo`=1인 통화만 행이 있음, action이 7가지 중 하나
-- **파생 규칙(초안 — 계획에서 표로 확정)**: 골드 `has_todo`=1인 통화만. 목적 기준 — `book`·`reschedule`·`confirm`·`cancel` → 예약 잡기·변경, `billing_q` → 수납·미수 확인, `document_req` → 서류 준비, `price_q`·`insurance_q` → 보험·비용 안내, `recall_q` → `used_fact.recent_visits`에 스케일링이 있으면 스케일링 시기 안내, 아니면 원장님 확인 후 회신, `treatment_q`·`emergency`·`complaint` → 원장님 확인 후 회신, `other`·`unknown` → 기타. 경계가 애매한 조합은 계획 단계에서 실제 통화 몇 건을 읽고 확정한다
-- **이름**: 7가지 코드 값 `appointment`·`doctor_reply`·`billing`·`document`·`insurance_cost`·`scaling_timing`·`other`(우리말 이름은 화면용으로 `shared/`에)
+- **왜 코드 파생이 아닌가**: 골드에는 `has_todo`만 있고 할 일의 내용은 생성 모델이 녹취록마다 자유롭게 지었다. 목적만으로 파생하면 가격 문의인데 할 일은 예약 날짜 회신인 통화처럼 실제 할 일과 어긋나는 경우가 많아, 에이전트가 맞게 골라도 오답이 된다
+- **라벨**: 채점 모수(골드·활성 분류 모두 할 일인 dev 판정 풀 + silver 검증 구간, 약 330통화)에 Opus(`claude-opus-5-5`, 추론 medium — 골드 점검과 같은 설정)가 방향·녹취록만 보고 7가지 중 하나를 붙인다(Batch). 분류기 결과·골드 라벨은 주지 않는다. 종류의 뜻은 후속 에이전트와 같은 정의(`shared/followup.py`)
+- **사람 표본**: 30통화(`evaluation/metrics.py` `ACTION_AUDIT_SAMPLE`)를 사람이 터미널 화면에서 라벨을 보지 않고 직접 고른다(앵커링 없게). 보고는 LLM vs 사람 일치율. 표본 통화는 사람 답을 정답으로 쓴다
+- **기록**: `evaluation/call_actions.jsonl`(커밋, 한 줄 = 통화 — `call_uid, transcript_sha, llm_action, human_action, prompt_version`). `truth.sqlite`·생성기는 바꾸지 않는다(평가 설계 §6의 `truth_call_actions` 행을 이 파일로 바꾼다)
+- **명령**: `make action-label`(라벨, 과금·빠진 건만) / `make action-audit`(사람 표본)
+- **이름**: 7가지 코드 값 `appointment`·`doctor_reply`·`billing`·`document`·`insurance_cost`·`scaling_timing`·`other`(우리말·뜻은 `shared/followup.py`)
 
 ### PR ② 후속 에이전트
 
