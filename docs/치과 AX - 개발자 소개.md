@@ -81,8 +81,8 @@ tags:
 
 **아직 만들지 않은 데이터(추정)**
 - **⑤-3 청구 기준 질문**(`truth_claim_qa`): 조정 상세 사유(`master.ADJUST_REASONS`)마다 1~2문항. 사람이 ⑤ 착수 때 쓴다. 청구·조정·청구 기준 문서는 이미 있다
-- **사람 판정**: 골드 점검 표본 `GOLD_AUDIT_SAMPLE`통화(판정기와 골드가 다른 항목만), 최종 블라인드 비교 `blind_pool_size`통화 + 운영 구간의 엇갈림·표본
-- **평가 전용 정답**: 후속 처리 정답(`evaluation/call_actions.jsonl` — Opus 라벨 + 사람 표본)과 ⑥·운영 에이전트 시나리오(`truth_scenarios`). 기존 `emr_*`·`fin_*`는 바꾸지 않는다
+- **사람 판정**: 골드 점검 표본 `GOLD_AUDIT_SAMPLE`통화(판정기와 골드가 다른 항목만), 처리 정답 사람 표본 `ACTION_AUDIT_SAMPLE`통화, 최종 블라인드 비교 `blind_pool_size`통화 + 운영 구간의 엇갈림·표본
+- **평가 전용 정답**: ⑥·운영 에이전트 시나리오(`truth_scenarios`). 기존 `emr_*`·`fin_*`는 바꾸지 않는다
 - ⑦은 기존 EMR을 쿼리만 하므로 새 데이터가 없고, ⑧·⑨ 원본과 정답은 이미 생성돼 있다
 
 ## 4. 기능별 AI — 무엇을 맡기고, 왜 쓰고, 어떻게 믿나
