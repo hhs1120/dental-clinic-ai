@@ -365,7 +365,7 @@ tags:
 - [ ] 후속 에이전트 착수 시 — `ax_call_followups`(통화 단위 처리·처리안)를 만들고 "오늘 할 일"의 할 일 체크(`ax_todo_checks`)와 어떻게 맞물릴지, 분류 버전을 바꿀 때 체크를 이어 붙일지 정한다
 - [ ] 일괄 실행을 화면이나 `make nightly`에서 돌릴 때 — 작업 API(`POST /jobs/classify-batch`·`judge-batch`·`blind-judge-batch`, `ax_jobs`). 지금은 `make classify`·`judge`·`blind-judge`
 - [ ] 화면 E2E를 CI에 넣을 때 — `make fixture`(가짜 게이트웨이 데이터)로 `make e2e`를 돌린다(지금은 실데이터 복사본이라 로컬만)
-- [ ] ① Qwen 파인튜닝 비교 — 분류기 라벨 자리 후보. 학습 재료는 silver 재료 구간만(`evaluation/splits.py`), 교체 기준·평가 셋은 `docs/superpowers/specs/2026-11-05-classifier-design.md` "Qwen 비교"
+- [ ] ① Qwen 파인튜닝 비교 — 분류기 라벨 자리 후보(교체 기준·평가 셋은 `docs/superpowers/specs/2026-11-05-classifier-design.md` "Qwen 비교"). Qwen3.5-2B full은 같은 분포(생성 데이터)에서 Haiku v2와 대등 이상([[치과 AX - AI 실험 기록]] §13). 남은 것: half 학습으로 재료 충분성 판단. 실제 도입 때는 그 병원 통화로 다시 학습하고 골드로 확인
 - [ ] 후순위: 다른 오픈 모델 비교 — 얻는 것: 모델 선택 근거를 정확도·속도·크기로, Qwen이 안 될 때의 대안, 병원 사양에 맞춘 크기 선택. 꺼낼 조건: Qwen 비교 뒤(판정기는 그대로)
 - [ ] 후순위: 세 계열 다수결(분류기·판정기·Qwen) — Qwen 교체 뒤 엇갈림이 많으면
 - [ ] ⑧ 착수 시 — 거래처 첫 기본값을 어디서 읽을지 정한다(앱 설계 §8 `VENDORS`와 함께)
