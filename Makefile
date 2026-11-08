@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -44,6 +44,13 @@ gold-arbitrate:
 
 gold-audit:
 	uv run python -m evaluation.gold_audit audit
+
+# ① 처리 정답(설계 "PR ② 처리 정답") — Opus 라벨(과금, 빠진 건만, Batch)·사람 표본 터미널 화면
+action-label:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.call_actions label
+
+action-audit:
+	uv run python -m evaluation.call_actions audit
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:

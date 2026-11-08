@@ -13,6 +13,8 @@ SILVER_MATERIAL_SHARE = (
 )
 GOLD_AUDIT_SAMPLE = 50  # 골드 점검 사람 표본 통화 수(평가 설계 §2.3 — evaluation/gold_audit.py)
 
+ACTION_AUDIT_SAMPLE = 30  # 처리 정답 사람 표본 통화 수(evaluation/call_actions.py)
+
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
     """비율 k/n의 Wilson 95% 구간 — 모수가 작은 test 자동 종결 오류율용(평가 설계 §5). n=0이면 None"""
