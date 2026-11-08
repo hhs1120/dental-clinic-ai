@@ -28,7 +28,7 @@
 
 ### PR ① 자동 종결
 
-- **조건 함수** `backend/autoclose.py` `autoclose_reason(cls, judge, disagreement) -> str | None` — 넘으면 None이 아니라 종결 이유 문자열, 못 넘으면 None. 조건(기능 정의 §4 ① 완료 기준 그대로): 두 결과 모두 `ok`·폴백 아님, 두 모델 모두 `has_todo` 거짓, 응급·불만 거짓, 급함 urgent 아님(두 모델 모두), 엇갈림 없음(`differing_items` 빈 목록 — 엇갈림 계산과 같은 규칙), 판정 풀 통화 아님. `eval.py`도 이 함수를 쓴다(평가 설계 §5)
+- **조건 함수** `backend/autoclose.py` `autoclose_reason(cls, judge) -> str | None` — 넘으면 None이 아니라 종결 이유 문자열, 못 넘으면 None. 조건(기능 정의 §4 ① 완료 기준 그대로): 두 결과 모두 `ok`·폴백 아님, 두 모델 모두 `has_todo` 거짓, 응급·불만 거짓, 급함 urgent 아님(두 모델 모두), 엇갈림 없음(앱 엇갈림 규칙 그대로 — `differing_items` 빈 목록이고 분류기 할 일 목록이 비어 있음(`todo_mismatch` 아님)), 판정 풀 통화 아님. `eval.py`도 이 함수를 쓴다(평가 설계 §5)
 - **실행**: `make autoclose` — 활성 분류 버전 × 활성 판정기 버전 결과가 모두 있는 통화에 조건을 계산해 `apply_auto_action(kind="call_autoclose", target=call_uid)`. 이미 종결됐거나 되돌린 통화는 건너뛴다(UNIQUE 키·되돌린 건 재종결 금지는 `auto.py`가 이미 함). 새로 추가한 통화는 분류·판정이 끝나는 같은 흐름에서 한 번 계산한다
 - **스위치**: `auto_policy`의 `call_autoclose`(기본 끔). 켜고 끄는 명령 `make auto-policy KIND=call_autoclose ON=1|0`. 꺼져 있으면 아무것도 종결하지 않는다
 - **오늘 할 일**: 종결된(되돌리지 않은) 통화는 오르지 않는다. 통화 기록 목록에는 "자동 종결" 딱지
