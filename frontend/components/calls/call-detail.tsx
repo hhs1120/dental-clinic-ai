@@ -56,6 +56,7 @@ export function CallDetail({
   onClose,
   onCheck,
   onReclassify,
+  onRevertClose,
   busy,
 }: {
   detail: Detail;
@@ -65,6 +66,7 @@ export function CallDetail({
   onClose: () => void;
   onCheck: (item: TodoItem, done: boolean) => void;
   onReclassify: () => void;
+  onRevertClose: (id: number) => void;
   busy: boolean;
 }) {
   const { call, classification: k, judge, disagree } = detail;
@@ -100,6 +102,25 @@ export function CallDetail({
       AI 분류가 아직 없거나 실패했습니다.
       <Button size="sm" onClick={onReclassify} disabled={busy}>
         {busy ? "분류하는 중…" : "다시 분류"}
+      </Button>
+    </div>
+  );
+  // 자동 종결된 통화 — 이유와 함께 보이고 되돌리면 오늘 할 일로 돌아간다(기능 정의 §4 ①)
+  const closed = detail.autoclose && (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+      <Badge variant="muted">자동 종결</Badge>
+      <span>{detail.autoclose.reason}</span>
+      <span className="text-xs text-muted-foreground">
+        {detail.autoclose.at.slice(0, 16)}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-auto"
+        onClick={() => onRevertClose(detail.autoclose!.id)}
+        disabled={busy}
+      >
+        되돌리기
       </Button>
     </div>
   );
@@ -217,6 +238,7 @@ export function CallDetail({
     return (
       <div className="flex flex-col gap-3">
         {head}
+        {closed}
         {failed}
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-4">
@@ -245,6 +267,7 @@ export function CallDetail({
       aria-label="통화 상세"
     >
       {head}
+      {closed}
       {failed}
       {todo}
       {summary}
