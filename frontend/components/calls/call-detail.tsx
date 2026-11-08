@@ -124,6 +124,37 @@ export function CallDetail({
       </Button>
     </div>
   );
+  // 후속 에이전트 처리안 — 종류·근거·조회 과정(설계 "화면 A안")
+  const fu = detail.followup;
+  const plan = fu && (
+    <Section title="처리안">
+      {fu.status === "done" ? (
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="kind">
+              {names?.action[fu.action ?? ""] ?? fu.action}
+            </Badge>
+            {fu.summary}
+            <span className="text-xs text-muted-foreground">
+              · AI 후속 에이전트
+            </span>
+          </span>
+          {fu.facts.length > 0 && (
+            <ul className="list-disc pl-5 text-sm">
+              {fu.facts.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+          )}
+          <Trace trace={fu.trace} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          처리안 실패{fu.reason ? ` — ${fu.reason}` : ""}
+        </p>
+      )}
+    </Section>
+  );
   const todo = (
     <Section title="할 일">
       {k.todo.length === 0 ? (
@@ -240,6 +271,7 @@ export function CallDetail({
         {head}
         {closed}
         {failed}
+        {plan}
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-4">
             {todo}
@@ -269,6 +301,7 @@ export function CallDetail({
       {head}
       {closed}
       {failed}
+      {plan}
       {todo}
       {summary}
       {diff}
@@ -276,6 +309,32 @@ export function CallDetail({
       {patient}
       {transcript}
     </aside>
+  );
+}
+
+/** 에이전트가 부른 조회 도구 — 접어 두고 "과정 보기"로 */
+function Trace({
+  trace,
+}: {
+  trace: { tool: string; args: Record<string, unknown> }[];
+}) {
+  const [open, setOpen] = useState(false);
+  if (trace.length === 0) return null;
+  return (
+    <div className="text-xs text-muted-foreground">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "▾" : "▸"} 과정 보기 · 조회 {trace.length}번
+      </button>
+      {open && (
+        <ol className="mt-1 list-decimal pl-5">
+          {trace.map((t, i) => (
+            <li key={i}>
+              {t.tool} {JSON.stringify(t.args)}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 

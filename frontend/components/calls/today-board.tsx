@@ -4,17 +4,24 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { type Board, type BoardItem, shortAt } from "@/lib/calls-api";
+import {
+  type Board,
+  type BoardItem,
+  type LabelNames,
+  shortAt,
+} from "@/lib/calls-api";
 import { cn } from "@/lib/utils";
 
 /** "오늘 할 일" 두 칸 — 왼쪽 병원 안에서 할 일, 오른쪽 연락할 사람. 칸마다 통화 하나에 카드 하나(통화·② 판정 화면 설계 "오늘") */
 export function TodayBoard({
   board,
+  names,
   selected,
   onOpen,
   onCheck,
 }: {
   board: Board;
+  names: LabelNames | null;
   selected: string | null;
   onOpen: (uid: string) => void;
   onCheck: (item: BoardItem, done: boolean) => void;
@@ -38,6 +45,7 @@ export function TodayBoard({
           onCheck={onCheck}
           empty="남은 할 일이 없습니다"
           tone="internal"
+          names={names}
         />
         <Column
           title="연락할 사람"
@@ -49,6 +57,7 @@ export function TodayBoard({
           empty="연락할 사람이 없습니다"
           note={(it) => waitingFor(it)?.text ?? null}
           tone="contact"
+          names={names}
         />
       </div>
       <DoneList items={board.done} onOpen={onOpen} onCheck={onCheck} />
@@ -66,6 +75,7 @@ function Column({
   empty,
   note,
   tone,
+  names,
 }: {
   title: string;
   hint: string;
@@ -76,6 +86,7 @@ function Column({
   empty: string;
   note?: (it: BoardItem) => string | null;
   tone: "internal" | "contact";
+  names: LabelNames | null;
 }) {
   // 두 칸을 글자만이 아니라 영역으로 구분한다 — 칸마다 바탕과 머리 띠 색
   return (
@@ -110,6 +121,7 @@ function Column({
           onOpen={onOpen}
           onCheck={onCheck}
           note={note}
+          names={names}
         />
       ))}
     </section>
@@ -134,14 +146,17 @@ function CallCard({
   onOpen,
   onCheck,
   note,
+  names,
 }: {
   items: BoardItem[];
   on: boolean;
   onOpen: (uid: string) => void;
   onCheck: (item: BoardItem, done: boolean) => void;
   note?: (it: BoardItem) => string | null;
+  names: LabelNames | null;
 }) {
   const head = items[0];
+  const plan = head.followup;
   const name = head.name ?? (head.kind === "contact" ? head.who : null);
   // 카드 어디를 눌러도 상세가 열린다 — 키보드는 머리 버튼(클릭이 카드로 올라온다), 체크박스는 열지 않는다
   return (
@@ -194,6 +209,22 @@ function CallCard({
           </div>
         );
       })}
+      {/* 후속 에이전트 처리안 한 줄 — 종류 딱지 + 요지(설계 "화면 A안") */}
+      {plan &&
+        (plan.status === "done" ? (
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md border-l-2 border-primary bg-accent/40 px-2 py-1 text-left text-xs"
+            onClick={() => onOpen(head.call_uid)}
+          >
+            <Badge variant="kind">
+              {names?.action[plan.action ?? ""] ?? plan.action}
+            </Badge>
+            <span>{plan.summary}</span>
+          </button>
+        ) : (
+          <span className="text-xs text-muted-foreground">처리안 실패</span>
+        ))}
     </div>
   );
 }

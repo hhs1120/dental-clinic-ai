@@ -31,7 +31,9 @@ CALLS_CTE = (
 ROWS_SQL = (
     CALLS_CTE + " SELECT calls.*, k.id AS classification_id, k.status, k.labels, k.summary,"
     " k.todo, j.labels AS judge_labels, d.items AS disagree_items, d.is_core,"
-    " auto.id AS close_id, auto.reason AS close_reason, auto.created_at AS closed_at"
+    " auto.id AS close_id, auto.reason AS close_reason, auto.created_at AS closed_at,"
+    " fu.action AS fu_action, fu.summary AS fu_summary, fu.facts AS fu_facts, fu.status AS fu_status,"
+    " fu.reason AS fu_reason, fu.run_id AS fu_run"
     " FROM calls"
     " LEFT JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
     "  AND k.model_alias = 'classify' AND k.prompt_version = :a"
@@ -41,6 +43,8 @@ ROWS_SQL = (
     "  AND d.a_version = :a AND d.b_version = :b"
     # 되돌리지 않은 자동 종결 — 앱 상태는 이 행 자체(backend/autoclose.py). 정책이 켜져 있고 지금 활성 버전 쌍으로
     # 닫은 것만 종결로 본다 — 정책을 끄거나 버전을 바꾼 뒤 make autoclose 전의 낡은 종결이 할 일을 숨기지 않게
+    # 후속 에이전트 처리안 — 활성 분류 행의 것만(backend/followup.py)
+    " LEFT JOIN ax_call_followups fu ON fu.classification_id = k.id"
     " LEFT JOIN ax_auto_actions auto ON auto.kind = 'call_autoclose'"
     "  AND auto.target = calls.call_uid AND auto.reverted_at IS NULL AND :closing = 1"
     "  AND json_extract(auto.result, '$.versions') = json_array(:a, :b)"
@@ -121,6 +125,15 @@ def today_board(conn: sqlite3.Connection, today: date) -> dict:
                     "chart_no": r["chart_no"],
                     "urgent": urgent,
                     "emergency": emergency,
+                    "followup": (
+                        {
+                            "action": r["fu_action"],
+                            "summary": r["fu_summary"],
+                            "status": r["fu_status"],
+                        }
+                        if r["fu_status"]
+                        else None
+                    ),
                 }
             )
     items.sort(key=lambda i: (i["at"], -i["item"]), reverse=True)
@@ -246,6 +259,29 @@ def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
             if r["close_id"] is not None
             else None
         ),
+        "followup": _followup(conn, r),
+    }
+
+
+def _followup(conn, r) -> dict | None:
+    """처리안 + 조회 과정(끝내는 도구 제외) — 상세 "처리안" 절"""
+    if not r["fu_status"]:
+        return None
+    trace = [
+        {"tool": t, "args": json.loads(a) if a else {}}
+        for t, a in conn.execute(
+            "SELECT tool, args FROM ax_agent_steps WHERE run_id = ? AND kind = 'tool'"
+            " AND tool != 'submit_followup' ORDER BY seq",
+            (r["fu_run"],),
+        )
+    ]
+    return {
+        "action": r["fu_action"],
+        "summary": r["fu_summary"],
+        "facts": json.loads(r["fu_facts"] or "[]"),
+        "status": r["fu_status"],
+        "reason": r["fu_reason"],
+        "trace": trace,
     }
 
 

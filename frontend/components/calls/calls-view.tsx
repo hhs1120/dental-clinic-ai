@@ -156,6 +156,7 @@ export function CallsView() {
               ) : board.data ? (
                 <TodayBoard
                   board={board.data}
+                  names={names}
                   selected={call}
                   onOpen={open}
                   onCheck={(it, done) => check(it.call_uid, it.item, done)}
