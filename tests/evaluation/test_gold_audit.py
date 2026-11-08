@@ -540,3 +540,76 @@ def test_audit_shows_label_guide(conn, tmp_path):
     assert "불만을 드러냈다" in text  # complaint 표시 항목 기준
     assert gold_audit.guide("counterpart")[0].strip().startswith("환자")
     assert any("급하지 않음" in line for line in gold_audit.guide("urgency"))
+
+
+def test_batch_state_is_bound_to_out_path(conn, tmp_path):
+    """맛보기 배치(다른 기록 파일)를 받다 끊긴 상태로 본 기록을 돌리면 멈춘다 — 다른 설정의 결과가 섞이지 않게"""
+    state = tmp_path / "batch.json"
+    gw = BatchFake(tmp_path, status="in_progress")
+    with pytest.raises(TimeoutError):
+        gold_audit.arbitrate_batch(
+            gw, conn, tmp_path / "pilot.jsonl", "v1", state_path=state, poll_seconds=0, max_polls=1
+        )
+    gw.status = "ended"
+    with pytest.raises(SystemExit, match="pilot.jsonl"):
+        gold_audit.arbitrate_batch(
+            gw, conn, tmp_path / "a.jsonl", "v1", state_path=state, poll_seconds=0
+        )
+
+
+def test_batch_state_other_judge_version(conn, tmp_path):
+    state = tmp_path / "batch.json"
+    gw = BatchFake(tmp_path, status="in_progress")
+    p = tmp_path / "a.jsonl"
+    with pytest.raises(TimeoutError):
+        gold_audit.arbitrate_batch(
+            gw, conn, p, "v1", state_path=state, poll_seconds=0, max_polls=1
+        )
+    with pytest.raises(SystemExit, match="v1"):
+        gold_audit.arbitrate_batch(gw, conn, p, "v2", state_path=state, poll_seconds=0)
+
+
+def test_batch_drops_answers_for_changed_targets(conn, tmp_path):
+    """제출 뒤 값이 바뀐 대상의 답, 대상 밖 통화의 답은 기록하지 않는다"""
+    _set_judge(conn, "c-0004", urgency="urgent")
+    state, p = tmp_path / "batch.json", tmp_path / "a.jsonl"
+    gw = BatchFake(tmp_path, status="in_progress")
+    with pytest.raises(TimeoutError):
+        gold_audit.arbitrate_batch(
+            gw, conn, p, "v1", state_path=state, poll_seconds=0, max_polls=1
+        )
+    _set_judge(conn, "c-0002", primary_purpose="cancel")  # 같은 항목, 판정기 값만 바뀜
+    _set_judge(conn, "c-0004", urgency="normal")  # 대상에서 빠짐
+    gw.status = "ended"
+    r = gold_audit.arbitrate_batch(gw, conn, p, "v1", state_path=state, poll_seconds=0)
+    assert (r["done"], r["failed"]) == (0, 2) and gold_audit.load(p) == []
+
+
+def test_budget_exceeded_is_raised(conn, tmp_path):
+    """하루 상한에 걸리면 실패로 묻지 않고 그대로 알린다"""
+    from shared.llm import BudgetExceeded
+
+    class Over(Fake):
+        def complete(self, alias, **kw):
+            raise BudgetExceeded("하루 상한")
+
+    with pytest.raises(BudgetExceeded):
+        gold_audit.arbitrate(Over(tmp_path), conn, tmp_path / "a.jsonl", "v1")
+
+
+def test_guide_covers_every_item():
+    """프롬프트 형식이 바뀌어도 판정 도중 멈추지 않게 — 9항목 전부, 용건은 14가지 다"""
+    from shared.call_labels import ITEMS, PURPOSE_KO
+
+    for item in ITEMS:
+        assert gold_audit.guide(item)
+    purpose = [
+        line for line in gold_audit.guide("primary_purpose") if not line.strip().startswith("(")
+    ]
+    assert len(purpose) == len(PURPOSE_KO)
+
+
+def test_reasoning_max_tokens_from_backend():
+    from backend.classify import REASONING_MAX_TOKENS
+
+    assert gold_audit.REASONING_MAX_TOKENS is REASONING_MAX_TOKENS

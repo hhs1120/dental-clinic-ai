@@ -13,15 +13,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from backend import prompts
+from backend.classify import REASONING_MAX_TOKENS  # 추론 토큰도 max_tokens 안(앱 설계 §7.2)
 from evaluation.classification import _calls, _judgments, _usable, judge_version
 from evaluation.metrics import GOLD_AUDIT_SAMPLE
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, differing_items
-from shared.llm import Gateway, JsonlLog, load_config
+from shared.llm import BudgetExceeded, Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK = "gold_audit"  # prompts/gold_audit/<버전>.md — 머리말 effort가 추론 단계(앱 설계 §7.2)
 PROMPT_VERSION = "v1"
-REASONING_MAX_TOKENS = 16000  # 추론 토큰도 max_tokens 안(backend/classify.py와 같은 값)
 AUDIT_PATH = ROOT / "evaluation" / "gold_audit.jsonl"
 LLM_LOG = (
     ROOT / "evaluation" / "gold_audit_llm.jsonl"
@@ -200,6 +200,14 @@ def _to_record(t: dict, r, version: str, effort: str | None) -> dict | None:
     }
 
 
+def _snapshot(t: dict) -> dict:
+    """대상의 녹취록 해시와 항목별 (골드, 판정기) — 제출 때와 받을 때가 같은지 본다"""
+    return {
+        "sha": t["transcript_sha"],
+        "items": {i: [v["gold"], v["judge"]] for i, v in t["items"].items()},
+    }
+
+
 def _put(records: list[dict], rec: dict) -> list[dict]:
     """같은 (통화, 판정기 버전)의 옛 줄을 새 줄로"""
     key = (rec["call_uid"], rec["judge_version"])
@@ -226,6 +234,8 @@ def arbitrate(
             r = gw.complete(
                 ALIAS, task="gold-audit", prompt_version=PROMPT_VERSION, **_request(t, effort)
             )
+        except BudgetExceeded:  # 하루 상한은 실패로 묻지 않고 알린다(끝난 결과는 이미 저장됨)
+            raise
         except Exception:  # noqa: BLE001 — 한 건의 예외로 끝난 결과를 잃지 않게 실패로 센다
             return None, 0
         return _to_record(t, r, version, effort), r.cost_usd
@@ -253,13 +263,16 @@ def arbitrate_batch(
     poll_seconds: int = 60,
     max_polls: int | None = None,
 ) -> dict:
-    """arbitrate와 같은 대상·입력을 Batch로(반값, 느림). 제출한 배치 id를 state_path에 남겨, 끊겨도 다시 제출하지 않고
-    그 결과를 받는다. 결과 없는 건은 기록하지 않아 다음 실행에서 다시 돈다"""
+    """arbitrate와 같은 대상·입력을 Batch로(반값, 느림). 제출한 배치 id·기록 파일·대상 값을 state_path에 남겨, 끊겨도
+    다시 제출하지 않고 그 결과를 받는다(다시 실행할 때 --limit·--effort는 쓰지 않는다). 결과 없는 건과 제출 뒤 값이
+    바뀐 대상의 답은 기록하지 않아 다음 실행에서 다시 돈다"""
     if state_path.exists():
         st = json.loads(state_path.read_text(encoding="utf-8"))
-        if st["judge_version"] != version:
-            raise SystemExit(f"판정기 {st['judge_version']}의 배치가 진행 중 — {state_path}")
-        bid, effort = st["batch_id"], st["effort"]
+        if st["judge_version"] != version or st["out"] != str(path):
+            raise SystemExit(
+                f"판정기 {st['judge_version']}·기록 {st['out']}의 배치가 진행 중 — {state_path}"
+            )
+        bid, effort, sent = st["batch_id"], st["effort"], st["targets"]
     else:
         effort = effort or prompts.effort(TASK, PROMPT_VERSION)
         todo = _todo(conn, path, version, limit)
@@ -267,8 +280,18 @@ def arbitrate_batch(
             return {"done": 0, "failed": 0, "cost_usd": 0.0}
         reqs = [{"custom_id": t["call_uid"], **_request(t, effort)} for t in todo]
         bid = gw.submit_batch(ALIAS, reqs, task="gold-audit", prompt_version=PROMPT_VERSION)
+        sent = {t["call_uid"]: _snapshot(t) for t in todo}
         state_path.write_text(
-            json.dumps({"batch_id": bid, "judge_version": version, "effort": effort}),
+            json.dumps(
+                {
+                    "batch_id": bid,
+                    "judge_version": version,
+                    "effort": effort,
+                    "out": str(path),
+                    "targets": sent,
+                },
+                ensure_ascii=False,
+            ),
             encoding="utf-8",
         )
     polls = 0
@@ -283,7 +306,10 @@ def arbitrate_batch(
     now = {t["call_uid"]: t for t in targets(conn, version)}
     records, done = load(path), 0
     for uid, r in results.items():
-        rec = _to_record(now[uid], r, version, effort) if uid in now else None
+        same = uid in now and _snapshot(now[uid]) == sent.get(
+            uid
+        )  # 제출 뒤 녹취록·값이 바뀌면 옛 답
+        rec = _to_record(now[uid], r, version, effort) if same else None
         if rec is not None:
             records = _put(records, rec)
             done += 1
@@ -443,7 +469,7 @@ def audit(conn, path: Path, version: str, read=input, write=print) -> None:
     picks = sample(cur)
     todo = pending(cur)
     if stale:
-        write(f"녹취록이 바뀐 기록 {stale}줄은 건너뜀")
+        write(f"낡은 기록(녹취록·값이 바뀜) {stale}줄은 건너뜀")
     write(f"표본 {len(picks)}통화 중 남은 {len(todo)}통화")
     for k, uid in enumerate(todo, len(picks) - len(todo) + 1):
         t, rec = by_uid[uid], rec_of[uid]
