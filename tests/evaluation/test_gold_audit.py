@@ -523,3 +523,18 @@ def test_batch_resumes_submitted(conn, tmp_path):
         == 1
     )
     assert len(gw.batches) == 1
+
+
+def test_audit_shows_label_guide(conn, tmp_path):
+    """항목마다 고를 수 있는 라벨 전체와 뜻을 먼저 보인다 — 용건은 14가지 전부, 표시 항목은 판정 기준 문장"""
+    from shared.call_labels import PURPOSE_KO
+
+    p = tmp_path / "a.jsonl"
+    gold_audit.arbitrate(Fake(tmp_path), conn, p, "v1")  # 대상 c-0002: 용건·불만
+    out = []
+    gold_audit.audit(conn, p, "v1", read=_keys("1", "1"), write=out.append)
+    text = "\n".join(out)
+    assert all(ko in text for ko in PURPOSE_KO.values())
+    assert "불만을 드러냈다" in text  # complaint 표시 항목 기준
+    assert gold_audit.guide("counterpart")[0].strip().startswith("환자")
+    assert any("급하지 않음" in line for line in gold_audit.guide("urgency"))

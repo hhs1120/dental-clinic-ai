@@ -6,6 +6,7 @@
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -389,6 +390,40 @@ def summarize(records: list[dict]) -> dict:
     }
 
 
+def _sections() -> dict[str, str]:
+    """중재 프롬프트 본문을 절 제목(괄호 속 항목 이름 또는 '표시')별로 — 화면 안내를 프롬프트 정의와 같게"""
+    body = prompts.load(TASK, PROMPT_VERSION)["system"]
+    out = {}
+    for part in re.split(r"^## ", body, flags=re.M)[1:]:
+        head, _, text = part.partition("\n")
+        m = re.search(r"\((\w+)\)", head)
+        out["flags" if "표시" in head else (m[1] if m else head)] = text
+    return out
+
+
+def guide(item: str) -> list[str]:
+    """사람 화면에서 그 항목의 라벨 전체와 뜻(프롬프트 정의 그대로, 값은 우리말)"""
+    sec = _sections()
+
+    def defs(text: str) -> dict[str, str]:
+        return dict(re.findall(r"^- (\w+) — (.+)$", text, flags=re.M))
+
+    if item == "primary_purpose":
+        order = re.search(r"^판단 순서: .+$", sec["primary_purpose"], flags=re.M)
+        return ([f"  ({order[0]})"] if order else []) + [
+            f"  {PURPOSE_KO[k]} — {v}" for k, v in defs(sec["primary_purpose"]).items()
+        ]
+    if item == "counterpart":
+        d = dict(re.findall(r"(\w+)\(([^)]*)\)", sec["counterpart"]))
+        return [
+            f"  {COUNTERPART_KO[k]} — {d.get(k, '위 어디에도 맞지 않음')}" for k in COUNTERPART_KO
+        ]
+    if item == "urgency":
+        d = defs(sec["urgency"])
+        return [f"  급함 — {d['urgent']}", "  급하지 않음 — 그 밖(보통·낮음)"]
+    return [f"  예 = {defs(sec['flags'])[item]}"]
+
+
 KEYS = {"1": "가", "2": "나", "3": NEITHER}
 
 
@@ -414,7 +449,10 @@ def audit(conn, path: Path, version: str, read=input, write=print) -> None:
         for item in t["items"]:
             p = pair(t, item)
             keys = " · ".join(f"{key} {KEYS[key]}" for key in list(KEYS)[: len(choices(item))])
-            write(f"\n{ITEM_KO[item]} — 가: {p['가']} / 나: {p['나']}")
+            write(f"\n{ITEM_KO[item]} — 고를 수 있는 라벨")
+            for line in guide(item):
+                write(line)
+            write(f"  ▶ 가: {p['가']} / 나: {p['나']}")
             while True:
                 key = read(f"  {keys} > ").strip()
                 if key in KEYS and KEYS[key] in choices(item):
