@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ChatPanel } from "@/components/ask/chat-panel";
 import { SearchForm } from "@/components/ask/search-form";
 import {
   SearchResults,
@@ -99,7 +100,15 @@ export function AskView() {
         />
         <SearchResults status={status} search={search} />
       </TabsContent>
-      {TABS.filter((t) => t.value !== "search").map((t) => (
+      {/* 질문하기는 탭을 바꿔도 입력·답이 남게 숨기기만 한다(기능 정의 §4 ③) */}
+      <TabsContent
+        value="chat"
+        forceMount
+        className="data-[state=inactive]:hidden"
+      >
+        <ChatPanel />
+      </TabsContent>
+      {TABS.filter((t) => t.value === "docs").map((t) => (
         <TabsContent key={t.value} value={t.value}>
           <p className="text-muted-foreground">준비 중입니다.</p>
         </TabsContent>
