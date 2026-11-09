@@ -23,6 +23,12 @@ export interface BoardItem extends TodoItem {
   chart_no: string | null;
   urgent: boolean;
   emergency: boolean;
+  /** 후속 에이전트 처리안 — 활성 분류 행의 것 */
+  followup: {
+    action: string | null;
+    summary: string | null;
+    status: "done" | "failed";
+  } | null;
 }
 
 export interface Board {
@@ -80,6 +86,15 @@ export interface CallDetail {
   disagree: { items: string[]; is_core: boolean } | null;
   /** 되돌리지 않은 자동 종결(기능 정의 §4 ①) */
   autoclose: { id: number; reason: string; at: string } | null;
+  /** 후속 에이전트 처리안과 조회 과정(기능 정의 §4 ①) */
+  followup: {
+    action: string | null;
+    summary: string | null;
+    facts: string[];
+    status: "done" | "failed";
+    reason: string | null;
+    trace: { tool: string; args: Record<string, unknown> }[];
+  } | null;
 }
 
 export interface LabelNames {
@@ -87,6 +102,7 @@ export interface LabelNames {
   counterpart: Record<string, string>;
   urgency: Record<string, string>;
   flag: Record<string, string>;
+  action: Record<string, string>;
 }
 
 export const DIRECTION_LABEL: Record<Direction, string> = {

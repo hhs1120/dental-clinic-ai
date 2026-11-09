@@ -6,9 +6,11 @@ aliases:
   summarize: [claude-haiku-5-5, claude-sonnet-5-5] # ① 분류기 요약·할 일
   judge: [solar-mini4]                             # ① 판정기 라벨 — 프로바이더 하나라 폴백 없음
   chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
+  followup: [claude-sonnet-5-5]                    # ① 후속 에이전트(backend/followup.py) — 앱 설계 §7 그 밖의 에이전트
   blind_judge: [claude-haiku-5-5]                  # ② 블라인드 LLM 쌍 비교(평가 설계 §2.4) — 요약을 쓴 모델과 같아 자기 글 쏠림은 사람 투표 일치율로 본다
   rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
   gold_audit: [claude-opus-5-5]                    # 골드 점검 중재(평가 설계 §2.3) — 생성기(Sonnet)·판정기(Solar)와 다른 모델, 폴백 없음(섞이면 중재가 바뀐다)
+  action_label: [claude-opus-5-5]                  # 처리 정답 라벨(evaluation/call_actions.py) — 후속 에이전트(Sonnet)와 다른 모델, 폴백 없음
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
 models:
   claude-opus-5-5: { input: 4.00, output: 20.00, cache_read: 0.20 }  # 서버 측 폴백 안 씀 — 골드 점검 중재만

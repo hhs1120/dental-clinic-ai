@@ -251,3 +251,64 @@ def test_detail_and_revert_pasted(client, tmp_path):
     assert client.get(f"/calls/{uid}").json()["autoclose"]["id"] == aid
     assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 200
     assert client.get(f"/calls/{uid}").json()["autoclose"] is None
+
+
+def _plan(tmp_path, uid, version="v2", status="done"):
+    """처리안 행과 그 실행의 도구 단계를 바로 넣는다(에이전트는 test_followup이 본다)"""
+    from backend import db
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    cid = c.execute(
+        "SELECT id FROM ax_call_classifications WHERE call_uid = ? AND prompt_version = ?",
+        (uid, version),
+    ).fetchone()[0]
+    c.execute(
+        "INSERT INTO ax_agent_runs (agent, target, status, prompt_version, started_at)"
+        " VALUES ('call_followup', ?, 'done', 'v1', '2026-11-05 09:00:00')",
+        (uid,),
+    )
+    run = c.execute("SELECT max(id) FROM ax_agent_runs").fetchone()[0]
+    c.execute(
+        "INSERT INTO ax_agent_steps (run_id, seq, kind, tool_use_id, tool, args, result, hook_status, created_at)"
+        " VALUES (?, 1, 'tool', 't1', 'query_patient', '{\"chart_no\": \"C-00001\"}', '{}', 'pass', '2026-11-05 09:00:01')",
+        (run,),
+    )
+    c.execute(
+        "INSERT INTO ax_call_followups (call_uid, classification_id, action, summary, facts, run_id, status,"
+        " created_at) VALUES (?, ?, 'doctor_reply', '원장님 확인 뒤 회신', '[\"다음 예약 없음\"]', ?, ?,"
+        " '2026-11-05 09:00:02')",
+        (uid, cid, run, status),
+    )
+    c.commit()
+    c.close()
+
+
+def test_board_and_detail_show_followup(client, tmp_path):
+    _plan(tmp_path, "c-0001")
+    b = client.get("/calls/today").json()
+    item = next(i for i in b["internal"] if i["call_uid"] == "c-0001")
+    assert item["followup"] == {
+        "action": "doctor_reply",
+        "summary": "원장님 확인 뒤 회신",
+        "status": "done",
+    }
+    assert next(i for i in b["internal"] if i["call_uid"] == "c-0004")["followup"] is None
+    d = client.get("/calls/c-0001").json()["followup"]
+    assert d["facts"] == ["다음 예약 없음"] and d["trace"] == [
+        {"tool": "query_patient", "args": {"chart_no": "C-00001"}}
+    ]
+
+
+def test_followup_is_per_classification(client, tmp_path):
+    from backend import db
+    from tests.backend.call_db import classify_row
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    classify_row(c, "c-0001", version="v1")
+    c.close()
+    _plan(tmp_path, "c-0001", version="v1")
+    assert client.get("/calls/c-0001").json()["followup"] is None
+
+
+def test_labels_has_action(client):
+    assert client.get("/labels").json()["action"]["scaling_timing"] == "스케일링 시기 안내"

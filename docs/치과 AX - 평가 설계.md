@@ -203,7 +203,7 @@ tags:
 
 **재발 방지**(하네스가 실수를 환경 수정으로 바꾼 결과): 규칙 수, 규칙별 차단 횟수, 재현 테스트 통과율, 같은 유형 재발 건수. 차단이 많다고 좋은 규칙은 아니므로 차단된 건 표본의 오차단율을 함께 본다
 
-**① 후속 처리**: 처리안 정확도(`truth_call_actions`)를 규칙 기준선과 나란히. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 잰다(묶음 키는 §7, `evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 앱의 종결 기록을 읽지 않고 `eval.py`가 같은 조건 함수로 다시 재며(test 판정 풀은 앱이 자동 처리하지 않는다) 결과는 리포트에만 남긴다
+**① 후속 처리**: 처리안 정확도를 규칙 기준선(분류기 할 일 문장의 낱말 규칙 — `evaluation/followup.py` `baseline`)과 나란히. 모수는 골드와 활성 분류가 모두 할 일인 통화, dev 판정 풀과 silver 검증 구간을 따로 보고하고 분류기가 놓친 할 일 통화 수를 함께 적는다. 정답은 골드에 할 일 내용이 없어 코드로 파생하지 않는다 — Opus가 녹취록만 보고 붙인 라벨(`make action-label`)과 사람 표본(`make action-audit`, `evaluation/metrics.py` `ACTION_AUDIT_SAMPLE`통화 — 표본은 사람 답이 정답), 라벨 vs 사람 일치율을 리포트에. 평가 실행은 `make followup-eval`이 `app.sqlite` 사본(`evaluation/runs/`)에서 라운드 배치(남은 실행이 `backend/harness/rounds.py` `ROUND_BATCH_MIN` 이하면 일반 호출)로 돌려 `evaluation/followup_runs.jsonl`에 쌓고, `eval.py`는 채점만 한다. 실행 줄은 (통화, 분류 행, 프롬프트 버전)으로 구분해 버전마다 다시 돌고, 리포트는 같은 통화·같은 정답으로 버전을 나란히 놓는다. 근거 후검증은 입력(녹취록·통화 일시·오늘)과 도구 인자·결과를 근거로 본다. 한계: 평가 통화는 1년에 걸쳐 있는데 조회 도구는 기준일 상태를 돌려줘, 지난 통화에서 "이미 지난 예약"처럼 실제 당일과 다른 추론이 나온다. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 잰다(묶음 키는 §7, `evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 앱의 종결 기록을 읽지 않고 `eval.py`가 같은 조건 함수로 다시 재며(test 판정 풀은 앱이 자동 처리하지 않는다) 결과는 리포트에만 남긴다
 
 **시나리오 평가**(⑥·운영 에이전트): 생성 데이터에 정답이 없어 시나리오 DB로 잰다. ⑥은 이상 원인 정확도, 운영 에이전트는 심은 환자 묶음의 재현율·정밀도를 고정 순서 기준선과 나란히. 시나리오는 dev/test로 나누고 test는 묶음마다 1회
 
@@ -243,7 +243,7 @@ tags:
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |
 | `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune --condition …`(여러 번) |
-| `truth_call_actions` | 생성기(평가 전용 단계) | ① 통화 → 기대 처리 enum. 목적·`has_todo`·`used_fact`에서 코드로 파생, 앱 입력 없음 |
+| `evaluation/call_actions.jsonl` | `make action-label`·`make action-audit` | ① 통화 → 처리 정답(Opus 라벨 + 사람 표본, 만드는 법·이유는 §5). `truth.sqlite`가 아니라 커밋하는 jsonl |
 | `truth_scenarios` | 생성기(평가 전용 단계) | ⑥·운영 평가 시나리오 → 심은 이상·정답 원인·대상 환자, split. 시나리오 DB는 `evaluation/scenarios/`(정답 없음) |
 
 같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`이 원본이고 `truth_rag_qa`는 적재 결과.
@@ -265,7 +265,7 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - 판정: 판정기 vs 골드(§2.6). 교차검증: 엇갈림·핵심 엇갈림·일치 오류·오류 포착·향상 배수(§2.5). 골드 점검(§2.3 쓰임)
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 주의사항 반영률·과잉 언급률·과잉 제안률
-- 슬롯·에이전트 섹션은 착수 시 추가
+- ① 후속 처리: §5 — dev만(test 묶음은 [[치과 AX - 기능 정의]] §9 "후속 처리 test 정답" 뒤). 나머지 슬롯·에이전트 섹션은 착수 시 추가
 - 자동 처리 값도 `eval.py`가 낸다(§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리

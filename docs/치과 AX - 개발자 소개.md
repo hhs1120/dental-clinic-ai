@@ -28,7 +28,7 @@ tags:
 | LLM 게이트웨이 | Anthropic·Upstage 공식 SDK, 모듈 하나(`shared/llm.py`) — 별칭으로 모델 호출·폴백·토큰·비용 기록·일일 상한, 대량 생성은 Batch API. 모델은 `config/llm.yaml` 별칭 | 완성 |
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
 | 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
-| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·FastAPI 검색·EMR 조회·통화·판정·블라인드 API 구현, SSE·작업 폴링은 설계 완료 |
+| 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·① 후속 에이전트·FastAPI 검색·EMR 조회·통화·판정·블라인드 API 구현, SSE·작업 폴링은 설계 완료 |
 | 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색·일별 예약표·전환 전 EMR·통화·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포·UI 테스트 | `docker compose` 로컬 배포 · Playwright | 앱 착수 뒤 |
@@ -81,8 +81,8 @@ tags:
 
 **아직 만들지 않은 데이터(추정)**
 - **⑤-3 청구 기준 질문**(`truth_claim_qa`): 조정 상세 사유(`master.ADJUST_REASONS`)마다 1~2문항. 사람이 ⑤ 착수 때 쓴다. 청구·조정·청구 기준 문서는 이미 있다
-- **사람 판정**: 골드 점검 표본 `GOLD_AUDIT_SAMPLE`통화(판정기와 골드가 다른 항목만), 최종 블라인드 비교 `blind_pool_size`통화 + 운영 구간의 엇갈림·표본
-- **평가 전용 정답**: 후속 처리 정답(`truth_call_actions`)과 ⑥·운영 에이전트 시나리오(`truth_scenarios`). 기존 `emr_*`·`fin_*`는 바꾸지 않는다
+- **사람 판정**: 골드 점검 표본 `GOLD_AUDIT_SAMPLE`통화(판정기와 골드가 다른 항목만), 처리 정답 사람 표본 `ACTION_AUDIT_SAMPLE`통화, 최종 블라인드 비교 `blind_pool_size`통화 + 운영 구간의 엇갈림·표본
+- **평가 전용 정답**: ⑥·운영 에이전트 시나리오(`truth_scenarios`). 기존 `emr_*`·`fin_*`는 바꾸지 않는다
 - ⑦은 기존 EMR을 쿼리만 하므로 새 데이터가 없고, ⑧·⑨ 원본과 정답은 이미 생성돼 있다
 
 ## 4. 기능별 AI — 무엇을 맡기고, 왜 쓰고, 어떻게 믿나
@@ -218,7 +218,7 @@ tags:
 
 | 과제 | 읽는 원본 | 채점 정답 | 다른 과제와의 연결 |
 |---|---|---|---|
-| 코어 ①② 통화 분류·판정·자동 개선 | `ax_calls` | `truth_call_labels`·`truth_call_actions` + 골드 점검 표본 | 에이전트 하네스를 함께 씀 |
+| 코어 ①② 통화 분류·판정·자동 개선 | `ax_calls` | `truth_call_labels` + 처리 정답 라벨·골드 점검 표본 | 에이전트 하네스를 함께 씀 |
 | 코어 ③ 물어보기 | `ax_documents`·`ax_calls`·`emr_messages`·`emr_chart_notes`, 조회 도구용 `emr_*` | `truth_rag_qa` | 검색 구조를 ⑤-3이 다시 씀 |
 | 코어 ④ 준비표 (+⑦ 브리핑) | 환자·예약·수납·청구·주의사항 `emr_*` | 코드 채점(후검증) | 후검증 함수를 ⑤-4·⑥·⑦·⑨가 다시 씀. `make gate` 뒤 착수 |
 | ⑤ 청구 점검·삭감 대응 | `emr_claims`·`emr_chart_notes`·청구 기준 문서 | `truth_claim_errors`·`truth_doc_meta`(기준 절)·`truth_claim_qa`(착수 때 작성) | ③ 검색 구조, ④ 후검증 |

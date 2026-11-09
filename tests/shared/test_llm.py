@@ -714,3 +714,44 @@ def test_upstage_effort_sent_as_reasoning_effort(tmp_path):
     gw.complete("up", task="t", messages=MSGS, schema=LABELS_SCHEMA)
     (_, with_effort), (_, without) = up.calls
     assert with_effort["reasoning_effort"] == "low" and "reasoning_effort" not in without
+
+
+def test_batch_with_tools_round_trip(tmp_path):
+    """라운드 배치 — 요청에 tools가 들어가고, tool_use 응답은 단건 complete와 같은 모양(tool_calls·content)으로 성공"""
+    tools = [{"name": "query_patient", "description": "환자", "input_schema": {"type": "object"}}]
+    msg = Message.model_validate(
+        {
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "model": "model-a",
+            "content": [
+                {"type": "text", "text": "조회합니다"},
+                {
+                    "type": "tool_use",
+                    "id": "tu1",
+                    "name": "query_patient",
+                    "input": {"chart_no": "C-1"},
+                },
+            ],
+            "stop_reason": "tool_use",
+            "stop_sequence": None,
+            "usage": _usage(input_tokens=100, output_tokens=20),
+        }
+    ).model_dump()
+    client = BatchClient([_entry("r1", {"type": "succeeded", "message": msg})])
+    gw = _gateway(tmp_path, client)
+    gw.submit_batch("gen", [{"custom_id": "r1", "messages": MSGS, "tools": tools}], task="toy")
+    (req,) = client.messages.batches.created
+    assert req["params"]["tools"] == tools
+    out = gw.batch_results("batch_1", "gen", task="toy")["r1"]
+    assert out.ok and out.stop_reason == "tool_use" and out.text == "조회합니다"
+    assert out.tool_calls == (
+        {"id": "tu1", "name": "query_patient", "input": {"chart_no": "C-1"}},
+    )
+    assert out.content[-1] == {
+        "type": "tool_use",
+        "id": "tu1",
+        "name": "query_patient",
+        "input": {"chart_no": "C-1"},
+    }

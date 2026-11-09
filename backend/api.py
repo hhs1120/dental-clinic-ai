@@ -33,6 +33,7 @@ from shared.call_labels import (
     URGENCY_KO,
 )
 from shared.clinic import Clinic, load_clinic
+from shared.followup import ACTION_KO
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_INDEX = f"검색 색인이 없습니다 — make index EMBEDDING={DEFAULT_EMBEDDING}을 먼저 실행하세요"
@@ -265,6 +266,7 @@ def labels() -> dict:
         "counterpart": COUNTERPART_KO,
         "urgency": URGENCY_KO,
         "flag": FLAG_KO,
+        "action": ACTION_KO,
     }
 
 

@@ -391,7 +391,7 @@ class Gateway(_Base):
         prompt_version: str | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> str:
-        """requests: [{custom_id, system, messages, schema, effort?, max_tokens?}] → 배치 id. 요청의 effort·max_tokens가
+        """requests: [{custom_id, system, messages, schema, effort?, max_tokens?, tools?}] → 배치 id. 요청의 effort·max_tokens가
         있으면 그것으로(단건 호출과 같은 버전은 같은 설정 — 앱 설계 §7.2), max_tokens 인자는 없을 때의 기본값. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
         보고 제출한다(기능 정의 §7). 비용은 결과에서 기록"""
         model = self.config["aliases"][alias][0]
@@ -409,6 +409,8 @@ class Gateway(_Base):
             output_config = _output_config(r.get("schema"), r.get("effort"))
             if output_config is not None:
                 params["output_config"] = output_config
+            if r.get("tools"):  # 라운드 배치(에이전트) — 단건 complete와 같은 도구 목록
+                params["tools"] = r["tools"]
             batch.append({"custom_id": r["custom_id"], "params": params})
         return self.client.messages.batches.create(requests=batch).id
 
@@ -449,7 +451,26 @@ class Gateway(_Base):
                 )
 
             text = "".join(b.text for b in msg.content if b.type == "text")
-            if msg.stop_reason != "end_turn":
+            if msg.stop_reason == "tool_use":  # 도구 호출 — 단건 complete와 같은 모양으로 돌려준다
+                result = LLMResult(
+                    True,
+                    text,
+                    None,
+                    msg.model,
+                    False,
+                    tokens_in,
+                    tokens_out,
+                    cost * BATCH_PRICE_SHARE,
+                    0,
+                    stop_reason=msg.stop_reason,
+                    tool_calls=tuple(
+                        {"id": b.id, "name": b.name, "input": b.input}
+                        for b in msg.content
+                        if b.type == "tool_use"
+                    ),
+                    content=_blocks(msg.content),
+                )
+            elif msg.stop_reason != "end_turn":
                 result = fail(
                     "refusal" if msg.stop_reason == "refusal" else f"stop_reason {msg.stop_reason}"
                 )
@@ -464,6 +485,8 @@ class Gateway(_Base):
                     tokens_out,
                     cost * BATCH_PRICE_SHARE,
                     0,
+                    stop_reason=msg.stop_reason,
+                    content=_blocks(msg.content),
                 )
             else:
                 try:

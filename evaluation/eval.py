@@ -25,7 +25,15 @@ from pathlib import Path
 import yaml
 
 from backend.calls import active_versions
-from evaluation import EvalRefused, autoclose, classification, gold_audit, rag
+from evaluation import (
+    EvalRefused,
+    autoclose,
+    call_actions,
+    classification,
+    followup,
+    gold_audit,
+    rag,
+)
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
 
@@ -104,6 +112,8 @@ def run(
     force: bool = False,
     prompts_dir: Path | None = None,
     gold_audit_path: Path | None = None,
+    followup_runs: Path | None = None,
+    call_actions_path: Path | None = None,
 ) -> dict:
     """section = test 묶음(SECTIONS 하나). dev는 없으면 전부(--retrieval-only면 챗 빼고)"""
     reports_dir, prompts_dir = reports_dir or REPORTS, prompts_dir or PROMPTS
@@ -205,6 +215,7 @@ def run(
         "rag": None,
         "gold_audit": None,
         "autoclose": None,
+        "followup": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -271,6 +282,25 @@ def run(
         a = prompt_version if section == "auto" else active_versions(conn)[0]  # 앱과 같은 기본값
         if jv and a:
             result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
+    if dev and call_actions_path and call_actions_path.exists():
+        # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
+        acts = call_actions.load(call_actions_path)
+        runs = followup.load(followup_runs) if followup_runs else []
+        truth, split_calls = call_actions.truth(acts), call_actions.eval_calls(conn)
+        versions = sorted({r["prompt_version"] for r in runs if r.get("prompt_version")})
+        result["followup"] = {
+            "prompt_version": followup.followup_version(),
+            "score": followup.score(conn, runs, truth, split_calls),
+            "by_version": {  # 버전 비교 — 같은 통화·같은 정답으로
+                v: followup.score(conn, runs, truth, split_calls, v) for v in versions
+            },
+            "labels": len(acts),
+            # 다시 라벨하다 실패해 옛 프롬프트 버전으로 남은 줄 — 0이 아니면 make action-label을 다시
+            "stale_labels": sum(
+                r.get("prompt_version") != call_actions.PROMPT_VERSION for r in acts
+            ),
+            "agreement": call_actions.agreement(acts),
+        }
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -357,6 +387,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_crosscheck(r["crosscheck"])
     if r.get("autoclose") is not None:
         out += _render_autoclose(r["autoclose"])
+    if r.get("followup") is not None:
+        out += _render_followup(r["followup"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -512,6 +544,51 @@ def _render_autoclose(a: dict) -> list[str]:
     ]
 
 
+def _render_followup(f: dict) -> list[str]:
+    ag = f["agreement"]
+    out = [
+        "## ① 후속 처리",
+        "",
+        f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}"
+        + (
+            f" · 옛 버전 라벨 {f['stale_labels']}통화(make action-label 다시)"
+            if f.get("stale_labels")
+            else ""
+        ),
+        "",
+        f"후속 에이전트 {f['prompt_version']}",
+        "",
+        "| 구간 | 통화 | 에이전트 | 규칙 기준선 | 실패(이유) | 실행 전 | 비용 | 분류기 놓침 | 분류기만 할 일 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for sp, x in f["score"].items():
+        why = ", ".join(f"{k} {n}" for k, n in x["failed_by_reason"].items())
+        out.append(
+            f"| {sp} | {x['n']} | {_kn(x['agent'])} | {_kn(x['baseline'])} | {x['failed']}"
+            + (f"({why})" if why else "")
+            + f" | {x['not_run']} | ${x['cost_usd']} | {x['missed_by_classifier']}"
+            f" | {x['extra_by_classifier']} |"
+        )
+    out.append("")
+    if len(f.get("by_version", {})) > 1:  # 버전 비교 — 같은 통화·같은 정답
+        out.append(
+            "버전 비교 — "
+            + " / ".join(
+                f"{v}: " + ", ".join(f"{sp} {_kn(x['agent'])}" for sp, x in sc.items())
+                for v, sc in f["by_version"].items()
+            )
+        )
+        out.append("")
+    for sp, x in f["score"].items():
+        rows = [
+            f"{a} 에이전트 {_kn(x['agent']['by_action'][a])} · 기준선 {_kn(x['baseline']['by_action'][a])}"
+            for a in x["agent"]["by_action"]
+        ]
+        if rows:
+            out += [f"{sp} 종류별 — " + " / ".join(rows), ""]
+    return out
+
+
 def _render_crosscheck(xs: list[dict]) -> list[str]:
     out = ["## ① 교차검증 (모델 A × 판정기)", ""]
     if not xs:
@@ -659,6 +736,8 @@ def main(argv=None) -> int:
             condition=args.condition,
             force=args.force,
             gold_audit_path=gold_audit.AUDIT_PATH,
+            followup_runs=followup.OUT,
+            call_actions_path=call_actions.ACTIONS_PATH,
         )
     except AlreadyRun as e:
         print(e)
