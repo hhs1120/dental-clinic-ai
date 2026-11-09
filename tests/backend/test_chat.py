@@ -209,3 +209,20 @@ def test_max_tool_calls_matches_eval():
     from evaluation.metrics import MAX_TOOL_CALLS
 
     assert chat.CHAT_MAX_TOOL_CALLS == MAX_TOOL_CALLS
+
+
+def test_chat_reports_cost(conn):
+    assert ask(conn, [SEARCH, ANSWER()])["cost_usd"] >= 0
+
+
+def test_baseline_one_search_one_answer(conn):
+    """단순 RAG 기준선(평가 설계 §3.3) — 질문 원문으로 한 번 검색, 도구 없이 그 결과만으로 답"""
+    gw = Script(conn, [])
+    out = chat.baseline(conn, gw, Searcher(conn, CLINIC, FakeEmbedder()), "재평가 차트")
+    assert set(out) >= {"retrieved_ids", "answer_text", "cited_ids", "refused", "cost_usd"}
+    assert set(out["retrieved_ids"]) == {"doc:1:0", "chart:102"}
+    sent = conn.execute(
+        "SELECT COUNT(*) FROM ax_llm_calls WHERE task = ? AND model_alias = 'chat'",
+        (chat.BASELINE_TASK,),
+    ).fetchone()[0]
+    assert sent == 1 and conn.execute("SELECT COUNT(*) FROM ax_agent_runs").fetchone()[0] == 0

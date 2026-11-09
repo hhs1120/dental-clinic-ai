@@ -1,8 +1,10 @@
-"""평가 훅 (앱 설계 §1). 평가 스크립트가 앱의 search·chat을 같은 프로세스에서 부른다. 조건은
-'embedding=…,reranker=…'이고 Searcher를 조건별로 하나씩 둔다."""
+"""평가 훅 (앱 설계 §1). 평가 스크립트가 앱의 search·chat·baseline을 같은 프로세스에서 부른다. 조건은
+'embedding=…,reranker=…'이고 Searcher를 조건별로 하나씩 둔다. 챗은 평가 쪽이 넘긴 app.sqlite 사본에 쓴다
+(설계 2026-11-09 챗 "평가")."""
 
 from pathlib import Path
 
+from backend import chat as chat_agent
 from backend import db
 from backend.embeddings import make_embedder
 from backend.harness.llm import make_gateway
@@ -19,7 +21,7 @@ from shared.clinic import load_clinic
 
 
 class App:
-    supports_chat = False  # ③ 챗 착수 때 켠다
+    supports_chat = True
 
     def __init__(self, conn, embedder_for=make_embedder):
         self.conn, self.embedder_for = conn, embedder_for
@@ -58,7 +60,16 @@ class App:
         return {bucket: [c["id"] for c in chunks] for bucket, chunks in found.items()}
 
     def chat(self, question: str, qa_id: str, condition: str | None = None) -> dict:
-        raise NotImplementedError("③ 챗 착수 때")
+        gw = make_gateway(self.conn, is_eval=True)
+        return chat_agent.chat(
+            self.conn, gw, self._searcher(condition), self.clinic, question, is_eval=True
+        )
+
+    def baseline(self, question: str, qa_id: str, condition: str | None = None) -> dict:
+        gw = make_gateway(self.conn, is_eval=True)
+        return chat_agent.baseline(
+            self.conn, gw, self._searcher(condition), question, is_eval=True
+        )
 
 
 def make_app(app_db: Path, source_db: Path) -> App:

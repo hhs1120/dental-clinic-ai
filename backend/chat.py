@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from backend import prompts
 from backend.harness.hooks import Rule
-from backend.harness.loop import AgentSpec, Runner
+from backend.harness.loop import AgentSpec, Runner, external
 from backend.harness.store import RunStore
 from backend.harness.tools import Tool, ToolRegistry
 from backend.query_tools import query_tools
@@ -23,6 +23,20 @@ from shared.clinic import Clinic
 
 AGENT, ALIAS, TASK = "chat", "chat", "chat"
 PROMPT_VERSION = "v1"
+BASELINE_TASK, BASELINE_VERSION = (
+    "chat_baseline",
+    "v1",
+)  # 단순 RAG 기준선(평가 설계 §3.3) — 같은 답변 모델
+BASELINE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string"},
+        "cited_ids": {"type": "array", "items": {"type": "string"}},
+        "refused": {"type": "boolean"},
+    },
+    "required": ["text", "cited_ids", "refused"],
+    "additionalProperties": False,
+}
 # 평가의 질문당 도구 호출 상한과 같게(평가 설계 §3.2 — tests/backend/test_chat.py가 비교)
 CHAT_MAX_TOOL_CALLS = 6
 CHAT_MAX_USD = 0.5  # 질문당 비용 상한 — dev 실측 뒤 다시 정한다
@@ -209,7 +223,9 @@ def chat(
     outcome = Runner(spec(names), gw, store, reg, rules=_rules(today)).start(
         str(log_id), f"오늘: {today}\n질문: {question}"
     )
-    record_voyage(conn, searcher.drain_usage(), is_eval=is_eval, ref=("agent_run", outcome.run_id))
+    voyage = record_voyage(
+        conn, searcher.drain_usage(), is_eval=is_eval, ref=("agent_run", outcome.run_id)
+    )
     steps = store.steps(outcome.run_id)
     status, answer = _status(store, outcome, steps, today)
     tools = [s for s in steps if s["kind"] == "tool" and s["tool"] != ANSWER]
@@ -232,6 +248,7 @@ def chat(
         "cited_ids": answer["cited_ids"] if answer else [],
         "refuse_reason": refuse["args"]["reason"] if refuse and status == "refused" else None,
         "fallback_used": bool(fallback),
+        "cost_usd": store.run(outcome.run_id)["cost_usd"] + voyage,
     }
     conn.execute(
         "UPDATE ax_search_logs SET tool_calls = ?, retrieved_ids = ?, answer_text = ?, cited_ids = ?,"
@@ -250,3 +267,31 @@ def chat(
     )
     conn.commit()
     return out
+
+
+def baseline(
+    conn: sqlite3.Connection, gw, searcher: Searcher, question: str, *, is_eval: bool = False
+) -> dict:
+    """단순 RAG 기준선(평가 설계 §3.3) — 질문 원문으로 검색 1회(필터 없음), 같은 답변 모델이 도구 없이 그 결과만으로
+    {text, cited_ids, refused}. 인용 확인·숫자 후검증은 붙이지 않는다(단순 RAG 그대로와 비교)"""
+    found = searcher.search(question)
+    chunks = [_chart_plain(conn, c) for b in found.values() for c in b]
+    context = "\n\n".join(external(c["id"], c["text"]) for c in chunks)
+    r = gw.complete(
+        ALIAS,
+        task=BASELINE_TASK,
+        system=prompts.load(BASELINE_TASK, BASELINE_VERSION)["system"],
+        messages=[{"role": "user", "content": f"질문: {question}\n\n검색 결과:\n{context}"}],
+        schema=BASELINE_SCHEMA,
+        prompt_version=BASELINE_VERSION,
+    )
+    voyage = record_voyage(conn, searcher.drain_usage(), is_eval=is_eval, ref=None)
+    data = r.data if r.ok and r.data else {"text": "", "cited_ids": [], "refused": True}
+    return {
+        "retrieved_ids": [c["id"] for c in chunks],
+        "answer_text": data["text"],
+        "cited_ids": data["cited_ids"],
+        "refused": data["refused"],
+        "cost_usd": r.cost_usd + voyage,
+        "fallback_used": r.fallback_used,
+    }
