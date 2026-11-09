@@ -242,3 +242,35 @@ def test_marker_after_period_belongs_to_previous_sentence():
 def test_answer_text_joins_marker_to_sentence(conn):
     r, _ = run(conn, out("진료 당일 2시간 무료입니다. [1]"))
     assert r["status"] == "answered" and r["text"] == "진료 당일 2시간 무료입니다.[1]"
+
+
+def test_retry_does_not_hold_write_lock(conn):
+    """다시 부르는 동안 앱 DB 쓰기 잠금을 쥐지 않는다 — 막힌 횟수는 바로 커밋한다"""
+    seen = []
+
+    class Watch(Script):
+        def complete(self, alias, **kwargs):
+            seen.append(conn.in_transaction)
+            return super().complete(alias, **kwargs)
+
+    run(conn, gw=Watch(out(cited=(OLD,)), out()))
+    assert seen == [False, False] and _rule(conn, search_summary.CITE_OUTSIDE) == 1
+
+
+def test_unexpected_error_logs_failed_and_raises(conn):
+    with pytest.raises(RuntimeError):
+        run(conn, RuntimeError("x"))
+    assert [tuple(x) for x in _rows(conn)] == [("failed", 0)]
+
+
+def test_dotted_date_and_ellipsis_stay_in_sentence():
+    ids = ["a"]
+    for text in ("시행일은 2026. 3. 1.부터입니다[1].", "주차 등록... 데스크에서 합니다[1]."):
+        assert search_summary.check(text, ids, ids, ["2026. 3. 1."]) is None
+
+
+def test_marker_must_end_sentence():
+    ids = ["a"]
+    assert (
+        search_summary.check("주차[1]는 무료입니다.", ids, ids, []) == search_summary.CITE_MISSING
+    )

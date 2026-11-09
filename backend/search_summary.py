@@ -37,12 +37,14 @@ NUMBER = "search_summary.number_unverified"
 STATUS = {CITE_OUTSIDE: "cite_failed", CITE_MISSING: "cite_failed", NUMBER: "number_failed"}
 REASON = {
     CITE_OUTSIDE: "cited_ids가 이번 검색 결과 밖이거나, 본문 번호가 cited_ids 범위 밖이거나, 쓰이지 않은 출처가 있다.",
-    CITE_MISSING: "번호 없는 문장이 있다.",
+    CITE_MISSING: "끝에 번호가 없는 문장이 있다.",
     NUMBER: "검색 결과에 없는 숫자가 있다.",
 }
 RETRY_HINT = " 이번 검색 결과만 인용하고, 모든 문장 끝에 cited_ids 순번 [n]을 붙이고, 숫자는 결과에 있는 그대로 쓴다."
 MARK = re.compile(r"\[(\d+)\]")
-SENTENCES = re.compile(r"\n+|(?<=[.?!\]])\s+")  # 줄바꿈, 또는 . ? ! ] 뒤 공백에서 나눈다
+# 줄바꿈, 또는 . ? ! ] 뒤 공백에서 나눈다 — 숫자 뒤·마침표 뒤 마침표('2026. 3. 1.', '...')에서는 나누지 않는다
+SENTENCES = re.compile(r"\n+|(?<=[.?!\]])(?<![\d.]\.)\s+")
+ENDS_MARKED = re.compile(r"(?:\[\d+\])+[.?!]?$")  # 문장 끝 번호 — '…다[1].' 또는 '…다.[1]'
 # 마침표 뒤에 띄우고 붙인 번호('…있습니다. [1]')는 앞 문장의 번호다 — 실측 첫 응답 5건 중 4건이 이 모양
 LOOSE_MARKS = re.compile(r"([.?!])\s+((?:\[\d+\])+)")
 
@@ -63,7 +65,7 @@ def check(text: str, cited: list[str], input_ids: list[str], sources: list[str])
     # 번호는 1..len(cited)를 빠짐없이 — 범위 밖 번호도, 본문에 안 쓰인 출처도 막는다
     if not cited or not set(cited) <= set(input_ids) or marks != set(range(1, len(cited) + 1)):
         return CITE_OUTSIDE
-    if any(not MARK.search(s) for s in SENTENCES.split(text.strip()) if s.strip()):
+    if any(not ENDS_MARKED.search(s.strip()) for s in SENTENCES.split(text) if s.strip()):
         return CITE_MISSING
     if not numbers_ok(strip_marks(text), allowed_numbers(sources)):
         return NUMBER
@@ -179,7 +181,8 @@ def summarize(
             if rule is None:
                 status, text, cited = "answered", tidy(data["text"]), data["cited_ids"]
                 break
-            count_block(conn, rule)
+            with conn:  # 바로 커밋 — 다시 부르는 동안 쓰기 잠금을 쥐지 않는다
+                count_block(conn, rule)
             status = STATUS[rule]
             messages = messages + [
                 {"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
@@ -187,14 +190,22 @@ def summarize(
             ]
     except BudgetExceeded:
         status = "budget"
+    except Exception:  # 챗처럼 실패 행을 남기고 다시 던진다
+        conn.rollback()
+        _log(conn, args.query, key, retrieved, "", [], "failed", fallback, is_eval)
+        raise
+    log_id = _log(conn, args.query, key, retrieved, text, cited, status, fallback, is_eval)
+    return _result(status, _shown(status, text), cited, input_ids, log_id, False, cost, fallback)
 
+
+def _log(conn, question, key, retrieved, text, cited, status, fallback, is_eval) -> int:
     now = datetime.now().isoformat(sep=" ", timespec="seconds")
     log_id = conn.execute(
         "INSERT INTO ax_search_logs (kind, question, tool_calls, retrieved_ids, answer_text,"
         " cited_ids, status, fallback_used, is_eval, created_at)"
         " VALUES ('search_summary', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            args.query,
+            question,
             key,
             retrieved,
             text or None,
@@ -206,4 +217,4 @@ def summarize(
         ),
     ).lastrowid
     conn.commit()
-    return _result(status, _shown(status, text), cited, input_ids, log_id, False, cost, fallback)
+    return log_id
