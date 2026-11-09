@@ -14,7 +14,8 @@ from backend.vector_store import VectorStore
 from shared.llm import load_config
 
 MAX_CHARS = 500
-OVERLAP = 50
+OVERLAP = 50  # 문서 — 통화는 대화 단위(split_dialog)
+CARRY_MAX = 150  # 통화 조각 앞에 붙이는 직전 발화 상한(자) — 넘으면 그 발화의 끝부분만
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTION = {"inbound": "수신", "outbound": "발신"}
 _HEADER = re.compile(r"^#{1,6}\s+(.+)$", re.M)
@@ -46,6 +47,61 @@ def split_text(text: str, overlap: int = OVERLAP) -> list[str]:
         pieces.append(current)
         current = f"{current[-overlap:]}\n{unit}"
     pieces.append(current)
+    return pieces
+
+
+_SPEAKER = re.compile(r"^([^:：\n]{1,10})[:：]")
+
+
+def _turns(text: str) -> list[str]:
+    """같은 화자가 이어 말한 줄을 한 발화로. 표기 없는 줄은 앞 발화에 붙인다"""
+    turns, who = [], None
+    for line in (x.strip() for x in text.strip().split("\n")):
+        if not line:
+            continue
+        m = _SPEAKER.match(line)
+        if turns and (m is None or m[1] == who):
+            turns[-1] += "\n" + line
+        else:
+            turns.append(line)
+        who = m[1] if m else who
+    return turns
+
+
+def _carry(turn: str) -> str:
+    """다음 조각 앞에 붙일 직전 발화 — CARRY_MAX를 넘으면 화자 표기 + 끝부분"""
+    if len(turn) <= CARRY_MAX:
+        return turn
+    m = _SPEAKER.match(turn)
+    head = f"{m[1]}: …" if m else "…"
+    return head + turn[-(CARRY_MAX - len(head)) :]
+
+
+def split_dialog(text: str) -> list[str]:
+    """통화 녹취록을 발화 사이에서만 MAX_CHARS 안으로 나눈다. 다음 조각은 직전 발화로 시작해 이웃한 두 발화(질문→답)가
+    늘 한 조각에 함께 있다(글자 겹침은 긴 발화에서 갈라진다 — AI 실험 기록 §6). 화자 표기가 없으면 split_text,
+    한 발화가 MAX_CHARS를 넘으면 그 발화만 글자로 나눈다"""
+    text = text.strip()
+    if len(text) <= MAX_CHARS:
+        return [text] if text else []
+    if not any(_SPEAKER.match(x.strip()) for x in text.split("\n")):
+        return split_text(text)
+    pieces, current = [], []
+    for turn in _turns(text):
+        if len(turn) > MAX_CHARS:
+            if current:
+                pieces.append("\n".join(current))
+            pieces += split_text(turn)
+            current = []
+            continue
+        if len("\n".join([*current, turn])) <= MAX_CHARS:
+            current.append(turn)
+            continue
+        pieces.append("\n".join(current))
+        carry = _carry(current[-1])
+        current = [carry, turn] if len(carry) + 1 + len(turn) <= MAX_CHARS else [turn]
+    if current:
+        pieces.append("\n".join(current))
     return pieces
 
 
@@ -81,7 +137,7 @@ def _documents(conn, overlap: int = OVERLAP) -> list[dict]:
     return out
 
 
-def _calls(conn, overlap: int = OVERLAP) -> list[dict]:
+def _calls(conn) -> list[dict]:
     out = []
     for c in conn.execute(
         "SELECT c.*, p.chart_no, p.name FROM source.ax_calls c"
@@ -93,7 +149,7 @@ def _calls(conn, overlap: int = OVERLAP) -> list[dict]:
             f"환자: {c['name']}({c['chart_no']})" if c["chart_no"] else f"상대: {c['caller_name']}"
         )
         prefix = f"[{who} | {day} | {DIRECTION[c['direction']]}]"
-        for n, piece in enumerate(split_text(c["transcript"], overlap)):
+        for n, piece in enumerate(split_dialog(c["transcript"])):
             out.append(
                 {
                     "id": f"call:{c['call_uid']}:{n}",
@@ -203,7 +259,7 @@ def _charts(conn) -> list[dict]:
 
 
 def collect_chunks(conn: sqlite3.Connection, overlap: int = OVERLAP) -> list[dict]:
-    return [*_documents(conn, overlap), *_calls(conn, overlap), *_threads(conn), *_charts(conn)]
+    return [*_documents(conn, overlap), *_calls(conn), *_threads(conn), *_charts(conn)]
 
 
 def _write_chunks(conn: sqlite3.Connection, chunks: list[dict]) -> None:

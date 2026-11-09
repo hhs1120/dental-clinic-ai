@@ -15,6 +15,7 @@ from backend.rag_index import (
     _sections,
     build_index,
     chart_terms,
+    split_dialog,
     split_text,
     tooth_terms,
 )
@@ -300,3 +301,56 @@ def test_main_takes_overlap_and_db(monkeypatch, tmp_path):
     )
     ri.main(["--embedding", "fake", "--overlap", "90", "--db", str(tmp_path / "copy.sqlite")])
     assert seen == {"db": tmp_path / "copy.sqlite", "overlap": 90}
+
+
+# ── 통화 대화 단위 자르기 (AI 실험 기록 §6, 앱 설계 §3) ─────────────────────
+
+
+def _dialog(n=30, long_every=0):
+    lines = []
+    for i in range(n):
+        who = "환자" if i % 2 else "직원"
+        body = f"{i}번 발화 " + (
+            "길게 설명합니다 " * 12 if long_every and i % long_every == 0 else "짧게"
+        )
+        lines.append(f"{who}: {body.strip()}")
+    return "\n".join(lines)
+
+
+def _adjacent_together(text, pieces):
+    lines = text.split("\n")
+    return [
+        (a, b)
+        for a, b in zip(lines, lines[1:], strict=False)
+        if not any(a in p and b in p for p in pieces)
+    ]
+
+
+def test_call_split_keeps_every_adjacent_turn_pair():
+    text = _dialog(
+        60, long_every=4
+    )  # 4번째마다 100자 넘는 발화 — 글자 겹침 50자로는 갈라지는 경우
+    pieces = split_dialog(text)
+    assert len(pieces) > 1 and all(len(p) <= MAX_CHARS for p in pieces)
+    assert _adjacent_together(text, pieces) == []
+    assert _adjacent_together(text, split_text(text)) != []  # 글자 기준은 갈라진다
+
+
+def test_call_split_cuts_only_between_turns():
+    pieces = split_dialog(_dialog(60))
+    assert all(p.split("\n")[0].startswith(("직원:", "환자:")) for p in pieces)
+
+
+def test_same_speaker_lines_are_one_turn():
+    text = "직원: 가\n직원: 나\n환자: 다"
+    assert split_dialog(text) == [text]
+
+
+def test_turn_longer_than_chunk_is_cut_by_chars():
+    text = "직원: 네\n환자: " + "아" * 1200 + "\n직원: 알겠습니다"
+    assert all(len(p) <= MAX_CHARS for p in split_dialog(text))
+
+
+def test_no_speaker_labels_falls_back_to_chars():
+    text = "\n".join(f"줄 {i} " + "가" * 40 for i in range(30))
+    assert split_dialog(text) == split_text(text)
