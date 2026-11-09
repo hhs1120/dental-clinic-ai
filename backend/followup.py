@@ -5,7 +5,6 @@
 
 import argparse
 import json
-import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -18,6 +17,7 @@ from backend.harness.loop import AgentSpec, Runner
 from backend.harness.store import RunLocked, RunStore, SqliteLlmLog
 from backend.harness.tools import Tool, ToolRegistry
 from backend.query_tools import query_tools
+from backend.verify import verify_facts
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, URGENCY_KO
 from shared.clinic import Clinic, load_clinic
 from shared.followup import ACTIONS
@@ -102,16 +102,6 @@ def input_text(call: dict, cls: dict, today: date | None = None) -> str:
         call["transcript"],
     ]
     return "\n".join(lines)
-
-
-def _numbers(text: str) -> set[int]:
-    return {int(n) for n in re.findall(r"\d+", text.replace(",", ""))}
-
-
-def verify_facts(summary: str, facts: list[str], sources: list[str]) -> bool:
-    """처리안의 숫자가 모두 도구 결과나 녹취록에 있으면 참(④ 후검증과 같은 방식 — 지어낸 날짜·금액을 막는다)"""
-    have = set().union(*(_numbers(s) for s in sources)) if sources else set()
-    return _numbers(" ".join([summary, *facts])) <= have
 
 
 def active(conn, call_uid: str, include_pool: bool = False) -> tuple[dict, dict] | None:
