@@ -34,8 +34,8 @@
 - **출처 번호 형식**: 모델은 `text` 문장 끝에 `[n]`을 붙이고, `[n]`은 `cited_ids[n-1]`을 가리킨다. 화면 출처 칩은 `cited_ids` 순서대로 1부터 번호를 단다
 - **검사**(숫자는 챗과 같은 함수 — `backend/verify.py`)
   1. 인용: `cited_ids` ⊆ 입력 청크 id, 본문의 모든 `[n]`이 1..`len(cited_ids)` 안, `cited_ids`가 모두 본문에서 한 번 이상 쓰임. `refused`가 아니면 `cited_ids`는 비면 안 된다
-  2. 문장마다 번호: 본문을 문장으로 나눠(`.`·`?`·`!`·줄바꿈 기준) 번호 없는 문장이 있으면 막는다
-  3. 숫자 후검증: `[n]` 표지를 뗀 본문의 숫자가 모두 검색어와 입력 청크 본문에 있다(표지 숫자를 근거 없는 숫자로 세지 않게). 행 수 허용(`count_rows`)은 켜지 않는다 — 요약은 결과를 세지 않는다
+  2. 문장 끝 번호: 본문을 문장으로 나눠(`.`·`?`·`!`·줄바꿈 기준, 숫자 뒤·마침표 뒤 마침표에서는 나누지 않음) 끝에 번호가 없는 문장이 있으면 막는다
+  3. 숫자 후검증: `[n]` 표지를 뗀 본문의 숫자가 모두 검색어·필터 값(기간·환자번호)과 입력 청크 본문에 있다(표지 숫자를 근거 없는 숫자로 세지 않게). 행 수 허용(`count_rows`)은 켜지 않는다 — 요약은 결과를 세지 않는다
   4. 어긋나면 이유를 붙여 한 번 다시 부른다(챗과 같은 한 번 재시도). 두 번째도 어긋나면 고정 문구로 끝내고 `cited_ids`를 비운다
   5. 막힐 때마다 `ax_rule_counts`에 더한다 — `search_summary.cite_outside`(1), `search_summary.cite_missing`(2), `search_summary.number_unverified`(3). 1·2는 상태 `cite_failed`, 3은 `number_failed`
 - **상태**(`ax_search_logs.status`, 칸은 그대로): `answered` / `refused`(모델이 정리할 내용이 없다고 함 — 벡터 검색에 임계값이 없어 관련 없는 결과가 올 수 있다) / `cite_failed` / `number_failed` / `budget`(하루 상한 `BudgetExceeded`) / `failed`(게이트웨이 실패). 실행 중 행(`running`)은 만들지 않고 끝난 뒤 한 번 쓴다. 화면 문구: `refused`는 "검색 결과에서 정리할 내용을 찾지 못했습니다", 나머지 실패는 "요약을 만들지 못했습니다"(문구 상수는 `backend/search_summary.py`)
