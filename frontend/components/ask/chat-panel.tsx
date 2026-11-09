@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ResultCard } from "@/components/ask/result-card";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,8 @@ import type { SearchCard } from "@/lib/api";
 import { streamChat } from "@/lib/chat-api";
 
 // 진행 단계 이름 — 도구 이름은 backend/chat.py registry
+const CUT = "응답이 끊겼습니다 — 다시 물어봐 주세요";
+
 const STEP_LABEL: Record<string, string> = {
   search_docs: "문서·기록 찾는 중",
   query_patient: "환자 조회 중",
@@ -33,6 +35,8 @@ export function ChatPanel() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);
   const next = useRef(0);
+  const live = useRef<AbortController | null>(null);
+  useEffect(() => () => live.current?.abort(), []); // 화면을 떠나면 받던 스트림을 끊는다
 
   const update = (id: number, patch: (it: ChatItem) => ChatItem) =>
     setItems((all) => all.map((it) => (it.id === id ? patch(it) : it)));
@@ -45,10 +49,13 @@ export function ChatPanel() {
     setDraft("");
     setBusy(true);
     const ac = new AbortController();
+    live.current = ac;
+    let ended = false; // answer·error를 받았나 — 못 받고 끝나면 끊긴 것
     try {
       await streamChat(
         question,
         (e) => {
+          ended ||= e.type !== "step";
           if (e.type === "step")
             update(id, (it) => ({ ...it, steps: [...it.steps, e.tool] }));
           else if (e.type === "answer")
@@ -57,7 +64,11 @@ export function ChatPanel() {
         },
         ac.signal,
       );
+    } catch {
+      // 읽기·해석 오류 — 아래에서 끊김으로 표시
     } finally {
+      if (!ended && !ac.signal.aborted)
+        update(id, (it) => ({ ...it, error: CUT }));
       setBusy(false);
     }
   };

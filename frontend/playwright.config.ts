@@ -1,6 +1,6 @@
 // 화면 E2E(기능 정의 §4 ② 완료 기준) — data/를 임시 폴더로 복사해 그 복사본으로 API(8100)·화면(3100)을 띄운다.
 // 진짜 판정 DB를 더럽히지 않게. 실데이터가 필요해 CI에는 넣지 않는다(make e2e, 로컬). 브라우저는 설치된 Chrome
-import { cpSync, mkdtempSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -10,8 +10,10 @@ const root = resolve(__dirname, "..");
 // 설정은 작업자마다 다시 읽히므로 한 번만 복사한다
 process.env.AX_E2E_DIR ??= (() => {
   const dir = mkdtempSync(join(tmpdir(), "ax-e2e-"));
-  for (const f of ["app.sqlite", "source.sqlite"])
-    cpSync(join(root, "data", f), join(dir, f));
+  // app.sqlite는 WAL(앱 설계 §6)이라 아직 합쳐지지 않은 쓰기가 -wal 파일에 있을 수 있다 — 함께 복사
+  for (const f of ["app.sqlite", "app.sqlite-wal", "source.sqlite"])
+    if (existsSync(join(root, "data", f)))
+      cpSync(join(root, "data", f), join(dir, f));
   return dir;
 })();
 
