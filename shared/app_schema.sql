@@ -213,6 +213,24 @@ CREATE TABLE ax_auto_actions (
 );
 
 -- 규칙 id별 차단 누계 — 실행 기록을 다시 만들어도 남는다(앱 설계 §7.3)
+-- 검색·챗 1회 = 1행 (앱 설계 §3). running은 실행 중 — 실행 target이 이 행 id라 먼저 넣는다
+CREATE TABLE ax_search_logs (
+    id            INTEGER PRIMARY KEY,
+    kind          TEXT NOT NULL CHECK (kind IN ('chat', 'search_summary')),
+    question      TEXT NOT NULL,
+    tool_calls    TEXT NOT NULL DEFAULT '[]',  -- [{name, args}] 정규화 인자, answer 제외
+    retrieved_ids TEXT NOT NULL DEFAULT '[]',
+    answer_text   TEXT,
+    cited_ids     TEXT NOT NULL DEFAULT '[]',
+    status        TEXT NOT NULL CHECK (status IN ('running', 'answered', 'refused', 'cite_failed',
+                      'number_failed', 'call_limit', 'cost_limit', 'budget', 'failed')),
+    refuse_reason TEXT,
+    run_id        INTEGER,  -- ax_agent_runs.id
+    fallback_used INTEGER NOT NULL DEFAULT 0,
+    is_eval       INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL
+);
+
 CREATE TABLE ax_rule_counts (
     rule_id TEXT PRIMARY KEY,
     blocked INTEGER NOT NULL DEFAULT 0
