@@ -164,6 +164,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b단계의 API 채우기도 경유). 프로바이더마다 공식 SDK를 직접 쓴다 — Anthropic, Upstage(OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜닝 판정기 — `mlx-lm`, `finetune` 그룹이라 `make judge`·`make dev`가 `uv run --group finetune`으로 띄운다. 그룹 없이 띄우면 판정만 실패로 남는다). 모델의 프로바이더는 `config/llm.yaml` 모델 항목의 `provider`. 셋뿐이라 LiteLLM 같은 변환 계층을 두지 않는다
 - **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 일시 오류(재시도 소진)·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch 제출은 보지 않는다 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
 - **구조화 출력**: JSON 스키마(Anthropic `output_config.format`, Upstage `response_format` `json_schema` strict). 로컬 MLX는 구조화 출력이 없어 출력의 첫 JSON 객체를 읽고, 판정기는 라벨로 맞는 객체를 다시 찾는다(`backend/classify.py` `first_labels`)
+- **로컬 모델(MLX) 보기 강제**: 로컬 생성은 구조화 출력을 강제하지 못해, 결과가 스키마(보기·불)에 맞지 않으면 같은 입력을 다시 생성하지 않고 칸마다 허용 값 중 모델 확률이 가장 높은 것을 고르는 제약 디코딩으로 다시 낸다(`shared/llm.py` `_mlx_constrain`). 맞게 나온 결과는 그대로라 판정기 수치가 바뀌지 않는다. 보기 밖 값은 막지만 보기 중 틀린 값은 막지 못한다
 - **기록**: 호출 1건 = 기록 1행 — 생성기와 골드가 든 `evaluation/` 호출(평가 설계 §2.3·§2.7)은 jsonl, 앱은 `ax_llm_calls`
 - **Batch**(생성기 API 채우기·① 일괄 분류): Anthropic 모델만(Upstage·로컬 MLX는 일반 호출). 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다
 - **`FakeGateway`**: 같은 인터페이스로 입력 해시에서 결정적 응답(스키마가 있으면 스키마에 맞는 JSON) — 테스트·CI·fixture용
