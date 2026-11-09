@@ -46,9 +46,11 @@ class VoyageEmbedder:
 
         self.model = model
         self.client = voyageai.Client(max_retries=API_RETRIES, timeout=API_TIMEOUT)
+        self.usage = []  # [(model, tokens)] — 검색이 비용 기록에 넘긴다(backend/usage.py)
 
     def embed(self, texts: list[str], kind: str) -> list[np.ndarray]:
         result = self.client.embed(texts, model=self.model, input_type=kind)
+        self.usage.append((self.model, result.total_tokens))
         return [np.array(v, dtype="float32") for v in result.embeddings]
 
 

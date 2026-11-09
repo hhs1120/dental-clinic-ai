@@ -93,8 +93,10 @@ def voyage_rerank(model: str):
 
     def rerank(query: str, chunks: list[dict]) -> list[dict]:
         result = client.rerank(query, [c["text"] for c in chunks], model=model)
+        rerank.usage.append((model, result.total_tokens))
         return [chunks[r.index] for r in result.results]
 
+    rerank.usage = []  # [(model, tokens)] — Searcher.drain_usage가 비운다
     return rerank
 
 
@@ -212,6 +214,16 @@ class Searcher:
                 self.rerank_failures += 1
                 log.warning("리랭커 실패: %s", e)
         return self.latest_first(chunks)[:top_k]
+
+    def drain_usage(self) -> list[tuple[str, str, int]]:
+        """쌓인 Voyage 호출 [(task, model, tokens)]을 돌려주고 비운다 — 비용 기록용(backend/usage.py)"""
+        out = []
+        for task, source in (("search_embed", self.embedder), ("search_rerank", self.reranker)):
+            usage = getattr(source, "usage", None)
+            if usage:
+                out += [(task, model, tokens) for model, tokens in usage]
+                usage.clear()
+        return out
 
     def search(
         self,

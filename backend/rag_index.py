@@ -11,6 +11,7 @@ from pathlib import Path
 from backend import db
 from backend.embeddings import BATCH, make_embedder
 from backend.vector_store import VectorStore
+from shared.llm import load_config
 
 MAX_CHARS = 500
 OVERLAP = 50
@@ -250,7 +251,13 @@ def main() -> None:
         chunks = collect_chunks(conn)
         print(f"청크 {len(chunks)}개, {sum(len(c['text']) for c in chunks)}자")
         return
-    print(f"{args.embedding}: 새로 계산 {build_index(conn, make_embedder(args.embedding))}개")
+    embedder = make_embedder(args.embedding)
+    print(f"{args.embedding}: 새로 계산 {build_index(conn, embedder)}개")
+    # 색인 임베딩은 하루 상한에 넣지 않고 비용만 알린다(설계 2026-11-09 챗 "Voyage 비용")
+    tokens = sum(t for _, t in getattr(embedder, "usage", []))
+    if tokens:
+        price = load_config()["models"].get(args.embedding, {}).get("input", 0)
+        print(f"임베딩 {tokens:,}토큰 · ${tokens * price / 1_000_000:.4f}")
 
 
 if __name__ == "__main__":
