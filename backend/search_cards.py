@@ -65,3 +65,15 @@ def card(conn: sqlite3.Connection, chunk: dict, replaced_by: dict[int, int]) -> 
     else:
         raise ValueError(f"모르는 출처: {kind}")
     return out
+
+
+def chart_plain(conn: sqlite3.Connection, chunk: dict) -> dict:
+    """차트 청크 text의 검색용 괄호 꼬리를 떼고 서술 원문을 준다 — 화면 카드(위 card)와 같은 기준. 챗·기록 검색 요약이 모델에 넣는다"""
+    if chunk["source_type"] != "chart_note":
+        return chunk
+    prefix = chunk["text"].split("] ", 1)[0] + "]"
+    note = conn.execute(
+        "SELECT note FROM source.emr_chart_notes WHERE treatment_id = ?",
+        (int(chunk["id"].split(":")[1]),),
+    ).fetchone()
+    return {**chunk, "text": f"{prefix} {note[0]}" if note else prefix}

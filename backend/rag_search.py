@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend import documents
 from backend.embeddings import API_RETRIES, API_TIMEOUT
 from backend.harness.loop import external
 from backend.harness.tools import Tool
@@ -143,18 +144,8 @@ class Searcher:
             raise MissingVectors(f"{embedder.model} 벡터 없는 청크 {missing}개 — make index 먼저")
 
     def _replacements(self) -> dict:
-        """옛 공지 → 같은 제목의 최신 공지. 옛 값이 답이 되지 않게 코드로 정한다(앱 설계 §3)"""
-        latest, out = {}, {}
-        rows = self.conn.execute(
-            "SELECT id, title FROM source.ax_documents WHERE type = 'notice'"
-            " ORDER BY effective_date DESC, id DESC"
-        )
-        for doc_id, title in rows:
-            if title in latest:
-                out[doc_id] = latest[title]
-            else:
-                latest[title] = doc_id
-        return out
+        """옛 공지 → 같은 제목의 최신 공지 — 문서함과 같은 규칙(backend/documents.py)"""
+        return documents.replacements(self.conn)
 
     def latest_first(self, chunks: list[dict]) -> list[dict]:
         """옛 공지 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다"""

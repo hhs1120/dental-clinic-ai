@@ -16,7 +16,18 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from backend import autoclose, blind, calls, chat, db, emr, judge_queue, metrics
+from backend import (
+    autoclose,
+    blind,
+    calls,
+    chat,
+    db,
+    documents,
+    emr,
+    judge_queue,
+    metrics,
+    search_summary,
+)
 from backend.embeddings import make_embedder
 from backend.harness.auto import revert_auto_action
 from backend.harness.llm import make_gateway
@@ -193,6 +204,60 @@ def get_chat_gateway():
     return make_gateway
 
 
+class SummaryBody(BaseModel):
+    """GET /search 쿼리와 같은 이름·형식 — 화면이 같은 인자를 그대로 보낸다"""
+
+    q: str
+    source_types: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    chart_no: str | None = None
+
+
+@app.post("/search/summary")
+def post_search_summary(
+    body: SummaryBody,
+    paths: Annotated[tuple[Path, Path], Depends(get_db_paths)],
+    models: Annotated[tuple, Depends(get_models)],
+    gateway: Annotated[object, Depends(get_chat_gateway)],
+) -> dict:
+    """기록 검색 AI 요약 — 같은 조건으로 다시 검색해 그 결과만 입력·인용 기준으로 쓴다
+    (설계 2026-11-09 검색 요약 "요약 API"). sources는 cited_ids 순서 그대로(화면 번호 = 순번)"""
+    try:
+        args = to_search_args(
+            body.q, body.source_types, body.date_from, body.date_to, body.chart_no
+        )
+    except ValidationError as e:
+        err = e.errors()[0]
+        raise HTTPException(422, f"{'.'.join(map(str, err['loc']))}: {err['msg']}") from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    if not all(Path(p).exists() for p in paths):
+        raise HTTPException(503, NO_INDEX)
+    conn = db.connect(*paths)  # 기록을 쓰므로 읽기 전용이 아니다
+    try:
+        if not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+            raise HTTPException(503, NO_INDEX)
+        try:
+            searcher = Searcher(conn, _clinic(), *models)
+            out = search_summary.summarize(conn, gateway(conn), searcher, args)
+        except MissingVectors as e:
+            raise HTTPException(503, NO_INDEX) from e
+        except EmbeddingFailed as e:
+            raise HTTPException(503, f"임베딩 호출 실패: {e}") from e
+        cited = out["cited_ids"]
+        rows = {
+            r["id"]: dict(r)
+            for r in conn.execute(
+                f"SELECT * FROM ax_chunks WHERE id IN ({','.join('?' * len(cited))})", cited
+            )
+        }
+        sources = [card(conn, rows[i], searcher.replaced_by) for i in cited if i in rows]
+    finally:
+        conn.close()
+    return {"status": out["status"], "text": out["text"], "sources": sources}
+
+
 def _sse(event: dict) -> str:
     kind = event.pop("type")
     return f"event: {kind}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -314,6 +379,28 @@ def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_d
     if record is None:
         raise HTTPException(404, "환자를 찾을 수 없습니다")
     return record
+
+
+@app.get("/documents")
+def list_documents(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    """문서함 목록 — 공지는 최신 버전만(기능 정의 §4 ③). 색인 없이 source.sqlite만 읽는다"""
+    conn = _open_source(paths)
+    try:
+        return {"documents": documents.list_documents(conn, "main")}
+    finally:
+        conn.close()
+
+
+@app.get("/documents/{doc_id}")
+def get_document(doc_id: int, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    conn = _open_source(paths)
+    try:
+        doc = documents.get_document(conn, doc_id, "main")
+    finally:
+        conn.close()
+    if doc is None:
+        raise HTTPException(404, "문서가 없습니다")
+    return doc
 
 
 @app.get("/emr/tour")

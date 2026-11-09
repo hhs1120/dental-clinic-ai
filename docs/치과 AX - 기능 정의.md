@@ -211,11 +211,12 @@ tags:
 
 차트 케이스는 "차트 검색이 환자 이름으로만 돼서 이름을 모르면 못 찾는다"는 인터뷰 고충에 대한 답 — 케이스 내용으로 찾고 결과에 차트 번호를 띄운다. 차트 기록 데이터는 [[치과 AX - 가상 데이터 생성 설계]] §4.3.
 
-**화면**: 메뉴 하나에 탭 `질문하기 | 기록 검색 | 문서함` — 입력한 내용은 탭을 바꿔도 유지, 챗 답변의 "근거 더 보기"는 같은 질문으로 기록 검색을, 검색 결과의 "이걸로 질문하기"는 챗을 연다. **질문하기**(질문 1 → 진행 이벤트 SSE → 답변 + 출처. 멀티턴 없음. 근거가 없으면 `refuse` → 고정 문구 "문서함에 없음") / **기록 검색**(`매뉴얼 결과` / `실제 사례 결과` 분리 + AI 요약 + 출처, 필터: 출처 종류·기간·환자번호) / **문서함**(매뉴얼·공지·FAQ·청구 기준 목록 — 공지는 최신 버전만·시행일 표시, 본문 보기, 읽기 전용). 챗이 문서에서 근거를 못 찾아 거절한 질문은 문서 초안 에이전트가 기존 문서·통화·문자에서 재료를 찾아 초안을 만들고, 오늘 화면의 "사람이 볼 일"에 올린다. 게시는 사람이 문서함의 초안 목록에서 한다. 게시된 초안은 문서함과 색인에 합쳐진다
+**화면**: 메뉴 하나에 탭 `질문하기 | 기록 검색 | 문서함` — 입력한 내용은 탭을 바꿔도 유지, 챗 답변의 "근거 더 보기"는 같은 질문으로 기록 검색을, 검색 결과의 "이걸로 질문하기"는 챗을 연다. **질문하기**(질문 1 → 진행 이벤트 SSE → 답변 + 출처. 멀티턴 없음. 근거가 없으면 `refuse` → 고정 문구 "문서함에 없음") / **기록 검색**(`매뉴얼 결과` / `실제 사례 결과` 분리 + AI 요약 + 출처, 필터: 출처 종류·기간·환자번호) / **문서함**(`ax_documents.type`별 목록 — 공지는 최신 버전만·시행일 표시, 본문 보기, 읽기 전용). 챗이 문서에서 근거를 못 찾아 거절한 질문은 문서 초안 에이전트가 기존 문서·통화·문자에서 재료를 찾아 초안을 만들고, 오늘 화면의 "사람이 볼 일"에 올린다. 게시는 사람이 문서함의 초안 목록에서 한다. 게시된 초안은 문서함과 색인에 합쳐진다
 
 **API**
 - `GET /search?q=&source_types=&date_from=&date_to=&chart_no=` → `{manual_results, case_results}` (카드 칸은 `backend/search_cards.py`)
 - `POST /chat`(SSE 진행 + 최종 답변) → `ax_search_logs`
+- `POST /search/summary`(기록 검색 AI 요약 — `GET /search`와 같은 인자, `{status, text, sources}`) → `ax_search_logs`
 - `GET /documents` / `GET /documents/{id}`. `GET /doc-drafts` / `POST /doc-drafts/{id}/publish`. 문서 초안 입력은 `ax_search_logs`, 오늘 화면은 `GET /today`
 - 도구 6개(시그니처는 앱 설계 §3): `search_docs`, `query_patient`, `query_schedule`, `query_claims`, `query_charts`(기간·간격 조건 차트), `refuse`
 - `make index`(인자는 앱 설계 §3) / `eval.py --split dev [--retrieval-only]` · `--split test --section …`([[치과 AX - 평가 설계]] §7)
@@ -356,12 +357,11 @@ tags:
 
 - [ ] 운영 에이전트 착수 시 — 부모가 재개될 때 끝나지 않은 자식을 함께 잇는 처리(앱 설계 §3b 재개)
 - [ ] `make nightly` 착수 시 — 결정적 예외로 `running`에 남는 실행의 재개 횟수 상한, 비용 기록 전에 죽은 호출을 `ax_llm_calls`로 맞추기, 재개 때 `result_limit` 고정 여부와 도구별 상한
-- [ ] ③ 검색 요약·문서함 착수 시 — 기록 검색의 AI 요약·"이걸로 질문하기"·"근거 더 보기"(`ax_search_logs` `kind='search_summary'`), 문서함 — 설계는 `docs/superpowers/specs/2026-11-09-chat-agent-design.md` 브랜치 2
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
 - [ ] 오늘 화면 착수 시 — 자동 종결을 되돌렸거나 사람 판정이 할 일·응급 등을 켠 통화(할 일 줄이 없는 통화)를 어디에 보일지(예: "확인할 통화" 칸) 정한다
-- [ ] 착수 순서 — ③ 검색 요약·문서함 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
+- [ ] 착수 순서 — 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
 - [ ] 새 통화 색인 — `POST /calls`로 추가한 통화를 앱이 색인(앱 설계 §3). 오늘 화면·`make nightly` 착수 시
 - [ ] 평가 정답 추가 — 시나리오 DB·`truth_scenarios`(⑥·운영 에이전트 착수 때, verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다
 - [ ] 후속 처리 test 정답 — test 판정 풀에 처리 정답 라벨(`make action-label`과 같은 방식)을 붙여 `eval.py` test 묶음 `followup`을 만든다(사람 실행)

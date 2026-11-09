@@ -48,10 +48,11 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - FTS5 `ax_chunks_fts(chunk_id, text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`.
 - 벡터 `ax_chunk_vectors(chunk_id = ax_chunks.id, model, embedding)` — sqlite-vec, float32 BLOB, 임베딩 모델마다 한 벌. 필터는 `ax_chunks` 실컬럼으로 먼저 거르고 남은 행만 `vec_distance_cosine` 전수 계산(정확 검색 — 근사 인덱스 없음, top-k가 필터에 깎이지 않음). 다중 조건 필터도 SQL 그대로
 
-**`ax_search_logs`**: 검색·챗 1회 = 1행. 칸은 `shared/app_schema.sql`(`tool_calls`의 `args`는 Pydantic 정규화 후 기록). eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 챗은 끝내는 도구 `answer(text, cited_ids[])`로 답한다(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. `cited_ids`가 비어도 되는 것은 `query_patient`·`query_schedule`·`query_claims`를 쓴 답변뿐. 검색 화면의 AI 요약도 같은 `{text, cited_ids[]}`.
+**`ax_search_logs`**: 챗·검색 요약 1회 = 1행. 칸은 `shared/app_schema.sql`(`tool_calls`의 `args`는 Pydantic 정규화 후 기록). eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 챗은 끝내는 도구 `answer(text, cited_ids[])`로 답한다(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. `cited_ids`가 비어도 되는 것은 `query_patient`·`query_schedule`·`query_claims`를 쓴 답변뿐.
 - **인용 확인**(챗 후처리 — 훅은 도구 호출만 보므로 답을 낸 직후 코드가 검사): `cited_ids`가 이번 질문의 `retrieved_ids`(검색 결과 + `query_charts` 결과) 밖이면 같은 루프에서 한 번 다시 답하게 하고(다시 검색할 수 있다), 또 어긋나면 `cited_ids`를 비우고 상태 `cite_failed`로 끝낸다(마지막 호출이 `refuse`가 아니라 문서 초안 입력에 들지 않는다). 막힐 때마다 `ax_rule_counts`에 `chat.cite_outside`로 더한다. ③ 문서 초안이 같은 검사를 쓰고, ⑤-4는 인용 문장이 실제로 있는지까지 본다(평가 설계 §5)
 - **숫자 후검증**(인용 확인 다음, 같은 다시 답하기): 답의 숫자가 이번 질문의 도구 결과·질문·오늘 날짜·날짜와 필터 인자(검색어·`top_k`·`limit`은 빼고 — `backend/chat.py` `EVIDENCE_SKIP`)에 있거나 도구 결과 안 목록의 행 수여야 한다(`backend/verify.py` — 합계·날짜 계산은 막는다). 막힐 때마다 `chat.number_unverified`
 - **상태**(`ax_search_logs.status`, 칸은 `shared/app_schema.sql`): `answered` / `refused` / `cite_failed` / `number_failed` / `call_limit` / `cost_limit` / `budget` / `failed`(`running`은 실행 중). 화면에 답을 내는 것은 `answered`뿐, `refused`는 "문서함에 없음", 나머지는 `backend/chat.py` `FAILED_TEXT`. 챗은 `POST /chat` SSE(이벤트 `step`·`answer`·`error`). 모델이 도구 없이 글로 끝내면 하네스가 한 번 되돌려 `answer`·`refuse`로 내게 한다(`AgentSpec.end_tools`) — 또 글이면 `failed`
+- **기록 검색 요약**(`POST /search/summary`, `backend/search_summary.py`): 같은 조건으로 다시 검색해 그 결과만 입력·인용 기준으로 쓴다 — 옛 공지는 빼고(목록에는 "옛 버전"으로 남는다), 차트는 괄호 없는 원문. 하네스 없이 게이트웨이 한 번이고 출력은 `{text, cited_ids[], refused}`. 검색어에 답하거나 결과를 세지 않고 결과가 말하는 바를 정리하며, 문장마다 끝에 `[n]`(= `cited_ids[n-1]`)을 붙인다. 검사: 인용이 비었거나 입력 밖이거나 번호가 1..`len(cited_ids)`를 빠짐없이 쓰지 않으면 `search_summary.cite_outside`, 끝에 번호가 없는 문장은 `search_summary.cite_missing`(숫자 뒤·마침표 뒤 마침표 — `2026. 3. 1.`·`...` — 에서는 문장을 나누지 않는다), 표지를 뗀 본문에 검색어·필터 값(기간·환자번호)·입력에 없는 숫자는 `search_summary.number_unverified`(행 수 허용 없음). 어긋나면 한 번 다시 부르고, 또 어긋나면 `cite_failed`·`number_failed`. 상태는 `answered`·`refused`·`cite_failed`·`number_failed`·`budget`·`failed`이고 끝난 뒤 1행을 쓴다(예상 밖 예외도 `failed` 행을 남기고 다시 던진다, `kind='search_summary'`, `tool_calls` = 정규화한 검색 인자 + 프롬프트 버전). 같은 `tool_calls`·`retrieved_ids`의 `answered`·`refused` 행이 있으면 다시 부르지 않는다. 입력이 비면(옛 공지뿐) 부르지 않고 기록도 남기지 않는다. 화면 문구는 `REFUSED_TEXT`·`FAILED_TEXT`
 
 **도구 6개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준, 코드 `backend/query_tools.py`·`backend/rag_search.py` `search_tool`)
 
@@ -73,7 +74,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - 호출 상한 6회/질문(`backend/chat.py` `CHAT_MAX_TOOL_CALLS` — 채점 상수와 같음을 테스트가 비교), `answer`는 세지 않는다. 넘는 호출은 훅 `chat.call_limit`이 막고 그 자리에서 실행을 끝낸다(`AgentSpec.stop_rules`, 상태 `call_limit`). 경계: 건수·목록 → `query_*`, 기간·간격 조건이 있는 차트 → `query_charts`, 절차·규정·과거 대화·차트 내용 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document`와 `call/message_thread/chart_note`를 따로 찾아 각각 상위 `CANDIDATES`(`backend/rag_search.py`) → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제. 리랭커 뒤에 옛 공지(같은 제목에서 시행일이 이른 것) 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다. 날짜 필터를 주면 시행일 없는 문서는 빠지고, 환자 필터를 주면 환자 기록만 찾는다
 
-**문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만.
+**문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만(`GET /documents`·`/documents/{id}`, `backend/documents.py` — 최신 규칙은 검색의 옛 공지 정렬과 같다. 본문에는 같은 제목 공지의 모든 버전과 `latest_id`). `source.sqlite`만 읽어 색인 없이도 열린다.
 
 ## 3b. 에이전트 하네스
 
@@ -113,7 +114,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - **재생**: `ax_agent_steps`의 모델 응답·도구 결과로 실행을 다시 돌린다. 도구는 저장된 결과로 대신하고 호출·훅 결과·종료 상태를 비교한다. 훅·권한·인자·상한의 변화를 잡고 프롬프트 변화는 잡지 못한다. 저장된 응답을 `Gateway.complete()`와 같은 인터페이스로 내고(`backend/harness/replay.py`) 테스트 기록은 `tests/fixtures/agent_runs/`
 - **재개**: 잠금이 만료되고 끝나지 않은 `ax_agent_runs`는 마지막 단계 다음부터 이어 간다. 쓸 때마다 잠금 소유자를 확인해 잠금을 뺏긴 쪽은 멈춘다. 일반 재시도의 호출 최악 시간은 잠금 만료보다 짧아야 한다(`backend/harness/llm.py`). 서버가 준 `Retry-After` 대기는 상한이 없어 이 계산 밖이고, 그동안 잠금이 만료되면 소유자 확인으로 멈춘다. 부모가 끊기면 끝나지 않은 자식은 부모 재개 때 함께 이어 간다. 모든 앱 쓰기는 중복 방지 키로 한 번만 들어간다
 - **컨텍스트**: 에이전트별 결과 크기 상한은 `AgentSpec.result_limit`, 도구별 상한은 착수 시([[치과 AX - 기능 정의]] §9). 기능 에이전트는 운영 에이전트에 요약과 실행 id만 돌려준다
-- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗 규칙 id는 §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
+- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗·검색 요약 규칙 id는 §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
 
 ## 4. 준비표·오늘 화면·리포트
 
@@ -218,7 +219,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
 | `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
-| `/ask` | 질문하기, 기록 검색, 문서함 | [[치과 AX - 기능 정의]] §4 ③ |
+| `/ask` | 질문하기, 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③ |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |
 | `/claims` | 삭감 대응, 청구 전 점검 | [[치과 AX - 기능 정의]] §5 ⑤, 착수 때 |
