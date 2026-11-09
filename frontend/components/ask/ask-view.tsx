@@ -4,7 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ChatPanel } from "@/components/ask/chat-panel";
+import { DocsPanel } from "@/components/ask/docs-panel";
 import { SearchForm } from "@/components/ask/search-form";
+import { SearchSummary } from "@/components/ask/search-summary";
 import {
   SearchResults,
   type SearchStatus,
@@ -73,6 +75,12 @@ export function AskView() {
         ? { kind: "error", message: answer.error }
         : { kind: "done", data: answer.data };
 
+  // 질문하기 입력 — 탭을 바꿔도 남고, "이걸로 질문하기"가 검색어를 넣는다(보내지는 않는다)
+  const [question, setQuestion] = useState("");
+  const hasResults =
+    status.kind === "done" &&
+    status.data.manual_results.length + status.data.case_results.length > 0;
+
   const changeTab = (value: string) => {
     const next = new URLSearchParams(params);
     next.set("tab", value);
@@ -98,6 +106,16 @@ export function AskView() {
             else router.push(`/ask?${next}`);
           }}
         />
+        {hasResults && (
+          <SearchSummary
+            search={search}
+            requestKey={request}
+            onAsk={(q) => {
+              setQuestion(q);
+              changeTab("chat");
+            }}
+          />
+        )}
         <SearchResults status={status} search={search} />
       </TabsContent>
       {/* 질문하기는 탭을 바꿔도 입력·답이 남게 숨기기만 한다(기능 정의 §4 ③) */}
@@ -106,13 +124,11 @@ export function AskView() {
         forceMount
         className="data-[state=inactive]:hidden"
       >
-        <ChatPanel />
+        <ChatPanel draft={question} onDraftChange={setQuestion} />
       </TabsContent>
-      {TABS.filter((t) => t.value === "docs").map((t) => (
-        <TabsContent key={t.value} value={t.value}>
-          <p className="text-muted-foreground">준비 중입니다.</p>
-        </TabsContent>
-      ))}
+      <TabsContent value="docs">
+        <DocsPanel />
+      </TabsContent>
     </Tabs>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { ResultCard } from "@/components/ask/result-card";
@@ -9,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import type { SearchCard } from "@/lib/api";
 import { streamChat } from "@/lib/chat-api";
+import { ALL_TYPES, writeSearch } from "@/lib/search-query";
 
 // 진행 단계 이름 — 도구 이름은 backend/chat.py registry
 const CUT = "응답이 끊겼습니다 — 다시 물어봐 주세요";
@@ -30,8 +32,13 @@ interface ChatItem {
 }
 
 /** 질문하기 — 질문 1개에 한 번 답한다(멀티턴 없음). 이 화면에서 한 질문은 위에서 아래로 쌓인다 */
-export function ChatPanel() {
-  const [draft, setDraft] = useState("");
+export function ChatPanel({
+  draft,
+  onDraftChange: setDraft,
+}: {
+  draft: string;
+  onDraftChange: (v: string) => void;
+}) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);
   const next = useRef(0);
@@ -97,6 +104,14 @@ export function ChatPanel() {
             )}
           </div>
           {it.error && <p className="text-destructive">{it.error}</p>}
+          {(it.answer || it.error) && (
+            <Link
+              href={`/ask?${writeSearch({ q: it.question, types: ALL_TYPES, from: "", to: "", chart: "" })}`}
+              className="self-start text-sm font-medium text-link hover:underline"
+            >
+              근거 더 보기
+            </Link>
+          )}
           {it.answer && (
             <div className="flex flex-col gap-3">
               <p

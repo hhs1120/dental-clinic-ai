@@ -1,25 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { SearchCard } from "@/lib/api";
+import type { DocType, SearchCard } from "@/lib/api";
+import { DOC_TYPE, docHref, docIdOf } from "@/lib/doc-types";
 import { highlight } from "@/lib/highlight";
 import { cn } from "@/lib/utils";
 
-const DOC_TYPE: Record<string, string> = {
-  notice: "공지",
-  manual: "매뉴얼",
-  faq: "FAQ",
-  insurance_guide: "보험 안내",
-  claim_standard: "청구 기준",
-  education: "교육 자료",
-  external: "외부 자료",
-};
-
 function kindLabel(c: SearchCard): string {
-  if (c.source_type === "document") return DOC_TYPE[c.doc_type ?? ""] ?? "문서";
+  if (c.source_type === "document")
+    return DOC_TYPE[c.doc_type as DocType] ?? "문서";
   if (c.source_type === "call") return `통화 · ${c.direction}`;
   if (c.source_type === "message_thread") return "문자";
   return "차트 기록";
@@ -49,6 +42,7 @@ export function ResultCard({ card, q }: { card: SearchCard; q: string }) {
   }, [open]);
 
   const isDoc = card.source_type === "document";
+  const docId = docIdOf(card.id);
   const isNotice = card.doc_type === "notice";
   const meta = [
     isNotice && card.version
@@ -65,6 +59,14 @@ export function ResultCard({ card, q }: { card: SearchCard; q: string }) {
           <span key={m}>{m}</span>
         ))}
         {card.is_outdated && <Badge variant="outdated">옛 버전</Badge>}
+        {docId !== null && (
+          <Link
+            href={docHref(docId)}
+            className="ml-auto font-medium text-link hover:underline"
+          >
+            문서함에서 보기
+          </Link>
+        )}
       </div>
       {card.title && (
         <h4

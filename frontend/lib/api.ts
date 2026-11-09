@@ -23,6 +23,38 @@ export interface SearchResponse {
   case_results: SearchCard[];
 }
 
+export type DocType =
+  | "notice"
+  | "manual"
+  | "faq"
+  | "insurance_guide"
+  | "claim_standard"
+  | "education"
+  | "external";
+
+/** GET /documents 한 줄 — 공지는 최신 버전만 */
+export interface DocumentItem {
+  id: number;
+  type: DocType;
+  title: string;
+  version: string;
+  effective_date: string | null;
+}
+
+/** GET /documents/{id} — versions는 같은 제목 공지 전부(최신 먼저, 공지가 아니면 빈 목록) */
+export interface DocumentDetail extends DocumentItem {
+  body: string;
+  versions: { id: number; version: string; effective_date: string | null }[];
+  latest_id: number;
+}
+
+/** POST /search/summary — sources는 cited_ids 순서(화면 번호 = 순번) */
+export interface SummaryResponse {
+  status: string;
+  text: string;
+  sources: SearchCard[];
+}
+
 export interface Clinic {
   name: string;
   today: string;
