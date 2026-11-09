@@ -43,6 +43,14 @@ def score_set(pred: dict, rows: list[dict], population: Counter | None) -> dict:
     }
 
 
+def check_coverage(preds: dict[str, dict], rows: list[dict]) -> None:
+    """모델마다 평가 행 id가 예측에 다 있는지(값 None = 실패는 있음으로 본다) — 일부만 낸 파일이 실패로 섞여 채점되지 않게"""
+    ids = {r["id"] for r in rows}
+    short = {m: len(ids - set(p)) for m, p in preds.items() if ids - set(p)}
+    if short:
+        raise SystemExit(f"예측이 평가 셋을 다 덮지 않는다(빠진 건수): {short}")
+
+
 def criteria(qwen: dict[str, dict], ref_validation: dict) -> dict:
     """교체 기준 3개(학습 전 고정) — qwen은 셋 이름 → score_set 결과, ref_validation은 지금 분류기 라벨 모델의 검증 구간"""
     q, r = qwen["validation"], ref_validation

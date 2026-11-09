@@ -184,15 +184,52 @@ def test_predict_resumes(tmp_path):
     rows = [{"id": f"c-{i}", "set": "dev", "direction": "inbound", "transcript": "x"}
             for i in range(3)]  # fmt: skip
     out = tmp_path / "pred.jsonl"
-    out.write_text("".join(json.dumps({"id": f"c-{i}"}) + "\n" for i in range(2)))
+    out.write_text("".join(json.dumps({"id": f"c-{i}", "adapter": "a1"}) + "\n" for i in range(2)))
     calls = []
 
     def fake(row):
         calls.append(row["id"])
         return data.target_json(labels)
 
-    infer.predict(rows, out, fake)
+    infer.predict(rows, out, fake, "a1")
     lines = [json.loads(line) for line in out.read_text().splitlines()]
     assert calls == ["c-2"]
     assert [r["id"] for r in lines] == ["c-0", "c-1", "c-2"]
     assert lines[-1]["labels"] == labels and lines[-1]["set"] == "dev"
+    assert lines[-1]["adapter"] == "a1"
+
+
+@pytest.mark.parametrize("old", [{"id": "c-0", "adapter": "a0"}, {"id": "c-0"}])
+def test_predict_refuses_other_adapter(tmp_path, old):
+    """다른 어댑터(또는 지문 없는 옛 줄)로 낸 예측 파일에 이어 쓰지 않는다 — 옛 예측이 새 어댑터 결과로 채점되지 않게"""
+    from evaluation.finetune.qwen import infer
+
+    out = tmp_path / "pred.jsonl"
+    out.write_text(json.dumps(old) + "\n")
+    rows = [{"id": "c-1", "set": "dev", "direction": "inbound", "transcript": "x"}]
+    with pytest.raises(SystemExit, match="다른 어댑터"):
+        infer.predict(rows, out, lambda row: "", "a1")
+
+
+def test_adapter_fingerprint(tmp_path):
+    from evaluation.finetune.qwen import infer
+
+    assert infer.adapter_fingerprint(None) == "none"
+    (tmp_path / "adapters.safetensors").write_bytes(b"w1")
+    first = infer.adapter_fingerprint(tmp_path)
+    (tmp_path / "adapters.safetensors").write_bytes(b"w2")
+    assert infer.adapter_fingerprint(tmp_path) != first
+
+
+def test_parse_labels_skips_earlier_braces():
+    text = "예시 {형식} 뒤에 답: " + data.target_json(_example())
+    assert data.parse_labels(text) == _example()
+
+
+def test_eval_sets_keeps_empty_style_transcript():
+    rng = random.Random(1)
+    silver, _, _ = _fixture()
+    dev = [_labels("d-0000", rng, "dev")]
+    style = [{"aug_id": "d-0000-s1", "call_uid": "d-0000", "style": "s1",
+              "direction": dev[0]["direction"], "transcript": "", "kept": True}]  # fmt: skip
+    assert data.eval_sets(silver, dev, style)["s1"][0]["transcript"] == ""

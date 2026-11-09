@@ -133,8 +133,10 @@ def test_status_done_and_missing(dirs):
     (dirs / "adapters" / "full" / "progress.json").write_text(
         json.dumps({"name": "full", "total": 10, "done": 10, "parts": [{"dir": "part0"}]})
     )
-    _log(dirs, [{"kind": "start", "part": "part0", "time": 0.0}])
-    assert "끝남" in train.status("full", now=60.0)
+    _log(dirs, [{"kind": "start", "part": "part0", "time": 0.0},
+                {"kind": "end", "part": "part0", "time": 3600.0}])  # fmt: skip
+    text = train.status("full", now=99999.0)
+    assert "끝남" in text and "경과 1시간 0분" in text
 
 
 def test_killed_by_signal_retries(dirs):
@@ -166,3 +168,62 @@ def test_status_waiting_first_report(dirs):
     )
     _log(dirs, [{"kind": "start", "part": "part0", "time": 0.0}])
     assert "모델 불러오는 중·첫 기록 대기" in train.status("full", now=60.0)
+
+
+def test_resume_after_parent_died(dirs):
+    """부모까지 죽어 progress.json에 끝나지 않은 part가 남으면 resume이 마지막 체크포인트부터 잇는다"""
+
+    class Die(Fake):
+        def __call__(self, *a):
+            super().__call__(*a)
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        train.train("full", epochs=1, runner=Die(250))
+    fake = Fake()
+    train.train("full", resume=True, runner=fake)
+    assert fake.calls[0]["offset"] == 200 and fake.calls[0]["iters"] == ROWS - 200
+    assert fake.calls[0]["resume"].endswith("part0/0000200_adapters.safetensors")
+    prog = _progress(dirs)
+    assert prog["done"] == ROWS and prog["parts"][0]["status"] == "interrupted"
+
+
+def test_resume_without_checkpoint_restarts_part(dirs):
+    class Die(Fake):
+        def __call__(self, *a):
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        train.train("full", epochs=1, runner=Die())
+    fake = Fake()
+    train.train("full", resume=True, runner=fake)
+    assert fake.calls[0]["offset"] == 0 and fake.calls[0]["resume"] is None
+
+
+def test_resume_refuses_finished_or_missing(dirs):
+    with pytest.raises(SystemExit):
+        train.train("full", resume=True, runner=Fake())
+    train.train("full", epochs=1, runner=Fake())
+    with pytest.raises(SystemExit, match="끝났다"):
+        train.train("full", resume=True, runner=Fake())
+
+
+def test_fresh_train_clears_old_log(dirs):
+    _log(dirs, [{"kind": "start", "part": "part0", "time": 0.0}])
+    train.train("full", epochs=1, runner=Fake())
+    assert not (dirs / "out" / "train_full.log").exists()  # Fake는 로그를 쓰지 않는다
+
+
+def test_status_after_retry_uses_current_part(dirs):
+    """재시도 뒤 새 part의 첫 보고 전에는 옛 part의 보고가 아니라 progress의 done을 진행으로 본다"""
+    (dirs / "adapters" / "full").mkdir(parents=True)
+    (dirs / "adapters" / "full" / "progress.json").write_text(json.dumps(
+        {"name": "full", "total": 1000, "done": 200, "parts": [{"dir": "part0"}, {"dir": "part1"}]}
+    ))  # fmt: skip
+    _log(dirs, [
+        {"kind": "start", "part": "part0", "time": 0.0},
+        {"kind": "train", "part": "part0", "iteration": 240, "train_loss": 0.1,
+         "iterations_per_second": 0.1, "peak_memory": 12.0, "time": 100.0},
+        {"kind": "start", "part": "part1", "time": 200.0},
+    ])  # fmt: skip
+    assert "200 / 1,000" in train.status("full", now=300.0)

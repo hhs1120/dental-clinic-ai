@@ -1,8 +1,10 @@
 """Qwen 추론 — 학습과 같은 지시·입력, 탐욕 디코딩(분류기 설계 "Qwen 비교").
-결과 out/pred_<name>.jsonl 한 줄 {id, set, text, labels, sec}. 끊겨도 다시 돌리면 이미 낸 id는 건너뛴다.
+결과 out/pred_<name>.jsonl 한 줄 {id, set, text, labels, sec, adapter}. 끊겨도 다시 돌리면 이미 낸 id는 건너뛴다 —
+같은 어댑터(지문)로 낸 파일일 때만. 어댑터를 바꿨으면 옛 파일을 옮기고 새로 낸다.
 MLX는 함수 안에서만 import한다 — CI(finetune 그룹 없음)에서 이 모듈의 테스트가 돈다.
 """
 
+import hashlib
 import json
 import time
 from collections.abc import Callable
@@ -28,10 +30,21 @@ def render_prompt(tokenizer, row: dict) -> str:
     )
 
 
-def predict(rows: list[dict], out_path: Path, generate: Callable[[dict], str]) -> None:
+def adapter_fingerprint(adapter: Path | None) -> str:
+    """어댑터 가중치 sha256 앞 16자(학습 전 기본 모델은 none)"""
+    if adapter is None:
+        return "none"
+    return hashlib.sha256((adapter / "adapters.safetensors").read_bytes()).hexdigest()[:16]
+
+
+def predict(rows: list[dict], out_path: Path, generate: Callable[[dict], str],
+            adapter: str) -> None:  # fmt: skip
     done = set()
     if out_path.exists():
-        done = {json.loads(line)["id"] for line in out_path.read_text().splitlines()}
+        old = [json.loads(line) for line in out_path.read_text().splitlines()]
+        if any(r.get("adapter") != adapter for r in old):
+            raise SystemExit(f"{out_path.name}는 다른 어댑터로 낸 예측이다 — 옮기거나 지우고 다시")
+        done = {r["id"] for r in old}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("a") as f:
         for row in rows:
@@ -40,7 +53,8 @@ def predict(rows: list[dict], out_path: Path, generate: Callable[[dict], str]) -
             t = time.perf_counter()
             text = generate(row)
             out = {"id": row["id"], "set": row.get("set"), "text": text,
-                   "labels": parse_labels(text), "sec": round(time.perf_counter() - t, 3)}  # fmt: skip
+                   "labels": parse_labels(text), "sec": round(time.perf_counter() - t, 3),
+                   "adapter": adapter}  # fmt: skip
             f.write(json.dumps(out, ensure_ascii=False) + "\n")
             f.flush()
             done.add(row["id"])

@@ -47,14 +47,28 @@ def latest_checkpoint(part_dir: Path) -> tuple[int, Path] | None:
 
 
 def train(name: str, epochs: int = 1, cont: bool = False, overrides: dict | None = None,
-          runner=None) -> Path:  # fmt: skip
+          runner=None, resume: bool = False) -> Path:  # fmt: skip
     """→ adapters/<name>/(adapters.safetensors·adapter_config.json). 진행은 adapters/<name>/progress.json.
     cont면 끝난 어댑터에서 epochs만큼 더(에폭 경계에서 끊어 이어 가기). 한 번의 학습은 part<k>/ 폴더 하나 —
     멈추면 그 part의 마지막 체크포인트에서 남은 단계만 새 part로 다시 돈다(MAX_RETRIES번까지).
+    resume이면 부모까지 죽어(재부팅·터미널 종료) 끝나지 않은 채 남은 학습을 마지막 part의 체크포인트부터 잇는다.
     이어 가면 가중치만 이어지고 옵티마이저 상태·데이터 순서는 새로 시작한다(시드는 part마다 바꾼다)"""
     runner = runner or _subprocess_runner
     root = ADAPTERS / name
     path = root / "progress.json"
+    if resume:
+        if not path.exists():
+            raise SystemExit(f"{root}에 이어 갈 학습이 없다")
+        prog = json.loads(path.read_text())
+        if prog["done"] == prog["total"]:
+            raise SystemExit(f"{name} 학습은 끝났다 — 더 하려면 continue")
+        part = prog["parts"][-1]
+        part.setdefault("status", "interrupted")
+        last = latest_checkpoint(root / part["dir"])
+        prog["done"], resume_from = (
+            (part["offset"] + last[0], str(last[1])) if last else (part["offset"], part["resume"])
+        )
+        return _run(name, root, prog, resume_from, runner)
     rows = len((DATA / name / "train.jsonl").read_text().splitlines())
     add = iters_for(rows, epochs, config()["batch_size"])
     if cont:
@@ -62,17 +76,30 @@ def train(name: str, epochs: int = 1, cont: bool = False, overrides: dict | None
             raise SystemExit(f"{root}에 끝난 학습이 없다 — continue 없이 먼저 학습")
         prog = json.loads(path.read_text())
         if prog["done"] != prog["total"]:
-            raise SystemExit(f"{name} 학습이 끝나지 않았다({prog['done']}/{prog['total']})")
+            raise SystemExit(
+                f"{name} 학습이 끝나지 않았다({prog['done']}/{prog['total']}) — resume"
+            )
         prog["total"] += add
-        resume = str(root / "adapters.safetensors")
+        prog["overrides"] = overrides or {}
+        resume_from = str(root / "adapters.safetensors")
     else:
         if path.exists():
             raise SystemExit(
-                f"{root}가 이미 있다 — 이어 가려면 continue, 새로 하려면 폴더를 지운다"
+                f"{root}가 이미 있다 — 이어 가려면 continue·resume, 새로 하려면 폴더를 지운다"
             )
-        prog = {"name": name, "rows": rows, "total": add, "done": 0, "parts": []}
-        resume = None
+        prog = {"name": name, "rows": rows, "total": add, "done": 0, "parts": [],
+                "overrides": overrides or {}}  # fmt: skip
+        resume_from = None
+        (OUT / f"train_{name}.log").unlink(
+            missing_ok=True
+        )  # 같은 이름 옛 학습 기록이 status에 섞이지 않게
     root.mkdir(parents=True, exist_ok=True)
+    return _run(name, root, prog, resume_from, runner)
+
+
+def _run(name: str, root: Path, prog: dict, resume: str | None, runner) -> Path:
+    """남은 단계를 part로 돌린다 — 메모리 부족·신호 종료면 마지막 체크포인트부터 새 part로(MAX_RETRIES번까지)"""
+    path = root / "progress.json"
     for attempt in range(MAX_RETRIES + 1):
         k = len(prog["parts"])
         part = {"dir": f"part{k}", "offset": prog["done"], "iters": prog["total"] - prog["done"],
@@ -81,7 +108,7 @@ def train(name: str, epochs: int = 1, cont: bool = False, overrides: dict | None
         path.write_text(json.dumps(prog, ensure_ascii=False, indent=1))
         part_dir = root / part["dir"]
         code = runner(name, part_dir, part["iters"], part["offset"], part["seed"], resume,
-                      overrides or {})  # fmt: skip
+                      prog.get("overrides", {}))  # fmt: skip
         if code == 0:
             part["status"] = "ok"
             prog["done"] = prog["total"]
@@ -91,7 +118,7 @@ def train(name: str, epochs: int = 1, cont: bool = False, overrides: dict | None
             return root
         last = latest_checkpoint(part_dir)
         part["status"] = f"failed (exit {code})"
-        if code != OOM_EXIT and code >= 0:  # 음수 = 신호로 종료(재부팅·강제 종료)
+        if code != OOM_EXIT and code >= 0:  # 음수 = 자식만 신호로 종료(메모리 압박 강제 종료 등)
             path.write_text(json.dumps(prog, ensure_ascii=False, indent=1))
             raise SystemExit(
                 f"part{k} 오류로 멈춤(exit {code}) — 다시 시도하지 않는다. 위 출력을 본다"
@@ -100,8 +127,9 @@ def train(name: str, epochs: int = 1, cont: bool = False, overrides: dict | None
             prog["done"] = part["offset"] + last[0]
             resume = str(last[1])
         path.write_text(json.dumps(prog, ensure_ascii=False, indent=1))
-        print(f"part{k} 멈춤 — {prog['done']}/{prog['total']}부터 다시 ({attempt + 1}/{MAX_RETRIES})",
-              flush=True)  # fmt: skip
+        if attempt < MAX_RETRIES:
+            print(f"part{k} 멈춤 — {prog['done']}/{prog['total']}부터 다시 ({attempt + 1}/{MAX_RETRIES})",
+                  flush=True)  # fmt: skip
     raise SystemExit(f"{name}: {MAX_RETRIES}번 다시 돌아도 멈춤 — {prog['done']}/{prog['total']}")
 
 
@@ -179,6 +207,9 @@ def status(name: str, now: float | None = None) -> str:
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     now = time.time() if now is None else now
     starts = [r["time"] for r in rows if r["kind"] == "start" and "time" in r]
+    ends = [r["time"] for r in rows if r["kind"] == "end"]
+    if prog["done"] == prog["total"] and ends:
+        now = ends[-1]  # 끝난 학습은 끝난 시각까지
     elapsed = f"경과 {_hm(now - starts[0])}" if starts else "경과 —"
     part = prog["parts"][-1]["dir"]
     trains = [r for r in rows if r["kind"] == "train"]
@@ -186,12 +217,13 @@ def status(name: str, now: float | None = None) -> str:
     if prog["done"] == prog["total"]:
         head = f"{name}  끝남 {prog['total']:,}단계  {elapsed}  part {len(prog['parts'])}개"
     else:
-        step = trains[-1]["iteration"] if trains else prog["done"]
-        recent = [r for r in trains if r["part"] == part and "time" in r][-5:]
+        mine = [r for r in trains if r["part"] == part]
+        step = (
+            mine[-1]["iteration"] if mine else prog["done"]
+        )  # 재시도 직후 옛 part 보고는 체크포인트보다 앞선다
+        recent = [r for r in mine if "time" in r][-5:]
         eta = "남은 예상 —"
-        if not any(
-            r["part"] == part for r in trains
-        ):  # 첫 보고(steps_per_report) 전 — 로딩·첫 heldout 계산
+        if not mine:  # 첫 보고(steps_per_report) 전 — 로딩·첫 heldout 계산
             eta = "모델 불러오는 중·첫 기록 대기"
         if len(recent) >= 2 and recent[-1]["time"] > recent[0]["time"]:
             rate = (recent[-1]["iteration"] - recent[0]["iteration"]) / (

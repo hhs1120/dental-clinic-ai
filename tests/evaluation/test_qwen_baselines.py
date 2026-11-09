@@ -3,6 +3,8 @@
 import json
 import sqlite3
 
+import pytest
+
 from evaluation.finetune.qwen import baselines
 from shared.call_labels import FLAGS
 from shared.llm import FakeGateway, JsonlLog
@@ -12,7 +14,7 @@ LABELS = {"primary_purpose": "book", "counterpart": "patient", "urgency": "norma
 
 
 def _app(path, rows):
-    """rows: (call_uid, 표, prompt_version, status, fallback_used)"""
+    """rows: (call_uid, 표, prompt_version, status, fallback_used[, 별칭])"""
     conn = sqlite3.connect(path)
     conn.executescript(
         "CREATE TABLE ax_llm_calls (id INTEGER PRIMARY KEY, fallback_used INTEGER);"
@@ -21,11 +23,12 @@ def _app(path, rows):
         "CREATE TABLE ax_model_judgments (call_uid, model_alias, prompt_version, status,"
         " labels, llm_call_id);"
     )
-    for i, (uid, table, version, status, fallback) in enumerate(rows):
+    default = {"ax_call_classifications": "classify", "ax_model_judgments": "judge"}
+    for i, (uid, table, version, status, fallback, *alias) in enumerate(rows):
         conn.execute("INSERT INTO ax_llm_calls VALUES (?, ?)", (i, fallback))
         labels = json.dumps(LABELS) if status == "ok" else None
-        conn.execute(f"INSERT INTO {table} VALUES (?, 'x', ?, ?, ?, ?)",
-                     (uid, version, status, labels, i))  # fmt: skip
+        conn.execute(f"INSERT INTO {table} VALUES (?, ?, ?, ?, ?, ?)",
+                     (uid, alias[0] if alias else default[table], version, status, labels, i))  # fmt: skip
     conn.commit()
     conn.close()
 
@@ -38,6 +41,15 @@ def test_from_app(tmp_path):
     out = baselines.from_app(db, {"a", "b", "c", "d"})
     assert out["haiku_v2"] == {"a": LABELS, "b": None, "c": None, "d": None}
     assert out["solar_v2"] == {"a": LABELS, "b": None, "c": None, "d": None}
+
+
+def test_from_app_alias(tmp_path):
+    """같은 버전을 다른 별칭으로 돌린 행은 섞지 않는다"""
+    db = tmp_path / "app.sqlite"
+    _app(db, [("a", "ax_call_classifications", "v2", "ok", 0, "other"),
+              ("a", "ax_model_judgments", "v2", "ok", 0)])  # fmt: skip
+    out = baselines.from_app(db, {"a"})
+    assert out["haiku_v2"] == {"a": None} and out["solar_v2"] == {"a": LABELS}
 
 
 def _rows(n):
@@ -67,3 +79,21 @@ def test_failed_retried_last_wins(tmp_path):
     assert len(out.read_text().splitlines()) == 3  # 실패 1건은 다시, solar는 처음
     got = baselines.latest(out)
     assert got[("s-0", "haiku_v2")] is not None and got[("s-0", "solar_v2")] is not None
+
+
+class Boom(FakeGateway):
+    """판정기 호출만 예외 — 이미 끝난 라벨 호출 결과는 파일에 남아야 한다"""
+
+    def complete(self, alias, **kw):
+        if alias == "judge":
+            raise RuntimeError("boom")
+        return super().complete(alias, **kw)
+
+
+def test_run_style_keeps_done_on_error(tmp_path):
+    out = tmp_path / "style.jsonl"
+    gw = Boom(JsonlLog(tmp_path / "log.jsonl"), "runtime")
+    with pytest.raises(RuntimeError):
+        baselines.run_style(_rows(3), out, gw)
+    got = baselines.latest(out)
+    assert {k for k in got if k[1] == "haiku_v2"} == {(f"s-{i}", "haiku_v2") for i in range(3)}

@@ -1,8 +1,9 @@
 """Qwen 파인튜닝 비교 명령 — 분류기 설계 "Qwen 비교". MLX가 필요한 명령은 --group finetune으로.
 uv run python -m evaluation.finetune.qwen data
 uv run --group finetune python -m evaluation.finetune.qwen lengths
-uv run --group finetune python -m evaluation.finetune.qwen train <full|half|speed> [continue] [epochs=N] [키=값 …]
-  기본 1에폭. continue는 끝난 어댑터에서 N에폭 더. 키=값은 lora.yaml 덮기(예: steps_per_eval=100)
+uv run --group finetune python -m evaluation.finetune.qwen train <full|half|speed> [continue|resume] [epochs=N] [키=값 …]
+  기본 1에폭. continue는 끝난 어댑터에서 N에폭 더, resume은 부모까지 죽어 끝나지 않은 학습을 마지막 체크포인트부터.
+  키=값은 lora.yaml 덮기(예: steps_per_eval=100)
 uv run python -m evaluation.finetune.qwen status <full|half|speed> [--watch]  (30초마다 갱신)
 uv run --group finetune python -m evaluation.finetune.qwen predict <full|half|speed|none> [셋,…] [limit]
   셋 기본 validation,dev,s1,s2,s3 · limit은 셋마다 앞 N건 · none은 학습 전 기본 모델
@@ -25,17 +26,22 @@ ROOT = Path(__file__).resolve().parents[3]
 def _predict(name: str, sets: str = ",".join(data.SETS), limit: str | None = None) -> None:
     from evaluation.finetune.qwen import infer, train
 
+    wanted = sets.split(",")
+    if unknown := set(wanted) - set(data.SETS):
+        raise SystemExit(f"모르는 셋 {sorted(unknown)} — {','.join(data.SETS)} 중에서")
     rows = [json.loads(line) for line in (data.DATA / "eval.jsonl").read_text().splitlines()]
     picked = []
-    for s in sets.split(","):
+    for s in wanted:
         mine = [r for r in rows if r["set"] == s]
         picked += mine[: int(limit)] if limit else mine
     adapter = None if name == "none" else train.ADAPTERS / name
-    gen = infer.mlx_generate(train.config()["model"], adapter)
     out = train.OUT / f"pred_{name}.jsonl"
-    infer.predict(picked, out, gen)
-    mine = [json.loads(line) for line in out.read_text().splitlines()]
-    secs = sorted(r["sec"] for r in mine if r["id"] in {p["id"] for p in picked})
+    fingerprint = infer.adapter_fingerprint(adapter)
+    gen = infer.mlx_generate(train.config()["model"], adapter)
+    infer.predict(picked, out, gen, fingerprint)
+    ids = {p["id"] for p in picked}
+    mine = [r for r in map(json.loads, out.read_text().splitlines()) if r["id"] in ids]
+    secs = sorted(r["sec"] for r in mine)
     print(f"{out.name}: {len(secs)}건, 건당 중앙 {secs[len(secs) // 2]}초·최대 {secs[-1]}초,"
           f" 파싱 실패 {sum(r['labels'] is None for r in mine)}, Peak mem {infer.peak_memory_gb():.2f}GB")  # fmt: skip
 
@@ -100,6 +106,7 @@ def _score() -> None:
             }
     for r in map(json.loads, (train.OUT / "baseline.jsonl").read_text().splitlines()):
         preds.setdefault(r["model"], {})[r["id"]] = r["labels"]
+    score.check_coverage(preds, rows)
     population = _population()
     results = {
         m: {
@@ -136,10 +143,10 @@ def main(argv: list[str]) -> None:
         from evaluation.finetune.qwen import train
 
         name, *rest = args
-        cont = "continue" in rest
         opts = dict(a.split("=", 1) for a in rest if "=" in a)
         epochs = int(opts.pop("epochs", 1))
-        train.train(name, epochs, cont, {k: train.parse_override(v) for k, v in opts.items()})
+        overrides = {k: train.parse_override(v) for k, v in opts.items()}
+        train.train(name, epochs, "continue" in rest, overrides, resume="resume" in rest)
     elif cmd == "status":
         import time
 

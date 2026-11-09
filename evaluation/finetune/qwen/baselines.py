@@ -5,7 +5,7 @@
 
 import json
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from backend.classify import MAX_TOKENS, judge_request, label_request, valid_labels
@@ -27,13 +27,13 @@ def from_app(app_db: Path, ids: set[str]) -> dict[str, dict[str, dict | None]]:
     """→ {모델 이름: {call_uid: labels | None}} — status='ok'이고 라벨 호출에 폴백이 없을 때만 라벨"""
     conn = sqlite3.connect(f"file:{app_db}?mode=ro", uri=True)
     out = {}
-    for name, (table, _) in MODELS.items():
+    for name, (table, alias) in MODELS.items():
         got = dict(
             conn.execute(
                 f"SELECT t.call_uid, t.labels FROM {table} t JOIN ax_llm_calls l"
-                " ON l.id = t.llm_call_id"
-                " WHERE t.prompt_version = ? AND t.status = 'ok' AND l.fallback_used = 0",
-                (VERSION,),
+                " ON l.id = t.llm_call_id WHERE t.prompt_version = ? AND t.model_alias = ?"
+                " AND t.status = 'ok' AND l.fallback_used = 0",
+                (VERSION, alias),
             ).fetchall()
         )
         out[name] = {i: _flags01(json.loads(got[i])) if i in got else None for i in ids}
@@ -59,7 +59,7 @@ def latest(path: Path) -> dict[tuple[str, str], dict | None]:
 
 def run_style(rows: list[dict], out_path: Path, gw) -> None:
     """rows × 모델 둘을 일반 호출(동시 WORKERS) → out_path에 {id, set, model, labels, fallback, cost} 덧붙임.
-    labels가 있는 (id, 모델)은 건너뛰고, 실패·폴백 건은 다시 돈다"""
+    labels가 있는 (id, 모델)은 건너뛰고, 실패·폴백 건은 다시 돈다. 호출이 예외로 끝나도 끝난 결과는 다 적고 나서 다시 던진다"""
     done = {k for k, v in latest(out_path).items() if v is not None}
     todo = [(r, m) for r in rows for m in MODELS if (r["id"], m) not in done]
 
@@ -72,7 +72,15 @@ def run_style(rows: list[dict], out_path: Path, gw) -> None:
                 "cost": res.cost_usd, "error": res.error}  # fmt: skip
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    error = None
     with ThreadPoolExecutor(WORKERS) as ex, out_path.open("a") as f:
-        for r in ex.map(one, todo):
+        for fut in as_completed([ex.submit(one, job) for job in todo]):
+            try:
+                r = fut.result()
+            except Exception as e:  # noqa: BLE001 — 나머지 결과를 적은 뒤 다시 던진다
+                error = error or e
+                continue
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.flush()
+    if error:
+        raise error

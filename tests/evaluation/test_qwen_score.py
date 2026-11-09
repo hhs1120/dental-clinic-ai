@@ -97,3 +97,10 @@ def test_report_has_all_sets():
     text = score.report(results, crit)
     for name in ("validation", "dev", "s1", "s2", "s3", "qwen_full", "haiku_v2"):
         assert name in text
+
+
+def test_coverage_refuses_partial():
+    rows = _rows([BASE] * 3)
+    score.check_coverage({"m": {"c-0": BASE, "c-1": None, "c-2": BASE}}, rows)  # None은 실패로 셈
+    with pytest.raises(SystemExit, match="m"):
+        score.check_coverage({"m": {"c-0": BASE}}, rows)

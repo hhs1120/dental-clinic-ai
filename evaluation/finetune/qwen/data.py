@@ -46,17 +46,19 @@ def target_json(labels: dict) -> str:
 
 
 def parse_labels(text: str) -> dict | None:
-    """모델 출력의 첫 JSON 객체 → 라벨(플래그 0/1). 못 읽거나 9항목·값이 안 맞으면 None(채점에서 오답)"""
-    m = re.search(r"\{.*?\}", text, re.S)
-    if not m:
-        return None
-    try:
-        d = json.loads(m.group())
-    except json.JSONDecodeError:
-        return None
-    if isinstance(d, dict):
-        d = {k: int(v) if k in FLAGS and type(v) is bool else v for k, v in d.items()}
-    return d if valid_labels(d) else None
+    """모델 출력에서 라벨로 읽히는 첫 JSON 객체 → 라벨(플래그 0/1). '{'마다 읽어 보고, 9항목·값이 맞는 것이 없으면
+    None(채점에서 오답)"""
+    decoder = json.JSONDecoder()
+    for m in re.finditer(r"\{", text):
+        try:
+            d, _ = decoder.raw_decode(text, m.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict):
+            d = {k: int(v) if k in FLAGS and type(v) is bool else v for k, v in d.items()}
+            if valid_labels(d):
+                return d
+    return None
 
 
 def _stratum(r: dict) -> tuple:
@@ -120,7 +122,7 @@ def eval_sets(silver: list[dict], dev: list[dict], style: list[dict]) -> dict[st
 
     def row(r, id_=None, transcript=None):
         return {"id": id_ or r["call_uid"], "call_uid": r["call_uid"], "direction": r["direction"],
-                "transcript": transcript or r["transcript"], "gold": _gold(r)}  # fmt: skip
+                "transcript": r["transcript"] if transcript is None else transcript, "gold": _gold(r)}  # fmt: skip
 
     by_uid = {r["call_uid"]: r for r in dev}
     out = {
