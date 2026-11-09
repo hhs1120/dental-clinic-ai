@@ -379,3 +379,11 @@ def test_baseline_paired_with_chat(conn):
     assert (b["refusal"]["k"], b["refusal"]["n"]) == (0, 1)
     assert b["compare"]["rescued"]["citation"] == ["m1"]  # 기준선 실패 → 챗 통과
     assert set(b["compare"]["lost"]["citation"]) == {"c1", "n1"}
+
+
+def test_answer_content_date_forms_match(conn):
+    """날짜 표기 차이(2024년 10월 23일 ↔ 2024-10-23)는 같은 말로 본다 — 답 내용 지표의 거짓 음성 줄이기"""
+    q = {"answer_chunk_hint": "2024년 10월 23일"}
+    assert rag._has_content(q, "마지막 스케일링은 2024-10-23입니다", {}) is True
+    assert rag._has_content({"answer_chunk_hint": "2024-10-23"}, "2024년 10월 23일", {}) is True
+    assert rag._has_content(q, "2024-10-24", {}) is False

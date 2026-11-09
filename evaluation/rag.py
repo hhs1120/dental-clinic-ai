@@ -103,7 +103,12 @@ def _fact_words(conn) -> dict[str, list[str]]:
     return out
 
 
+_KO_DATE = re.compile(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
+
+
 def _flat(text: str) -> str:
+    """비교용 — 'YYYY년 M월 D일'을 YYYY-MM-DD로 맞추고 공백·쉼표를 뗀다"""
+    text = _KO_DATE.sub(lambda m: f"{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}", text)
     return re.sub(r"[\s,]", "", text)
 
 
