@@ -92,7 +92,9 @@ def clinic(tmp_path):
             duration_min, is_tooth_level, aliases) VALUES
             ('U0010', '치주치료', 'perio', 'yes', 80000, 0.3, 30, 0, '["잇몸치료"]'),
             ('U0021', '임플란트1차', 'implant', 'no', 1000000, 1.0, 60, 1, '["임플란트"]'),
-            ('U0022', '임플란트2차', 'implant', 'no', 300000, 1.0, 30, 1, '["임플란트"]');
+            ('U0022', '임플란트2차', 'implant', 'no', 300000, 1.0, 30, 1, '["임플란트"]'),
+            ('U0031', '단순발치', 'surgery', 'yes', 30000, 0.3, 30, 1, '["단순 발치"]'),
+            ('U0032', '사랑니 발치', 'surgery', 'yes', 60000, 0.3, 30, 1, '["사랑니"]');
         INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,
             performed_at, fee_total, insured_amount, patient_amount) VALUES
             (101, 1, 1, 'U0001', '00', '2026-11-02 10:00:00', 50000, 35000, 15000),
@@ -462,3 +464,14 @@ def test_charts_unknown_procedure_is_empty(clinic):
 def test_charts_future_treatments_hidden(clinic):
     ids = [r["id"] for r in run(clinic, "query_charts", procedure="치주치료")["results"]]
     assert ids == ["chart:102", "chart:104"]  # 2026-12-05는 오늘(12-01) 뒤
+
+
+def test_charts_category_word_matches_all_procedures_containing_it(clinic):
+    """'발치'처럼 이름 일부면 그 말이 든 시술 전부(단순발치·사랑니 발치)를 앞 시술로 — 0건으로 헛돌지 않게"""
+    out = run(clinic, "query_charts", procedure="발치")
+    assert out["matched"] == ["단순발치", "사랑니 발치"]
+
+
+def test_charts_unknown_name_is_reported(clinic):
+    out = run(clinic, "query_charts", procedure="치주치료", prev_procedure="교정")
+    assert out["count"] == 0 and out["unknown"] == ["교정"]

@@ -241,29 +241,38 @@ def _claims(conn, args: dict) -> dict:
     }
 
 
-def _procedure_codes(conn, name: str) -> tuple[list[str], list[str]]:
-    """시술 이름·별칭 → (코드, 후보 이름). 이름이 맞으면 그 시술, 아니면 별칭이 걸린 시술 — 둘 이상이면 코드 없이 후보만
-    (별칭 오탐 방지, AI 실험 기록 §4·§5). 이름은 emr_procedures에서 읽어 상수를 박지 않는다(앱 설계 §8)"""
-    rows = _rows(conn, "SELECT code, name, aliases FROM source.emr_procedures")
-    exact = [r for r in rows if r["name"] == name]
-    hits = exact or [r for r in rows if name in json.loads(r["aliases"] or "[]")]
-    if len(hits) > 1:
-        return [], [r["name"] for r in hits]
-    return [r["code"] for r in hits], []
+def _procedure_codes(conn, name: str) -> tuple[list[str], list[str], list[str]]:
+    """시술 이름·별칭 → (코드, 맞춘 시술 이름, 모호한 별칭의 후보). 띄어쓰기는 무시한다. 순서: 이름 일치 → 별칭 일치(둘 이상이면
+    코드 없이 후보만 — 별칭 오탐 방지, AI 실험 기록 §4·§5) → 이름에 그 말이 든 시술 전부('발치' → 단순발치·사랑니 발치).
+    이름은 emr_procedures에서 읽어 상수를 박지 않는다(앱 설계 §8)"""
+    key = name.replace(" ", "")
+    rows = _rows(conn, "SELECT code, name, aliases FROM source.emr_procedures ORDER BY code")
+    flat = {r["code"]: r["name"].replace(" ", "") for r in rows}
+    exact = [r for r in rows if flat[r["code"]] == key]
+    alias = [
+        r for r in rows if key in {a.replace(" ", "") for a in json.loads(r["aliases"] or "[]")}
+    ]
+    if not exact and len(alias) > 1:
+        return [], [], [r["name"] for r in alias]
+    hits = exact or alias or [r for r in rows if key in flat[r["code"]]]
+    return [r["code"] for r in hits], [r["name"] for r in hits], []
 
 
 def _charts(clinic: Clinic, conn, args: dict) -> dict:
     """범위 조건 차트 조회 (설계 2026-11-09 챗 "query_charts") — 같은 환자 직전 앞 시술과의 날짜 차(일)"""
-    codes, candidates = _procedure_codes(conn, args["procedure"])
-    if candidates:
-        return {"count": 0, "results": [], "candidates": candidates}
-    prev_codes = []
+    codes, matched, candidates = _procedure_codes(conn, args["procedure"])
+    prev_codes, prev_cand = [], []
     if args["prev_procedure"]:
-        prev_codes, prev_cand = _procedure_codes(conn, args["prev_procedure"])
-        if prev_cand:
-            return {"count": 0, "results": [], "candidates": prev_cand}
-    if not codes or (args["prev_procedure"] and not prev_codes):
-        return {"count": 0, "results": []}
+        prev_codes, _, prev_cand = _procedure_codes(conn, args["prev_procedure"])
+    if candidates or prev_cand:
+        return {"count": 0, "results": [], "candidates": candidates or prev_cand}
+    unknown = [
+        n
+        for n, c in ((args["procedure"], codes), (args["prev_procedure"], prev_codes))
+        if n and not c
+    ]
+    if unknown:  # 없는 이름 — 모델이 이름을 고쳐 다시 부르게 알린다
+        return {"count": 0, "results": [], "unknown": unknown}
     sql = [
         "SELECT t.id, t.patient_id, t.tooth_no, t.performed_at, p.chart_no, pr.name AS procedure,"
         " n.dx_code, n.note FROM source.emr_treatments t"
@@ -315,7 +324,7 @@ def _charts(clinic: Clinic, conn, args: dict) -> dict:
                 continue
             item["prev"] = {"procedure": prev[0], "performed_at": prev[1], "gap_days": gap}
         out.append(item)
-    return {"count": len(out), "results": out[: args["limit"]]}
+    return {"count": len(out), "matched": matched, "results": out[: args["limit"]]}
 
 
 def query_tools(clinic: Clinic) -> list[Tool]:

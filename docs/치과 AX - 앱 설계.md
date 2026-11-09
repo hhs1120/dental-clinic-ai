@@ -61,7 +61,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`)·열린 치료계획 항목 |
 | `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?` | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
-| `query_charts` | `procedure`(이름·별칭), `prev_procedure?`, `min_gap_days?/max_gap_days?`(앞 시술과의 간격, 일), `same_tooth?`, `date_from?/date_to?`, `chart_no?`, `limit?`(기본값은 `ChartArgs`) | `{count, results[]}` — `id`(`chart:<treatment_id>`, 인용 가능)·차트 번호·진료일·시술·치아·상병·서술·`prev{procedure, performed_at, gap_days}`. 환자 이름 없음. 여러 시술에 걸린 별칭은 결과 없이 `candidates`만 |
+| `query_charts` | `procedure`(이름·별칭), `prev_procedure?`, `min_gap_days?/max_gap_days?`(앞 시술과의 간격, 일), `same_tooth?`, `date_from?/date_to?`, `chart_no?`, `limit?`(기본값은 `ChartArgs`) | `{count, results[]}` — `id`(`chart:<treatment_id>`, 인용 가능)·차트 번호·진료일·시술·치아·상병·서술·`prev{procedure, performed_at, gap_days}`. 환자 이름 없음. 이름은 띄어쓰기 무시 — 이름 일치 → 별칭 일치(여러 시술에 걸린 별칭은 결과 없이 `candidates`만) → 이름에 그 말이 든 시술 전부(`matched`, 예: 발치). 없는 이름은 `unknown` |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
 
 - `query_schedule` 칸

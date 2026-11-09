@@ -39,7 +39,7 @@ BASELINE_SCHEMA = {
 }
 # 평가의 질문당 도구 호출 상한과 같게(평가 설계 §3.2 — tests/backend/test_chat.py가 비교)
 CHAT_MAX_TOOL_CALLS = 6
-CHAT_MAX_USD = 0.5  # 질문당 비용 상한 — dev 실측 뒤 다시 정한다
+CHAT_MAX_USD = 0.3  # 질문당 비용 상한 — dev 실측 최대($0.09)의 약 3배
 ANSWER, REFUSE = "answer", "refuse"
 DATA_TOOLS = ("query_patient", "query_schedule", "query_claims")  # 청크 없이 답할 수 있는 조회
 REFUSED_TEXT = "문서함에 없음"
