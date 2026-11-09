@@ -1,5 +1,6 @@
 """앱 API (앱 설계 §9, 앱 뼈대 설계안 '백엔드'). 키 없이 돈다 — FakeEmbedder, 리랭커 끔."""
 
+import json
 import shutil
 import socket
 import threading
@@ -313,3 +314,74 @@ def test_search_records_voyage_usage(client_with, indexed_paths):
     rows = conn.execute("SELECT task, model_alias, input_tokens FROM ax_llm_calls").fetchall()
     conn.close()
     assert [tuple(r) for r in rows] == [("search_embed", "voyage", 7)]
+
+
+@pytest.fixture
+def summary_client(client_with):
+    """요약 게이트웨이를 대본으로(설계 2026-11-09 검색 요약 "요약 API")"""
+    from backend.api import get_chat_gateway
+    from tests.backend.script import Script
+
+    def make(*turns, **kw):
+        c = client_with(**kw)
+        gw = Script(*turns)
+        app.dependency_overrides[get_chat_gateway] = lambda: lambda conn: gw
+        return c, gw
+
+    return make
+
+
+def summary_out(text, cited):
+    from shared.llm import LLMResult
+
+    data = {"text": text, "cited_ids": cited, "refused": False}
+    return LLMResult(True, "", data, "m", False, 1, 1, 0.01, 1)
+
+
+def test_summary_returns_numbered_sources(summary_client):
+    c, _ = summary_client(summary_out("접수 후 기공소로 보낸다[1].", ["doc:3:0"]))
+    r = c.post("/search/summary", json={"q": "틀니 수리"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "answered" and body["text"] == "접수 후 기공소로 보낸다[1]."
+    assert [s["id"] for s in body["sources"]] == ["doc:3:0"]
+    assert body["sources"][0]["title"]  # 검색 카드 형식
+
+
+def test_summary_same_filters_as_search(summary_client):
+    c, gw = summary_client(summary_out("틀니 수리 문의[1].", ["call:c-0001:0"]))
+    c.post("/search/summary", json={"q": "틀니 수리", "source_types": "call"})
+    sent = json.dumps(gw.calls[0]["messages"], ensure_ascii=False)
+    assert "doc:" not in sent and "call:" in sent
+
+
+def test_summary_bad_args_is_422(summary_client):
+    c, gw = summary_client()
+    assert c.post("/search/summary", json={"q": "틀니", "source_types": ""}).status_code == 422
+    assert gw.calls == []
+
+
+def test_summary_without_index_is_503(client_with, source_paths, tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    paths = (empty / "app.sqlite", shutil.copy(source_paths[1], empty / "source.sqlite"))
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    conn.close()
+    assert client_with(paths=paths).post("/search/summary", json={"q": "틀니"}).status_code == 503
+
+
+def test_summary_records_voyage_usage(summary_client, indexed_paths):
+    class Counting(FakeEmbedder):
+        def embed_with_usage(self, texts, kind):
+            return self.embed(texts, kind), 7
+
+    c, _ = summary_client(
+        summary_out("접수 후 기공소로 보낸다[1].", ["doc:3:0"]),
+        models=(GuardedEmbedder(Counting()), None),
+    )
+    assert c.post("/search/summary", json={"q": "틀니 수리"}).status_code == 200
+    conn = db.connect(*indexed_paths)
+    rows = conn.execute("SELECT task FROM ax_llm_calls WHERE model_alias = 'voyage'").fetchall()
+    conn.close()
+    assert [r[0] for r in rows] == ["search_embed"]

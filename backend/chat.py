@@ -17,6 +17,7 @@ from backend.harness.store import RunStore
 from backend.harness.tools import Tool, ToolRegistry
 from backend.query_tools import query_tools
 from backend.rag_search import Searcher, search_tool
+from backend.search_cards import chart_plain
 from backend.usage import record_voyage
 from backend.verify import allowed_numbers, numbers_ok
 from shared.clinic import Clinic
@@ -58,27 +59,13 @@ class AnswerArgs(BaseModel):
     cited_ids: list[str] = Field(default_factory=list)
 
 
-def _chart_plain(conn: sqlite3.Connection, chunk: dict) -> dict:
-    """차트 청크 text의 검색용 괄호 꼬리를 떼고 서술 원문을 준다 — 화면 카드와 같은 기준(backend/search_cards.py)"""
-    if chunk["source_type"] != "chart_note":
-        return chunk
-    prefix = chunk["text"].split("] ", 1)[0] + "]"
-    note = conn.execute(
-        "SELECT note FROM source.emr_chart_notes WHERE treatment_id = ?",
-        (int(chunk["id"].split(":")[1]),),
-    ).fetchone()
-    return {**chunk, "text": f"{prefix} {note[0]}" if note else prefix}
-
-
 def _search(searcher: Searcher) -> Tool:
     """챗 전용 search_docs — 공용 도구는 그대로 두고(후속 에이전트 입력이 바뀌지 않게) 차트 text만 바꾼다"""
     base = search_tool(searcher)
 
     def run(ctx, args):
         found = base.fn(ctx, args)
-        return {
-            b: [_chart_plain(ctx.store.conn, c) for c in chunks] for b, chunks in found.items()
-        }
+        return {b: [chart_plain(ctx.store.conn, c) for c in chunks] for b, chunks in found.items()}
 
     return Tool(base.name, base.description, base.args, run)
 
@@ -306,7 +293,7 @@ def baseline(
     """단순 RAG 기준선(평가 설계 §3.3) — 질문 원문으로 검색 1회(필터 없음), 같은 답변 모델이 도구 없이 그 결과만으로
     {text, cited_ids, refused}. 인용 확인·숫자 후검증은 붙이지 않는다(단순 RAG 그대로와 비교)"""
     found = searcher.search(question)
-    chunks = [_chart_plain(conn, c) for b in found.values() for c in b]
+    chunks = [chart_plain(conn, c) for b in found.values() for c in b]
     context = "\n\n".join(external(c["id"], c["text"]) for c in chunks)
     r = gw.complete(
         ALIAS,
