@@ -5,8 +5,10 @@
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
+import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -88,11 +90,8 @@ def decide(stats: dict, item: str) -> list[str]:
         failed.append("no_new_miss")
     if any(stats[i]["false_alarm_delta"] > GATE_FALSE_ALARM_CAP for i in SAFETY):
         failed.append("false_alarm_cap")
-    if any(
-        (s["c"] > s["b"] and s["p"] < GATE_P) or s["c"] - s["b"] > GATE_REGRESSION_CAP
-        for i, s in stats.items()
-        if i != item
-    ):
+    # 오답 증가 상한 이하면 유의할 수 없다(c−b ≤ 3이면 p ≥ 0.25) — 상한 하나로 본다
+    if any(s["c"] - s["b"] > GATE_REGRESSION_CAP for i, s in stats.items() if i != item):
         failed.append("no_regression")
     return failed
 
@@ -173,13 +172,14 @@ def gate_hash() -> str:
     return hashlib.sha256(json.dumps(GATE_VALUES, sort_keys=True).encode()).hexdigest()[:12]
 
 
-def attempts(base: str, report: Path = REPORT) -> set[str]:
-    """같은 기준·같은 관문 값으로 판정한 서로 다른 후보 — 같은 버전끼리의 점검은 세지 않는다"""
+def attempts(base: str, report: Path = REPORT) -> set[tuple[str, str | None]]:
+    """같은 기준·같은 관문 값으로 판정한 서로 다른 (후보, 프롬프트 해시) — 이름이 같아도 내용을 고치면
+    새 시도다. 같은 버전끼리의 점검은 세지 않는다"""
     if not report.exists():
         return set()
     rows = map(json.loads, report.read_text().splitlines())
     return {
-        r["candidate"]
+        (r["candidate"], r.get("candidate_sha256"))
         for r in rows
         if r["base"] == base and r["candidate"] != base and r["gate_hash"] == gate_hash()
     }
@@ -189,11 +189,12 @@ class _Spent:
     """게이트웨이 호출 비용을 더한다 — 기록 행의 cost_usd"""
 
     def __init__(self, gw):
-        self.gw, self.cost = gw, 0.0
+        self.gw, self.cost, self.lock = gw, 0.0, threading.Lock()
 
     def complete(self, alias, **kwargs):
         r = self.gw.complete(alias, **kwargs)
-        self.cost += r.cost_usd
+        with self.lock:  # fill_runs가 여러 스레드로 부른다
+            self.cost += r.cost_usd
         return r
 
 
@@ -208,12 +209,14 @@ def run_gate(
         policy.values()
     ):  # 원칙 9 자동 처리 조건은 자동 개선 때 — 그 전에는 관문을 돌리지 않는다
         raise SystemExit("auto_policy_on")
+    if not all(re.fullmatch(r"[\w-]+", v) for v in (a, b)):  # 실행 폴더 밖을 지우지 않게
+        raise SystemExit("버전 이름은 글자·숫자·-·_만")
+    fp = {v: fingerprint(v, config) for v in (a, b)}
     tried = attempts(a, report)
-    if b != a and b not in tried and len(tried) >= GATE_ATTEMPTS:
+    if b != a and (b, fp[b]["prompt_sha256"]) not in tried and len(tried) >= GATE_ATTEMPTS:
         raise SystemExit("attempt_cap")
     gold = population(gold_rows)
     spent = _Spent(gw)
-    fp = {v: fingerprint(v, config) for v in (a, b)}
     picked = {u: calls[u] for u in gold}
     base, cand = (majority(fill_runs(spent, v, picked, fp[v], runs_root, workers)) for v in (a, b))
     stats = compare(base, cand, gold)
@@ -222,6 +225,7 @@ def run_gate(
         "at": datetime.now().isoformat(timespec="seconds"),
         "base": a,
         "candidate": b,
+        "candidate_sha256": fp[b]["prompt_sha256"],
         "item": item,
         "gate": GATE_VALUES,
         "gate_hash": gate_hash(),

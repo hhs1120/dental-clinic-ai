@@ -215,11 +215,22 @@ def _gate(tmp_path, gw, a="v1", b="v2", policy=None, rows=None, item="has_todo")
                        workers=1)  # fmt: skip
 
 
-def _history(tmp_path, *cands, base="v1", gate_hash=None):
+def _history(tmp_path, *cands, base="v1", gate_hash=None, sha=None):
     lines = [
-        {"base": base, "candidate": c, "gate_hash": gate_hash or pg.gate_hash()} for c in cands
-    ]
+        {"base": base, "candidate": c, "candidate_sha256": sha or f"sha-{c}",
+         "gate_hash": gate_hash or pg.gate_hash()}
+        for c in cands
+    ]  # fmt: skip
     (tmp_path / "r.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines))
+
+
+@pytest.fixture
+def fake_fp(monkeypatch):
+    """버전 → 프롬프트 해시 — 기본은 sha-<버전>, 고친 프롬프트는 값을 바꿔 흉내 낸다"""
+    shas = {}
+    monkeypatch.setattr(pg, "fingerprint", lambda v, config: {
+        "prompt_sha256": shas.get(v, f"sha-{v}"), "model": "claude-haiku-5-5"})  # fmt: skip
+    return shas
 
 
 def test_gate_pass_records_row(tmp_path):
@@ -236,7 +247,7 @@ def test_auto_policy_on_stops_before_calls(tmp_path):
     assert gw.calls == [] and not (tmp_path / "r.jsonl").exists()
 
 
-def test_attempt_cap_stops_third_candidate(tmp_path):
+def test_attempt_cap_stops_third_candidate(tmp_path, fake_fp):
     _history(tmp_path, "v2", "v9")
     gw = Script()
     with pytest.raises(SystemExit, match="attempt_cap"):
@@ -244,10 +255,27 @@ def test_attempt_cap_stops_third_candidate(tmp_path):
     assert gw.calls == []
 
 
-def test_same_candidate_rerun_not_counted(tmp_path):
+def test_same_candidate_rerun_not_counted(tmp_path, fake_fp):
     _history(tmp_path, "v2", "v9")
     out = _gate(tmp_path, _scripted(_gold()))
-    assert out["candidate"] == "v2" and pg.attempts("v1", tmp_path / "r.jsonl") == {"v2", "v9"}
+    assert out["candidate_sha256"] == "sha-v2"
+    assert pg.attempts("v1", tmp_path / "r.jsonl") == {("v2", "sha-v2"), ("v9", "sha-v9")}
+
+
+def test_edited_candidate_counts_as_new_attempt(tmp_path, fake_fp):
+    _history(tmp_path, "v2", "v9")
+    fake_fp["v2"] = "sha-v2-edited"
+    gw = Script()
+    with pytest.raises(SystemExit, match="attempt_cap"):
+        _gate(tmp_path, gw)
+    assert gw.calls == []
+
+
+def test_version_outside_folder_rejected(tmp_path):
+    gw = Script()
+    with pytest.raises(SystemExit, match="버전 이름"):
+        _gate(tmp_path, gw, a="../v1")
+    assert gw.calls == []
 
 
 def test_gate_hash_change_resets_count(tmp_path):

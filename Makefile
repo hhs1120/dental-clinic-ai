@@ -48,7 +48,7 @@ gold-audit:
 # ① 분류 프롬프트 관문(평가 설계 §2.7) — 검증 구간에서 기준 A·후보 B를 3번씩 다수결 비교(과금, 저장된 실행은 다시 씀)
 prompt-gate:
 	$(if $(and $(A),$(B),$(ITEM)),,$(error A=기준 버전 B=후보 버전 ITEM=목표 항목 필요))
-	uv run --env-file .env python -m evaluation.prompt_gate --a $(A) --b $(B) --item $(ITEM)
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.prompt_gate --a $(A) --b $(B) --item $(ITEM)
 
 # ① 처리 정답(설계 "PR ② 처리 정답") — Opus 라벨(과금, 빠진 건만, Batch)·사람 표본 터미널 화면
 action-label:
