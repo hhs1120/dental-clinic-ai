@@ -26,7 +26,7 @@ tags:
 | 코어 | 가상 데이터 생성기 | 모든 기능의 토대. 정답 내장 |
 | 코어 | ① 통화 요약·분류 | 모델 2개 교차검증으로 완성. 할 일 없는 통화는 자동 종결, 할 일 있는 통화는 후속 에이전트의 처리안과 함께 통화 화면 "오늘 할 일"로(끝내면 빠짐) |
 | 코어 | ② 판정·자동 개선 + 블라인드 비교 | "AI 검증"의 간판 화면. 판정기가 1차, 사람은 엇갈림·표본과 골드 점검 표본. 프롬프트 개선은 관문을 넘어야 반영. 키보드 UX. 업무 메뉴와 떨어진 "AI 평가" 메뉴 |
-| 코어 | ③ 물어보기 (RAG 검색 + 챗 + 문서함) | 하이브리드 검색(문서·통화·문자·차트 케이스) + 도구 5개 에이전트 + 문서함(읽기 전용) + 빠진 문서 초안 에이전트. 부트캠프 직결 |
+| 코어 | ③ 물어보기 (RAG 검색 + 챗 + 문서함) | 하이브리드 검색(문서·통화·문자·차트 케이스) + 도구 6개 에이전트 + 문서함(읽기 전용) + 빠진 문서 초안 에이전트. 부트캠프 직결 |
 | 코어 (MVP) | ④ 진료 준비표 | 전환 전 EMR 대비 회의 보기·체어 보기. "코드 집계 → LLM 해석" + 주의 환자 야간 조사 에이전트. `make gate` 통과 시 착수 |
 | 슬롯 | ⑤ 청구 점검·삭감 대응 | 청구 전 점검(차트 기반 누락 포함)·조정 사유 판단(조정 목록·재심 기한)·재심 사유서 초안. 재심 근거 조사는 에이전트 |
 | 슬롯 | ⑥ 경영 리포트 | 월간·주간·일간 운영 숫자 + 상병 착오. 인건비가 들어간 손익은 `[추정]`. ④ 패턴(코드 집계 → LLM 해석) + 튄 숫자 원인 조사 에이전트 |
@@ -196,7 +196,7 @@ tags:
 
 ### ③ 물어보기 (RAG 검색 + 챗 + 문서함)
 
-**목적**: 매뉴얼·공지·청구 기준·통화·문자·차트 기록을 하이브리드 검색, 도구 5개 단일 턴 에이전트가 "확인된 사실만" 답함. 하네스 위에 만든다.
+**목적**: 매뉴얼·공지·청구 기준·통화·문자·차트 기록을 하이브리드 검색, 도구 6개 단일 턴 에이전트가 "확인된 사실만" 답함. 하네스 위에 만든다.
 
 **검색 대상** (현장 인터뷰에서 나온 질문 기준)
 
@@ -217,14 +217,14 @@ tags:
 - `GET /search?q=&source_types=&date_from=&date_to=&chart_no=` → `{manual_results, case_results}` (카드 칸은 `backend/search_cards.py`)
 - `POST /chat`(SSE 진행 + 최종 답변) → `ax_search_logs`
 - `GET /documents` / `GET /documents/{id}`. `GET /doc-drafts` / `POST /doc-drafts/{id}/publish`. 문서 초안 입력은 `ax_search_logs`, 오늘 화면은 `GET /today`
-- 도구 5개(시그니처는 앱 설계 §3): `search_docs`, `query_patient`, `query_schedule`, `query_claims`, `refuse`
+- 도구 6개(시그니처는 앱 설계 §3): `search_docs`, `query_patient`, `query_schedule`, `query_claims`, `query_charts`(기간·간격 조건 차트), `refuse`
 - `make index`(인자는 앱 설계 §3) / `eval.py --split dev [--retrieval-only]` · `--split test --section …`([[치과 AX - 평가 설계]] §7)
 
 **완료 기준**
 - `eval.py --split dev` exit 0 + 리포트
 - 데이터형 도구 선택 ≥ 1/2(dev), `--retrieval-only` Hit@5 ≥ 1/2(dev 문서 검색형 — 문항 수는 `verify.QA_TYPE_COUNTS`)
 - 인용 확인(pytest): 검색 결과 밖 청크를 인용하면 한 번 다시 답하고, 또 어긋나면 고정 거절 문구로 끝남([[치과 AX - 앱 설계]] §3)
-- 보고(관문 조건 아님): 챗 vs 단순 RAG 기준선([[치과 AX - 평가 설계]] §3.3)
+- 보고(관문 조건 아님): 챗 vs 단순 RAG 기준선, 차트형 인용 정확도·공지형 현재 값·답 내용([[치과 AX - 평가 설계]] §3.3)
 - 질문 구성(유형·수·dev/test)·채점 규칙·지표는 [[치과 AX - 평가 설계]] §3 — `make verify`가 문항 구성을 검사
 
 **설계 근거**: 문서 청크가 통화·문자 청크보다 훨씬 적어 단일 RRF에서 묻힘 → **문서 버킷·사례 버킷 따로 검색** 후 리랭커. 모든 청크에 출처 prefix 의무(환자명 없이는 사례형 검색 불가). 차트 서술은 비식별이고 prefix는 차트 번호까지만이다(형식은 [[치과 AX - 앱 설계]] §3). 리랭커·임베딩 선택은 앱 설계 §7.
@@ -356,7 +356,8 @@ tags:
 
 - [ ] 운영 에이전트 착수 시 — 부모가 재개될 때 끝나지 않은 자식을 함께 잇는 처리(앱 설계 §3b 재개)
 - [ ] `make nightly` 착수 시 — 결정적 예외로 `running`에 남는 실행의 재개 횟수 상한, 비용 기록 전에 죽은 호출을 `ax_llm_calls`로 맞추기, 재개 때 `result_limit` 고정 여부와 도구별 상한
-- [ ] ③ 챗 착수 시 — 기록 검색의 AI 요약·"이걸로 질문하기"·`ax_search_logs`, 앱이 쓰기 시작하기 전 SQLite 동시 쓰기 방식(WAL·`busy_timeout`, WAL이면 `save-demo`의 두 파일 복사도 함께), `ax_llm_calls`의 입력 덤프 경로 칸과 `ref_type` 목록(`agent_run` 포함), 호출 상한에 걸린 `refuse`의 처리, 범위 조건 차트 조회 도구, 챗이 옛 공지 값으로 답하지 않는지 확인, 청크 겹침 15~20% 비교([[치과 AX - AI 실험 기록]] §6), 호출 상한 상수, 차트 괄호를 LLM에 보일지, Voyage 비용을 `ax_llm_calls`·`daily_usd_limit`에 넣을지, `doc_type` 필터 사용 여부, `query_tools`의 상수를 `master` 경로로(앱 설계 §8)
+- [ ] ③ 검색 요약·문서함 착수 시 — 기록 검색의 AI 요약·"이걸로 질문하기"·"근거 더 보기"(`ax_search_logs` `kind='search_summary'`), 문서함 — 설계는 `docs/superpowers/specs/2026-11-09-chat-agent-design.md` 브랜치 2
+- [ ] ③ 청크 겹침 15~20% 비교 — 답 내용 지표로 dev 3회씩([[치과 AX - AI 실험 기록]] §6)
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게

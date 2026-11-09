@@ -180,6 +180,12 @@ tags:
 | 차트 Hit@5 · MRR | 차트형 — 문서 검색형과 따로 보고(정답 여럿 허용이라 채점이 다르고, `make gate` 기준 모수를 바꾸지 않으려고) | 정답 차트 중 하나라도 top-5 / 첫 정답 순위 역수 |
 | 도구 선택 정확도 | 데이터형 | §3.2 규칙 통과 비율 |
 | 환각 억제율 | 거절형 | 마지막 호출이 `refuse`인 비율 |
+| 차트형 인용 정확도 (보고) | 차트형 | 챗 답변 `cited_ids`에 정답 차트(`chart:<treatment_id>`)가 하나 이상 **and** `cited_ids` ⊆ `retrieved_ids`(검색 결과 + `query_charts` 결과). 차트 Hit@5는 검색기 직접 호출이라 조회 도구의 효과를 따로 본다 |
+| 공지형 현재 값 (보고) | 공지형 | 정답 사실(`answer_chunk_hint` → `truth_doc_meta.planted_facts`)의 `words` 중 하나가 답변에 있음 — 최신 공지를 인용하면서 "기존" 옛 값으로 답한 경우를 잡는다 |
+| 답 내용 (보고) | 매뉴얼형·사례형 | 매뉴얼형은 정답 사실의 `words`, 사례형은 `answer_chunk_hint` 구절(공백·쉼표 제거)이 답변에 있음. 청크 겹침 비교의 판단 지표 |
+
+폴백이 섞인 문항은 챗 지표 모수에서 뺀다(§1 원칙 5). 챗 평가는 `app.sqlite` 사본(`evaluation/eval.py` `CHAT_COPY`)에서 돈다.
+
 
 **검색 지표의 순위**: Hit@5·MRR·Top-1·최신성(차트 Hit@5·MRR 포함)은 eval.py가 **질문 원문으로 검색기를 직접 한 번** 호출한 결과로 센다 — 챗은 검색어를 바꿔 여러 번 검색해 순위가 하나로 정해지지 않고, 이렇게 해야 `--retrieval-only`와 같은 정의가 된다. 순위는 정답 출처의 버킷 목록 안에서(문서 → `manual_results`, 통화·스레드·차트 → `case_results` — 앱 설계 §3). 청크가 정답인지는 청크의 출처 id(문서·통화는 끝 순번을 뗀 것, 스레드·차트는 청크 = 출처 — `evaluation/metrics.py` `source_id`)가 `answer_doc_ids`에 있는지로 본다. 인용 정확도·도구 선택·환각 억제는 eval.py가 부른 챗의 반환값(도구 호출·`retrieved_ids`·답변·`cited_ids` — 앱이 `ax_search_logs`에 쓰는 행과 같은 내용, 형식은 `evaluation/rag.py`)으로 센다.
 

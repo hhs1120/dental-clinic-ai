@@ -37,7 +37,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 2. LLM 로그
 
-**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 경로 칸과 `ref_type` 목록은 ③ 챗 착수 때 정한다([[치과 AX - 기능 정의]] §9). `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
+**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
 
 ## 3. 검색
 
@@ -50,8 +50,10 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 **`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval`. eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
 - **인용 확인**(챗 후처리 — 훅은 도구 호출만 보므로 답을 낸 직후 코드가 검사): `cited_ids`가 이번 질문의 `retrieved_ids` 밖이면 같은 검색 결과로 한 번 다시 답하게 하고, 또 어긋나면 고정 거절 문구로 끝낸다. 이때 마지막 호출은 `refuse`가 아니고 `cited_ids`는 비우며 상태는 인용 실패로 `ax_search_logs`·`chat()` 반환값에 남긴다(문서 초안 입력은 `refuse(not_found)`만이라 여기에 들지 않는다). 막힐 때마다 `ax_rule_counts`에 `chat.cite_outside`로 더한다. ③ 문서 초안이 같은 검사를 쓰고, ⑤-4는 인용 문장이 실제로 있는지까지 본다(평가 설계 §5)
+- **숫자 후검증**(인용 확인 다음, 같은 다시 답하기): 답의 숫자가 이번 질문의 도구 결과·인자·질문·오늘 날짜에 있거나 도구 결과 안 목록의 행 수여야 한다(`backend/verify.py` — 합계·날짜 계산은 막는다). 막힐 때마다 `chat.number_unverified`. 인용 없이 답한 것은 데이터 조회(`query_patient`·`query_schedule`·`query_claims`)를 한 경우만 허용
+- **상태**(`ax_search_logs.status`, 칸은 `shared/app_schema.sql`): `answered` / `refused` / `cite_failed` / `number_failed` / `call_limit` / `cost_limit` / `budget` / `failed`(`running`은 실행 중). 화면에 답을 내는 것은 `answered`뿐, `refused`는 "문서함에 없음", 나머지는 `backend/chat.py` `FAILED_TEXT`. 챗은 `POST /chat` SSE(이벤트 `step`·`answer`·`error`)
 
-**도구 5개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준, 코드 `backend/query_tools.py`·`backend/rag_search.py` `search_tool`)
+**도구 6개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준, 코드 `backend/query_tools.py`·`backend/rag_search.py` `search_tool`)
 
 | 도구 | 인자 | 반환 |
 |---|---|---|
@@ -59,6 +61,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `query_patient` | `chart_no?` / `name?` (하나 필수) | `{matches[], summary?}` — 동명이인이면 summary 없이 후보만. summary: 기본정보·주의사항(기록일 ≤ 기준일 < 끝나는 날, `emr_patient_alerts`)·마지막 내원·잔액·다음 예약·가족 리콜·그해 스케일링 급여 사용 여부(`emr_claims`)·열린 치료계획 항목 |
 | `query_schedule` | `date_from, date_to`(단일 날짜는 같은 값), `status?, type?, has_unpaid_balance?, is_new_patient?` | 예약 목록 + `{count, by_status, by_type}` |
 | `query_claims` | `date_from?/date_to?, chart_no?, procedure_code?, status?` | 청구 목록 + `{count, total_amount, by_status}`. 확정 월은 결과·사유 포함 |
+| `query_charts` | `procedure`(이름·별칭), `prev_procedure?`, `min_gap_days?/max_gap_days?`(앞 시술과의 간격, 일), `same_tooth?`, `date_from?/date_to?`, `chart_no?`, `limit?`(기본값은 `ChartArgs`) | `{count, results[]}` — `id`(`chart:<treatment_id>`, 인용 가능)·차트 번호·진료일·시술·치아·상병·서술·`prev{procedure, performed_at, gap_days}`. 환자 이름 없음. 여러 시술에 걸린 별칭은 결과 없이 `candidates`만 |
 | `refuse` | `reason`(`not_found` / `restricted` — 비공개 행정정보) | 없음. 호출 시 턴 종료, 앱이 고정 거절 문구 표시 |
 
 - `query_schedule` 칸
@@ -67,14 +70,14 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
   - `count`는 조건에 맞는 행 전체(`status`를 주지 않으면 취소·변경 포함)
   - `by_status`는 변경으로 대체된 원래 예약(새 예약의 `rescheduled_from_id`가 가리키는 `cancelled`)을 취소와 따로 `rescheduled`로 센다 — 예약 변경은 취소가 아니다
 - 날짜 전부 `YYYY-MM-DD`. 도구 description에 TODAY 값(§6) 예시를 넣음
-- 호출 상한 6회/질문. 경계: 건수·목록 → `query_*`, 절차·규정·과거 대화 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
+- 호출 상한은 `backend/chat.py` `CHAT_MAX_TOOL_CALLS`(채점 상수와 같음 — 테스트가 비교)이고 `answer`는 세지 않는다. 넘는 호출은 훅 `chat.call_limit`이 막고 상태는 `call_limit`. 경계: 건수·목록 → `query_*`, 기간·간격 조건이 있는 차트 → `query_charts`, 절차·규정·과거 대화·차트 내용 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document`와 `call/message_thread/chart_note`를 따로 찾아 각각 상위 `CANDIDATES`(`backend/rag_search.py`) → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제. 리랭커 뒤에 옛 공지(같은 제목에서 시행일이 이른 것) 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다. 날짜 필터를 주면 시행일 없는 문서는 빠지고, 환자 필터를 주면 환자 기록만 찾는다
 
 **문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만.
 
 ## 3b. 에이전트 하네스
 
-코드 위치는 `backend/harness/`. 다섯 축의 뜻은 [[치과 AX - 기능 정의]] §4 에이전트 하네스. 랭체인·랭그래프를 쓰지 않고 직접 구현한다 — 권한·훅·자동 처리·저장소 주입처럼 코드로 강제할 부분이 하네스의 본체라 프레임워크가 덜어 주는 것은 도구 루프와 재개 정도이고, 체크포인트를 따로 두면 상태가 `ax_agent_steps`와 둘로 갈라진다. 게이트웨이(§7.1)는 그대로 쓰고 모든 LLM 호출은 그곳을 지난다(임베딩·Voyage 리랭커는 밖).
+코드 위치는 `backend/harness/`. 다섯 축의 뜻은 [[치과 AX - 기능 정의]] §4 에이전트 하네스. 랭체인·랭그래프를 쓰지 않고 직접 구현한다 — 권한·훅·자동 처리·저장소 주입처럼 코드로 강제할 부분이 하네스의 본체라 프레임워크가 덜어 주는 것은 도구 루프와 재개 정도이고, 체크포인트를 따로 두면 상태가 `ax_agent_steps`와 둘로 갈라진다. 게이트웨이(§7.1)는 그대로 쓰고 모든 LLM 호출은 그곳을 지난다(임베딩·Voyage 리랭커는 밖 — 비용 기록은 §2).
 
 **상태·제약 테이블**
 | 테이블 | 목적 · 핵심 제약 |
@@ -91,7 +94,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 **에이전트별 도구** (호출 상한·세부 인자는 착수 시)
 | 에이전트 | 도구 |
 |---|---|
-| ③ 챗 | §3 도구 5개 |
+| ③ 챗 | §3 도구 6개 |
 | ① 후속 | `query_patient`, `query_schedule`, `search_docs`(색인이 있을 때), `submit_followup`(끝내는 도구 — 인자는 `backend/followup.py` `SubmitArgs`) |
 | ③ 문서 초안 | `search_docs` |
 | ④ 조사 | `query_patient`, `search_docs` |
@@ -131,6 +134,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 **`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
+**동시 쓰기**: 앱 연결은 WAL + `busy_timeout`(`backend/db.py`) — 챗 SSE가 쓰는 동안 다른 쓰기가 막히지 않게. 그래서 `save-demo`는 `app.sqlite`의 `-wal` 파일까지 함께 복사한다(또는 체크포인트 뒤 복사)
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
 
 **판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채우고, 활성 쌍의 엇갈림을 다시 계산하면 대상이 아니게 된 pending 건을 지운다(`backend/judge_queue.py` `prune` — skipped·done·사람 판정은 그대로). 저장 뒤 두 모델 라벨이 보인다
