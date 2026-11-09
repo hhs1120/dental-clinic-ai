@@ -387,3 +387,16 @@ def test_answer_content_date_forms_match(conn):
     assert rag._has_content(q, "마지막 스케일링은 2024-10-23입니다", {}) is True
     assert rag._has_content({"answer_chunk_hint": "2024-10-23"}, "2024년 10월 23일", {}) is True
     assert rag._has_content(q, "2024-10-24", {}) is False
+
+
+def test_baseline_fallback_excluded_from_both_sides(conn):
+    """기준선이 폴백된 문항은 짝 비교 양쪽에서 뺀다(리뷰 6)"""
+    base = dict(BASELINE, m1=dict(BASELINE["m1"], fallback_used=True))
+
+    class App(FakeApp):
+        def baseline(self, question, qa_id, condition=None):
+            return base[qa_id]
+
+    b = rag.evaluate(conn, App(), "dev")["chat"]["baseline"]
+    assert b["citation"]["n"] == 2 and b["excluded_fallback"] == 1
+    assert "m1" not in b["compare"]["rescued"].get("citation", [])

@@ -776,6 +776,8 @@ def main(argv=None) -> int:
         if not p.exists():
             print(f"DB 없음: {p} — make data 먼저")
             return 1
+    # 챗이 도는 실행만 사본을 뜬다(dev 기본, test --section chat) — 370MB를 매번 뜨지 않게
+    chat_runs = not args.retrieval_only and (args.split == "dev" or args.section == "chat")
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS source", (f"file:{source}?mode=ro",))
@@ -784,7 +786,7 @@ def main(argv=None) -> int:
         out = run(
             conn,
             reports_dir=args.reports_dir,
-            app=load_app(db if args.retrieval_only else copy_app_db(db, CHAT_COPY), source),
+            app=load_app(copy_app_db(db, CHAT_COPY) if chat_runs else db, source),
             split=args.split,
             section=args.section,
             retrieval_only=args.retrieval_only,

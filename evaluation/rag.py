@@ -25,12 +25,10 @@ from evaluation.metrics import (
 )
 
 SEARCH_TYPES = ("manual", "notice", "case")  # 문서 검색형 40 — Hit@5·MRR·Top-1·인용
-PARTS = ("retrieval", "chat")
-CONTENT_TYPES = ("manual", "case")  # 답 내용 — 청크 겹침 비교의 판단 지표
-BASELINE_TYPES = (
-    *SEARCH_TYPES,
-    "refusal",
-)  # 단순 RAG 기준선 짝 비교 모수(데이터형은 도구가 있어야 풀림)  # 검색 지표(검색기 직접 호출) / 챗 지표(chat 호출)
+PARTS = ("retrieval", "chat")  # 검색 지표(검색기 직접 호출) / 챗 지표(chat 호출)
+CONTENT_TYPES = ("manual", "case")  # 답 내용(보고 지표)
+# 단순 RAG 기준선 짝 비교 모수(데이터형은 도구가 있어야 풀림)
+BASELINE_TYPES = (*SEARCH_TYPES, "refusal")
 BUCKET = {
     "manual": "manual_results",
     "notice": "manual_results",
@@ -167,7 +165,7 @@ def _rate(qs: list[dict], field: str) -> dict:
     return {"k": sum(bool(q[field]) for q in qs if field in q), "n": sum(field in q for q in qs)}
 
 
-def _baseline_summary(base_q: list[dict], out_q: list[dict], cost: float) -> dict:
+def _baseline_summary(base_q: list[dict], out_q: list[dict], cost: float, excluded: int) -> dict:
     """단순 RAG 기준선 vs 챗 — 문서 검색형 인용·거절형 환각 억제, 구제(기준선 실패 → 챗 통과)/손실 (평가 설계 §3.3)"""
     chat_q = [q for q in out_q if any(b["id"] == q["id"] for b in base_q)]
     cmp = compare(base_q, chat_q)
@@ -177,6 +175,7 @@ def _baseline_summary(base_q: list[dict], out_q: list[dict], cost: float) -> dic
         "compare": {"rescued": cmp["rescued"], "lost": cmp["lost"]},
         "cost_usd": round(cost, 4),
         "calls": len(base_q),
+        "excluded_fallback": excluded,
     }
 
 
@@ -187,7 +186,7 @@ def evaluate(
     latest, pairs = _latest_notices(conn), _notice_pairs(conn)
     words = _fact_words(conn) if "chat" in parts else {}
     has_baseline = "chat" in parts and callable(getattr(app, "baseline", None))
-    out_q, base_q, cost = [], [], {"chat": 0.0, "baseline": 0.0, "calls": 0}
+    out_q, base_q, cost = [], [], {"chat": 0.0, "baseline": 0.0, "calls": 0, "base_excluded": 0}
     for q in questions if questions is not None else _questions(conn, split):
         r = {"id": q["id"], "type": q["type"], "question": q["question"]}
         if "retrieval" in parts and q["type"] in BUCKET:
@@ -214,8 +213,11 @@ def evaluate(
             if has_baseline and q["type"] in BASELINE_TYPES and not r.get("excluded"):
                 b = app.baseline(q["question"], q["id"], condition)
                 cost["baseline"] += b.get("cost_usd") or 0.0
-                ok = _chat_fail(q, _baseline_log(b), latest) is None
-                base_q.append({"id": q["id"], "type": q["type"], "chat_ok": ok})
+                if b.get("fallback_used"):  # 짝 비교는 양쪽에서 함께 뺀다(평가 설계 §1 원칙 5)
+                    cost["base_excluded"] += 1
+                else:
+                    ok = _chat_fail(q, _baseline_log(b), latest) is None
+                    base_q.append({"id": q["id"], "type": q["type"], "chat_ok": ok})
         out_q.append(r)
     search = [q for q in out_q if q["type"] in SEARCH_TYPES]
     chart = [q for q in out_q if q["type"] == "chart"]
@@ -243,7 +245,7 @@ def evaluate(
             "excluded_fallback": sum(bool(q.get("excluded")) for q in out_q),
             "cost_usd": round(cost["chat"], 4),
             "tool_calls": cost["calls"],
-            "baseline": _baseline_summary(base_q, out_q, cost["baseline"])
+            "baseline": _baseline_summary(base_q, out_q, cost["baseline"], cost["base_excluded"])
             if has_baseline
             else None,
         },

@@ -324,8 +324,12 @@ def test_main_passes_db_to_app(conn, tmp_path, monkeypatch):
     args = ["--reports-dir", str(tmp_path / "out")] + _db_files(conn, tmp_path)
     ev.main(["--split", "dev"] + args)
     ev.main(["--split", "dev", "--retrieval-only"] + args)
+    ev.main(
+        ["--split", "test", "--section", "classification"] + args
+    )  # 챗 안 돔 — 사본 안 뜸(리뷰 7)
     assert seen == [
         (tmp_path / "runs" / "rag.sqlite", tmp_path / "source.sqlite"),
+        (tmp_path / "app.sqlite", tmp_path / "source.sqlite"),
         (tmp_path / "app.sqlite", tmp_path / "source.sqlite"),
     ]
     assert (tmp_path / "runs" / "rag.sqlite").exists()
