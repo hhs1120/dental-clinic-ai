@@ -145,13 +145,9 @@ def run(
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
         todo = retry
-    total_cost = sum(
-        r[0] or 0
-        for r in conn.execute(
-            "SELECT cost_usd FROM ax_agent_runs WHERE agent = ?", (followup.AGENT,)
-        )
-    )
-    counts["cost_usd"] = round(total_cost, 4)
+    counts["cost_usd"] = round(
+        sum(spent.values()), 4
+    )  # 이번 실행의 통화만(사본의 앞 버전 실행 제외)
     return counts
 
 

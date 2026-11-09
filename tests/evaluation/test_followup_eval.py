@@ -197,3 +197,20 @@ def test_baseline_doctor_note():
     b = ev_followup.baseline
     assert b([{"text": "원장님께 앞니 파절 상황 미리 전달하기"}]) == "doctor_note"
     assert b([{"text": "원장님께 전달하고 회신 전화"}]) == "doctor_reply"
+
+
+def test_reported_cost_is_this_run_only(paths):
+    """요약 비용은 이번 실행의 통화만 — 사본에 남은 앞 버전 실행 비용을 다시 더하지 않는다"""
+    import json
+    import sqlite3
+
+    _run(paths, {})
+    c = sqlite3.connect(paths / "runs" / "copy.sqlite")
+    c.execute("UPDATE ax_agent_runs SET cost_usd = 5.0")  # 앞 버전 실행이 남긴 비용
+    c.commit()
+    c.close()
+    rows = ev_followup.load(paths / "runs.jsonl")
+    (paths / "runs.jsonl").write_text(
+        "".join(json.dumps(dict(r, prompt_version="v0")) + "\n" for r in rows)
+    )
+    assert _run(paths, {})["cost_usd"] == 0  # 가짜 게이트웨이 — 이번 실행 비용은 0
