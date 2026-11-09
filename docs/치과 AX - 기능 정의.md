@@ -363,7 +363,6 @@ tags:
 - [ ] 오늘 화면 착수 시 — 자동 종결을 되돌렸거나 사람 판정이 할 일·응급 등을 켠 통화(할 일 줄이 없는 통화)를 어디에 보일지(예: "확인할 통화" 칸) 정한다
 - [ ] 착수 순서 — ③ 챗 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
 - [ ] 평가 정답 추가 — 시나리오 DB·`truth_scenarios`(⑥·운영 에이전트 착수 때, verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다
-- [ ] 처리 정답 사람 표본 — `make action-audit`로 표본을 끝까지 판정하고 `evaluation/call_actions.jsonl`을 커밋(표본에서 목록 밖 일이 자주 나오면 처리 종류 추가를 정한다)
 - [ ] 후속 처리 test 정답 — test 판정 풀에 처리 정답 라벨(`make action-label`과 같은 방식)을 붙여 `eval.py` test 묶음 `followup`을 만든다(사람 실행)
 - [ ] 자동 개선 착수 시 — 관문 값, 반복 상한, 표본 비율을 첫 실행 전에 고정([[치과 AX - 평가 설계]] §2.3·§2.7). AI 평가 화면에 자동 개선 탭
 - [ ] 일괄 실행을 화면이나 `make nightly`에서 돌릴 때 — 작업 API(`POST /jobs/classify-batch`·`judge-batch`·`blind-judge-batch`, `ax_jobs`). 지금은 `make classify`·`judge`·`blind-judge`

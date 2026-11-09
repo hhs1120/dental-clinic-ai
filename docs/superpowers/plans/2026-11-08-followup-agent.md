@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 할 일 있는 통화마다 후속 에이전트가 환자 기록을 조회해 처리안(7가지 종류 + 요지 + 근거)을 붙여 오늘 할 일·상세에 보이고, 골드에서 파생한 처리 정답으로 에이전트와 규칙 기준선의 정확도를 잰다.
+**Goal:** 할 일 있는 통화마다 후속 에이전트가 환자 기록을 조회해 처리안(처리 종류 하나 + 요지 + 근거)을 붙여 오늘 할 일·상세에 보이고, 골드에서 파생한 처리 정답으로 에이전트와 규칙 기준선의 정확도를 잰다.
 
 **Architecture:** 처리 정답은 채점 모수 통화에 Opus가 녹취록만 보고 붙인 라벨(Batch)과 사람 표본 30통화로 만들어 `evaluation/call_actions.jsonl`에 둔다(골드에 할 일 내용이 없어서 — 설계 "PR ② 처리 정답"). 에이전트는 기존 하네스(`Runner`)에 조회 도구 + 문서 검색 + 끝내는 도구 `submit_followup`을 얹은 `backend/followup.py`이고, 결과는 `ax_call_followups`에 남는다. 평가 실행은 `app.sqlite` 사본에서 라운드 배치(남은 실행 30건 이하부터 일반 호출)로 돌려 `evaluation/followup_runs.jsonl`에 쌓고, `eval.py`는 채점만 한다.
 
@@ -14,7 +14,7 @@
 
 - 브랜치 `feat/followup-agent`(PR #25 머지 뒤 main에서). 커밋 `<영역>: <무엇>` + 본문 글머리 + 트레일러 두 줄(`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`, `Claude-Session: https://claude.ai/code/session_01G62cGwhYixc5LpBLhj8iGp`). `git add`는 파일 이름으로. 커밋 전 `make fmt` → `make lint` → `make test`
 - `backend/`는 `evaluation/`·`generator/`·`ground_truth/`를 import하지 않는다. 골드·판정 풀 통화의 실행 기록은 `data/app.sqlite`에 쓰지 않는다(평가 실행은 `evaluation/runs/`의 사본에서 — 그 폴더는 이미 커밋하지 않는다)
-- 처리 종류 7가지 코드 값·우리말·뜻(`shared/followup.py`, 앱·평가가 같이 씀 — 에이전트 프롬프트와 정답 라벨 프롬프트가 같은 뜻을 읽는다): `appointment` 예약 잡기·변경 / `doctor_reply` 원장님 확인 후 회신 / `billing` 수납·미수 확인 / `document` 서류 준비 / `insurance_cost` 보험·비용 안내 / `scaling_timing` 스케일링 시기 안내 / `other` 기타(사람 판단)
+- 처리 종류 코드 값·우리말·뜻은 `shared/followup.py` `ACTIONS`·`ACTION_KO`·`ACTION_DESC`(앱·평가가 같이 씀 — 에이전트 프롬프트와 정답 라벨 프롬프트가 같은 뜻을 읽는다)
 - 게이트웨이 별칭 `followup: [claude-sonnet-5-5]`. 도구 호출 상한은 앱 상수 `FOLLOWUP_MAX_TOOL_CALLS`(값은 `evaluation/metrics.py` `MAX_TOOL_CALLS`와 같게 — 같은지 테스트로 비교), 실행당 비용 상한 `FOLLOWUP_MAX_USD = 0.5`
 - 쓰기 도구 없음. 근거 후검증: `summary`·`facts`의 숫자(날짜·금액·횟수)가 그 실행의 도구 결과나 녹취록에 있어야 한다
 - 채점 모수: 골드 `has_todo`도 활성 분류 `has_todo`도 참인 통화. dev 판정 풀과 silver 검증 구간을 따로 보고
