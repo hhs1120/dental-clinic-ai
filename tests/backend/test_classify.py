@@ -2,11 +2,13 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 from backend import classify as cl
+from backend import prompts
 from backend.harness.store import SqliteLlmLog
 from shared import call_labels
-from shared.llm import FakeGateway
+from shared.llm import FakeGateway, LLMResult
 
 
 def _gw(conn):
@@ -120,8 +122,11 @@ class BadLabels(FakeGateway):
         r = super().complete(alias, **kw)
         if alias == "classify":
             return replace(r, data={k: v for k, v in r.data.items() if k != "urgency"})
-        if alias == "judge":
-            return replace(r, data=r.data | {"primary_purpose": "lunch"})
+        if (
+            alias == "judge"
+        ):  # 실제 게이트웨이처럼 text와 data가 같은 출력이어야 한다(판정은 text도 다시 본다)
+            data = r.data | {"primary_purpose": "lunch"}
+            return replace(r, text=json.dumps(data), data=data)
         return r
 
 
@@ -153,3 +158,85 @@ def test_normalize_summary():
         == "예약 변경 요청함 목요일 3시로 옮김"
     )
     assert cl.normalize_summary("# 요약\n1. 첫째임\n• 둘째임  ") == "요약 첫째임 둘째임"
+
+
+ROOT = Path(__file__).resolve().parents[2]
+GOOD_JSON = (
+    '{"primary_purpose":"book","counterpart":"patient","urgency":"normal","emergency":0,'
+    '"complaint":0,"price_inquiry":0,"wants_appt":1,"appt_confirmed":0,"has_todo":0}'
+)
+
+
+def _call(text: str, data) -> LLMResult:
+    return LLMResult(True, text, data, "qwen", False, 0, 0, 0.0, 0)
+
+
+def test_first_labels_matches_parse_labels():
+    """실험 채점(parse_labels)과 같은 규칙 — Qwen 판정기 설계 '판정기 v3'"""
+    from evaluation.finetune.qwen.data import parse_labels
+
+    lines = (ROOT / "evaluation/finetune/qwen/out/pred_full.jsonl").read_text().splitlines()
+    texts = [json.loads(x)["text"] for x in lines]
+    extra = [
+        '앞말 {"x": 1} ' + GOOD_JSON,
+        GOOD_JSON.replace('"emergency":0', '"emergency":false'),
+        GOOD_JSON + " " + GOOD_JSON.replace("book", "cancel"),
+        "JSON 없음",
+        "{깨진",
+    ]
+    for t in texts + extra:
+        assert cl.first_labels(t) == parse_labels(t)
+
+
+def test_judgment_falls_back_to_text():
+    j = cl.judgment_from(_call('{"x": 1} ' + GOOD_JSON, {"x": 1}))
+    assert j.ok and j.labels == json.loads(GOOD_JSON)
+
+
+def test_judgment_invalid_enum_failed():
+    bad = GOOD_JSON.replace('"patient"', '"student"')
+    j = cl.judgment_from(_call(bad, json.loads(bad)))
+    assert not j.ok and j.labels is None
+
+
+class PinnedGateway(FakeGateway):
+    """판정기 별칭이 Qwen인 설정 — 판정기 버전 머리말 model과 맞는지 보는 테스트용"""
+
+    config = {"aliases": {"judge": ["qwen3.5-2b-judge"]}}
+
+
+def test_judge_versions_pin_their_model():
+    """판정기 버전은 (프롬프트 × 모델) 하나 — 옛 v1·v2는 Solar, v3는 지금 별칭(Qwen 판정기 설계 '비교 규칙')"""
+    from shared import llm
+
+    assert prompts.model("judge", "v1") == prompts.model("judge", "v2") == "solar-mini4"
+    assert prompts.model("judge", "v3") == llm.load_config()["aliases"]["judge"][0]
+
+
+def test_judge_model_ok(conn):
+    gw = PinnedGateway(SqliteLlmLog(conn), scope="runtime")
+    assert cl.judge_model_ok(gw, "v3") and not cl.judge_model_ok(gw, "v2")
+    assert cl.judge_model_ok(FakeGateway(SqliteLlmLog(conn), scope="runtime"), "v2")  # 설정 없음
+
+
+def test_classify_one_keeps_old_judge_row(cconn):
+    """별칭 모델이 바뀐 옛 판정기 버전은 다시 판정하지 않는다 — Solar v2 ok 행을 Qwen 실패로 덮지 않게"""
+    from backend import calls, db
+    from tests.backend.call_db import LABELS, judge_row
+
+    judge_row(cconn, "c-0001", LABELS, "v2")
+    db.set_setting(cconn, "prompt_versions", {"judge": "v2"})
+    a = calls.active_versions(cconn)[0]
+    cconn.execute(  # 옛 분류 기준의 낡은 엇갈림 — 다시 분류하면 새 분류로 다시 계산돼야 한다
+        "INSERT INTO ax_call_disagreements VALUES ('c-0001', ?, 'v2', 0, 0, 0, '[\"낡음\"]')", (a,)
+    )
+    calls.classify_one(cconn, PinnedGateway(SqliteLlmLog(cconn), scope="runtime"), "c-0001")
+    row = cconn.execute(
+        "SELECT model_actual, status FROM ax_model_judgments WHERE call_uid = 'c-0001'"
+        " AND prompt_version = 'v2'"
+    ).fetchone()
+    assert tuple(row) == ("solar", "ok")
+    stale = cconn.execute(
+        "SELECT 1 FROM ax_call_disagreements WHERE call_uid = 'c-0001' AND items LIKE '%낡음%'"
+    ).fetchone()
+    assert stale is None

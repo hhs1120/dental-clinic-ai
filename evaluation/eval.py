@@ -258,9 +258,13 @@ def run(
         result["classification"] = classification.evaluate(
             conn, split, versions, fewshot, dump=dev, gold_drop=gold_drop
         )
+    judges = classification.judge_versions(conn)
+    # 판정기 학습 통화 — 판정기끼리 같은 모수가 되게 모든 쌍에서 뺀다(dev만, Qwen 판정기 설계 '비교 규칙')
+    trained = classification.judge_skip(conn, judges, prompts_dir) if dev else set()
+    result["judge_trained_skip"] = len(trained)
     if dev or section == "judge":
         result["judge"] = classification.evaluate_judge(
-            conn, split, [prompt_version] if section == "judge" else None, gold_drop
+            conn, split, [prompt_version] if section == "judge" else None, gold_drop, trained
         )
     if dev or section == "crosscheck":
         jv = classification.judge_version(conn)
@@ -269,10 +273,14 @@ def run(
             if section == "crosscheck"
             else list(result["classification"]["versions"])
         )
+        b_versions = judges if dev else [jv]  # dev는 판정기 버전 전부 나란히, test는 묶음 하나
         result["crosscheck"] = (
             [
-                classification.crosscheck(conn, split, a, jv, fewshot.get(a) if dev else None)
+                classification.crosscheck(
+                    conn, split, a, b, fewshot.get(a) if dev else None, trained
+                )
                 for a in a_versions
+                for b in b_versions
             ]
             if jv
             else []
@@ -282,6 +290,10 @@ def run(
         a = prompt_version if section == "auto" else active_versions(conn)[0]  # 앱과 같은 기본값
         if jv and a:
             result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
+            if dev:  # 판정기 비교 — 같은 분류 버전으로(검증 구간이라 학습 통화와 겹치지 않는다)
+                result["autoclose_by_judge"] = [
+                    autoclose.evaluate(conn, split, a, b) for b in judges
+                ]
     if dev and call_actions_path and call_actions_path.exists():
         # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
         acts = call_actions.load(call_actions_path)
@@ -380,6 +392,11 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
             r["classification"], (r.get("gold_audit") or {}).get("judge_version")
         )
     audit_jv = (r.get("gold_audit") or {}).get("judge_version")
+    if r.get("judge_trained_skip"):  # 판정기 채점·교차검증 둘 다에 걸린다
+        out += [
+            f"판정기 학습 통화 제외 {r['judge_trained_skip']}통화 — 판정기 채점·교차검증에서 모든 판정기 쪽으로",
+            "",
+        ]
     if r["judge"] is not None:
         out += _render_judge(r["judge"], audit_jv)
         out += _render_gold_audit(r["gold_audit"])
@@ -387,6 +404,9 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_crosscheck(r["crosscheck"])
     if r.get("autoclose") is not None:
         out += _render_autoclose(r["autoclose"])
+    for a in r.get("autoclose_by_judge") or []:
+        if a["pair"] != r["autoclose"]["pair"]:
+            out += _render_autoclose(a)
     if r.get("followup") is not None:
         out += _render_followup(r["followup"])
     if r["rag"] is not None or app_missing:

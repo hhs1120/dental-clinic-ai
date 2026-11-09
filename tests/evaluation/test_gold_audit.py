@@ -613,3 +613,16 @@ def test_reasoning_max_tokens_from_backend():
     from backend.classify import REASONING_MAX_TOKENS
 
     assert gold_audit.REASONING_MAX_TOKENS is REASONING_MAX_TOKENS
+
+
+def test_targets_skip_trained(conn, tmp_path):
+    """판정기가 학습한 통화는 대상에서 뺀다 — 판정기와 골드가 거의 늘 같아 조용히 빠지므로(Qwen 판정기 설계)"""
+    _set_judge(conn, "c-0004", urgency="urgent")
+    _set_judge(conn, "c-0005", urgency="urgent")
+    (tmp_path / "p" / "judge").mkdir(parents=True)
+    (tmp_path / "p" / "judge" / "v1.md").write_text(
+        "---\ntrained_on: silver_material\n---\n지시", "utf-8"
+    )
+    before = {t["call_uid"] for t in gold_audit.targets(conn, "v1")}
+    after = {t["call_uid"] for t in gold_audit.targets(conn, "v1", tmp_path / "p")}
+    assert {"c-0004", "c-0005"} <= before and len(before - after) == 1 and "c-0002" in after

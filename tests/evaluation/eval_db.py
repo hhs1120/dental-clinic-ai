@@ -171,3 +171,32 @@ def make_db(tmp_path) -> sqlite3.Connection:
     conn.execute("ATTACH DATABASE ? AS source", (str(tmp_path / "source.sqlite"),))
     conn.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))
     return conn
+
+
+def add_judge(conn, version: str, preds: dict, model: str = "qwen@abcd") -> None:
+    """판정기 버전 하나 더 — {통화 id: 목적}. LLM 호출 id는 버전마다 1000번대부터"""
+    base = 1000 * (
+        1
+        + conn.execute("SELECT COUNT(DISTINCT prompt_version) FROM ax_model_judgments").fetchone()[
+            0
+        ]
+    )
+    uid_of = {cid: uid for cid, uid, *_ in CALLS}
+    for cid, purpose in preds.items():
+        conn.execute(
+            "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, ok, created_at)"
+            " VALUES (?, 'judge', 'judge', ?, ?, 1, '2026-12-01 09:00:00')",
+            (base + cid, model, version),
+        )
+        conn.execute(
+            "INSERT INTO ax_model_judgments (call_uid, model_alias, model_actual, prompt_version, status, labels,"
+            " llm_call_id) VALUES (?, 'judge', ?, ?, 'ok', ?, ?)",
+            (
+                uid_of[cid],
+                model,
+                version,
+                json.dumps(labels(purpose, complaint=int(purpose == "complaint"))),
+                base + cid,
+            ),
+        )
+    conn.commit()

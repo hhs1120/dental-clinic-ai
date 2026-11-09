@@ -7,6 +7,7 @@ import pytest
 
 from evaluation import EvalRefused
 from evaluation import eval as ev
+from tests.evaluation.eval_db import add_judge
 from tests.evaluation.test_rag import SEARCH, FakeApp, make_rag_db
 
 
@@ -527,3 +528,23 @@ def test_dev_report_has_autoclose(conn, reports):
     out = _run(conn, reports, split="dev")
     assert _json(out)["autoclose"]["pair"].endswith("×v1")
     assert "## ① 자동 종결" in out["report_path"].read_text(encoding="utf-8")
+
+
+def test_dev_reports_each_judge_on_same_population(conn, reports, tmp_path):
+    """비교 규칙 — dev는 분류 버전 × 판정기 버전 전부, 판정기 학습 통화는 모든 쌍에서 뺀다(Qwen 판정기 설계)"""
+    add_judge(conn, "v9", {1: "book", 2: "complaint", 3: "book", 4: "book", 5: "book"})
+    conn.execute("INSERT INTO ax_settings VALUES ('prompt_versions', '{\"judge\": \"v9\"}')")
+    prompts = tmp_path / "prompts"
+    (prompts / "judge").mkdir(parents=True)
+    (prompts / "judge" / "v9.md").write_text(
+        "---\ntrained_on: silver_material\n---\n지시\n", "utf-8"
+    )
+    out = _run(conn, reports, split="dev", prompts_dir=prompts)
+    data = _json(out)
+    pairs = {(x["a"], x["b"]): x for x in data["crosscheck"]}
+    assert set(pairs) == {("v1", "v1"), ("v1", "v9"), ("v2", "v1"), ("v2", "v9")}
+    assert pairs[("v1", "v1")]["n"] == pairs[("v1", "v9")]["n"]
+    by_judge = [a["pair"].split("×")[1] for a in data["autoclose_by_judge"]]
+    assert by_judge == ["v1", "v9"]
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert md.count("판정기 학습 통화 제외") == 1 and "판정기 채점·교차검증" in md

@@ -1,5 +1,6 @@
 """LLM 게이트웨이 — 생성기·앱의 모든 LLM 호출이 지나는 모듈 하나 (앱 설계 §7). 프로바이더마다 공식 SDK를 직접 쓴다 —
-Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK). 모델의 프로바이더는 설정의 provider(없으면 anthropic).
+Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜닝 판정기 — Qwen 판정기 설계 "게이트웨이 로컬 갈래").
+모델의 프로바이더는 설정의 provider(없으면 anthropic).
 설정은 config/llm.yaml: 별칭 → 모델 순서, 모델별 단가, 일일 비용 상한.
 - 폴백: 일시 오류(연결·408·409·429·5xx — SDK 재시도를 다 쓴 뒤)나 거절이면 다음 모델로. 그 밖의 오류(400 등),
   잘린 응답(stop_reason이 end_turn 아님, Upstage는 finish_reason이 stop 아님), JSON 파싱 실패는 다른 모델로 가도
@@ -11,7 +12,11 @@ Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK). 모델의 프로바�
 - 결과의 log_id = 그 호출의 기록 행 id(SqliteLlmLog면 ax_llm_calls.id, JsonlLog면 None)
 - Batch(생성기 API 채우기·분류 일괄): Anthropic만, 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
   결과 1건 = 기록 1행. 처리 안 된 건(오류·취소·만료)은 기록하지 않고 None
-의존성: anthropic은 generator·backend 그룹, openai는 backend 그룹(Upstage 모델을 처음 부를 때 import)
+- 로컬 MLX: 모델·어댑터는 처음 부를 때 한 번 올려 프로세스 안에서 다시 쓰고, 적재·생성은 잠금 하나로 한 번에 하나씩.
+  출력 상한 LOCAL_MAX_TOKENS(요청 max_tokens는 안 씀), 비용 0, 구조화 출력이 없어 첫 JSON 객체를 data로. 모델·어댑터가
+  없으면 예외 대신 실패 결과. 응답 모델은 "<설정 이름>@<어댑터 지문>"
+의존성: anthropic은 generator·backend 그룹, openai는 backend 그룹(Upstage 모델을 처음 부를 때 import),
+mlx-lm은 finetune 그룹(로컬 모델을 처음 부를 때 import — uv run --group finetune)
 """
 
 import hashlib
@@ -37,6 +42,9 @@ TRANSIENT_STATUS = (408, 409, 429)  # + 5xx — SDK 재시도 기준과 같음
 ATTEMPT_ITERATIONS = ("message", "fallback_message")  # usage.iterations 중 모델 시도
 BATCH_PRICE_SHARE = 0.5  # Batch 단가 = 일반 단가의 이 배수
 UPSTAGE_BASE_URL = "https://api.upstage.ai/v1"
+LOCAL_MAX_TOKENS = 256  # 로컬 판정기 출력 상한 — 정답 JSON은 100토큰 안팎(evaluation/finetune/qwen/infer.py와 같음)
+_LOCAL_MODELS: dict = {}  # (설정 이름, base, adapter) → (model, tokenizer, 응답 모델 이름) — 게이트웨이는 요청마다 새로 만들어진다
+_LOCAL_LOCK = threading.Lock()  # MLX 적재·생성은 한 번에 하나(API 스레드가 동시에 부를 수 있다)
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -63,6 +71,57 @@ class LLMResult:
     tool_calls: tuple = ()  # 도구 호출 {id, name, input}
     content: list | None = None  # 다음 턴에 그대로 넘길 assistant 블록(글·도구 호출)
     log_id: int | None = None  # 기록 행 id (기록 저장소가 돌려준 값)
+
+
+@dataclass(frozen=True)
+class LocalOutput:
+    text: str
+    input_tokens: int
+    output_tokens: int
+    model: str  # 응답 모델 이름 — "<설정 이름>@<어댑터 지문>"
+
+
+def adapter_fingerprint(adapter_dir: Path) -> str:
+    """어댑터 가중치 sha256 앞 16자 — evaluation/finetune/qwen/infer.py adapter_fingerprint와 같은 값"""
+    return hashlib.sha256((adapter_dir / "adapters.safetensors").read_bytes()).hexdigest()[:16]
+
+
+def first_json(text: str):
+    """출력에서 읽히는 첫 JSON 객체 — 없으면 None"""
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            d, _ = decoder.raw_decode(text, i)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict):
+            return d
+    return None
+
+
+def _mlx_generate(name: str, cfg: dict, messages: list[dict]) -> LocalOutput:
+    """학습·실험 추론(infer.py)과 같은 채팅 템플릿(생각 끔)·탐욕 디코딩. 오류는 부른 쪽(_local)이 실패 결과로"""
+    import mlx_lm
+
+    adapter = ROOT / cfg["adapter"] if cfg.get("adapter") else None
+    key = (name, cfg["base"], str(adapter))
+    with _LOCAL_LOCK:
+        if key not in _LOCAL_MODELS:
+            if adapter is not None and not (adapter / "adapters.safetensors").exists():
+                raise FileNotFoundError(f"어댑터 없음 {adapter}")
+            model, tokenizer = mlx_lm.load(
+                cfg["base"], adapter_path=str(adapter) if adapter else None
+            )
+            label = f"{name}@{adapter_fingerprint(adapter)}" if adapter else name
+            _LOCAL_MODELS[key] = (model, tokenizer, label)
+        model, tokenizer, label = _LOCAL_MODELS[key]
+        prompt = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, enable_thinking=False, tokenize=False
+        )
+        text = mlx_lm.generate(model, tokenizer, prompt=prompt, max_tokens=LOCAL_MAX_TOKENS)
+    return LocalOutput(text, len(tokenizer.encode(prompt)), len(tokenizer.encode(text)), label)
 
 
 class JsonlLog:
@@ -157,12 +216,14 @@ class Gateway(_Base):
         client=None,
         *,
         upstage_client=None,
+        local_generate=None,
         clock=datetime.now,
     ):
         super().__init__(log, scope, clock)
         self.config = config
         self.client = client if client is not None else anthropic.Anthropic()
         self.upstage_client = upstage_client  # 없으면 Upstage 모델을 처음 부를 때 만든다
+        self.local_generate = local_generate or _mlx_generate  # 테스트는 가짜를 넣는다
 
     def _provider(self, model: str) -> str:
         return self.config["models"][model].get("provider", "anthropic")
@@ -262,6 +323,37 @@ class Gateway(_Base):
             state["errors"].append(f"{model}: JSON 파싱 실패")
             return "stop", None
 
+    def _local(self, model: str, system, messages, schema, state) -> tuple:
+        """로컬 MLX 한 시도 — _upstage와 같은 ("stop" | "ok", (text, data)). 폴백 대상 오류는 없다"""
+        head = [{"role": "system", "content": system}] if system is not None else []
+        try:
+            out = self.local_generate(model, self.config["models"][model], head + list(messages))
+        except ImportError:
+            state["errors"].append(f"{model}: mlx_lm 없음 — uv run --group finetune으로 실행")
+            return "stop", None
+        except FileNotFoundError as e:
+            state["errors"].append(f"{model}: {e}")
+            return "stop", None
+        except (
+            Exception
+        ) as e:  # 적재·생성 중 예상 밖 오류(오프라인 hub·메모리 부족) — 앱·일괄 실행이 멈추지 않게
+            state["errors"].append(f"{model}: 로컬 실행 실패 {type(e).__name__}: {e}")
+            return "stop", None
+        state.update(
+            {
+                "in": state["in"] + out.input_tokens,
+                "out": state["out"] + out.output_tokens,
+                "model": out.model,
+            }
+        )
+        if schema is None:
+            return "ok", (out.text, None)
+        data = first_json(out.text)
+        if data is None:
+            state["errors"].append(f"{model}: JSON 파싱 실패")
+            return "stop", None
+        return "ok", (out.text, data)
+
     def complete(
         self,
         alias: str,
@@ -318,9 +410,11 @@ class Gateway(_Base):
         try:
             for model in chain:
                 state["model"] = state["tried"] = model
-                if self._provider(model) == "upstage":
-                    outcome, got = self._upstage(
-                        model, system, messages, max_tokens, schema, effort, state
+                if self._provider(model) in ("upstage", "mlx"):
+                    outcome, got = (
+                        self._upstage(model, system, messages, max_tokens, schema, effort, state)
+                        if self._provider(model) == "upstage"
+                        else self._local(model, system, messages, schema, state)
                     )
                     if outcome == "next":
                         continue

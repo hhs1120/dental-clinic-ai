@@ -114,3 +114,21 @@ def test_save_rejects_non_target_and_bad_labels(cconn):
     jq.save(
         cconn, "c-0001", {"urgency": "low"}, None, part="데스크", at="x"
     )  # 모르겠음은 키를 뺀다
+
+
+def test_prune_drops_stale_pending_only(cconn, monkeypatch):
+    """판정기를 바꾸면 옛 판정기 엇갈림으로 들어간 대기 건만 지운다 — 건너뜀·끝낸 건은 그대로(Qwen 판정기 설계 '실행 순서' 4)"""
+    monkeypatch.setattr(jq, "is_sample", lambda uid: False)
+    _disagree(cconn, "c-0001", True)
+    _set_state(cconn, {"c-0001": "pending", "c-0003": "pending", "c-0002": "pending",
+                       "c-0004": "skipped", "c-0005": "done"})  # fmt: skip
+    assert jq.prune(cconn, "v2", "v2") == 2  # c-0003 엇갈림 없음, c-0002 대상 밖(판정 풀)
+    assert _uids(cconn) == {"c-0001": "pending", "c-0004": "skipped", "c-0005": "done"}
+
+
+def _set_state(conn, states):
+    conn.executemany(
+        "INSERT OR REPLACE INTO ax_judge_state VALUES (?, ?, '2026-11-05 09:00:00')",
+        list(states.items()),
+    )
+    conn.commit()

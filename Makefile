@@ -27,7 +27,7 @@ classify:
 
 judge:
 	$(if $(V),,$(error V=프롬프트 버전 필요))
-	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch judge --version $(V) $(if $(LIMIT),--limit $(LIMIT)) $(if $(NO_BATCH),--no-batch)
+	uv run --group finetune $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch judge --version $(V) $(if $(LIMIT),--limit $(LIMIT)) $(if $(NO_BATCH),--no-batch)
 
 disagreements:
 	$(if $(and $(A),$(B)),,$(error A=분류기 버전 B=판정기 버전 필요))
@@ -94,9 +94,10 @@ frontend/node_modules: frontend/package-lock.json
 	touch $@
 
 # 앱 실행 — API(8000)와 화면(3000)을 같이 띄우고 Ctrl+C로 둘 다 끝낸다
+# Qwen 판정기(새 통화 판정)는 finetune 그룹(mlx-lm)이 있어야 돈다 — Qwen 판정기 설계 "게이트웨이 로컬 갈래" 의존성
 dev: frontend/node_modules
 	trap 'kill 0' INT TERM EXIT; \
-	uv run $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
+	uv run --group finetune $(if $(wildcard .env),--env-file .env) uvicorn backend.api:app --port 8000 & \
 	npm --prefix frontend run dev
 
 # 화면 E2E(Playwright) — data/ 복사본으로 API(8100)·화면(3100)을 띄운다. 실데이터가 필요해 CI에는 넣지 않는다

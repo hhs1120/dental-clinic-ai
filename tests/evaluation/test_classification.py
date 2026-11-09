@@ -1,11 +1,13 @@
 """분류 채점 (평가 설계 §2.2·§2.4·§2.6·§7) — fixture는 eval_db 머리말."""
 
 import json
+from pathlib import Path
 
 import pytest
 
 from evaluation import EvalRefused, classification
-from tests.evaluation.eval_db import labels, make_db
+from evaluation.splits import silver_split
+from tests.evaluation.eval_db import add_judge, labels, make_db
 
 
 @pytest.fixture
@@ -272,3 +274,61 @@ def test_calls_read_from_source_even_if_app_has_same_table(conn):
     conn.execute("CREATE TABLE main.ax_calls AS SELECT * FROM source.ax_calls")
     conn.execute("UPDATE main.ax_calls SET transcript = '옛 전사'")
     assert {u: c["transcript"] for u, c in classification._calls(conn).items()} == want
+
+
+def _judge_prompts(tmp_path, trained: dict) -> Path:
+    """{판정기 버전: trained_on 값 또는 None} → prompts 폴더"""
+    d = tmp_path / "prompts"
+    (d / "judge").mkdir(parents=True)
+    for v, t in trained.items():
+        head = f"---\ntrained_on: {t}\n---\n" if t else ""
+        (d / "judge" / f"{v}.md").write_text(head + "판정 지시\n", "utf-8")
+    return d
+
+
+def _material(conn) -> set:
+    calls = classification._calls(conn)
+    silver = [
+        {"call_uid": u, **{k: c["gold"][k] for k in ("primary_purpose", "emergency", "complaint")}}
+        for u, c in calls.items()
+        if c["split"] == "silver"
+    ]
+    return {u for u, p in silver_split(silver).items() if p == "material"}
+
+
+def test_trained_uids_reads_front_matter(conn, tmp_path):
+    """머리말 trained_on: silver_material → 재료 구간 통화 전부(Qwen 판정기 설계 '학습한 통화 빼기')"""
+    d = _judge_prompts(tmp_path, {"v1": None, "v9": "silver_material"})
+    assert classification.trained_uids(conn, "v9", d) == _material(conn) and _material(conn)
+    assert classification.trained_uids(conn, "v1", d) == set()
+    assert classification.trained_uids(conn, "v7", d) == set()  # 파일 없음
+
+
+def test_trained_uids_unknown_value_refused(conn, tmp_path):
+    d = _judge_prompts(tmp_path, {"v9": "everything"})
+    with pytest.raises(EvalRefused):
+        classification.trained_uids(conn, "v9", d)
+
+
+def test_crosscheck_same_population_for_both_judges(conn, tmp_path):
+    """판정기끼리 비교는 같은 모수 — 한쪽이 학습한 통화를 양쪽에서 뺀다(비교 규칙)"""
+    add_judge(conn, "v9", {1: "book", 2: "complaint", 3: "book", 4: "book", 5: "book"})
+    d = _judge_prompts(tmp_path, {"v1": None, "v9": "silver_material"})
+    skip = classification.judge_skip(conn, ["v1", "v9"], d)
+    assert skip == _material(conn)
+    x = classification.crosscheck(conn, "dev", "v1", "v1", skip=skip)
+    y = classification.crosscheck(conn, "dev", "v1", "v9", skip=skip)
+    full = classification.crosscheck(conn, "dev", "v1", "v1")
+    assert x["n"] == y["n"] == full["n"] - len(skip & {"c-0004", "c-0005"})
+    assert (
+        classification.crosscheck(conn, "test", "v1", "v9", skip=skip)["n"] == 1
+    )  # test는 안 뺀다
+
+
+def test_evaluate_judge_skips_trained_on_dev_only(conn):
+    skip = {"c-0004"}
+    full = classification.evaluate_judge(conn, "dev")["v1"]["judge_vs_gold"]["purpose"]["n"]
+    got = classification.evaluate_judge(conn, "dev", skip=skip)["v1"]["judge_vs_gold"]
+    assert got["purpose"]["n"] == full - 1
+    t = classification.evaluate_judge(conn, "test", skip={"c-0003"})["v1"]["judge_vs_gold"]
+    assert t["purpose"]["n"] == 1

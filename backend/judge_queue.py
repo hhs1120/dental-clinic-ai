@@ -45,6 +45,21 @@ def refresh(conn: sqlite3.Connection, a: str, b: str) -> int:
     return len(new)
 
 
+def prune(conn: sqlite3.Connection, a: str, b: str) -> int:
+    """pending 중 refresh가 넣지 않을 통화(대상 밖이거나 엇갈림도 표본도 아님)를 지운다 — 지운 수. 판정기를 바꾸면 옛
+    판정기 엇갈림으로 들어간 대기 건이 남지 않게(Qwen 판정기 설계 '실행 순서' 4). skipped·done·사람 판정은 그대로"""
+    keep = {r["call_uid"] for r in conn.execute(TARGETS_SQL, (a, a, b))
+            if r["disagree"] or is_sample(r["call_uid"])}  # fmt: skip
+    stale = [
+        (u,)
+        for (u,) in conn.execute("SELECT call_uid FROM ax_judge_state WHERE state = 'pending'")
+        if u not in keep
+    ]
+    conn.executemany("DELETE FROM ax_judge_state WHERE call_uid = ?", stale)
+    conn.commit()
+    return len(stale)
+
+
 def refresh_if_active(conn: sqlite3.Connection, a: str, b: str) -> int:
     """지금 쓰는 버전 쌍일 때만 refresh — 실험으로 다른 쌍의 엇갈림을 계산해도 사람 큐에 남지 않게"""
     return refresh(conn, a, b) if (a, b) == active_versions(conn) else 0

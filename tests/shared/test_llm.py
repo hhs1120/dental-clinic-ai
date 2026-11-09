@@ -4,6 +4,10 @@ usage.iterations가 없다는 것, 529가 InternalServerError가 아니라는 �
 
 import importlib
 import json
+import sys
+import threading
+import time
+import types
 from datetime import datetime
 
 import anthropic
@@ -755,3 +759,162 @@ def test_batch_with_tools_round_trip(tmp_path):
         "name": "query_patient",
         "input": {"chart_no": "C-1"},
     }
+
+
+# ── 로컬 MLX(Qwen 판정기 설계 "게이트웨이 로컬 갈래") ──────────────────────────
+MLX_CONFIG = {
+    "aliases": {"q": ["qwen"]},
+    "models": {
+        "qwen": {"provider": "mlx", "base": "base-id", "adapter": "ad", "input": 0, "output": 0}
+    },
+    "daily_usd_limit": {"generator": 1.0, "runtime": 0.5},
+}
+
+
+def _mlx_gateway(tmp_path, local_generate=None):
+    return llm.Gateway(
+        MLX_CONFIG,
+        llm.JsonlLog(tmp_path / "calls.jsonl"),
+        scope="runtime",
+        client=StubClient(),
+        local_generate=local_generate,
+        clock=lambda: NOW,
+    )
+
+
+def test_mlx_ok_records_row(tmp_path):
+    seen = []
+
+    def gen(name, cfg, messages):
+        seen.append((name, cfg["base"], messages))
+        return llm.LocalOutput('잡담 {"label": "예약"} 끝', 50, 9, "qwen@abcd")
+
+    r = _mlx_gateway(tmp_path, gen).complete(
+        "q", task="judge", system="지시", messages=MSGS, schema=LABELS_SCHEMA, max_tokens=3000
+    )
+    assert r.ok and r.data == {"label": "예약"} and r.model == "qwen@abcd"
+    assert (r.input_tokens, r.output_tokens, r.cost_usd, r.fallback_used) == (50, 9, 0, False)
+    assert seen == [("qwen", "base-id", [{"role": "system", "content": "지시"}, *MSGS])]
+    (row,) = _log(tmp_path)
+    assert row["ok"] and row["model"] == "qwen@abcd" and row["cost_usd"] == 0
+
+
+def test_mlx_no_json_fails(tmp_path):
+    gen = lambda name, cfg, messages: llm.LocalOutput("모름", 5, 1, "qwen@abcd")  # noqa: E731
+    r = _mlx_gateway(tmp_path, gen).complete(
+        "q", task="judge", messages=MSGS, schema=LABELS_SCHEMA
+    )
+    assert not r.ok and "JSON 파싱 실패" in r.error
+    assert len(_log(tmp_path)) == 1
+
+
+def test_mlx_missing_module(tmp_path, monkeypatch):
+    """--group finetune 없이 띄우면 예외 대신 실패 — 앱이 멈추지 않는다"""
+    monkeypatch.setattr(llm, "_LOCAL_MODELS", {})
+    monkeypatch.setitem(sys.modules, "mlx_lm", None)
+    r = _mlx_gateway(tmp_path).complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
+    assert not r.ok and "--group finetune" in r.error
+    assert len(_log(tmp_path)) == 1
+
+
+class FakeTokenizer:
+    def apply_chat_template(self, messages, **kw):
+        assert kw == {"add_generation_prompt": True, "enable_thinking": False, "tokenize": False}
+        return "|".join(m["content"] for m in messages)
+
+    def encode(self, text):
+        return list(text)
+
+
+def _fake_mlx(monkeypatch, loads, overlap):
+    busy = []
+
+    def load(base, adapter_path=None):
+        loads.append((base, adapter_path))
+        return "model", FakeTokenizer()
+
+    def generate(model, tokenizer, prompt, max_tokens):
+        if busy:
+            overlap.append(prompt)
+        busy.append(1)
+        time.sleep(0.01)
+        busy.pop()
+        assert max_tokens == llm.LOCAL_MAX_TOKENS
+        return '{"label": "예약"}'
+
+    monkeypatch.setitem(sys.modules, "mlx_lm", types.SimpleNamespace(load=load, generate=generate))
+    monkeypatch.setattr(llm, "_LOCAL_MODELS", {})
+
+
+def test_mlx_missing_adapter(tmp_path, monkeypatch):
+    _fake_mlx(monkeypatch, [], [])
+    monkeypatch.setattr(llm, "ROOT", tmp_path)
+    r = _mlx_gateway(tmp_path).complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
+    assert not r.ok and str(tmp_path / "ad") in r.error
+
+
+def test_mlx_loads_once_and_serializes(tmp_path, monkeypatch):
+    loads, overlap = [], []
+    _fake_mlx(monkeypatch, loads, overlap)
+    monkeypatch.setattr(llm, "ROOT", tmp_path)
+    (tmp_path / "ad").mkdir()
+    (tmp_path / "ad" / "adapters.safetensors").write_bytes(b"w")
+    results = []
+
+    def run():
+        gw = _mlx_gateway(tmp_path)  # API처럼 요청마다 새 게이트웨이
+        for _ in range(3):
+            results.append(gw.complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA))
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert loads == [("base-id", str(tmp_path / "ad"))] and overlap == []
+    fp = llm.adapter_fingerprint(tmp_path / "ad")
+    assert all(r.ok and r.model == f"qwen@{fp}" for r in results) and len(results) == 6
+
+
+def test_adapter_fingerprint_matches_infer(tmp_path):
+    from evaluation.finetune.qwen.infer import adapter_fingerprint
+
+    (tmp_path / "adapters.safetensors").write_bytes(b"w")
+    assert llm.adapter_fingerprint(tmp_path) == adapter_fingerprint(tmp_path)
+
+
+def test_local_max_tokens_matches_infer():
+    from evaluation.finetune.qwen import infer
+
+    assert llm.LOCAL_MAX_TOKENS == infer.MAX_TOKENS
+
+
+def test_mlx_load_error_is_failure(tmp_path, monkeypatch):
+    """적재 중 예상 밖 오류(오프라인 hub·메모리 부족)도 실패 결과 — make judge·다시 분류가 멈추지 않게"""
+
+    def load(base, adapter_path=None):
+        raise RuntimeError("hub offline")
+
+    monkeypatch.setitem(sys.modules, "mlx_lm", types.SimpleNamespace(load=load, generate=None))
+    monkeypatch.setattr(llm, "_LOCAL_MODELS", {})
+    monkeypatch.setattr(llm, "ROOT", tmp_path)
+    (tmp_path / "ad").mkdir()
+    (tmp_path / "ad" / "adapters.safetensors").write_bytes(b"w")
+    r = _mlx_gateway(tmp_path).complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
+    assert not r.ok and "로컬 실행 실패" in r.error and "hub offline" in r.error
+    assert llm._LOCAL_MODELS == {}  # 다음 호출이 다시 적재한다
+
+
+def test_mlx_cache_key_includes_name(tmp_path, monkeypatch):
+    """같은 base·adapter의 설정 항목이 둘이어도 응답 모델 이름은 각자"""
+    _fake_mlx(monkeypatch, [], [])
+    monkeypatch.setattr(llm, "ROOT", tmp_path)
+    (tmp_path / "ad").mkdir()
+    (tmp_path / "ad" / "adapters.safetensors").write_bytes(b"w")
+    cfg = {**MLX_CONFIG, "aliases": {"q": ["qwen"], "q2": ["qwen2"]},
+           "models": {**MLX_CONFIG["models"], "qwen2": MLX_CONFIG["models"]["qwen"]}}  # fmt: skip
+    gw = llm.Gateway(cfg, llm.JsonlLog(tmp_path / "calls.jsonl"), scope="runtime",
+                     client=StubClient(), clock=lambda: NOW)  # fmt: skip
+    a = gw.complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
+    b = gw.complete("q2", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
+    assert a.model.startswith("qwen@") and b.model.startswith("qwen2@")
