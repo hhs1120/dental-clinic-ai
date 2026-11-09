@@ -27,12 +27,12 @@ TOOTH_KIND |= {"6": "어금니", "7": "어금니", "8": "사랑니"}
 NOTE_SYNONYMS = {"치석제거": "스케일링"}
 
 
-def split_text(text: str) -> list[str]:
-    """줄 경계로 MAX_CHARS 안에 나눈다. 다음 조각은 앞 조각의 끝 OVERLAP자로 시작한다"""
+def split_text(text: str, overlap: int = OVERLAP) -> list[str]:
+    """줄 경계로 MAX_CHARS 안에 나눈다. 다음 조각은 앞 조각의 끝 overlap자로 시작한다(겹침 비교는 AI 실험 기록 §6)"""
     text = text.strip()
     if len(text) <= MAX_CHARS:
         return [text] if text else []
-    room = MAX_CHARS - OVERLAP - 1
+    room = MAX_CHARS - overlap - 1
     units = []
     for line in text.split("\n"):
         line = line.strip()
@@ -44,7 +44,7 @@ def split_text(text: str) -> list[str]:
             current = joined
             continue
         pieces.append(current)
-        current = f"{current[-OVERLAP:]}\n{unit}"
+        current = f"{current[-overlap:]}\n{unit}"
     pieces.append(current)
     return pieces
 
@@ -60,13 +60,13 @@ def _sections(title: str, body: str) -> list[tuple[str, str]]:
     return out
 
 
-def _documents(conn) -> list[dict]:
+def _documents(conn, overlap: int = OVERLAP) -> list[dict]:
     out = []
     for d in conn.execute("SELECT * FROM source.ax_documents ORDER BY id"):
         n = 0
         for section, text in _sections(d["title"], d["body"]):
             prefix = d["title"] if section == d["title"] else f"{d['title']} > {section}"
-            for piece in split_text(text):
+            for piece in split_text(text, overlap):
                 out.append(
                     {
                         "id": f"doc:{d['id']}:{n}",
@@ -81,7 +81,7 @@ def _documents(conn) -> list[dict]:
     return out
 
 
-def _calls(conn) -> list[dict]:
+def _calls(conn, overlap: int = OVERLAP) -> list[dict]:
     out = []
     for c in conn.execute(
         "SELECT c.*, p.chart_no, p.name FROM source.ax_calls c"
@@ -93,7 +93,7 @@ def _calls(conn) -> list[dict]:
             f"환자: {c['name']}({c['chart_no']})" if c["chart_no"] else f"상대: {c['caller_name']}"
         )
         prefix = f"[{who} | {day} | {DIRECTION[c['direction']]}]"
-        for n, piece in enumerate(split_text(c["transcript"])):
+        for n, piece in enumerate(split_text(c["transcript"], overlap)):
             out.append(
                 {
                     "id": f"call:{c['call_uid']}:{n}",
@@ -202,8 +202,8 @@ def _charts(conn) -> list[dict]:
     ]
 
 
-def collect_chunks(conn: sqlite3.Connection) -> list[dict]:
-    return [*_documents(conn), *_calls(conn), *_threads(conn), *_charts(conn)]
+def collect_chunks(conn: sqlite3.Connection, overlap: int = OVERLAP) -> list[dict]:
+    return [*_documents(conn, overlap), *_calls(conn, overlap), *_threads(conn), *_charts(conn)]
 
 
 def _write_chunks(conn: sqlite3.Connection, chunks: list[dict]) -> None:
@@ -224,9 +224,9 @@ def _write_chunks(conn: sqlite3.Connection, chunks: list[dict]) -> None:
         )
 
 
-def build_index(conn: sqlite3.Connection, embedder) -> int:
-    """청크·FTS를 다시 쓰고 이 모델의 벡터가 없는 청크만 계산한다. 새로 계산한 수를 돌려준다"""
-    _write_chunks(conn, collect_chunks(conn))
+def build_index(conn: sqlite3.Connection, embedder, overlap: int = OVERLAP) -> int:
+    """청크·FTS를 다시 쓰고 이 모델의 벡터가 없는 청크만 계산한다(글이 바뀐 청크는 벡터를 지워 다시). 새로 계산한 수"""
+    _write_chunks(conn, collect_chunks(conn, overlap))
     missing = conn.execute(
         "SELECT c.id, c.text FROM ax_chunks c LEFT JOIN ax_chunk_vectors v"
         " ON v.chunk_id = c.id AND v.model = ? WHERE v.chunk_id IS NULL ORDER BY c.id",
@@ -240,19 +240,23 @@ def build_index(conn: sqlite3.Connection, embedder) -> int:
     return len(missing)
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="검색 색인 (앱 설계 §3)")
     parser.add_argument("--embedding", required=True)
     parser.add_argument("--stats", action="store_true", help="청크 수만 보고 임베딩하지 않는다")
-    args = parser.parse_args()
-    conn = db.connect(ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite")
+    parser.add_argument("--overlap", type=int, default=OVERLAP, help="청크 겹침(자) — 비교 실험용")
+    parser.add_argument(
+        "--db", type=Path, default=ROOT / "data" / "app.sqlite", help="색인할 app.sqlite(사본)"
+    )
+    args = parser.parse_args(argv)
+    conn = db.connect(args.db, ROOT / "data" / "source.sqlite")
     db.init_schema(conn)
     if args.stats:
-        chunks = collect_chunks(conn)
+        chunks = collect_chunks(conn, args.overlap)
         print(f"청크 {len(chunks)}개, {sum(len(c['text']) for c in chunks)}자")
         return
     embedder = make_embedder(args.embedding)
-    print(f"{args.embedding}: 새로 계산 {build_index(conn, embedder)}개")
+    print(f"{args.embedding}: 새로 계산 {build_index(conn, embedder, args.overlap)}개")
     # 색인 임베딩은 하루 상한에 넣지 않고 비용만 알린다(설계 2026-11-09 챗 "Voyage 비용")
     tokens = sum(t for _, t in getattr(embedder, "usage", []))
     if tokens:

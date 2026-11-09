@@ -275,3 +275,28 @@ def test_removed_source_removes_chunks_and_vectors(conn, tmp_path):
     assert chunk(conn, "chart:7") is None
     gone = conn.execute("SELECT COUNT(*) FROM ax_chunk_vectors WHERE chunk_id = 'chart:7'")
     assert gone.fetchone()[0] == 0
+
+
+def test_overlap_argument_changes_pieces():
+    """청크 겹침 비교(AI 실험 기록 §6) — 겹침 값을 인자로 바꿔 색인할 수 있다"""
+    text = "\n\n".join(f"문단{i} " + "".join(f"{i}-{n} " for n in range(50)) for i in range(6))
+    pieces = split_text(text, overlap=90)
+    assert len(pieces) > 1 and all(len(p) <= MAX_CHARS for p in pieces)
+    assert all(b.startswith(a[-90:]) for a, b in zip(pieces, pieces[1:], strict=False))
+    assert pieces != split_text(text)
+
+
+def test_main_takes_overlap_and_db(monkeypatch, tmp_path):
+    import backend.rag_index as ri
+
+    seen = {}
+    monkeypatch.setattr(ri, "make_embedder", lambda model: FakeEmbedder(model))
+    monkeypatch.setattr(ri.db, "connect", lambda app, source: seen.setdefault("db", app) and None)
+    monkeypatch.setattr(ri.db, "init_schema", lambda conn: None)
+    monkeypatch.setattr(
+        ri,
+        "build_index",
+        lambda conn, emb, overlap=OVERLAP: seen.setdefault("overlap", overlap) and 0,
+    )
+    ri.main(["--embedding", "fake", "--overlap", "90", "--db", str(tmp_path / "copy.sqlite")])
+    assert seen == {"db": tmp_path / "copy.sqlite", "overlap": 90}
