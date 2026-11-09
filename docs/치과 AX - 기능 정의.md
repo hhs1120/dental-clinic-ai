@@ -357,7 +357,6 @@ tags:
 - [ ] 운영 에이전트 착수 시 — 부모가 재개될 때 끝나지 않은 자식을 함께 잇는 처리(앱 설계 §3b 재개)
 - [ ] `make nightly` 착수 시 — 결정적 예외로 `running`에 남는 실행의 재개 횟수 상한, 비용 기록 전에 죽은 호출을 `ax_llm_calls`로 맞추기, 재개 때 `result_limit` 고정 여부와 도구별 상한
 - [ ] ③ 검색 요약·문서함 착수 시 — 기록 검색의 AI 요약·"이걸로 질문하기"·"근거 더 보기"(`ax_search_logs` `kind='search_summary'`), 문서함 — 설계는 `docs/superpowers/specs/2026-11-09-chat-agent-design.md` 브랜치 2
-- [ ] ③ 청크 겹침 15~20% 비교 — 답 내용 지표로 dev 3회씩([[치과 AX - AI 실험 기록]] §6)
 - [ ] 튜닝 질문을 다시 쓸 때 — `ground_truth/tune_qa.json` verify 검사, 재생성 때 id 확인
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
