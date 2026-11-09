@@ -56,7 +56,9 @@ class App:
         ]
 
     def search(self, question: str, condition: str | None = None) -> dict:
-        found = self._searcher(condition).search(question, top_k=CANDIDATES)
+        s = self._searcher(condition)
+        found = s.search(question, top_k=CANDIDATES)
+        s.drain_usage()  # 검색 지표용 직접 호출 — 챗 비용에 섞이지 않게 비운다(기록하지 않음, 금액 작음)
         return {bucket: [c["id"] for c in chunks] for bucket, chunks in found.items()}
 
     def chat(self, question: str, qa_id: str, condition: str | None = None) -> dict:

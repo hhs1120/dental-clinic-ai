@@ -298,3 +298,18 @@ def test_chat_without_index_is_503(client_with, source_paths, tmp_path):
     db.init_schema(conn)
     conn.close()
     assert client_with(paths=paths).post("/chat", json={"question": "틀니"}).status_code == 503
+
+
+def test_search_records_voyage_usage(client_with, indexed_paths):
+    """기록 검색의 Voyage 호출도 ax_llm_calls에 — 하루 상한이 센다(리뷰 2)"""
+
+    class Counting(FakeEmbedder):
+        def embed_with_usage(self, texts, kind):
+            return self.embed(texts, kind), 7
+
+    c = client_with(models=(GuardedEmbedder(Counting()), None))
+    assert c.get("/search", params={"q": "틀니 수리"}).status_code == 200
+    conn = db.connect(*indexed_paths)
+    rows = conn.execute("SELECT task, model_alias, input_tokens FROM ax_llm_calls").fetchall()
+    conn.close()
+    assert [tuple(r) for r in rows] == [("search_embed", "voyage", 7)]

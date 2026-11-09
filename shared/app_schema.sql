@@ -212,7 +212,6 @@ CREATE TABLE ax_auto_actions (
     UNIQUE (kind, target, period)
 );
 
--- 규칙 id별 차단 누계 — 실행 기록을 다시 만들어도 남는다(앱 설계 §7.3)
 -- 검색·챗 1회 = 1행 (앱 설계 §3). running은 실행 중 — 실행 target이 이 행 id라 먼저 넣는다
 CREATE TABLE ax_search_logs (
     id            INTEGER PRIMARY KEY,
@@ -231,6 +230,7 @@ CREATE TABLE ax_search_logs (
     created_at    TEXT NOT NULL
 );
 
+-- 규칙 id별 차단 누계 — 실행 기록을 다시 만들어도 남는다(앱 설계 §7.3)
 CREATE TABLE ax_rule_counts (
     rule_id TEXT PRIMARY KEY,
     blocked INTEGER NOT NULL DEFAULT 0

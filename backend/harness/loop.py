@@ -38,6 +38,8 @@ class AgentSpec:
     result_limit: int = DEFAULT_RESULT_LIMIT
     # 끝내는 도구 — 있으면 모델이 도구 없이 글로 끝낼 때 한 번 되돌려 이 도구로 내게 한다(챗: answer·refuse)
     end_tools: tuple = ()
+    # 이 규칙 id로 막히면 그 자리에서 실행을 끝낸다(handed_off, reason=규칙 id) — 챗 호출 상한
+    stop_rules: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -156,6 +158,10 @@ class Runner:
             return self._finish(run_id, "done", result=last["response"]["text"])
         if reason := self._ended(last):  # 끝내는 도구를 기록하고 죽음
             return self._finish(run_id, "done", reason=reason)
+        if (
+            last["kind"] == "tool" and last["rule_id"] in spec.stop_rules
+        ):  # 멈출 규칙에 막히고 죽음
+            return self._finish(run_id, "handed_off", reason=last["rule_id"])
         if last["kind"] == "model" and not last["response"]["tool_calls"]:  # 되돌리기 전에 죽음
             with self.store.conn:
                 self.store.add_step(run_id, "input", result=nudge_text(spec.end_tools))
@@ -167,8 +173,11 @@ class Runner:
                     if self.store.run(run_id)["tool_calls"] >= spec.max_tool_calls:
                         return self._finish(run_id, "handed_off", reason="call_limit")
                     results.append(self._tool(ctx, spec, call))
-                    if reason := self._ended(self.store.steps(run_id)[-1]):
+                    step = self.store.steps(run_id)[-1]
+                    if reason := self._ended(step):
                         return self._finish(run_id, "done", reason=reason)
+                    if step["rule_id"] in spec.stop_rules:
+                        return self._finish(run_id, "handed_off", reason=step["rule_id"])
                 pending = []
             if results:
                 messages.append({"role": "user", "content": results})

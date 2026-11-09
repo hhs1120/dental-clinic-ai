@@ -91,12 +91,15 @@ def voyage_rerank(model: str):
 
     client = voyageai.Client(max_retries=API_RETRIES, timeout=API_TIMEOUT)
 
-    def rerank(query: str, chunks: list[dict]) -> list[dict]:
+    def with_usage(query: str, chunks: list[dict]) -> tuple[list[dict], int]:
         result = client.rerank(query, [c["text"] for c in chunks], model=model)
-        rerank.usage.append((model, result.total_tokens))
-        return [chunks[r.index] for r in result.results]
+        return [chunks[r.index] for r in result.results], result.total_tokens
 
-    rerank.usage = []  # [(model, tokens)] — Searcher.drain_usage가 비운다
+    def rerank(query: str, chunks: list[dict]) -> list[dict]:
+        return with_usage(query, chunks)[0]
+
+    # 리랭커는 프로세스에 하나라 사용량은 Searcher가 요청마다 모은다(with_usage)
+    rerank.model, rerank.with_usage = model, with_usage
     return rerank
 
 
@@ -129,6 +132,7 @@ class Searcher:
         self.conn, self.clinic, self.embedder, self.reranker = conn, clinic, embedder, reranker
         self.vectors = VectorStore(conn, embedder.model)
         self.rerank_failures = 0
+        self.usage = []  # 이 검색기(요청)의 Voyage 호출 [(task, model, tokens)] — drain_usage
         self.replaced_by = self._replacements()
         missing = conn.execute(
             "SELECT COUNT(*) FROM ax_chunks c LEFT JOIN ax_chunk_vectors v"
@@ -209,20 +213,19 @@ class Searcher:
         chunks = [rows[i] for i in ids]
         if self.reranker and chunks:
             try:
-                chunks = self.reranker(query, chunks)
+                if hasattr(self.reranker, "with_usage"):
+                    chunks, tokens = self.reranker.with_usage(query, chunks)
+                    self.usage.append(("search_rerank", self.reranker.model, tokens))
+                else:
+                    chunks = self.reranker(query, chunks)
             except Exception as e:  # 장애가 나도 검색은 답한다
                 self.rerank_failures += 1
                 log.warning("리랭커 실패: %s", e)
         return self.latest_first(chunks)[:top_k]
 
     def drain_usage(self) -> list[tuple[str, str, int]]:
-        """쌓인 Voyage 호출 [(task, model, tokens)]을 돌려주고 비운다 — 비용 기록용(backend/usage.py)"""
-        out = []
-        for task, source in (("search_embed", self.embedder), ("search_rerank", self.reranker)):
-            usage = getattr(source, "usage", None)
-            if usage:
-                out += [(task, model, tokens) for model, tokens in usage]
-                usage.clear()
+        """이 검색기에 쌓인 Voyage 호출 [(task, model, tokens)]을 돌려주고 비운다 — 비용 기록용(backend/usage.py)"""
+        out, self.usage = self.usage, []
         return out
 
     def search(
@@ -234,7 +237,12 @@ class Searcher:
         patient_chart_no=None,
         top_k=5,
     ) -> dict:
-        vector = self.embedder.embed([query], "query")[0]
+        if hasattr(self.embedder, "embed_with_usage"):
+            vectors, tokens = self.embedder.embed_with_usage([query], "query")
+            self.usage.append(("search_embed", self.embedder.model, tokens))
+            vector = vectors[0]
+        else:
+            vector = self.embedder.embed([query], "query")[0]
         out = {}
         for bucket, kinds in BUCKETS.items():
             chosen = [k for k in kinds if not source_types or k in source_types]

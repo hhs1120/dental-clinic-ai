@@ -241,3 +241,55 @@ def test_text_ending_is_sent_back_once_then_answers(conn):
 def test_text_ending_twice_is_failed(conn):
     out = ask(conn, [SEARCH, ("text", "2시간"), ("text", "2시간")])
     assert out["status"] == "failed" and out["answer_text"] == chat.FAILED_TEXT
+
+
+# ── 리뷰 반영 ────────────────────────────────────────────────────────────
+
+
+def test_number_in_search_query_is_not_evidence(conn):
+    """검색어에 모델이 쓴 숫자는 근거가 아니다(리뷰 1)"""
+    search = ("tool", "search_docs", {"query": "주차 7시간"})
+    bad = ANSWER(text="주차 7시간 무료")
+    assert ask(conn, [search, bad, bad])["status"] == "number_failed"
+
+
+def test_search_setting_numbers_are_not_evidence(conn):
+    """top_k 같은 검색 설정의 숫자도 근거가 아니다(리뷰 1)"""
+    search = ("tool", "search_docs", {"query": "주차", "top_k": 8})
+    bad = ANSWER(text="주차 8시간 무료")
+    assert ask(conn, [search, bad, bad])["status"] == "number_failed"
+
+
+def test_date_arguments_are_evidence(conn):
+    sched = ("tool", "query_schedule", {"date_from": "2026-12-01", "date_to": "2026-12-01"})
+    out = ask(conn, [sched, ANSWER(text="12월 1일 9건", cited=[])], question="오늘 예약?")
+    assert out["status"] == "answered"
+
+
+def test_call_limit_ends_run_without_another_model_call(conn):
+    """7번째 호출이 막히면 바로 끝낸다 — 답을 청하고 버리지 않는다(리뷰 3)"""
+    gw = Script(conn, [SEARCH] * 7 + [ANSWER()])
+    out = ask(conn, gw=gw)
+    assert out["status"] == "call_limit"
+    run = conn.execute("SELECT model_calls FROM ax_agent_runs WHERE agent = 'chat'").fetchone()
+    assert run[0] == 7
+
+
+def test_exception_marks_log_and_run_failed(conn):
+    """실행 중 예외 — 기록이 running으로 남지 않는다(리뷰 4)"""
+
+    class Boom(Script):
+        def complete(self, alias, **kw):
+            raise RuntimeError("장애")
+
+    with pytest.raises(RuntimeError):
+        ask(conn, gw=Boom(conn, []))
+    assert conn.execute("SELECT status FROM ax_search_logs").fetchone()[0] == "failed"
+    assert conn.execute("SELECT status FROM ax_agent_runs").fetchone()[0] == "failed"
+
+
+def test_bad_args_answer_does_not_use_the_retry(conn):
+    """answer가 인자 오류로 막힌 것은 다시 답할 기회를 쓰지 않는다(리뷰 5)"""
+    empty = ("tool", "answer", {"text": "", "cited_ids": []})
+    out = ask(conn, [SEARCH, empty, ANSWER(cited=["doc:9:0"]), ANSWER()])
+    assert out["status"] == "answered"

@@ -46,12 +46,16 @@ class VoyageEmbedder:
 
         self.model = model
         self.client = voyageai.Client(max_retries=API_RETRIES, timeout=API_TIMEOUT)
-        self.usage = []  # [(model, tokens)] — 검색이 비용 기록에 넘긴다(backend/usage.py)
+        self.total_tokens = 0  # 색인 실행 끝에 비용을 알리려고(backend/rag_index.py)
+
+    def embed_with_usage(self, texts: list[str], kind: str) -> tuple[list[np.ndarray], int]:
+        """(벡터, 토큰 수) — 임베더는 프로세스에 하나라 사용량은 부른 쪽(Searcher)이 요청마다 모은다"""
+        result = self.client.embed(texts, model=self.model, input_type=kind)
+        self.total_tokens += result.total_tokens
+        return [np.array(v, dtype="float32") for v in result.embeddings], result.total_tokens
 
     def embed(self, texts: list[str], kind: str) -> list[np.ndarray]:
-        result = self.client.embed(texts, model=self.model, input_type=kind)
-        self.usage.append((self.model, result.total_tokens))
-        return [np.array(v, dtype="float32") for v in result.embeddings]
+        return self.embed_with_usage(texts, kind)[0]
 
 
 def make_embedder(model: str):

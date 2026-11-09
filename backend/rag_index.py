@@ -50,7 +50,7 @@ def split_text(text: str, overlap: int = OVERLAP) -> list[str]:
     return pieces
 
 
-_SPEAKER = re.compile(r"^([^:：\n]{1,10})[:：]")
+_SPEAKER = re.compile(r"^([^:：\n\d]{1,10})[:：]")  # 숫자 없는 표기만 — '10:30에'는 화자가 아니다
 
 
 def _turns(text: str) -> list[str]:
@@ -92,7 +92,7 @@ def split_dialog(text: str) -> list[str]:
             if current:
                 pieces.append("\n".join(current))
             pieces += split_text(turn)
-            current = []
+            current = [_carry(turn)]  # 다음 조각도 이 발화(끝부분)로 시작 — 다음 답과 갈리지 않게
             continue
         if len("\n".join([*current, turn])) <= MAX_CHARS:
             current.append(turn)
@@ -314,7 +314,7 @@ def main(argv=None) -> None:
     embedder = make_embedder(args.embedding)
     print(f"{args.embedding}: 새로 계산 {build_index(conn, embedder, args.overlap)}개")
     # 색인 임베딩은 하루 상한에 넣지 않고 비용만 알린다(설계 2026-11-09 챗 "Voyage 비용")
-    tokens = sum(t for _, t in getattr(embedder, "usage", []))
+    tokens = getattr(embedder, "total_tokens", 0)
     if tokens:
         price = load_config()["models"].get(args.embedding, {}).get("input", 0)
         print(f"임베딩 {tokens:,}토큰 · ${tokens * price / 1_000_000:.4f}")

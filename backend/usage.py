@@ -2,11 +2,13 @@
 ax_llm_calls에 1행씩 남겨 하루 상한(daily_usd_limit.runtime)이 센다. 호출 경로는 게이트웨이 밖 그대로이고,
 기록은 하네스 도구 트랜잭션 밖에서 쓴다(읽기 도구 안의 쓰기는 하네스가 막는다)."""
 
+import logging
 import sqlite3
 from datetime import datetime
 
 from shared.llm import load_config
 
+log = logging.getLogger(__name__)
 ALIAS = "voyage"
 PER_TOKENS = 1_000_000  # config/llm.yaml 단가는 100만 토큰당
 
@@ -19,7 +21,9 @@ def record_voyage(
     now = datetime.now().isoformat(sep=" ", timespec="seconds")
     total = 0.0
     for task, model, tokens in usage:
-        cost = tokens * models[model]["input"] / PER_TOKENS
+        if model not in models:  # 단가 없는 모델 — 토큰은 남기고 비용 0(기록이 멈추지 않게)
+            log.warning("단가 없는 Voyage 모델 %s — config/llm.yaml models에 더한다", model)
+        cost = tokens * models.get(model, {}).get("input", 0) / PER_TOKENS
         total += cost
         conn.execute(
             "INSERT INTO ax_llm_calls (task, model_alias, model_actual, ok, is_eval, created_at,"

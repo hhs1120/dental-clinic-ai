@@ -29,34 +29,47 @@ def test_ref_and_eval_flag_kept(conn):
 
 
 class CountingEmbedder(FakeEmbedder):
-    def __init__(self):
-        super().__init__()
-        self.usage = []
+    """Voyage처럼 호출마다 토큰 수를 돌려준다"""
 
-    def embed(self, texts, kind):
-        self.usage.append((self.model, 5))
-        return super().embed(texts, kind)
+    def embed_with_usage(self, texts, kind):
+        return self.embed(texts, kind), 5
 
 
-def test_searcher_drains_embed_and_rerank_usage(conn):
+def _rerank():
     def rerank(query, chunks):
-        rerank.usage.append(("rerank-3", 9))
         return chunks
 
-    rerank.usage = []
+    rerank.model = "rerank-3"
+    rerank.with_usage = lambda query, chunks: (chunks, 9)
+    return rerank
+
+
+def _index(conn, emb):
+    from backend.vector_store import VectorStore
+
     conn.execute(
         "INSERT INTO ax_chunks (id, source_type, text) VALUES ('doc:1:0', 'document', '틀니')"
     )
     conn.execute("INSERT INTO ax_chunks_fts VALUES ('doc:1:0', '틀니')")
-    emb = CountingEmbedder()
-    from backend.vector_store import VectorStore
-
     VectorStore(conn, emb.model).upsert(["doc:1:0"], emb.embed(["틀니"], "document"))
-    emb.usage.clear()
-    s = Searcher(conn, CLINIC, emb, rerank)
+
+
+def test_searcher_drains_embed_and_rerank_usage(conn):
+    emb = CountingEmbedder()
+    _index(conn, emb)
+    s = Searcher(conn, CLINIC, emb, _rerank())
     s.search("틀니")
     assert s.drain_usage() == [("search_embed", "fake", 5), ("search_rerank", "rerank-3", 9)]
     assert s.drain_usage() == []
+
+
+def test_usage_is_per_searcher_not_shared(conn):
+    """임베더·리랭커는 프로세스에 하나라도 사용량은 요청(검색기)마다 — 다른 요청에 붙지 않게(리뷰 2)"""
+    emb, rr = CountingEmbedder(), _rerank()
+    _index(conn, emb)
+    a, b = Searcher(conn, CLINIC, emb, rr), Searcher(conn, CLINIC, emb, rr)
+    a.search("틀니")
+    assert b.drain_usage() == [] and len(a.drain_usage()) == 2
 
 
 def test_fake_embedder_has_no_usage(conn):

@@ -45,6 +45,11 @@ DATA_TOOLS = ("query_patient", "query_schedule", "query_claims")  # 청크 없�
 REFUSED_TEXT = "문서함에 없음"
 FAILED_TEXT = "확인된 근거로 답하지 못했습니다"
 CALL_LIMIT, CITE, NUMBER = "chat.call_limit", "chat.cite_outside", "chat.number_unverified"
+EVIDENCE_SKIP = (
+    "query",
+    "top_k",
+    "limit",
+)  # 숫자 근거로 치지 않는 인자 — 모델이 쓴 자유 글·기본값
 RETRY_HINT = " 이번 질문의 검색·조회 결과만 인용하고, 숫자는 결과에 있는 그대로 쓴다. 건수는 필터를 주고 count를 읽는다."
 
 
@@ -115,7 +120,10 @@ def spec(names: tuple) -> AgentSpec:
         max_tool_calls=CHAT_MAX_TOOL_CALLS
         + 2,  # 답변 두 번 몫 — 다른 도구 상한은 훅 chat.call_limit
         max_usd=CHAT_MAX_USD,
-        end_tools=(ANSWER, REFUSE),  # 글로 끝나면 인용·숫자 검사를 못 하므로 한 번 되돌린다
+        end_tools=(ANSWER, REFUSE),
+        stop_rules=(
+            CALL_LIMIT,
+        ),  # 7번째 호출이 막히면 답을 청하지 않고 끝낸다  # 글로 끝나면 인용·숫자 검사를 못 하므로 한 번 되돌린다
     )
 
 
@@ -143,7 +151,14 @@ def _check(steps: list[dict], args: dict) -> str | None:
     if not cited and not any(s["tool"] in DATA_TOOLS for s in done):
         return CITE  # 검색만 하고 인용 없이 답함 — 데이터 조회만 쓴 답은 비어도 된다(앱 설계 §3)
     sources = [str(s["result"]) for s in steps if s["kind"] == "input"]
-    sources += [json.dumps(s["args"], ensure_ascii=False, default=str) for s in done]
+    sources += [  # 인자는 날짜·필터만 — 검색어에 쓴 숫자나 기본값(top_k)이 근거가 되지 않게
+        json.dumps(
+            {k: v for k, v in s["args"].items() if k not in EVIDENCE_SKIP and v is not None},
+            ensure_ascii=False,
+            default=str,
+        )
+        for s in done
+    ]
     if not numbers_ok(args["text"], allowed_numbers(sources, [s["result"] for s in done], True)):
         return NUMBER
     return None
@@ -155,14 +170,14 @@ def _rules(today: str) -> tuple:
             return None
         used = [s for s in ctx.store.steps(ctx.run_id) if s["kind"] == "tool"]
         if sum(s["tool"] not in (ANSWER, REFUSE) for s in used) >= CHAT_MAX_TOOL_CALLS:
-            return f"도구 호출 {CHAT_MAX_TOOL_CALLS}회 상한 — 지금까지의 결과로 answer 또는 refuse"
+            return f"도구 호출 {CHAT_MAX_TOOL_CALLS}회 상한"  # 실행은 여기서 끝난다(stop_rules)
         return None
 
     def first_answer(ctx, name, args, result, rule):
         if name != ANSWER:
             return None
         steps = ctx.store.steps(ctx.run_id)
-        if any(s["tool"] == ANSWER and s["hook_status"] == "blocked" for s in steps):
+        if any(s["tool"] == ANSWER and s["rule_id"] in (CITE, NUMBER) for s in steps):
             return None  # 두 번째 답은 통과시켜 끝내고 chat()이 상태로 거른다
         steps = [*steps, {"kind": "input", "result": f"오늘 {today}"}]
         if _check(steps, args) != rule:
@@ -183,7 +198,7 @@ def _status(store: RunStore, outcome, steps: list[dict], today: str) -> tuple[st
     """(상태, 정상 answer 인자) — 설계 "상태" 순서"""
     if outcome.status == "handed_off" and outcome.reason in ("budget", "cost_limit"):
         return outcome.reason, None
-    if outcome.reason == "call_limit" or any(s["rule_id"] == CALL_LIMIT for s in steps):
+    if outcome.reason in ("call_limit", CALL_LIMIT):
         return "call_limit", None
     ok = _ok_tool_steps(steps)
     if ok and ok[-1]["tool"] == REFUSE:
@@ -221,6 +236,21 @@ def chat(
     today = clinic.today.isoformat()
     reg, names = registry(clinic, searcher, on_event)
     store = RunStore(conn)
+    try:
+        return _run(conn, gw, searcher, store, reg, names, log_id, question, today, is_eval)
+    except Exception:  # 기록이 running으로 남지 않게 — 실행·로그를 실패로 닫고 다시 던진다
+        conn.rollback()
+        conn.execute(
+            "UPDATE ax_agent_runs SET status = 'failed', reason = '예외', locked_by = NULL"
+            " WHERE agent = ? AND target = ? AND status = 'running'",
+            (AGENT, str(log_id)),
+        )
+        conn.execute("UPDATE ax_search_logs SET status = 'failed' WHERE id = ?", (log_id,))
+        conn.commit()
+        raise
+
+
+def _run(conn, gw, searcher, store, reg, names, log_id, question, today, is_eval) -> dict:
     outcome = Runner(spec(names), gw, store, reg, rules=_rules(today)).start(
         str(log_id), f"오늘: {today}\n질문: {question}"
     )

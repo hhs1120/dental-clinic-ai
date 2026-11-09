@@ -30,6 +30,7 @@ from backend.rag_search import (
     voyage_rerank,
 )
 from backend.search_cards import card
+from backend.usage import record_voyage
 from shared.call_labels import (
     COUNTERPART_KO,
     FLAG_KO,
@@ -56,11 +57,18 @@ class GuardedEmbedder:
 
     def __init__(self, inner):
         self.inner, self.model = inner, inner.model
+        if hasattr(inner, "embed_with_usage"):  # 사용량을 돌려주는 임베더만 — 검색기가 기록한다
+            self.embed_with_usage = self._guard(inner.embed_with_usage)
 
-    @property
-    def usage(self) -> list:
-        """Voyage 사용량 — Searcher.drain_usage가 읽고 비운다(backend/usage.py)"""
-        return getattr(self.inner, "usage", [])
+    @staticmethod
+    def _guard(fn):
+        def run(*args):
+            try:
+                return fn(*args)
+            except Exception as e:
+                raise EmbeddingFailed(str(e)) from e
+
+        return run
 
     def embed(self, texts: list[str], kind: str):
         try:
@@ -153,12 +161,19 @@ def search(
             raise HTTPException(503, NO_INDEX) from e
         except EmbeddingFailed as e:
             raise HTTPException(503, f"임베딩 호출 실패: {e}") from e
-        return {
+        out = {
             bucket: [card(conn, c, searcher.replaced_by) for c in chunks]
             for bucket, chunks in found.items()
         }
     finally:
         conn.close()
+    if usage := searcher.drain_usage():  # 읽기 전용 연결이라 기록은 따로 연다(하루 상한이 센다)
+        log = db.connect(*paths)
+        try:
+            record_voyage(log, usage, is_eval=False, ref=None)
+        finally:
+            log.close()
+    return out
 
 
 CHAT_MAX_QUESTION = 500  # 글자 — 질문 1개(기능 정의 §4 ③ 멀티턴 없음)
