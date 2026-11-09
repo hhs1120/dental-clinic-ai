@@ -15,3 +15,6 @@
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T23:10:57", "report_path": "eval_dev_base_20261102-231057.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-02T23:33:20", "report_path": "eval_dev_base_20261102-233320.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-05T11:16:56", "report_path": "eval_dev_base_20261105-111656.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-09T15:16:47", "report_path": "eval_dev_base_20261109-151647.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-09T16:22:23", "report_path": "eval_dev_base_20261109-162223.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-09T16:39:10", "report_path": "eval_dev_base_20261109-163910.md"}
