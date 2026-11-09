@@ -99,9 +99,27 @@ def valid_labels(data) -> bool:
     )
 
 
+def first_labels(text: str) -> dict | None:
+    """출력에서 라벨로 읽히는 첫 JSON 객체(플래그 불은 0/1로) — 없으면 None. 규칙은 Qwen 비교 실험 채점
+    (parse_labels)과 같다(Qwen 판정기 설계 '판정기 v3', backend는 import 못 해 옮겨 씀)"""
+    decoder = json.JSONDecoder()
+    for m in re.finditer(r"\{", text):
+        try:
+            d, _ = decoder.raw_decode(text, m.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict):
+            d = {k: int(v) if k in FLAGS and type(v) is bool else v for k, v in d.items()}
+            if valid_labels(d):
+                return d
+    return None
+
+
 def judgment_from(call: LLMResult) -> Judgment:
-    ok = call.ok and valid_labels(call.data)
-    return Judgment(ok, call.data if ok else None, call)
+    """구조화 출력이 없는 로컬 판정기는 data가 라벨이 아닐 수 있어 text에서 다시 찾는다"""
+    labels = call.data if valid_labels(call.data) else first_labels(call.text) if call.ok else None
+    ok = call.ok and labels is not None
+    return Judgment(ok, labels if ok else None, call)
 
 
 def classification_from(label: LLMResult, summary_call: LLMResult) -> Classification:
@@ -129,6 +147,14 @@ def classify(gw, transcript: str, direction: str, version: str) -> Classificatio
         **summary_request(transcript, direction, version),
     )
     return classification_from(label, summary_call)
+
+
+def judge_model_ok(gw, version: str) -> bool:
+    """판정기 버전 머리말 model이 지금 judge 별칭의 첫 모델과 같은가 — 다르면 그 버전은 다시 판정하지 않는다
+    (별칭이 바뀐 옛 버전을 새 모델로 돌려 옛 기록을 덮지 않게, Qwen 판정기 설계 '비교 규칙'). 설정이 없는 가짜는 통과"""
+    pinned = prompts.model("judge", version)
+    config = getattr(gw, "config", None)
+    return pinned is None or config is None or config["aliases"]["judge"][0] == pinned
 
 
 def judge(gw, transcript: str, direction: str, version: str) -> Judgment:

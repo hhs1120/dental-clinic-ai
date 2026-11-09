@@ -4,7 +4,7 @@ aliases:
   gen: [claude-sonnet-5-5, claude-sonnet-5]        # 생성기 7·9·9b
   classify: [claude-haiku-5-5, claude-sonnet-5-5]  # ① 분류기 라벨
   summarize: [claude-haiku-5-5, claude-sonnet-5-5] # ① 분류기 요약·할 일
-  judge: [solar-mini4]                             # ① 판정기 라벨 — 프로바이더 하나라 폴백 없음
+  judge: [qwen3.5-2b-judge]                        # ① 판정기 라벨 — 로컬 Qwen(--group finetune), 폴백 없음. 옛 판정기 버전(v1·v2 Solar)은 다시 돌리지 않는다(Qwen 판정기 설계 "비교 규칙")
   chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
   followup: [claude-sonnet-5-5]                    # ① 후속 에이전트(backend/followup.py) — 앱 설계 §7 그 밖의 에이전트
   blind_judge: [claude-haiku-5-5]                  # ② 블라인드 LLM 쌍 비교(평가 설계 §2.4) — 요약을 쓴 모델과 같아 자기 글 쏠림은 사람 투표 일치율로 본다
@@ -17,6 +17,7 @@ models:
   claude-sonnet-5-5: { input: 2.00, output: 10.00, cache_read: 0.20, server_fallback: true }
   claude-sonnet-5: { input: 2.00, output: 10.00, cache_read: 0.20 }
   claude-haiku-5-5: { input: 0.10, output: 0.50 }   # 프롬프트 10만 토큰 이하 단가(넘으면 0.50/2.50 — 분류 입력은 통화 하나라 해당 없음)
-  solar-mini4: { input: 0.10, output: 0.40, provider: upstage }  # Upstage OpenAI 호환 API(Batch 없음)
+  solar-mini4: { input: 0.10, output: 0.40, provider: upstage }  # Upstage OpenAI 호환 API(Batch 없음) — 옛 판정기 v1·v2 기록의 단가
+  qwen3.5-2b-judge: { provider: mlx, base: mlx-community/Qwen3.5-2B-bf16, adapter: evaluation/finetune/qwen/adapters/full, input: 0, output: 0 }  # 로컬 MLX(Batch 없음) — 어댑터는 커밋하지 않는다
 # 일일 비용 상한($) — 넘으면 즉시 호출을 하지 않는다(배치 제출은 상한 밖). 금액의 원본은 docs/치과 AX - 기능 정의.md §7 (tests/generator/test_doc_sync.py가 비교)
 daily_usd_limit: { generator: 40, runtime: 15 }

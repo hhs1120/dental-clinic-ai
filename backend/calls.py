@@ -396,10 +396,12 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
 
     try:
         if b:
-            cl.save_judgment(
-                conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b)
-            )
-            disagreements.compute_call(conn, call_uid, a, b)
+            # 별칭 모델이 바뀐 옛 판정기 버전은 다시 판정하지 않는다(옛 기록을 덮지 않게)
+            if cl.judge_model_ok(gw, b):
+                cl.save_judgment(
+                    conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b)
+                )
+            disagreements.compute_call(conn, call_uid, a, b)  # 새 분류로 — 판정은 있는 행을 읽는다
         judge_queue.refresh_call(conn, call_uid)
     finally:  # 판정이 예외(하루 상한 등)로 끝나도 새 분류로 다시 계산 — 낡은 종결이 할 일을 숨기지 않게
         autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로

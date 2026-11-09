@@ -10,8 +10,9 @@ from shared.llm import FakeGateway
 from tests.backend.conftest import SOURCE_SCHEMA
 
 CONFIG = {
-    "aliases": {"classify": ["solar"], "summarize": ["haiku"], "judge": ["haiku"]},
-    "models": {"solar": {"provider": "upstage"}, "haiku": {}},
+    "aliases": {"classify": ["solar"], "summarize": ["haiku"], "judge": ["solar-mini4"]},
+    # judge 모델 이름은 판정기 v1·v2 머리말 model과 같게(Batch 경로를 보려고 프로바이더는 anthropic)
+    "models": {"solar": {"provider": "upstage"}, "haiku": {}, "solar-mini4": {}},
 }
 
 
@@ -188,8 +189,17 @@ def test_invalid_judge_labels_saved_failed(bconn):
     class Bad(BatchFake):
         def complete(self, alias, **kw):
             r = super().complete(alias, **kw)
-            return replace(r, data={"primary_purpose": "book"})
+            return replace(r, text='{"primary_purpose": "book"}', data={"primary_purpose": "book"})
 
     out = classify_batch.run(bconn, Bad(SqliteLlmLog(bconn)), "judge", "v1", use_batch=False)
     assert out["done"] == 0 and out["failed"] > 0
     assert set(_status(bconn, "ax_model_judgments").values()) == {"failed"}
+
+
+def test_judge_batch_refuses_model_mismatch(bconn):
+    """옛 판정기 버전(머리말 model이 별칭과 다름)은 일괄로도 돌리지 않는다"""
+    gw = BatchFake(SqliteLlmLog(bconn))
+    gw.config = {**CONFIG, "aliases": {**CONFIG["aliases"], "judge": ["qwen"]}}
+    with pytest.raises(SystemExit):
+        classify_batch.run(bconn, gw, "judge", "v2", use_batch=False)
+    assert not bconn.execute("SELECT COUNT(*) FROM ax_model_judgments").fetchone()[0]

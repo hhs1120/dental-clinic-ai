@@ -36,6 +36,12 @@ def summary_kinds(version: str, root: Path = PROMPTS_DIR) -> bool:
     return bool(m and (yaml.safe_load(m[1]) or {}).get("todo_kinds"))
 
 
+def model(task: str, version: str, root: Path = PROMPTS_DIR) -> str | None:
+    """버전 파일 머리말의 model — 그 버전을 낸 모델(버전은 프롬프트 × 모델 하나, 앱 설계 §1). 없으면 None"""
+    m = FRONT_MATTER.match(_text(root / task / f"{version}.md"))
+    return (yaml.safe_load(m[1]) or {}).get("model") if m else None
+
+
 def effort(task: str, version: str, root: Path = PROMPTS_DIR) -> str | None:
     """버전 파일 머리말의 effort(추론 단계, 앱 설계 §7) — 없으면 None. 분류기 버전 폴더는 아직 쓰지 않는다"""
     m = FRONT_MATTER.match(_text(root / task / f"{version}.md"))

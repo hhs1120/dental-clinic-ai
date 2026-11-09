@@ -62,3 +62,23 @@ def test_summary_kinds_front_matter(tmp_path):
     assert prompts.load("classify", "v9", root=tmp_path)["summary"] == "요약"
     assert prompts.summary_kinds("v1") is False
     assert prompts.summary_kinds("v2") is True
+
+
+def test_judge_v3_matches_training_instruction():
+    """Qwen 판정기 v3는 학습 지시문 그대로 — 한 글자라도 다르면 학습과 다른 입력(Qwen 판정기 설계 '판정기 v3')"""
+    from evaluation.finetune.qwen.data import INSTRUCTION
+
+    assert prompts.load("judge", "v3")["system"] == INSTRUCTION
+    assert prompts.effort("judge", "v3") is None
+
+
+def test_judge_alias_is_local_qwen():
+    """judge 별칭은 로컬 Qwen 하나(폴백 없음), 어댑터·기본 모델은 실험 학습과 같은 것"""
+    from evaluation.finetune.qwen import train
+    from shared import llm
+
+    cfg = llm.load_config()
+    (model,) = cfg["aliases"]["judge"]
+    m = cfg["models"][model]
+    assert m["provider"] == "mlx" and m["base"] == train.config()["model"]
+    assert llm.ROOT / m["adapter"] == train.ADAPTERS / "full"

@@ -2,6 +2,7 @@
 (없거나 failed), call_uid 순. use_batch면 Anthropic 별칭은 Batch(단가 절반), Batch가 없는 프로바이더(Upstage)는 일반 호출.
 Batch 결과에 빠진 건(처리 안 됨)은 저장하지 않아 다음 실행의 대상으로 남는다. 새로 추가한 통화는 그때 분류한다(backend/calls.py)
 uv run --env-file .env python -m backend.classify_batch {classify|judge} --version v1 [--limit N] [--no-batch]
+(judge는 로컬 Qwen이라 uv run --group finetune — config/llm.yaml judge, Qwen 판정기 설계)
 [--shard K/N] — 일반 호출이 느릴 때 프로세스 N개가 대상을 나눠 돈다(몫은 생성 통화 전체의 call_uid 순 위치로 고정)
 uv run python -m backend.classify_batch disagreements --a v1 --b v1
 uv run --env-file .env python -m backend.classify_batch blind --a v1 --b v2 --version v1
@@ -14,6 +15,7 @@ from typing import Literal
 
 from backend import blind, db, disagreements, judge_queue
 from backend import classify as cl
+from backend.calls import active_versions
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLES = {"classify": "ax_call_classifications", "judge": "ax_model_judgments"}
@@ -79,6 +81,10 @@ def run(
     shard: tuple[int, int] | None = None,
 ) -> dict:
     """반환 {"done": ok로 저장, "failed": failed로 저장, "missing": Batch에서 빠져 저장 안 함}"""
+    if task == "judge" and not cl.judge_model_ok(gw, version):
+        raise SystemExit(
+            f"판정기 {version}은 머리말 model이 지금 judge 별칭과 달라 돌리지 않는다 — 옛 기록은 읽기만"
+        )
     rows = targets(conn, task, version, limit, shard)
     if task == "classify":
         parts = {"classify": cl.label_request, "summarize": cl.summary_request}
@@ -146,6 +152,8 @@ def main(argv=None) -> None:
         print(
             f"판정 큐 추가 {judge_queue.refresh_if_active(conn, args.a, args.b)}건"
         )  # 앱 설계 §6
+        if (args.a, args.b) == active_versions(conn):  # 판정기를 바꾼 뒤 옛 대기 건 정리
+            print(f"판정 큐 정리 {judge_queue.prune(conn, args.a, args.b)}건")
         return
     from backend.harness.llm import make_gateway
 
