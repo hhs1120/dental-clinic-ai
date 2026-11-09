@@ -140,7 +140,7 @@ tags:
 
 **API**
 - `GET /calls/today` · `GET /calls?filter=&q=&before=` · `GET /calls/{call_uid}` · `GET /labels`(라벨 우리말 이름)
-- `POST /calls`(새 통화 추가) → 분류·판정 1행씩·엇갈림, 판정 큐는 운영 구간 규칙(앱 설계 §6). 색인은 ③ 챗 착수 때
+- `POST /calls`(새 통화 추가) → 분류·판정 1행씩·엇갈림, 판정 큐는 운영 구간 규칙(앱 설계 §6). 색인은 §9 "새 통화 색인"
 - `POST /calls/{call_uid}/todos/{item}/done`(끝냄·되돌림)
 - `POST /calls/{call_uid}/classify`(재시도). 일괄 분류·판정은 `make classify`·`make judge`(작업 API `POST /jobs/classify-batch`·`judge-batch`는 §9 — 대상은 판정 풀 포함 전체 녹취록과 새로 추가한 통화, 대기 버전 전환은 [[치과 AX - 앱 설계]] §7.2)
 - `POST /auto-actions/{id}/revert`(자동 종결 되돌리기 — [[치과 AX - 앱 설계]] §3b). 다시 계산은 `make autoclose`, 스위치는 `make auto-policy KIND=call_autoclose ON=1|0`
@@ -223,7 +223,7 @@ tags:
 **완료 기준**
 - `eval.py --split dev` exit 0 + 리포트
 - 데이터형 도구 선택 ≥ 1/2(dev), `--retrieval-only` Hit@5 ≥ 1/2(dev 문서 검색형 — 문항 수는 `verify.QA_TYPE_COUNTS`)
-- 인용 확인(pytest): 검색 결과 밖 청크를 인용하면 한 번 다시 답하고, 또 어긋나면 고정 거절 문구로 끝남([[치과 AX - 앱 설계]] §3)
+- 인용 확인(pytest): 검색 결과 밖 청크를 인용하면 한 번 다시 답하고, 또 어긋나면 고정 문구로 끝나고 상태는 `cite_failed`([[치과 AX - 앱 설계]] §3)
 - 보고(관문 조건 아님): 챗 vs 단순 RAG 기준선, 차트형 인용 정확도·공지형 현재 값·답 내용([[치과 AX - 평가 설계]] §3.3)
 - 질문 구성(유형·수·dev/test)·채점 규칙·지표는 [[치과 AX - 평가 설계]] §3 — `make verify`가 문항 구성을 검사
 
@@ -318,7 +318,7 @@ tags:
 |---|---|---|
 | ① 전체 1회 | `config` `calls_with_transcript` | 경량 $0.5~1.5 / 상위 $8~15 |
 | ① 튜닝 판정 풀 × 5~10회 (경량) | `config` `eval_pool_size` × 5~10 | $0.3~1 |
-| ③ 답변 평가 dev(`verify.QA_TYPE_COUNTS` 합의 절반) × 3~5회 + test 1회 | 420~630 | $5~14 |
+| ③ 답변 평가 dev(`verify.QA_TYPE_COUNTS` 합의 절반) × 3~5회 + test 1회 | 문항 + 기준선 | dev 1회 실측 [[치과 AX - AI 실험 기록]] §16 |
 | ③ 색인 (`make index`) 1회 | 청크 전체(임베딩) | [[치과 AX - AI 실험 기록]] §1 |
 | ③ 검색 실험 (`--retrieval-only`) | 답변 LLM 0 — 조건에 따라 임베딩·리랭커 호출 | [[치과 AX - AI 실험 기록]] §1·§3 |
 | ④ 하루치(최대 `config` `visits_per_day`명) × 재생성 20회 | ~500 | $2~5 |
@@ -361,7 +361,8 @@ tags:
 - [ ] ③ 문서 초안 착수 시 — `doc_draft`를 `shared/app_schema.sql` CHECK에 추가, 근거 후검증 통과율([[치과 AX - 평가 설계]] §5)의 모수·기준을 정한다(`make gate` 조건 아님)
 - [ ] thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
 - [ ] 오늘 화면 착수 시 — 자동 종결을 되돌렸거나 사람 판정이 할 일·응급 등을 켠 통화(할 일 줄이 없는 통화)를 어디에 보일지(예: "확인할 통화" 칸) 정한다
-- [ ] 착수 순서 — ③ 챗 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
+- [ ] 착수 순서 — ③ 검색 요약·문서함 → 개선 에이전트 → `make gate` → ④ → 슬롯 → 운영 에이전트
+- [ ] 새 통화 색인 — `POST /calls`로 추가한 통화를 앱이 색인(앱 설계 §3). 오늘 화면·`make nightly` 착수 시
 - [ ] 평가 정답 추가 — 시나리오 DB·`truth_scenarios`(⑥·운영 에이전트 착수 때, verify 검사 먼저, [[치과 AX - 가상 데이터 생성 설계]] §5.1). `emr_*`·`fin_*`는 바꾸지 않는다
 - [ ] 후속 처리 test 정답 — test 판정 풀에 처리 정답 라벨(`make action-label`과 같은 방식)을 붙여 `eval.py` test 묶음 `followup`을 만든다(사람 실행)
 - [ ] 자동 개선 착수 시 — 관문 값, 반복 상한, 표본 비율을 첫 실행 전에 고정([[치과 AX - 평가 설계]] §2.3·§2.7). AI 평가 화면에 자동 개선 탭

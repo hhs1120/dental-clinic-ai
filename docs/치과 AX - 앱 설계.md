@@ -37,20 +37,20 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 2. LLM 로그
 
-**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
+**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 사용량은 검색기(요청)마다 모아 챗과 기록 검색이 각각 남긴다. 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
 
 ## 3. 검색
 
-**색인**(`make index EMBEDDING=<모델>` — 모델 필수, 없는 청크만 계산): 크기·겹침은 `backend/rag_index.py` `MAX_CHARS`·`OVERLAP`, 마크다운 헤더 우선. 문자는 건별이 아니라 **환자별 월 스레드 1청크**(`[환자: 김○○(C-00001) | 2026-07] 07-03 예약 확인 … 07-10 답장: …`). 색인 코드는 앱 쪽이고 `app.sqlite`에 쓴다 — 생성기는 `source.sqlite`만 쓰고, `make index`는 `make data`와 따로 실행한다([[치과 AX - 가상 데이터 생성 설계]] §5.1). 색인 상태는 `ax_chunks`로 판단한다(생성 테이블에 색인 칸을 두지 않음). 새로 추가한 통화는 앱이 색인. 청크 id의 통화 부분은 `call_uid`.
+**색인**(`make index EMBEDDING=<모델>` — 모델 필수, 벡터가 없거나 글이 바뀐 청크만 계산): 크기는 `backend/rag_index.py` `MAX_CHARS`. 문서는 마크다운 헤더 우선 + 글자 겹침 `OVERLAP`, 통화는 발화 사이에서만 자르고 다음 조각을 직전 발화로 시작한다(`split_dialog`, 직전 발화 상한 `CARRY_MAX`, 화자 표기가 없으면 글자 기준). 문자는 건별이 아니라 **환자별 월 스레드 1청크**(`[환자: 김○○(C-00001) | 2026-07] 07-03 예약 확인 … 07-10 답장: …`). 색인 코드는 앱 쪽이고 `app.sqlite`에 쓴다 — 생성기는 `source.sqlite`만 쓰고, `make index`는 `make data`와 따로 실행한다([[치과 AX - 가상 데이터 생성 설계]] §5.1). 색인 상태는 `ax_chunks`로 판단한다(생성 테이블에 색인 칸을 두지 않음). 새로 추가한 통화는 앱이 색인. 청크 id의 통화 부분은 `call_uid`.
 
-**`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:c-0481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread/chart_note/doc_draft)`(id `'chart:<treatment_id>'`, 진료 1건 = 1청크. 게시한 문서 초안은 `'draft:<id>:<순번>'`이고 문서 버킷에 들고 RAG 평가 색인에서 뺀다), 필터용 실컬럼(`chart_no`·`event_date`·`doc_type`).
-`text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`(섹션이 제목과 같으면 제목만), 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`, 차트 `[차트 C-00001 | 2026-07-03 | 스케일링]`(환자 이름 없음 — 케이스 내용으로 찾고 차트 번호로 환자에 닿는다). 차트는 서술 끝 괄호에 다른 표현을 더한다 — 치아 번호의 부위, 그 차트 시술의 별칭, 정해 둔 동의어, 기간의 다른 표기(`backend/rag_index.py` `chart_terms`). 다른 시술 이름은 따라가지 않는다 — 받지 않은 시술이 붙는다. 괄호는 검색용이라 화면에는 내지 않는다.
+**`ax_chunks`**: id는 출처에서 결정적으로(`'doc:12:3'` / `'call:c-0481:0'` / `'thread:C-00001:2026-07'`), `source_type(document/call/message_thread/chart_note/doc_draft)`(id `'chart:<treatment_id>'`, 진료 1건 = 1청크. 게시한 문서 초안은 `'draft:<id>:<순번>'`이고 문서 버킷에 들고 RAG 평가 색인에서 뺀다), 필터용 실컬럼(`chart_no`·`event_date`)과 카드 표시용 `doc_type`.
+`text`는 **출처 prefix 의무**: 문서 `제목 > 섹션`(섹션이 제목과 같으면 제목만), 통화 `[환자: 김○○(C-00001) | 2026-07-03 | 수신]`(환자 없는 통화는 `[상대: 보험사 | 2026-07-03 | 수신]`), 스레드 `[환자: … | 2026-07]`, 차트 `[차트 C-00001 | 2026-07-03 | 스케일링]`(환자 이름 없음 — 케이스 내용으로 찾고 차트 번호로 환자에 닿는다). 차트는 서술 끝 괄호에 다른 표현을 더한다 — 치아 번호의 부위, 그 차트 시술의 별칭, 정해 둔 동의어, 기간의 다른 표기(`backend/rag_index.py` `chart_terms`). 다른 시술 이름은 따라가지 않는다 — 받지 않은 시술이 붙는다. 괄호는 검색용이라 화면과 챗 모델에는 내지 않는다.
 - FTS5 `ax_chunks_fts(chunk_id, text)` — `unicode61` + 질의 측 `원본어절* OR 조사제거어절*`.
 - 벡터 `ax_chunk_vectors(chunk_id = ax_chunks.id, model, embedding)` — sqlite-vec, float32 BLOB, 임베딩 모델마다 한 벌. 필터는 `ax_chunks` 실컬럼으로 먼저 거르고 남은 행만 `vec_distance_cosine` 전수 계산(정확 검색 — 근사 인덱스 없음, top-k가 필터에 깎이지 않음). 다중 조건 필터도 SQL 그대로
 
-**`ax_search_logs`**: 검색·챗 1회 = 1행. 도구 호출(`args`는 Pydantic 정규화 후 기록)·`retrieved_ids`·답변·`cited_ids`·`is_eval`. eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 답변은 `{text, cited_ids[]}` 구조화 출력으로 강제(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. 데이터형(`query_*`)만 쓴 답변은 `cited_ids`가 비어도 됨. 검색 화면의 AI 요약도 같은 출력.
-- **인용 확인**(챗 후처리 — 훅은 도구 호출만 보므로 답을 낸 직후 코드가 검사): `cited_ids`가 이번 질문의 `retrieved_ids` 밖이면 같은 검색 결과로 한 번 다시 답하게 하고, 또 어긋나면 고정 거절 문구로 끝낸다. 이때 마지막 호출은 `refuse`가 아니고 `cited_ids`는 비우며 상태는 인용 실패로 `ax_search_logs`·`chat()` 반환값에 남긴다(문서 초안 입력은 `refuse(not_found)`만이라 여기에 들지 않는다). 막힐 때마다 `ax_rule_counts`에 `chat.cite_outside`로 더한다. ③ 문서 초안이 같은 검사를 쓰고, ⑤-4는 인용 문장이 실제로 있는지까지 본다(평가 설계 §5)
-- **숫자 후검증**(인용 확인 다음, 같은 다시 답하기): 답의 숫자가 이번 질문의 도구 결과·인자·질문·오늘 날짜에 있거나 도구 결과 안 목록의 행 수여야 한다(`backend/verify.py` — 합계·날짜 계산은 막는다). 막힐 때마다 `chat.number_unverified`. 인용 없이 답한 것은 데이터 조회(`query_patient`·`query_schedule`·`query_claims`)를 한 경우만 허용
+**`ax_search_logs`**: 검색·챗 1회 = 1행. 칸은 `shared/app_schema.sql`(`tool_calls`의 `args`는 Pydantic 정규화 후 기록). eval.py는 이 표를 읽지 않는다(챗 채점은 `chat()` 반환값 — 평가 설계 §3.3). 챗은 끝내는 도구 `answer(text, cited_ids[])`로 답한다(모델이 근거 청크를 스스로 명시 — ④ `used_facts`와 같은 패턴), 화면의 출처 = `cited_ids`. `cited_ids`가 비어도 되는 것은 `query_patient`·`query_schedule`·`query_claims`를 쓴 답변뿐. 검색 화면의 AI 요약도 같은 `{text, cited_ids[]}`.
+- **인용 확인**(챗 후처리 — 훅은 도구 호출만 보므로 답을 낸 직후 코드가 검사): `cited_ids`가 이번 질문의 `retrieved_ids`(검색 결과 + `query_charts` 결과) 밖이면 같은 루프에서 한 번 다시 답하게 하고(다시 검색할 수 있다), 또 어긋나면 `cited_ids`를 비우고 상태 `cite_failed`로 끝낸다(마지막 호출이 `refuse`가 아니라 문서 초안 입력에 들지 않는다). 막힐 때마다 `ax_rule_counts`에 `chat.cite_outside`로 더한다. ③ 문서 초안이 같은 검사를 쓰고, ⑤-4는 인용 문장이 실제로 있는지까지 본다(평가 설계 §5)
+- **숫자 후검증**(인용 확인 다음, 같은 다시 답하기): 답의 숫자가 이번 질문의 도구 결과·질문·오늘 날짜·날짜와 필터 인자(검색어·`top_k`·`limit`은 빼고 — `backend/chat.py` `EVIDENCE_SKIP`)에 있거나 도구 결과 안 목록의 행 수여야 한다(`backend/verify.py` — 합계·날짜 계산은 막는다). 막힐 때마다 `chat.number_unverified`
 - **상태**(`ax_search_logs.status`, 칸은 `shared/app_schema.sql`): `answered` / `refused` / `cite_failed` / `number_failed` / `call_limit` / `cost_limit` / `budget` / `failed`(`running`은 실행 중). 화면에 답을 내는 것은 `answered`뿐, `refused`는 "문서함에 없음", 나머지는 `backend/chat.py` `FAILED_TEXT`. 챗은 `POST /chat` SSE(이벤트 `step`·`answer`·`error`). 모델이 도구 없이 글로 끝내면 하네스가 한 번 되돌려 `answer`·`refuse`로 내게 한다(`AgentSpec.end_tools`) — 또 글이면 `failed`
 
 **도구 6개 — 시그니처 고정** (평가 설계 §3.2 `expected_args` 채점의 기준, 코드 `backend/query_tools.py`·`backend/rag_search.py` `search_tool`)
@@ -70,7 +70,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
   - `count`는 조건에 맞는 행 전체(`status`를 주지 않으면 취소·변경 포함)
   - `by_status`는 변경으로 대체된 원래 예약(새 예약의 `rescheduled_from_id`가 가리키는 `cancelled`)을 취소와 따로 `rescheduled`로 센다 — 예약 변경은 취소가 아니다
 - 날짜 전부 `YYYY-MM-DD`. 도구 description에 TODAY 값(§6) 예시를 넣음
-- 호출 상한 6회/질문(`backend/chat.py` `CHAT_MAX_TOOL_CALLS` — 채점 상수와 같음을 테스트가 비교), `answer`는 세지 않는다. 넘는 호출은 훅 `chat.call_limit`이 막고 상태는 `call_limit`. 경계: 건수·목록 → `query_*`, 기간·간격 조건이 있는 차트 → `query_charts`, 절차·규정·과거 대화·차트 내용 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
+- 호출 상한 6회/질문(`backend/chat.py` `CHAT_MAX_TOOL_CALLS` — 채점 상수와 같음을 테스트가 비교), `answer`는 세지 않는다. 넘는 호출은 훅 `chat.call_limit`이 막고 그 자리에서 실행을 끝낸다(`AgentSpec.stop_rules`, 상태 `call_limit`). 경계: 건수·목록 → `query_*`, 기간·간격 조건이 있는 차트 → `query_charts`, 절차·규정·과거 대화·차트 내용 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document`와 `call/message_thread/chart_note`를 따로 찾아 각각 상위 `CANDIDATES`(`backend/rag_search.py`) → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제. 리랭커 뒤에 옛 공지(같은 제목에서 시행일이 이른 것) 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다. 날짜 필터를 주면 시행일 없는 문서는 빠지고, 환자 필터를 주면 환자 기록만 찾는다
 
 **문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만.
@@ -113,7 +113,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - **재생**: `ax_agent_steps`의 모델 응답·도구 결과로 실행을 다시 돌린다. 도구는 저장된 결과로 대신하고 호출·훅 결과·종료 상태를 비교한다. 훅·권한·인자·상한의 변화를 잡고 프롬프트 변화는 잡지 못한다. 저장된 응답을 `Gateway.complete()`와 같은 인터페이스로 내고(`backend/harness/replay.py`) 테스트 기록은 `tests/fixtures/agent_runs/`
 - **재개**: 잠금이 만료되고 끝나지 않은 `ax_agent_runs`는 마지막 단계 다음부터 이어 간다. 쓸 때마다 잠금 소유자를 확인해 잠금을 뺏긴 쪽은 멈춘다. 일반 재시도의 호출 최악 시간은 잠금 만료보다 짧아야 한다(`backend/harness/llm.py`). 서버가 준 `Retry-After` 대기는 상한이 없어 이 계산 밖이고, 그동안 잠금이 만료되면 소유자 확인으로 멈춘다. 부모가 끊기면 끝나지 않은 자식은 부모 재개 때 함께 이어 간다. 모든 앱 쓰기는 중복 방지 키로 한 번만 들어간다
 - **컨텍스트**: 에이전트별 결과 크기 상한은 `AgentSpec.result_limit`, 도구별 상한은 착수 시([[치과 AX - 기능 정의]] §9). 기능 에이전트는 운영 에이전트에 요약과 실행 id만 돌려준다
-- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗 인용 실패는 `chat.cite_outside` — §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
+- **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗 규칙 id는 §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
 
 ## 4. 준비표·오늘 화면·리포트
 
@@ -134,7 +134,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 **`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
-**동시 쓰기**: 앱 연결은 WAL + `busy_timeout`(`backend/db.py`) — 챗 SSE가 쓰는 동안 다른 쓰기가 막히지 않게. 그래서 `save-demo`는 `app.sqlite`의 `-wal` 파일까지 함께 복사한다(또는 체크포인트 뒤 복사)
+**동시 쓰기**: 앱 연결은 WAL + `busy_timeout`(`backend/db.py`) — 챗 SSE가 쓰는 동안 다른 쓰기가 막히지 않게. 그래서 `app.sqlite`를 복사하는 곳(`save-demo`, `make e2e` — `frontend/playwright.config.ts`)은 `-wal` 파일까지 함께 복사한다(또는 체크포인트 뒤 복사)
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
 
 **판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채우고, 활성 쌍의 엇갈림을 다시 계산하면 대상이 아니게 된 pending 건을 지운다(`backend/judge_queue.py` `prune` — skipped·done·사람 판정은 그대로). 저장 뒤 두 모델 라벨이 보인다
@@ -202,7 +202,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 ## 8. 미결
 
 - [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)
-- [ ] backend가 `master` 값을 읽는 방법 (④·⑤·⑧ 착수 시) — 주의 칩의 관련 시술·행동(④, `ALERT_TYPES`), 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 원본은 `generator/master.py`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱이 읽는 `source.sqlite`에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다
+- [ ] backend가 `master` 값을 읽는 방법 (④·⑤·⑧ 착수 시) — 주의 칩의 관련 시술·행동(④, `ALERT_TYPES`), 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 원본은 `generator/master.py`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱이 읽는 `source.sqlite`에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다. 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`
 - [ ] ⑨ 점수 규칙과 값 (⑨ 착수 시) — 앱 로직이라 `master`가 아니라 앱 쪽 설정이 원본
 
 ## 9. 프론트
