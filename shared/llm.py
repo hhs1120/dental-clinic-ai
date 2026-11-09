@@ -101,27 +101,97 @@ def first_json(text: str):
     return None
 
 
-def _mlx_generate(name: str, cfg: dict, messages: list[dict]) -> LocalOutput:
-    """학습·실험 추론(infer.py)과 같은 채팅 템플릿(생각 끔)·탐욕 디코딩. 오류는 부른 쪽(_local)이 실패 결과로"""
+def _local_model(name: str, cfg: dict) -> tuple:
+    """(모델, 토크나이저, 응답 이름) — 처음 한 번 적재해 둔다. _LOCAL_LOCK 안에서 부른다"""
     import mlx_lm
 
     adapter = ROOT / cfg["adapter"] if cfg.get("adapter") else None
     key = (name, cfg["base"], str(adapter))
+    if key not in _LOCAL_MODELS:
+        if adapter is not None and not (adapter / "adapters.safetensors").exists():
+            raise FileNotFoundError(f"어댑터 없음 {adapter}")
+        model, tokenizer = mlx_lm.load(cfg["base"], adapter_path=str(adapter) if adapter else None)
+        label = f"{name}@{adapter_fingerprint(adapter)}" if adapter else name
+        _LOCAL_MODELS[key] = (model, tokenizer, label)
+    return _LOCAL_MODELS[key]
+
+
+def _chat_prompt(tokenizer, messages: list[dict]) -> str:
+    return tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, enable_thinking=False, tokenize=False
+    )
+
+
+def _mlx_generate(name: str, cfg: dict, messages: list[dict]) -> LocalOutput:
+    """학습·실험 추론(infer.py)과 같은 채팅 템플릿(생각 끔)·탐욕 디코딩. 오류는 부른 쪽(_local)이 실패 결과로"""
+    import mlx_lm
+
     with _LOCAL_LOCK:
-        if key not in _LOCAL_MODELS:
-            if adapter is not None and not (adapter / "adapters.safetensors").exists():
-                raise FileNotFoundError(f"어댑터 없음 {adapter}")
-            model, tokenizer = mlx_lm.load(
-                cfg["base"], adapter_path=str(adapter) if adapter else None
-            )
-            label = f"{name}@{adapter_fingerprint(adapter)}" if adapter else name
-            _LOCAL_MODELS[key] = (model, tokenizer, label)
-        model, tokenizer, label = _LOCAL_MODELS[key]
-        prompt = tokenizer.apply_chat_template(
-            messages, add_generation_prompt=True, enable_thinking=False, tokenize=False
-        )
+        model, tokenizer, label = _local_model(name, cfg)
+        prompt = _chat_prompt(tokenizer, messages)
         text = mlx_lm.generate(model, tokenizer, prompt=prompt, max_tokens=LOCAL_MAX_TOKENS)
     return LocalOutput(text, len(tokenizer.encode(prompt)), len(tokenizer.encode(text)), label)
+
+
+def _logprob(model, tokenizer, context: str, continuation: str) -> float:
+    """context 뒤에 continuation이 올 로그 확률(토큰 합)"""
+    import mlx.core as mx
+
+    ctx = tokenizer.encode(context)
+    full = tokenizer.encode(context + continuation)
+    start = min(len(ctx), len(full) - 1)  # 경계 토큰이 합쳐져도 이어 붙인 부분은 센다
+    logits = model(mx.array([full]))[0]
+    lp = logits - mx.logsumexp(logits, axis=-1, keepdims=True)
+    return sum(lp[j - 1, full[j]].item() for j in range(start, len(full)))
+
+
+def _mlx_constrain(name: str, cfg: dict, messages: list[dict], schema: dict) -> LocalOutput:
+    """보기 강제(제약 디코딩) — 스키마의 칸 순서대로 JSON을 채우며 칸마다 허용 값(enum 보기·불은 0/1) 중 모델 확률이
+    가장 높은 것을 고른다. 보기 밖 값이 나올 수 없다. 자유 생성이 스키마에 맞지 않을 때만 부른다(_local)"""
+    with _LOCAL_LOCK:
+        model, tokenizer, label = _local_model(name, cfg)
+        prompt = _chat_prompt(tokenizer, messages)
+        text = "{"
+        for i, (key, prop) in enumerate(schema["properties"].items()):
+            sep = "," if i else ""
+            if "enum" in prop:
+                text += f'{sep}"{key}":"'
+                choices = [f'{v}"' for v in prop["enum"]]
+            else:
+                text += f'{sep}"{key}":'
+                choices = ["0", "1"]
+            text += max(choices, key=lambda c: _logprob(model, tokenizer, prompt + text, c))
+        text += "}"
+    return LocalOutput(text, len(tokenizer.encode(prompt)), 0, label)
+
+
+def fits_schema(data, schema: dict) -> bool:
+    """평평한 객체 스키마에 맞나 — 필수 칸, 남는 칸, enum 보기, 불(0/1도 인정), 문자열·정수 타입"""
+    if not isinstance(data, dict):
+        return False
+    props = schema.get("properties", {})
+    if not set(schema.get("required", [])) <= set(data):
+        return False
+    if schema.get("additionalProperties") is False and set(data) - set(props):
+        return False
+    for key, value in data.items():
+        prop = props.get(key, {})
+        if "enum" in prop and value not in prop["enum"]:
+            return False
+        kind = prop.get("type")
+        if kind == "boolean" and not (type(value) in (bool, int) and value in (0, 1)):
+            return False
+        if kind == "string" and not isinstance(value, str):
+            return False
+        if kind == "integer" and type(value) is not int:
+            return False
+    return True
+
+
+def _constrainable(schema: dict) -> bool:
+    """칸이 모두 보기(enum)나 불이면 제약 디코딩으로 채울 수 있다"""
+    props = schema.get("properties", {})
+    return bool(props) and all("enum" in p or p.get("type") == "boolean" for p in props.values())
 
 
 class JsonlLog:
@@ -217,6 +287,7 @@ class Gateway(_Base):
         *,
         upstage_client=None,
         local_generate=None,
+        local_constrain=None,
         clock=datetime.now,
     ):
         super().__init__(log, scope, clock)
@@ -224,6 +295,7 @@ class Gateway(_Base):
         self.client = client if client is not None else anthropic.Anthropic()
         self.upstage_client = upstage_client  # 없으면 Upstage 모델을 처음 부를 때 만든다
         self.local_generate = local_generate or _mlx_generate  # 테스트는 가짜를 넣는다
+        self.local_constrain = local_constrain or _mlx_constrain
 
     def _provider(self, model: str) -> str:
         return self.config["models"][model].get("provider", "anthropic")
@@ -349,6 +421,17 @@ class Gateway(_Base):
         if schema is None:
             return "ok", (out.text, None)
         data = first_json(out.text)
+        if not fits_schema(data, schema) and _constrainable(schema):
+            # 보기 밖 값·형식 오류 — 같은 입력이면 같은 답이라 다시 생성하지 않고 보기를 강제한다
+            try:
+                out = self.local_constrain(
+                    model, self.config["models"][model], head + list(messages), schema
+                )
+            except Exception as e:  # noqa: BLE001 — 강제도 실패하면 원래 결과로 판단
+                state["errors"].append(f"{model}: 보기 강제 실패 {type(e).__name__}: {e}")
+            else:
+                state["in"] += out.input_tokens
+                data = first_json(out.text)
         if data is None:
             state["errors"].append(f"{model}: JSON 파싱 실패")
             return "stop", None

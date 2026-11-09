@@ -98,3 +98,16 @@ def test_app_schema_has_disagreements(conn):
     }
     cls = {r[1] for r in conn.execute("PRAGMA table_info(ax_call_classifications)")}
     assert {"summary_model_actual", "summary_llm_call_id"} <= cls
+
+
+def test_connect_uses_wal_and_busy_timeout(conn):
+    """SSE 챗이 쓰는 동안 다른 화면의 쓰기가 막히지 않게 (설계 2026-11-09 챗 "동시 쓰기")"""
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == db.BUSY_TIMEOUT_MS
+
+
+def test_search_logs_status_is_checked(conn):
+    sql = "INSERT INTO ax_search_logs (kind, question, status, created_at) VALUES ('chat', 'q', ?, 'x')"
+    conn.execute(sql, ("running",))
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(sql, ("weird",))

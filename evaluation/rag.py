@@ -3,10 +3,15 @@
 
 앱 연결은 RagApp 두 함수 — eval.py가 앱을 같은 프로세스에서 호출한다(앱 착수 때 backend가 구현):
   search(question, condition) → {"manual_results": [청크 id], "case_results": [청크 id]}  (순위순, 앱 설계 §3)
-  chat(question, qa_id, condition) → {"tool_calls": [{name, args}], "retrieved_ids": [...], "answer_text": str, "cited_ids": [...]}
+  chat(question, qa_id, condition) → {"tool_calls": [{name, args}], "retrieved_ids": [...], "answer_text": str, "cited_ids": [...],
+    "fallback_used"?: bool, "cost_usd"?: float}
+  baseline(question, qa_id, condition) → {"retrieved_ids", "answer_text", "cited_ids", "refused", "cost_usd"?}  (단순 RAG 기준선, 있으면)
+보고 지표(설계 2026-11-09 챗 "새 지표 셋"): 차트형 인용 정확도·공지형 현재 값·답 내용(사례형·매뉴얼형). 폴백이 섞인 문항은
+챗 지표 모수에서 뺀다(평가 설계 §1 원칙 5).
 """
 
 import json
+import re
 from typing import Protocol
 
 from evaluation.metrics import (
@@ -21,6 +26,9 @@ from evaluation.metrics import (
 
 SEARCH_TYPES = ("manual", "notice", "case")  # 문서 검색형 40 — Hit@5·MRR·Top-1·인용
 PARTS = ("retrieval", "chat")  # 검색 지표(검색기 직접 호출) / 챗 지표(chat 호출)
+CONTENT_TYPES = ("manual", "case")  # 답 내용(보고 지표)
+# 단순 RAG 기준선 짝 비교 모수(데이터형은 도구가 있어야 풀림)
+BASELINE_TYPES = (*SEARCH_TYPES, "refusal")
 BUCKET = {
     "manual": "manual_results",
     "notice": "manual_results",
@@ -33,6 +41,8 @@ class RagApp(Protocol):
     def search(self, question: str, condition: str | None = None) -> dict: ...
 
     def chat(self, question: str, qa_id: str, condition: str | None = None) -> dict: ...
+
+    def baseline(self, question: str, qa_id: str, condition: str | None = None) -> dict: ...
 
 
 def _questions(conn, split: str) -> list[dict]:
@@ -82,6 +92,44 @@ def _latest_notices(conn) -> set[str]:
     }
 
 
+def _fact_words(conn) -> dict[str, list[str]]:
+    """심은 사실 id → 본문에 그대로 있는 말(truth_doc_meta.planted_facts)"""
+    out = {}
+    for (facts,) in conn.execute("SELECT planted_facts FROM truth.truth_doc_meta"):
+        for f in json.loads(facts):
+            out[f["id"]] = f["words"]
+    return out
+
+
+_KO_DATE = re.compile(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일")
+
+
+def _flat(text: str) -> str:
+    """비교용 — 'YYYY년 M월 D일'을 YYYY-MM-DD로 맞추고 공백·쉼표를 뗀다"""
+    text = _KO_DATE.sub(lambda m: f"{m[1]}-{int(m[2]):02d}-{int(m[3]):02d}", text)
+    return re.sub(r"[\s,]", "", text)
+
+
+def _has_content(q: dict, answer: str, words: dict) -> bool | None:
+    """답 내용 — 사실 id 힌트면 그 words 중 하나, 본문 구절이면 그 구절(공백·쉼표 제거)이 답에 있나. 힌트 없으면 None"""
+    hint = q.get("answer_chunk_hint")
+    if not hint:
+        return None
+    if hint in words:
+        return any(_flat(w) in _flat(answer) for w in words[hint])
+    return _flat(hint) in _flat(answer)
+
+
+def _baseline_log(b: dict) -> dict:
+    """기준선 답 → 챗 로그 모양(거절은 마지막 호출 refuse로) — 같은 판정 함수로 채점"""
+    return {
+        "tool_calls": [{"name": "refuse" if b["refused"] else "search_docs", "args": {}}],
+        "retrieved_ids": b["retrieved_ids"],
+        "answer_text": b["answer_text"],
+        "cited_ids": [] if b["refused"] else b["cited_ids"],
+    }
+
+
 def _chat_fail(q: dict, log: dict, latest: set) -> str | None:
     """챗 1문항 판정 — 통과면 None (평가 설계 §3.2·§3.3)"""
     calls = log["tool_calls"]
@@ -114,7 +162,21 @@ def _chat_fail(q: dict, log: dict, latest: set) -> str | None:
 
 
 def _rate(qs: list[dict], field: str) -> dict:
-    return {"k": sum(bool(q[field]) for q in qs), "n": len(qs)}
+    return {"k": sum(bool(q[field]) for q in qs if field in q), "n": sum(field in q for q in qs)}
+
+
+def _baseline_summary(base_q: list[dict], out_q: list[dict], cost: float, excluded: int) -> dict:
+    """단순 RAG 기준선 vs 챗 — 문서 검색형 인용·거절형 환각 억제, 구제(기준선 실패 → 챗 통과)/손실 (평가 설계 §3.3)"""
+    chat_q = [q for q in out_q if any(b["id"] == q["id"] for b in base_q)]
+    cmp = compare(base_q, chat_q)
+    return {
+        "citation": _rate([q for q in base_q if q["type"] in SEARCH_TYPES], "chat_ok"),
+        "refusal": _rate([q for q in base_q if q["type"] == "refusal"], "chat_ok"),
+        "compare": {"rescued": cmp["rescued"], "lost": cmp["lost"]},
+        "cost_usd": round(cost, 4),
+        "calls": len(base_q),
+        "excluded_fallback": excluded,
+    }
 
 
 def evaluate(
@@ -122,7 +184,9 @@ def evaluate(
 ) -> dict:
     """parts = 돌릴 묶음(PARTS 부분집합). 안 돌린 묶음의 지표는 None. questions를 주면 split 대신 그 문항을 쓴다"""
     latest, pairs = _latest_notices(conn), _notice_pairs(conn)
-    out_q = []
+    words = _fact_words(conn) if "chat" in parts else {}
+    has_baseline = "chat" in parts and callable(getattr(app, "baseline", None))
+    out_q, base_q, cost = [], [], {"chat": 0.0, "baseline": 0.0, "calls": 0, "base_excluded": 0}
     for q in questions if questions is not None else _questions(conn, split):
         r = {"id": q["id"], "type": q["type"], "question": q["question"]}
         if "retrieval" in parts and q["type"] in BUCKET:
@@ -131,9 +195,29 @@ def evaluate(
             r.update(rank=rank, hit=rank is not None, rr=1 / rank if rank else 0.0, top1=rank == 1)
             if q["type"] == "notice":
                 r["fresh"] = _fresh(ranked, q["answer_doc_ids"], pairs)
-        if "chat" in parts and q["type"] != "chart":
-            r["chat_fail"] = _chat_fail(q, app.chat(q["question"], q["id"], condition), latest)
-            r["chat_ok"] = r["chat_fail"] is None
+        if "chat" in parts:
+            log = app.chat(q["question"], q["id"], condition)
+            if log.get("fallback_used"):
+                r["chat_fail"] = "폴백 — 집계 제외"
+                r["excluded"] = True
+            else:
+                r["chat_fail"] = _chat_fail(q, log, latest)
+                r["chat_ok"] = r["chat_fail"] is None
+                if q["type"] == "notice":
+                    r["notice_value"] = bool(_has_content(q, log["answer_text"], words))
+                content = _has_content(q, log["answer_text"], words)
+                if q["type"] in CONTENT_TYPES and content is not None:
+                    r["answer_content"] = content
+                cost["chat"] += log.get("cost_usd") or 0.0
+                cost["calls"] += len(log["tool_calls"])
+            if has_baseline and q["type"] in BASELINE_TYPES and not r.get("excluded"):
+                b = app.baseline(q["question"], q["id"], condition)
+                cost["baseline"] += b.get("cost_usd") or 0.0
+                if b.get("fallback_used"):  # 짝 비교는 양쪽에서 함께 뺀다(평가 설계 §1 원칙 5)
+                    cost["base_excluded"] += 1
+                else:
+                    ok = _chat_fail(q, _baseline_log(b), latest) is None
+                    base_q.append({"id": q["id"], "type": q["type"], "chat_ok": ok})
         out_q.append(r)
     search = [q for q in out_q if q["type"] in SEARCH_TYPES]
     chart = [q for q in out_q if q["type"] == "chart"]
@@ -155,6 +239,15 @@ def evaluate(
             "citation": _rate(search, "chat_ok"),
             "tool": _rate([q for q in out_q if q["type"] == "data"], "chat_ok"),
             "refusal": _rate([q for q in out_q if q["type"] == "refusal"], "chat_ok"),
+            "chart_citation": _rate([q for q in chart if "chat_ok" in q], "chat_ok"),
+            "notice_value": _rate(out_q, "notice_value"),
+            "answer_content": _rate(out_q, "answer_content"),
+            "excluded_fallback": sum(bool(q.get("excluded")) for q in out_q),
+            "cost_usd": round(cost["chat"], 4),
+            "tool_calls": cost["calls"],
+            "baseline": _baseline_summary(base_q, out_q, cost["baseline"], cost["base_excluded"])
+            if has_baseline
+            else None,
         },
         "questions": out_q,
     }
@@ -171,6 +264,8 @@ PAIRED_FIELDS = (
     "fresh",
     "rr",
     "chat_ok",
+    "notice_value",
+    "answer_content",
 )  # 짝 비교에 쓰는 문항 칸 — test json에는 이것만 남긴다
 
 
@@ -191,6 +286,9 @@ COMPARE = {
     "citation": (SEARCH_TYPES, "chat_ok"),
     "tool": (("data",), "chat_ok"),
     "refusal": (("refusal",), "chat_ok"),
+    "chart_citation": (("chart",), "chat_ok"),
+    "notice_value": (("notice",), "notice_value"),
+    "answer_content": (CONTENT_TYPES, "answer_content"),
 }
 
 

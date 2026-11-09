@@ -3,18 +3,23 @@ sqlite3 연결은 만든 스레드에 묶이고 의존성과 핸들러는 다른
 연결·Searcher는 핸들러 안에서 만들어 닫는다. 임베더·리랭커만 프로세스에 하나 둔다."""
 
 import datetime as dt
+import json
 import os
+import queue
 import sqlite3
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from pydantic import BaseModel, ValidationError
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from backend import autoclose, blind, calls, db, emr, judge_queue, metrics
+from backend import autoclose, blind, calls, chat, db, emr, judge_queue, metrics
 from backend.embeddings import make_embedder
 from backend.harness.auto import revert_auto_action
+from backend.harness.llm import make_gateway
 from backend.rag_search import (
     DEFAULT_EMBEDDING,
     DEFAULT_RERANKER,
@@ -25,6 +30,7 @@ from backend.rag_search import (
     voyage_rerank,
 )
 from backend.search_cards import card
+from backend.usage import record_voyage
 from shared.call_labels import (
     COUNTERPART_KO,
     FLAG_KO,
@@ -51,6 +57,18 @@ class GuardedEmbedder:
 
     def __init__(self, inner):
         self.inner, self.model = inner, inner.model
+        if hasattr(inner, "embed_with_usage"):  # 사용량을 돌려주는 임베더만 — 검색기가 기록한다
+            self.embed_with_usage = self._guard(inner.embed_with_usage)
+
+    @staticmethod
+    def _guard(fn):
+        def run(*args):
+            try:
+                return fn(*args)
+            except Exception as e:
+                raise EmbeddingFailed(str(e)) from e
+
+        return run
 
     def embed(self, texts: list[str], kind: str):
         try:
@@ -143,12 +161,100 @@ def search(
             raise HTTPException(503, NO_INDEX) from e
         except EmbeddingFailed as e:
             raise HTTPException(503, f"임베딩 호출 실패: {e}") from e
-        return {
+        out = {
             bucket: [card(conn, c, searcher.replaced_by) for c in chunks]
             for bucket, chunks in found.items()
         }
     finally:
         conn.close()
+    if usage := searcher.drain_usage():  # 읽기 전용 연결이라 기록은 따로 연다(하루 상한이 센다)
+        log = db.connect(*paths)
+        try:
+            record_voyage(log, usage, is_eval=False, ref=None)
+        finally:
+            log.close()
+    return out
+
+
+CHAT_MAX_QUESTION = 500  # 글자 — 질문 1개(기능 정의 §4 ③ 멀티턴 없음)
+
+
+class ChatBody(BaseModel):
+    question: str = Field(min_length=1, max_length=CHAT_MAX_QUESTION)
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
+def get_chat_gateway():
+    """연결 → 게이트웨이. 테스트가 가짜로 바꾼다"""
+    return make_gateway
+
+
+def _sse(event: dict) -> str:
+    kind = event.pop("type")
+    return f"event: {kind}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _chat_worker(paths, models, gateway, question: str, events: queue.Queue) -> None:
+    """작업 스레드 — 자기 연결로 챗을 끝까지 돌린다. 스트림이 끊겨도 기록이 남게(설계 2026-11-09 챗 "API·화면")"""
+    conn = db.connect(*paths)
+    try:
+        searcher = Searcher(conn, _clinic(), *models)
+        out = chat.chat(conn, gateway(conn), searcher, _clinic(), question, on_event=events.put)
+        rows = {
+            r["id"]: dict(r)
+            for r in conn.execute(
+                f"SELECT * FROM ax_chunks WHERE id IN ({','.join('?' * len(out['cited_ids']))})",
+                out["cited_ids"],
+            )
+        }
+        sources = [
+            card(conn, rows[i], searcher.replaced_by) for i in out["cited_ids"] if i in rows
+        ]
+        events.put(
+            {
+                "type": "answer",
+                "status": out["status"],
+                "text": out["answer_text"],
+                "sources": sources,
+            }
+        )
+    except MissingVectors:
+        events.put({"type": "error", "message": NO_INDEX})
+    except Exception as e:  # 화면에는 짧게, 실행 기록은 하네스가 남긴다
+        events.put({"type": "error", "message": f"답변 중 오류: {type(e).__name__}"})
+    finally:
+        conn.close()
+        events.put(None)
+
+
+@app.post("/chat")
+def post_chat(
+    body: ChatBody,
+    paths: Annotated[tuple[Path, Path], Depends(get_db_paths)],
+    models: Annotated[tuple, Depends(get_models)],
+    gateway: Annotated[object, Depends(get_chat_gateway)],
+) -> StreamingResponse:
+    """질문 1개 → 진행 이벤트(step)·답(answer)·오류(error) SSE (기능 정의 §4 ③)"""
+    conn = _open(paths, NO_INDEX)
+    try:
+        if not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+            raise HTTPException(503, NO_INDEX)
+    finally:
+        conn.close()
+    events: queue.Queue = queue.Queue()
+    threading.Thread(
+        target=_chat_worker, args=(paths, models, gateway, body.question, events)
+    ).start()
+
+    def stream():
+        while (event := events.get()) is not None:
+            yield _sse(event)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 def _open_source(paths: tuple[Path, Path]) -> sqlite3.Connection:

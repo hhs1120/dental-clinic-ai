@@ -918,3 +918,63 @@ def test_mlx_cache_key_includes_name(tmp_path, monkeypatch):
     a = gw.complete("q", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
     b = gw.complete("q2", task="judge", messages=MSGS, schema=LABELS_SCHEMA)
     assert a.model.startswith("qwen@") and b.model.startswith("qwen2@")
+
+
+# ── 로컬 보기 강제 (제약 디코딩 — 자유 생성이 스키마 밖일 때만) ─────────────────
+
+ENUM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "counterpart": {"type": "string", "enum": ["patient", "guardian"]},
+        "emergency": {"type": "boolean"},
+    },
+    "required": ["counterpart", "emergency"],
+    "additionalProperties": False,
+}
+
+
+def test_fits_schema_accepts_enum_and_zero_one_flags():
+    assert llm.fits_schema({"counterpart": "patient", "emergency": 0}, ENUM_SCHEMA)
+    assert llm.fits_schema({"counterpart": "patient", "emergency": True}, ENUM_SCHEMA)
+    assert not llm.fits_schema({"counterpart": "student", "emergency": 0}, ENUM_SCHEMA)
+    assert not llm.fits_schema({"counterpart": "patient"}, ENUM_SCHEMA)
+    assert not llm.fits_schema({"counterpart": "patient", "emergency": 2}, ENUM_SCHEMA)
+
+
+def _mlx_with_constrain(tmp_path, text):
+    seen = []
+
+    def gen(name, cfg, messages):
+        return llm.LocalOutput(text, 50, 9, "qwen@abcd")
+
+    def constrain(name, cfg, messages, schema):
+        seen.append(schema)
+        return llm.LocalOutput('{"counterpart":"patient","emergency":0}', 50, 0, "qwen@abcd")
+
+    gw = llm.Gateway(
+        MLX_CONFIG,
+        llm.JsonlLog(tmp_path / "calls.jsonl"),
+        scope="runtime",
+        client=StubClient(),
+        local_generate=gen,
+        local_constrain=constrain,
+        clock=lambda: NOW,
+    )
+    return gw, seen
+
+
+def test_out_of_schema_output_is_redone_with_constraint(tmp_path):
+    gw, seen = _mlx_with_constrain(tmp_path, '{"counterpart":"student","emergency":0}')
+    r = gw.complete("q", task="judge", system="지시", messages=MSGS, schema=ENUM_SCHEMA)
+    assert r.ok and r.data == {"counterpart": "patient", "emergency": 0} and seen == [ENUM_SCHEMA]
+
+
+def test_valid_output_is_not_redone(tmp_path):
+    gw, seen = _mlx_with_constrain(tmp_path, '{"counterpart":"guardian","emergency":1}')
+    r = gw.complete("q", task="judge", system="지시", messages=MSGS, schema=ENUM_SCHEMA)
+    assert r.data == {"counterpart": "guardian", "emergency": 1} and seen == []
+
+
+def test_unparsable_output_is_redone_with_constraint(tmp_path):
+    gw, seen = _mlx_with_constrain(tmp_path, "글만 냄")
+    assert gw.complete("q", task="judge", messages=MSGS, schema=ENUM_SCHEMA).ok and seen

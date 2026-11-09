@@ -218,3 +218,98 @@ def test_db_paths_follow_data_dir_env(monkeypatch, tmp_path):
     assert get_db_paths() == (tmp_path / "app.sqlite", tmp_path / "source.sqlite")
     monkeypatch.delenv("AX_DATA_DIR")
     assert get_db_paths()[0].parent.name == "data"
+
+
+# ── POST /chat (설계 2026-11-09 챗 "API·화면") ─────────────────────────────
+
+
+def _events(text: str) -> list[tuple[str, dict]]:
+    import json
+
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        out.append((lines["event"], json.loads(lines["data"])))
+    return out
+
+
+@pytest.fixture
+def chat_client(client_with):
+    from backend.api import get_chat_gateway
+    from tests.backend.test_followup import Script
+
+    def make(*runs):
+        c = client_with()
+        app.dependency_overrides[get_chat_gateway] = lambda: lambda conn: Script(conn, *runs)
+        return c
+
+    return make
+
+
+SEARCH_RUN = [
+    ("tool", "search_docs", {"query": "틀니 수리"}),
+    ("tool", "answer", {"text": "접수 후 기공소로 보낸다", "cited_ids": ["doc:3:0"]}),
+]
+
+
+def _log_rows(paths):
+    conn = db.connect(*paths)
+    rows = conn.execute("SELECT status FROM ax_search_logs").fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def test_chat_streams_steps_then_answer(chat_client):
+    r = chat_client(SEARCH_RUN).post("/chat", json={"question": "틀니 수리 어떻게 해?"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = _events(r.text)
+    assert [e for e, _ in events] == ["step", "answer"]
+    assert events[0][1] == {"tool": "search_docs"}
+    answer = events[1][1]
+    assert answer["status"] == "answered" and answer["text"] == "접수 후 기공소로 보낸다"
+    assert [s["id"] for s in answer["sources"]] == ["doc:3:0"] and answer["sources"][0]["title"]
+
+
+def test_chat_rejects_blank_and_long_question(chat_client, indexed_paths):
+    from backend.api import CHAT_MAX_QUESTION
+
+    c = chat_client(SEARCH_RUN)
+    assert c.post("/chat", json={"question": "   "}).status_code == 422
+    assert c.post("/chat", json={"question": "가" * (CHAT_MAX_QUESTION + 1)}).status_code == 422
+    assert _log_rows(indexed_paths) == []
+
+
+def test_chat_log_written_even_if_stream_closed(chat_client, indexed_paths):
+    c = chat_client(SEARCH_RUN)
+    with c.stream("POST", "/chat", json={"question": "틀니 수리 어떻게 해?"}) as r:
+        next(r.iter_lines())  # 첫 줄만 읽고 닫는다
+    for _ in range(50):
+        if _log_rows(indexed_paths) and "running" not in _log_rows(indexed_paths):
+            break
+        time.sleep(0.05)
+    assert _log_rows(indexed_paths) == ["answered"]
+
+
+def test_chat_without_index_is_503(client_with, source_paths, tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    paths = (empty / "app.sqlite", shutil.copy(source_paths[1], empty / "source.sqlite"))
+    conn = db.connect(*paths)
+    db.init_schema(conn)
+    conn.close()
+    assert client_with(paths=paths).post("/chat", json={"question": "틀니"}).status_code == 503
+
+
+def test_search_records_voyage_usage(client_with, indexed_paths):
+    """기록 검색의 Voyage 호출도 ax_llm_calls에 — 하루 상한이 센다(리뷰 2)"""
+
+    class Counting(FakeEmbedder):
+        def embed_with_usage(self, texts, kind):
+            return self.embed(texts, kind), 7
+
+    c = client_with(models=(GuardedEmbedder(Counting()), None))
+    assert c.get("/search", params={"q": "틀니 수리"}).status_code == 200
+    conn = db.connect(*indexed_paths)
+    rows = conn.execute("SELECT task, model_alias, input_tokens FROM ax_llm_calls").fetchall()
+    conn.close()
+    assert [tuple(r) for r in rows] == [("search_embed", "voyage", 7)]

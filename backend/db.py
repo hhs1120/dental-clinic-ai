@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite_vec
 
 SCHEMA = Path(__file__).resolve().parents[1] / "shared" / "app_schema.sql"
+BUSY_TIMEOUT_MS = 5000  # 다른 연결이 쓰는 동안 기다리는 시간 — WAL과 함께(앱 설계 §6)
 
 
 def connect(app_path: Path, source_path: Path) -> sqlite3.Connection:
@@ -17,6 +18,8 @@ def connect(app_path: Path, source_path: Path) -> sqlite3.Connection:
     conn.enable_load_extension(False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA journal_mode = WAL")  # 챗 SSE가 쓰는 동안 읽기·다른 쓰기가 막히지 않게
     conn.execute(
         "ATTACH DATABASE ? AS source", (f"{Path(source_path).resolve().as_uri()}?mode=ro",)
     )

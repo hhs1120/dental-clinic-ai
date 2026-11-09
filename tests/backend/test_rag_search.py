@@ -331,7 +331,7 @@ def test_app_reports_rerank_failures(paths):
     VectorStore(conn, "fake").upsert(["doc:1:0"], FakeEmbedder().embed(["틀니"], "document"))
     conn.commit()
     app = App(conn, embedder_for=lambda model: FakeEmbedder())
-    assert app.supports_chat is False and app.warnings() == []
+    assert app.supports_chat is True and app.warnings() == []
 
     def boom(query, chunks):
         raise RuntimeError("장애")

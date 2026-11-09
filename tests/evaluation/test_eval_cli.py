@@ -317,10 +317,22 @@ def test_main_exit_codes(conn, tmp_path, monkeypatch, capsys):
 
 
 def test_main_passes_db_to_app(conn, tmp_path, monkeypatch):
+    """챗은 app.sqlite 사본에서 — 평가 실행이 운영 기록에 섞이지 않게(설계 2026-11-09 챗 "평가"). 검색만이면 원본"""
     seen = []
     monkeypatch.setattr(ev, "load_app", lambda db, source: seen.append((db, source)))
-    ev.main(["--split", "dev", "--reports-dir", str(tmp_path / "out")] + _db_files(conn, tmp_path))
-    assert seen == [(tmp_path / "app.sqlite", tmp_path / "source.sqlite")]
+    monkeypatch.setattr(ev, "CHAT_COPY", tmp_path / "runs" / "rag.sqlite")
+    args = ["--reports-dir", str(tmp_path / "out")] + _db_files(conn, tmp_path)
+    ev.main(["--split", "dev"] + args)
+    ev.main(["--split", "dev", "--retrieval-only"] + args)
+    ev.main(
+        ["--split", "test", "--section", "classification"] + args
+    )  # 챗 안 돔 — 사본 안 뜸(리뷰 7)
+    assert seen == [
+        (tmp_path / "runs" / "rag.sqlite", tmp_path / "source.sqlite"),
+        (tmp_path / "app.sqlite", tmp_path / "source.sqlite"),
+        (tmp_path / "app.sqlite", tmp_path / "source.sqlite"),
+    ]
+    assert (tmp_path / "runs" / "rag.sqlite").exists()
 
 
 @pytest.fixture
@@ -548,3 +560,10 @@ def test_dev_reports_each_judge_on_same_population(conn, reports, tmp_path):
     assert by_judge == ["v1", "v9"]
     md = out["report_path"].read_text(encoding="utf-8")
     assert md.count("판정기 학습 통화 제외") == 1 and "판정기 채점·교차검증" in md
+
+
+def test_dev_report_shows_new_chat_metrics(conn, tmp_path):
+    out = ev.run(conn, reports_dir=tmp_path, app=FakeApp())
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert "차트형 인용" in md and "공지형 현재 값" in md and "답 내용" in md
+    assert "단순 RAG 기준선" in md

@@ -1005,7 +1005,7 @@ function askChat() {
     <div class="chat mt16">${S.chat.map(x => `<div class="bubble-q">${esc(x.q)}</div>${x.pending ? `<div class="bubble-a"><div class="steps"><span>질문 받음</span></div><span class="fg3">문서 찾는 중…</span></div>` : answerCard(x)}`).join("")}</div>
     <div class="row mt16">${sugg.map(x => `<button class="fchip" data-act="askQ" data-arg="${esc(x.q)}">${esc(x.q)}</button>`).join("")}</div>
     <form id="askForm" class="row mt16" style="align-items:stretch"><textarea id="askInput" class="input" rows="2" style="flex:1;min-width:0" placeholder="질문을 적고 Enter (줄바꿈은 Shift+Enter)">${esc(S.askInput)}</textarea><button class="btn btn-primary" type="submit">묻기</button></form>
-    <p class="caption1 fg3" style="margin:8px 0 0">멀티턴 없음 · 질문 하나에 도구 5개(search_docs · query_patient · query_schedule · query_claims · refuse) 중 골라 한 번 답함</p>
+    <p class="caption1 fg3" style="margin:8px 0 0">멀티턴 없음 · 질문 하나에 도구 6개(search_docs · query_patient · query_schedule · query_claims · query_charts · refuse) 중 골라 한 번 답함</p>
   </div>`;
 }
 function tokens(q) { return q.split(/[\s,.?!]+/).map(t => t.replace(/(은|는|이|가|을|를|에|에서|으로|로|하면|했어|해|야|요|지)$/, "")).filter(t => t.length >= 2); }

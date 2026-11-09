@@ -40,6 +40,8 @@ from generator.paths import ROOT, output_paths
 REPORTS = ROOT / "reports"
 PROMPTS = ROOT / "prompts"
 RUNS = "eval_runs.jsonl"
+# 챗은 app.sqlite 사본에서 돈다 — 실행 기록·규칙 누계에 평가 표시가 없어 운영에 섞이지 않게, test 문항이 data/에 남지 않게
+CHAT_COPY = ROOT / "evaluation" / "runs" / "rag.sqlite"
 SECTIONS = (
     "classification",
     "judge",
@@ -653,6 +655,27 @@ def _render_rag(r: dict | None) -> list[str]:
             f"챗 — 인용 정확도 {_kn(c['citation'])} · 도구 선택 {_kn(c['tool'])} · 환각 억제 {_kn(c['refusal'])}",
             "",
         ]
+        if "chart_citation" in c:  # 보고 항목(관문 조건 아님) — 설계 2026-11-09 챗 "새 지표 셋"
+            out += [
+                f"보고 — 차트형 인용 {_kn(c['chart_citation'])} · 공지형 현재 값 {_kn(c['notice_value'])}"
+                f" · 답 내용(사례·매뉴얼) {_kn(c['answer_content'])}"
+                f" · 도구 호출 {c['tool_calls']}회 · ${c['cost_usd']:.4f}"
+                + (f" · 폴백 제외 {c['excluded_fallback']}문항" if c["excluded_fallback"] else ""),
+                "",
+            ]
+        if c.get("baseline"):
+            b = c["baseline"]
+            out += [
+                f"단순 RAG 기준선 — 인용 정확도 {_kn(b['citation'])} · 환각 억제 {_kn(b['refusal'])}"
+                f" · 호출 {b['calls']}회 · ${b['cost_usd']:.4f}",
+            ]
+            out += [
+                f"- {k}: 챗이 구제 {', '.join(b['compare']['rescued'][k]) or '—'}"
+                f" / 챗이 놓침 {', '.join(b['compare']['lost'][k]) or '—'}"
+                for k in b["compare"]["rescued"]
+                if b["compare"]["rescued"][k] or b["compare"]["lost"][k]
+            ]
+            out.append("")
     if "compare" in r and r["compare"] is None:
         out += [
             f"### 조건 비교 기본 → {r['condition']}",
@@ -699,6 +722,19 @@ def _num(x) -> str:
     return "—" if x is None else f"{x:.3f}"
 
 
+def copy_app_db(db: Path, copy: Path) -> Path:
+    """app.sqlite → 사본(SQLite 백업 — WAL 내용까지). 매번 새로 떠 지난 평가의 기록이 쌓이지 않게"""
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.unlink(missing_ok=True)
+    src, dst = sqlite3.connect(db), sqlite3.connect(copy)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    return copy
+
+
 def load_app(db: Path, source: Path) -> rag.RagApp | None:
     """앱의 평가 훅 backend/eval_hooks.py의 make_app(app_db, source_db) — eval.py가 채점하는 DB를 앱도 읽게. 훅 모듈이 없으면(앱 착수 전)
     None, 훅 안의 의존성이 없으면 그대로 오류(RAG가 조용히 빠진 리포트를 막음)"""
@@ -740,6 +776,8 @@ def main(argv=None) -> int:
         if not p.exists():
             print(f"DB 없음: {p} — make data 먼저")
             return 1
+    # 챗이 도는 실행만 사본을 뜬다(dev 기본, test --section chat) — 370MB를 매번 뜨지 않게
+    chat_runs = not args.retrieval_only and (args.split == "dev" or args.section == "chat")
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS source", (f"file:{source}?mode=ro",))
@@ -748,7 +786,7 @@ def main(argv=None) -> int:
         out = run(
             conn,
             reports_dir=args.reports_dir,
-            app=load_app(db, source),
+            app=load_app(copy_app_db(db, CHAT_COPY) if chat_runs else db, source),
             split=args.split,
             section=args.section,
             retrieval_only=args.retrieval_only,

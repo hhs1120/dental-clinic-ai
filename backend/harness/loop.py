@@ -36,6 +36,10 @@ class AgentSpec:
     max_tool_calls: int
     max_usd: float
     result_limit: int = DEFAULT_RESULT_LIMIT
+    # 끝내는 도구 — 있으면 모델이 도구 없이 글로 끝낼 때 한 번 되돌려 이 도구로 내게 한다(챗: answer·refuse)
+    end_tools: tuple = ()
+    # 이 규칙 id로 막히면 그 자리에서 실행을 끝낸다(handed_off, reason=규칙 id) — 챗 호출 상한
+    stop_rules: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,14 @@ def _tool_message(tool_use_id: str, source: str, value, limit: int, is_error: bo
     if is_error:
         block["is_error"] = True
     return block, cut
+
+
+def nudge_text(end_tools: tuple) -> str:
+    return f"답을 글로 끝내지 말고 {' 또는 '.join(end_tools)} 도구를 불러 내라."
+
+
+def _nudged(steps: list[dict], end_tools: tuple) -> bool:
+    return any(s["kind"] == "input" and s["result"] == nudge_text(end_tools) for s in steps)
 
 
 def _rebuild(steps: list[dict], limit: int) -> tuple[list, list, list]:
@@ -138,10 +150,22 @@ class Runner:
         schemas = self.registry.schemas(spec.tools)
         steps = self.store.steps(run_id)
         last = steps[-1]
-        if last["kind"] == "model" and not last["response"]["tool_calls"]:  # 답을 저장하고 죽음
+        if (
+            last["kind"] == "model"
+            and not last["response"]["tool_calls"]
+            and (not spec.end_tools or _nudged(steps, spec.end_tools))
+        ):  # 답을 저장하고 죽음(되돌릴 차례였으면 아래 루프가 이어 간다)
             return self._finish(run_id, "done", result=last["response"]["text"])
         if reason := self._ended(last):  # 끝내는 도구를 기록하고 죽음
             return self._finish(run_id, "done", reason=reason)
+        if (
+            last["kind"] == "tool" and last["rule_id"] in spec.stop_rules
+        ):  # 멈출 규칙에 막히고 죽음
+            return self._finish(run_id, "handed_off", reason=last["rule_id"])
+        if last["kind"] == "model" and not last["response"]["tool_calls"]:  # 되돌리기 전에 죽음
+            with self.store.conn:
+                self.store.add_step(run_id, "input", result=nudge_text(spec.end_tools))
+            steps = self.store.steps(run_id)
         messages, pending, results = _rebuild(steps, spec.result_limit)
         while True:
             if pending:
@@ -149,8 +173,11 @@ class Runner:
                     if self.store.run(run_id)["tool_calls"] >= spec.max_tool_calls:
                         return self._finish(run_id, "handed_off", reason="call_limit")
                     results.append(self._tool(ctx, spec, call))
-                    if reason := self._ended(self.store.steps(run_id)[-1]):
+                    step = self.store.steps(run_id)[-1]
+                    if reason := self._ended(step):
                         return self._finish(run_id, "done", reason=reason)
+                    if step["rule_id"] in spec.stop_rules:
+                        return self._finish(run_id, "handed_off", reason=step["rule_id"])
                 pending = []
             if results:
                 messages.append({"role": "user", "content": results})
@@ -189,7 +216,16 @@ class Runner:
             if not r.ok:
                 return self._finish(run_id, "failed", reason=r.error)
             if not r.tool_calls:
-                return self._finish(run_id, "done", result=r.text)
+                if not spec.end_tools or _nudged(self.store.steps(run_id), spec.end_tools):
+                    return self._finish(run_id, "done", result=r.text)
+                nudge = nudge_text(spec.end_tools)  # 한 번만 — 두 번째 글은 그대로 끝낸다
+                with self.store.conn:
+                    self.store.add_step(run_id, "input", result=nudge)
+                messages += [
+                    {"role": "assistant", "content": r.content},
+                    {"role": "user", "content": nudge},
+                ]
+                continue
             messages.append({"role": "assistant", "content": r.content})
             pending = list(r.tool_calls)
 

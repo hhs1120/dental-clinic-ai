@@ -1,5 +1,7 @@
 """RAG 채점 (평가 설계 §3.2·§3.3) — 검색 지표는 검색기 직접 호출 순위(버킷 목록 안), 챗 지표는 챗 로그."""
 
+import json
+
 import pytest
 
 from evaluation import rag
@@ -7,6 +9,27 @@ from generator.build import insert_rag_qa
 from tests.evaluation.eval_db import make_db
 
 # 문서: 1·2 매뉴얼 / 3 최신 공지(4를 대체) / 4 옛 공지 / 5 FAQ(3과 같은 사실)
+FACTS = {  # 심은 사실(truth_doc_meta.planted_facts) — 공지형 현재 값·답 내용 채점
+    1: [{"id": "man.days", "text": "영업일 3일", "words": ["3일"], "reason": None, "same": None}],
+    3: [
+        {
+            "id": "notice.parking",
+            "text": "2시간 무료",
+            "words": ["2시간"],
+            "reason": None,
+            "same": None,
+        }
+    ],
+    4: [
+        {
+            "id": "old.parking",
+            "text": "1시간 무료",
+            "words": ["1시간"],
+            "reason": None,
+            "same": None,
+        }
+    ],
+}
 DOCS = [
     (1, "manual", "core", None, None),
     (2, "manual", "core", None, None),
@@ -16,14 +39,14 @@ DOCS = [
 ]
 
 
-def _q(id, type, split, ids=(), tools=("search_docs",), args=None, answer="답"):
+def _q(id, type, split, ids=(), tools=("search_docs",), args=None, answer="답", hint=None):
     return {
         "id": id,
         "type": type,
         "question": f"질문 {id}",
         "answer_text": answer,
         "answer_doc_ids": list(ids),
-        "answer_chunk_hint": None,
+        "answer_chunk_hint": hint,
         "expected_tools": list(tools),
         "expected_args": args or {},
         "expect_refusal": type == "refusal",
@@ -33,9 +56,9 @@ def _q(id, type, split, ids=(), tools=("search_docs",), args=None, answer="답")
 
 
 QA = [
-    _q("m1", "manual", "dev", ["doc:1"]),
-    _q("n1", "notice", "dev", ["doc:3", "doc:5"]),
-    _q("c1", "case", "dev", ["call:1"]),
+    _q("m1", "manual", "dev", ["doc:1"], hint="man.days"),
+    _q("n1", "notice", "dev", ["doc:3", "doc:5"], hint="notice.parking"),
+    _q("c1", "case", "dev", ["call:1"], hint="350,000원"),
     _q("h1", "chart", "dev", ["chart:7"]),
     _q(
         "d1",
@@ -83,6 +106,35 @@ CHAT = {
 }
 
 
+BASELINE = {  # 단순 RAG 기준선 — 검색 1회 + 답, 거절은 refused
+    "m1": {
+        "retrieved_ids": ["doc:2:0"],
+        "answer_text": "답",
+        "cited_ids": ["doc:2:0"],
+        "refused": False,
+    },
+    "n1": {
+        "retrieved_ids": ["doc:3:1"],
+        "answer_text": "2시간",
+        "cited_ids": ["doc:3:1"],
+        "refused": False,
+    },
+    "c1": {
+        "retrieved_ids": ["call:1:0"],
+        "answer_text": "답",
+        "cited_ids": ["call:1:0"],
+        "refused": False,
+    },
+    "r1": {"retrieved_ids": [], "answer_text": "", "cited_ids": [], "refused": False},
+    "m2": {
+        "retrieved_ids": ["doc:2:0"],
+        "answer_text": "답",
+        "cited_ids": ["doc:2:0"],
+        "refused": False,
+    },
+}
+
+
 class FakeApp:
     def __init__(self, search=SEARCH, chat=CHAT):
         self.search_map, self.chat_map, self.calls = search, chat, []
@@ -95,6 +147,10 @@ class FakeApp:
         self.calls.append(("chat", qa_id, condition))
         return self.chat_map[qa_id]
 
+    def baseline(self, question, qa_id, condition=None):
+        self.calls.append(("baseline", qa_id, condition))
+        return BASELINE[qa_id]
+
 
 def make_rag_db(tmp_path):
     """분류 fixture(eval_db) + 문서 5개·RAG 문항"""
@@ -105,8 +161,16 @@ def make_rag_db(tmp_path):
             (doc_id, type, f"문서 {doc_id}", f"docs/{type}/{doc_id:03d}.md"),
         )
         c.execute(
-            "INSERT INTO truth.truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, '[]', '[]')",
-            (doc_id, f"key-{doc_id}", kind, int(kind != "core"), pair, sup),
+            "INSERT INTO truth.truth_doc_meta VALUES (?, ?, ?, ?, ?, ?, '[]', ?)",
+            (
+                doc_id,
+                f"key-{doc_id}",
+                kind,
+                int(kind != "core"),
+                pair,
+                sup,
+                json.dumps(FACTS.get(doc_id, []), ensure_ascii=False),
+            ),
         )
     insert_rag_qa(c, QA, schema="truth")
     return c
@@ -150,7 +214,7 @@ def test_chat_only_calls_no_search(conn):
     app = FakeApp()
     r = rag.evaluate(conn, app, "dev", parts=("chat",))
     assert (
-        all(kind == "chat" for kind, *_ in app.calls)
+        all(kind in ("chat", "baseline") for kind, *_ in app.calls)
         and r["retrieval"] is None
         and r["chat"]["tool"]["n"] == 1
     )
@@ -227,7 +291,21 @@ def test_compare_lists_rescued_and_lost(conn):
 
 def test_paired_keeps_only_pass_flags(conn):
     p = rag.paired(rag.evaluate(conn, FakeApp(), "dev"))
-    assert all(set(q) <= {"id", "type", "hit", "top1", "fresh", "rr", "chat_ok"} for q in p)
+    assert all(
+        set(q)
+        <= {
+            "id",
+            "type",
+            "hit",
+            "top1",
+            "fresh",
+            "rr",
+            "chat_ok",
+            "notice_value",
+            "answer_content",
+        }
+        for q in p
+    )
 
 
 def test_notices_read_from_source_even_if_app_has_same_table(conn):
@@ -255,3 +333,70 @@ def test_freshness_is_notice_vs_its_old_version(conn, ranked, fresh):
     search = dict(SEARCH, n1={"manual_results": ranked, "case_results": []})
     r = rag.evaluate(conn, FakeApp(search=search), "dev", parts=("retrieval",))
     assert {x["id"]: x for x in r["questions"]}["n1"]["fresh"] is fresh
+
+
+# ── 챗 평가 (설계 2026-11-09 챗 "평가") ─────────────────────────────────────
+
+
+def test_chart_questions_run_chat_and_count_citation(conn):
+    r = rag.evaluate(conn, FakeApp(), "dev")
+    assert (r["chat"]["chart_citation"]["k"], r["chat"]["chart_citation"]["n"]) == (1, 1)
+
+
+def test_notice_value_fails_when_only_old_value(conn):
+    old = _log([("search_docs", {})], ["doc:3:0"], ["doc:3:0"], answer="무료 주차 1시간")
+    new = dict(old, answer_text="진료 당일 2시간 무료")
+    for log, ok in ((old, False), (new, True)):
+        r = rag.evaluate(conn, FakeApp(chat=dict(CHAT, n1=log)), "dev")
+        q = next(q for q in r["questions"] if q["id"] == "n1")
+        assert q["chat_ok"] and q["notice_value"] is ok
+
+
+def test_answer_content_manual_words_and_case_phrase(conn):
+    chat = dict(
+        CHAT,
+        m1=dict(CHAT["m1"], answer_text="기공소 의뢰 후 3일"),
+        c1=dict(CHAT["c1"], answer_text="비급여 350000 원이라고 안내"),
+    )
+    r = rag.evaluate(conn, FakeApp(chat=chat), "dev")
+    content = {q["id"]: q.get("answer_content") for q in r["questions"]}
+    assert content["m1"] is True and content["c1"] is True
+    assert (r["chat"]["answer_content"]["k"], r["chat"]["answer_content"]["n"]) == (2, 2)
+
+
+def test_fallback_questions_excluded(conn):
+    chat = dict(CHAT, m1=dict(CHAT["m1"], fallback_used=True))
+    r = rag.evaluate(conn, FakeApp(chat=chat), "dev")
+    assert r["chat"]["excluded_fallback"] == 1 and r["chat"]["citation"]["n"] == 2
+    assert "chat_ok" not in next(q for q in r["questions"] if q["id"] == "m1")
+
+
+def test_baseline_paired_with_chat(conn):
+    r = rag.evaluate(conn, FakeApp(), "dev")
+    b = r["chat"]["baseline"]
+    # 기준선: m1 정답 아님·n1 통과·c1 통과(검색한 청크) / 챗: m1 통과·n1·c1 실패
+    assert (b["citation"]["k"], b["citation"]["n"]) == (2, 3)
+    assert (b["refusal"]["k"], b["refusal"]["n"]) == (0, 1)
+    assert b["compare"]["rescued"]["citation"] == ["m1"]  # 기준선 실패 → 챗 통과
+    assert set(b["compare"]["lost"]["citation"]) == {"c1", "n1"}
+
+
+def test_answer_content_date_forms_match(conn):
+    """날짜 표기 차이(2024년 10월 23일 ↔ 2024-10-23)는 같은 말로 본다 — 답 내용 지표의 거짓 음성 줄이기"""
+    q = {"answer_chunk_hint": "2024년 10월 23일"}
+    assert rag._has_content(q, "마지막 스케일링은 2024-10-23입니다", {}) is True
+    assert rag._has_content({"answer_chunk_hint": "2024-10-23"}, "2024년 10월 23일", {}) is True
+    assert rag._has_content(q, "2024-10-24", {}) is False
+
+
+def test_baseline_fallback_excluded_from_both_sides(conn):
+    """기준선이 폴백된 문항은 짝 비교 양쪽에서 뺀다(리뷰 6)"""
+    base = dict(BASELINE, m1=dict(BASELINE["m1"], fallback_used=True))
+
+    class App(FakeApp):
+        def baseline(self, question, qa_id, condition=None):
+            return base[qa_id]
+
+    b = rag.evaluate(conn, App(), "dev")["chat"]["baseline"]
+    assert b["citation"]["n"] == 2 and b["excluded_fallback"] == 1
+    assert "m1" not in b["compare"]["rescued"].get("citation", [])
