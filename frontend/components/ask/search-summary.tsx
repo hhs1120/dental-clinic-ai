@@ -19,6 +19,29 @@ import { toApiParams, type SearchState } from "@/lib/search-query";
 type State =
   { key: string; data: SummaryResponse } | { key: string; error: string };
 
+// 같은 검색의 요약 요청을 나눠 쓴다 — 개발 모드의 효과 두 번 실행과 탭 오가기에도 한 번만 부른다.
+// 실패·오류는 지워서 다시 검색하면 다시 부른다(서버 캐시와 같은 기준)
+const requests = new Map<string, Promise<SummaryResponse>>();
+
+function summaryOf(requestKey: string, search: SearchState) {
+  let p = requests.get(requestKey);
+  if (!p) {
+    p = postJson<SummaryResponse>(
+      "/search/summary",
+      Object.fromEntries(toApiParams(search)),
+    );
+    requests.set(requestKey, p);
+    p.then(
+      (d) => {
+        if (d.status !== "answered" && d.status !== "refused")
+          requests.delete(requestKey);
+      },
+      () => requests.delete(requestKey),
+    );
+  }
+  return p;
+}
+
 /** 본문의 [n]을 작은 번호 표지로 — 번호 n = 아래 출처 칩 n(설계 2026-11-09 검색 요약 "출처 번호 형식") */
 function Numbered({ text }: { text: string }) {
   return text.split(/\[(\d+)\]/).map((part, i) =>
@@ -58,10 +81,7 @@ export function SearchSummary({
   const [state, setState] = useState<State | null>(null);
   useEffect(() => {
     let live = true; // 늦게 온 옛 응답은 버린다
-    postJson<SummaryResponse>(
-      "/search/summary",
-      Object.fromEntries(toApiParams(search)),
-    ).then(
+    summaryOf(requestKey, search).then(
       (data) => live && setState({ key: requestKey, data }),
       (e) => live && setState({ key: requestKey, error: errorText(e) }),
     );

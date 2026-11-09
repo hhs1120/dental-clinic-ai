@@ -42,6 +42,28 @@ test("옛 버전 공지를 열면 최신 보기 링크가 있다", async ({ page
   await expect(page).toHaveURL(new RegExp(`doc=${latest}$`));
 });
 
+test("문서를 바꿔 여는 동안 목록은 그 종류에 머문다", async ({ page }) => {
+  const { documents } = await (
+    await page.request.get(`${api}/documents`)
+  ).json();
+  const manuals = documents.filter(
+    (x: { type: string }) => x.type === "manual",
+  );
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route(`**/api/documents/${manuals[1].id}`, async (r) => {
+    await held;
+    await r.continue();
+  });
+  await page.goto(`/ask?tab=docs&doc=${manuals[0].id}`);
+  const nav = page.getByRole("navigation", { name: "문서 목록" });
+  await expect(nav).toContainText(`매뉴얼 ${manuals.length}`);
+  await nav.getByRole("link", { name: manuals[1].title }).click();
+  await expect(page.getByText("불러오는 중…")).toBeVisible();
+  await expect(nav).toContainText(`매뉴얼 ${manuals.length}`);
+  release();
+});
+
 const CARD = {
   id: "doc:3:0",
   source_type: "document",
@@ -137,4 +159,24 @@ test("근거 더 보기는 같은 질문으로 기록 검색을 연다", async (
   await page.getByRole("button", { name: "묻기" }).click();
   await page.getByRole("link", { name: "근거 더 보기" }).click();
   await expect(page).toHaveURL(/tab=search&q=%EC%A3%BC%EB%A7%90/);
+});
+
+test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 부르지 않는다", async ({
+  page,
+}) => {
+  await fakeSearch(page);
+  let calls = 0;
+  await page.route("**/api/search/summary", (r) => {
+    calls++;
+    return r.fulfill({
+      json: { status: "answered", text: "접수한다[1].", sources: [CARD] },
+    });
+  });
+  await page.goto("/ask?tab=search&q=틀니");
+  const summary = page.getByRole("region", { name: "AI 요약" });
+  await expect(summary).toContainText("접수한다");
+  await page.getByRole("tab", { name: "질문하기" }).click();
+  await page.getByRole("tab", { name: "기록 검색" }).click();
+  await expect(summary).toContainText("접수한다");
+  expect(calls).toBe(1);
 });

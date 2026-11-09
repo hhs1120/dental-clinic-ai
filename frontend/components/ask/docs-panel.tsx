@@ -39,8 +39,9 @@ export function DocsPanel() {
   );
   const open = detail.data;
 
-  // 칩은 열린 문서의 종류를 따른다(옛 공지도 공지) — 문서가 오기 전에는 공지
-  const type: DocType = open?.type ?? "notice";
+  // 칩은 열 문서의 종류를 따른다 — 목록에서 먼저 찾아 불러오는 동안에도 머문다(옛 공지는 목록에 없어 문서로)
+  const type: DocType =
+    docs.find((d) => d.id === openId)?.type ?? open?.type ?? "notice";
   const ofType = (t: DocType) => docs.filter((d) => d.type === t);
   const shown = ofType(type);
   const latest = open && open.versions.find((v) => v.id === open.latest_id);
