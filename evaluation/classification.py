@@ -6,9 +6,14 @@ import json
 import re
 from collections import Counter
 from itertools import combinations
+from pathlib import Path
 
+import yaml
+
+from backend.prompts import FRONT_MATTER, PROMPTS_DIR
 from evaluation import EvalRefused
 from evaluation.metrics import inverse_weights, macro_accuracy, mcnemar_exact, weighted_accuracy
+from evaluation.splits import silver_split
 from generator.master import CALL_FLAGS
 from shared.call_labels import differing_items
 
@@ -176,26 +181,61 @@ def _usable(rows: list[dict], v: str, calls: dict) -> dict:
     return {r["call_uid"]: r for r in mine if r["status"] == "ok" and not r["fallback"]}
 
 
+TRAINED_ON = ("silver_material",)  # 판정기 프롬프트 머리말 trained_on 값
+
+
+def trained_uids(conn, version: str, prompts_dir: Path = PROMPTS_DIR) -> set[str]:
+    """판정기가 학습한 통화 — prompts/judge/<version>.md 머리말 trained_on. silver_material = silver_split 재료 구간 전부
+    (학습에서 원본 오류로 빠진 통화도 함께). 파일·머리말·키가 없으면 빈 집합(Qwen 판정기 설계 '학습한 통화 빼기', 평가 설계 §2.5)"""
+    path = prompts_dir / "judge" / f"{version}.md"
+    m = FRONT_MATTER.match(path.read_text(encoding="utf-8")) if path.exists() else None
+    value = (yaml.safe_load(m[1]) or {}).get("trained_on") if m else None
+    if value is None:
+        return set()
+    if value not in TRAINED_ON:
+        raise EvalRefused(f"{path}: trained_on {value!r}는 {TRAINED_ON} 중 하나여야 함")
+    calls = _calls(conn)
+    silver = [
+        {"call_uid": u, **{k: c["gold"][k] for k in (PURPOSE, "emergency", "complaint")}}
+        for u, c in calls.items()
+        if c["split"] == "silver"
+    ]
+    return {u for u, part in silver_split(silver).items() if part == "material"}
+
+
+def judge_skip(conn, versions: list[str], prompts_dir: Path = PROMPTS_DIR) -> set[str]:
+    """판정기 버전들이 학습한 통화의 합 — 판정기끼리 같은 모수로 비교하려고 모든 판정기 쪽에서 뺀다(비교 규칙)"""
+    return set().union(*(trained_uids(conn, v, prompts_dir) for v in versions))
+
+
+def judge_versions(conn) -> list[str]:
+    rows = conn.execute("SELECT DISTINCT prompt_version FROM ax_model_judgments")
+    return sorted((r[0] for r in rows), key=version_key)
+
+
 def evaluate_judge(
-    conn, split: str, versions: list[str] | None = None, gold_drop: set | None = None
+    conn,
+    split: str,
+    versions: list[str] | None = None,
+    gold_drop: set | None = None,
+    skip: set | None = None,
 ) -> dict:
-    """판정기 vs 골드(평가 설계 §2.6) — 판정기 버전별, 분할은 모델 vs 골드와 같다"""
+    """판정기 vs 골드(평가 설계 §2.6) — 판정기 버전별, 분할은 모델 vs 골드와 같다. skip = 판정기 학습 통화(dev에서만 뺀다)"""
     calls = _calls(conn)
     population = Counter(c["gold"][PURPOSE] for c in calls.values())
     gold = {i: c["gold"] for i, c in calls.items()}
     rows = _judgments(conn)
+    ids = _gold_ids(calls, split) - ((skip or set()) if split == "dev" else set())
     out = {}
     for v in versions or sorted({r["prompt_version"] for r in rows}, key=version_key):
         ok = _usable(rows, v, calls)
         pred = {c: r["labels"] for c, r in ok.items()}
         out[v] = {
             "model_actual": sorted({r["model_actual"] for r in rows if r["prompt_version"] == v}),
-            "judge_vs_gold": _score(_gold_ids(calls, split), pred, gold, calls, population),
+            "judge_vs_gold": _score(ids, pred, gold, calls, population),
         }
         if gold_drop is not None:
-            out[v]["judge_vs_gold_audited"] = _score(
-                _gold_ids(calls, split), pred, gold, calls, population, gold_drop
-            )
+            out[v]["judge_vs_gold_audited"] = _score(ids, pred, gold, calls, population, gold_drop)
     return out
 
 
@@ -213,9 +253,11 @@ def judge_version(conn) -> str | None:
 CORE = (PURPOSE, "urgency", "emergency")  # 핵심 엇갈림 — 앱 설계 §1 is_core
 
 
-def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> dict:
+def crosscheck(
+    conn, split: str, a: str, b: str, fewshot: set | None = None, skip: set | None = None
+) -> dict:
     """모델 2개 교차검증(평가 설계 §2.5) — 통화 단위로 9항목 중 하나라도 A ≠ B면 엇갈림(급함은 urgent 여부만 — A 오류도 같은 비교), 양쪽 ok·폴백 아닌 골드 통화만.
-    fewshot = A의 예시 call_uid — dev 집계에서 뺀다(§7).
+    fewshot = A의 예시 call_uid, skip = 판정기 학습 통화(judge_skip) — 둘 다 dev 집계에서 뺀다(§7, §2.5 비교 규칙).
     일치 오류 = 엇갈림 없는 통화 중 골드와 다른 것, 포착 = A가 틀린 통화 중 엇갈림이 붙은 것, 향상 배수 = 포착률 ÷ 엇갈림 비율.
     가중은 골드 목적 카테고리의 역확률(§2.2)"""
     calls = _calls(conn)
@@ -224,8 +266,8 @@ def crosscheck(conn, split: str, a: str, b: str, fewshot: set | None = None) -> 
     models_a = {r["model_actual"] for r in rows_a.values()}
     if models_a and models_a == {r["model_actual"] for r in rows_b.values()}:
         return {"a": a, "b": b, "skipped": "모델 A·B가 같음"}
-    skip = (fewshot or set()) if split == "dev" else set()
-    ids = sorted((_gold_ids(calls, split) & rows_a.keys() & rows_b.keys()) - skip)
+    drop = ((fewshot or set()) | (skip or set())) if split == "dev" else set()
+    ids = sorted((_gold_ids(calls, split) & rows_a.keys() & rows_b.keys()) - drop)
     cat = {c: calls[c]["gold"][PURPOSE] for c in ids}
     weights = inverse_weights(
         Counter(c["gold"][PURPOSE] for c in calls.values()), Counter(cat.values())

@@ -14,7 +14,8 @@ from pathlib import Path
 
 from backend import prompts
 from backend.classify import REASONING_MAX_TOKENS  # 추론 토큰도 max_tokens 안(앱 설계 §7.2)
-from evaluation.classification import _calls, _judgments, _usable, judge_version
+from backend.prompts import PROMPTS_DIR
+from evaluation.classification import _calls, _judgments, _usable, judge_version, trained_uids
 from evaluation.metrics import GOLD_AUDIT_SAMPLE
 from shared.call_labels import COUNTERPART_KO, FLAG_KO, PURPOSE_KO, differing_items
 from shared.llm import BudgetExceeded, Gateway, JsonlLog, load_config
@@ -45,10 +46,16 @@ SIDES = {"가", "나"}
 NEITHER = "둘 다 아님"
 
 
-def targets(conn, judge_version: str) -> list[dict]:
-    """test 판정 풀이 아닌 생성 통화 중 판정기 라벨이 골드와 다른 통화(급함은 urgent 여부만 — differing_items)"""
+def targets(conn, judge_version: str, prompts_dir: Path = PROMPTS_DIR) -> list[dict]:
+    """test 판정 풀이 아닌 생성 통화 중 판정기 라벨이 골드와 다른 통화(급함은 urgent 여부만 — differing_items).
+    판정기가 학습한 통화(trained_uids)는 뺀다 — 판정기와 골드가 거의 늘 같아 대상에서 조용히 빠지므로(Qwen 판정기 설계)"""
     calls = _calls(conn)
-    judged = _usable(_judgments(conn), judge_version, calls)
+    trained = trained_uids(conn, judge_version, prompts_dir)
+    judged = {
+        u: r
+        for u, r in _usable(_judgments(conn), judge_version, calls).items()
+        if u not in trained
+    }
     direction = dict(conn.execute("SELECT call_uid, direction FROM source.ax_calls"))
     out = []
     for uid in sorted(judged):
@@ -530,6 +537,8 @@ def main(argv=None) -> None:
         except (EOFError, KeyboardInterrupt):
             print("\n중단 — 다시 실행하면 이어서 한다")
         return
+    if skipped := len(trained_uids(conn, version)):
+        print(f"판정기 {version} 학습 통화 {skipped}통화는 대상에서 뺀다")
     gw = Gateway(load_config(), JsonlLog(LLM_LOG), "runtime")
     run = arbitrate_batch if args.batch else arbitrate
     r = run(gw, conn, args.out, version, limit=args.limit, effort=args.effort)

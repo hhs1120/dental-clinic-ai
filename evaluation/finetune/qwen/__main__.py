@@ -10,6 +10,7 @@ uv run --group finetune python -m evaluation.finetune.qwen predict <full|half|sp
 uv run --env-file .env python -m evaluation.finetune.qwen baselines [--run-style [N]]
   Haiku v2·Solar v2 → out/baseline.jsonl. 검증·dev는 app.sqlite(읽기만), 문체 dev는 --run-style일 때 API 호출(과금, N건만 가능)
 uv run python -m evaluation.finetune.qwen score  → out/report.md (있는 Qwen 예측 half·full과 기준선)
+uv run --group finetune python -m evaluation.finetune.qwen gateway-check [n]  (Qwen 판정기 확인 — app.sqlite 안 씀, 기본 30건)
 """
 
 import json
@@ -168,8 +169,14 @@ def main(argv: list[str]) -> None:
         _baselines(args)
     elif cmd == "score":
         _score()
+    elif cmd == "gateway-check":
+        from evaluation.finetune.qwen import gateway_check
+
+        sys.exit(gateway_check.main(*map(int, args)))
     else:
-        raise SystemExit("명령: data | lengths | train | status | predict | baselines | score")
+        raise SystemExit(
+            "명령: data | lengths | train | status | predict | baselines | score | gateway-check"
+        )
 
 
 if __name__ == "__main__":
