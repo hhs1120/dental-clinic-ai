@@ -429,7 +429,7 @@ const S = {
   prepDate:TODAY, prepChip:"all", prepType:"all", prepTodoOnly:false, prepView:"table", prepOpen:null, prepRegen:null, prepUpdated:"05:30",
   meetType:"all", chairSel:1, chairPick:null,
   callsTab:"list", callFilter:"all", callQ:"", callSel:null, done:{}, reverted:{}, pasteResult:null,
-  askTab:"chat", askInput:"", chat:null, searchQ:"스케일링", srcTypes:{doc:true,call:true,msg:true,chart:true}, sFrom:"", sTo:"", sChart:"", docSel:null, docType:"all",
+  askTab:"chat", askInput:"", chat:null, searchQ:"스케일링", srcTypes:{doc:true,call:true,msg:true,chart:true}, sFrom:"", sTo:"", sChart:"", docSel:null, docType:"notice",
   evalTab:"judge", jIdx:0, jAns:{}, jActive:0, jBuf:"", jSaved:false, jMemo:"", judged:[], bIdx:0, bVotes:[], bRevealed:null,
   emrChart:null, emrTab:"진료기록", emrQ:"", emrMoves:0, emrMode:"desk", emrPanel:"기본", emrDate:null, emrWeek:false,
   claimChip:"all", claimOpen:null, claimJudge:{},
@@ -1048,7 +1048,7 @@ function askSearch() {
       <span class="fg3" style="margin-left:12px">환자번호</span><input id="sChart" class="input" style="width:110px" value="${esc(S.sChart)}" placeholder="C-0xxxx">
     </div>
   </form>
-  <div class="card mt16"><div class="row"><h2 class="headline2">AI 요약</h2>${AI}</div><p class="mt8" style="margin-bottom:0">${toks.length ? `"${esc(q)}"에 관련된 매뉴얼 ${docs.length}건, 실제 사례 ${nCases}건을 찾았습니다. 요약 문장은 실제 앱에서 리랭커 상위 결과로 씁니다.` : "검색어를 넣으면 요약이 여기 나옵니다."}</p>
+  <div class="card mt16"><div class="row"><h2 class="headline2">AI 요약</h2>${AI}</div><p class="mt8" style="margin-bottom:0">${toks.length ? `${docs[0] ? `${esc(docs[0].d.title)} 문서가 이 내용의 절차를 정리합니다<sup class="brand">1</sup>.` : ""} 지난 통화·문자에서도 같은 내용을 문의한 기록이 있습니다<sup class="brand">${docs[0] ? 2 : 1}</sup>. <span class="caption1 fg3">(예시 — 실제 앱은 검색 결과가 말하는 바를 3~5문장으로 정리하고 문장 끝 번호는 아래 출처 칩. 검색어에 답하거나 결과를 세지 않음)</span>` : "검색어를 넣으면 요약이 여기 나옵니다."}</p>
     <div class="row mt8"><button class="btn btn-sm" data-act="chatWith" data-arg="${esc(q)}" ${q ? "" : "disabled"}>이걸로 질문하기</button></div></div>
   <div class="grid2 mt16">
     <section><h2 class="headline2" style="margin-bottom:8px">매뉴얼 결과 <span class="fg3 label2">${docs.length}</span></h2>
@@ -1067,12 +1067,15 @@ function mdRender(t) {
 }
 function askDocs() {
   const types = ["notice", "manual", "faq", "insurance_guide", "claim_standard", "education", "external"];
-  const groups = types.map(t => ({ t, list: t === "notice" ? latestNotices() : S.data.docs.filter(d => d.type === t) }));
-  const sel = S.docSel ? S.data.docs.find(d => d.id === S.docSel) : latestNotices()[0];
+  const listOf = t => t === "notice" ? latestNotices() : S.data.docs.filter(d => d.type === t);
+  const cur = types.includes(S.docType) ? S.docType : "notice";
+  const list = listOf(cur);
+  const sel = S.docSel ? S.data.docs.find(d => d.id === S.docSel) : list[0];
   const old = sel && sel.type === "notice" ? S.data.docs.filter(d => d.type === "notice" && d.title === sel.title && d.id !== sel.id) : [];
-  return `<div class="split" style="grid-template-columns:340px minmax(0,1fr)">
+  return `<div class="row" style="margin-bottom:16px;flex-wrap:wrap;gap:8px">${types.map(t => `<button class="fchip ${cur === t ? "on" : ""}" data-act="docType" data-arg="${t}">${DOC_TYPE[t]} <b>${listOf(t).length}</b></button>`).join("")}</div>
+  <div class="split" style="grid-template-columns:340px minmax(0,1fr)">
     <nav class="card doclist" style="padding:8px;max-height:720px;overflow:auto" aria-label="문서 목록">
-      ${groups.map(g => `<div class="dgroup">${DOC_TYPE[g.t]} ${g.list.length}${g.t === "notice" ? " · 최신 버전만" : ""}</div>${g.list.map(d => `<button class="${sel && sel.id === d.id ? "on" : ""}" data-act="docOpen" data-arg="${d.id}">${esc(d.title)}${d.type === "notice" ? `<span class="caption1 fg3 tnum"> · 시행 ${d.effective}</span>` : ""}</button>`).join("")}`).join("")}
+      <div class="dgroup">${DOC_TYPE[cur]} ${list.length}${cur === "notice" ? " · 최신 버전만 · 시행일 최근 순" : ""}</div>${list.map(d => `<button class="${sel && sel.id === d.id ? "on" : ""}" data-act="docOpen" data-arg="${d.id}">${esc(d.title)}${d.type === "notice" ? `<span class="caption1 fg3 tnum"> · 시행 ${d.effective}</span>` : ""}</button>`).join("")}
     </nav>
     <article class="card" style="padding:24px">
       ${sel ? `<div class="row" style="margin-bottom:12px"><span class="tag">${DOC_TYPE[sel.type]}</span><span class="tag">v${esc(sel.version)}</span>${sel.effective ? `<span class="tag t-brand">시행 ${sel.effective}</span>` : ""}<span class="spacer"></span><span class="caption1 fg3">읽기 전용 · doc:${sel.id}</span></div>
@@ -1617,7 +1620,8 @@ const A = {
   askQ: a => { S.askTab = "chat"; if (!S.chat) initChat(); ask(a); if (S.screen !== "ask") go("ask"); },
   searchWith: a => { S.searchQ = a; S.askTab = "search"; S.askInput = a; render(); },
   chatWith: a => { S.askTab = "chat"; ask(a); },
-  docOpen: a => { S.docSel = +a; S.askTab = "docs"; go("ask"); },
+  docOpen: a => { S.docSel = +a; const d = S.data.docs.find(x => x.id === +a); if (d) S.docType = d.type; S.askTab = "docs"; go("ask"); },
+  docType: a => { S.docType = a; S.docSel = null; render(); },
   evalTab: a => { S.evalTab = a; render(); },
   revertAuto: a => { S.reverted[a] = S.user; render(); },
   jPick: a => { const [i, l] = a.split("|"); if (S.jSaved) return; const it = judgeItems()[+i]; S.jAns[it.key] = l; S.jActive = Math.min(+i + 1, judgeItems().length - 1); S.jBuf = ""; render(); },
