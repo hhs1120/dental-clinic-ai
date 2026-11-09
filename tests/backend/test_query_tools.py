@@ -87,6 +87,25 @@ def clinic(tmp_path):
              NULL, NULL, NULL),
             (4, 4, 4, 'C-00004', '00', '2026-10', '2026-10-05', 'U0001', 35000, 'denied', 0,
              'C', '연 1회 초과', '2026-10-25');
+        UPDATE emr_procedures SET aliases = '["치석제거"]' WHERE code = 'U0001';
+        INSERT INTO emr_procedures (code, name, category, is_insured, fee_total, patient_share_rate,
+            duration_min, is_tooth_level, aliases) VALUES
+            ('U0010', '치주치료', 'perio', 'yes', 80000, 0.3, 30, 0, '["잇몸치료"]'),
+            ('U0021', '임플란트1차', 'implant', 'no', 1000000, 1.0, 60, 1, '["임플란트"]'),
+            ('U0022', '임플란트2차', 'implant', 'no', 300000, 1.0, 30, 1, '["임플란트"]');
+        INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,
+            performed_at, fee_total, insured_amount, patient_amount) VALUES
+            (101, 1, 1, 'U0001', '00', '2026-11-02 10:00:00', 50000, 35000, 15000),
+            (102, 1, 1, 'U0010', '00', '2026-11-05 10:00:00', 80000, 56000, 24000),
+            (103, 9, 6, 'U0001', '00', '2026-06-01 10:00:00', 50000, 35000, 15000),
+            (104, 10, 6, 'U0010', '00', '2026-06-20 10:00:00', 80000, 56000, 24000),
+            (105, 12, 7, 'U0010', '00', '2026-12-05 10:00:00', 80000, 56000, 24000);
+        INSERT INTO emr_chart_notes (id, treatment_id, dx_code, note) VALUES
+            (1, 101, 'K03', '전악 치석제거'),
+            (2, 102, 'K05', '스케일링 3일 뒤 재평가, 치주치료 연결'),
+            (3, 103, 'K03', '전악 치석제거'),
+            (4, 104, 'K05', '치주치료'),
+            (5, 105, 'K05', '치주치료 예정');
         """
     )
     s.commit()
@@ -404,3 +423,42 @@ def test_blocked_refuse_does_not_end_run(clinic):
     gw = Script(call(("refuse", {"reason": "없는값"})), answer("이어서"))
     out = Runner(spec, gw, RunStore(clinic), r, owner="t").start("q", "질문")
     assert out.result == "이어서" and len(gw.calls) == 2
+
+
+# ── query_charts (설계 2026-11-09 챗 "query_charts") ─────────────────────────
+
+
+def test_charts_gap_condition_finds_short_interval(clinic):
+    out = run(
+        clinic, "query_charts", procedure="잇몸치료", prev_procedure="스케일링", max_gap_days=4
+    )
+    assert [r["id"] for r in out["results"]] == ["chart:102"]  # 3일 뒤만, 19일 뒤는 빠짐
+    r = out["results"][0]
+    assert r["prev"] == {
+        "procedure": "스케일링",
+        "performed_at": "2026-11-02 10:00:00",
+        "gap_days": 3,
+    }
+    assert r["chart_no"] == "C-00001" and r["note"].startswith("스케일링 3일 뒤")
+    assert "patient" not in r and "name" not in r  # 차트 서술은 비식별
+
+
+def test_charts_min_gap(clinic):
+    out = run(
+        clinic, "query_charts", procedure="치주치료", prev_procedure="치석제거", min_gap_days=10
+    )
+    assert [r["id"] for r in out["results"]] == ["chart:104"]
+
+
+def test_charts_ambiguous_alias_returns_candidates(clinic):
+    out = run(clinic, "query_charts", procedure="임플란트")
+    assert out["results"] == [] and set(out["candidates"]) == {"임플란트1차", "임플란트2차"}
+
+
+def test_charts_unknown_procedure_is_empty(clinic):
+    assert run(clinic, "query_charts", procedure="교정")["count"] == 0
+
+
+def test_charts_future_treatments_hidden(clinic):
+    ids = [r["id"] for r in run(clinic, "query_charts", procedure="치주치료")["results"]]
+    assert ids == ["chart:102", "chart:104"]  # 2026-12-05는 오늘(12-01) 뒤

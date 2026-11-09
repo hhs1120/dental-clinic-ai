@@ -1,11 +1,12 @@
 """조회 도구 (앱 설계 §3 — 시그니처 고정, 평가 설계 §3.2 채점 기준). source.sqlite를 읽기만 한다.
 숫자는 코드가 낸다(기능 정의 §3 원칙 2). 요약 칸을 목록보다 앞에 두어 결과가 잘려도 건수가 남는다."""
 
+import json
 from collections import Counter
 from datetime import date, timedelta
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from backend.harness.tools import Tool
 from shared.clinic import Clinic
@@ -41,6 +42,18 @@ class ClaimsArgs(BaseModel):
     chart_no: str | None = None
     procedure_code: str | None = None
     status: Literal["pending", "submitted", "paid", "adjusted", "denied"] | None = None
+
+
+class ChartArgs(BaseModel):
+    procedure: str = Field(min_length=1)
+    prev_procedure: str | None = None
+    min_gap_days: int | None = Field(default=None, ge=0)
+    max_gap_days: int | None = Field(default=None, ge=0)
+    same_tooth: bool = False
+    date_from: date | None = None
+    date_to: date | None = None
+    chart_no: str | None = None
+    limit: int = Field(default=10, ge=1, le=20)
 
 
 class RefuseArgs(BaseModel):
@@ -228,6 +241,83 @@ def _claims(conn, args: dict) -> dict:
     }
 
 
+def _procedure_codes(conn, name: str) -> tuple[list[str], list[str]]:
+    """시술 이름·별칭 → (코드, 후보 이름). 이름이 맞으면 그 시술, 아니면 별칭이 걸린 시술 — 둘 이상이면 코드 없이 후보만
+    (별칭 오탐 방지, AI 실험 기록 §4·§5). 이름은 emr_procedures에서 읽어 상수를 박지 않는다(앱 설계 §8)"""
+    rows = _rows(conn, "SELECT code, name, aliases FROM source.emr_procedures")
+    exact = [r for r in rows if r["name"] == name]
+    hits = exact or [r for r in rows if name in json.loads(r["aliases"] or "[]")]
+    if len(hits) > 1:
+        return [], [r["name"] for r in hits]
+    return [r["code"] for r in hits], []
+
+
+def _charts(clinic: Clinic, conn, args: dict) -> dict:
+    """범위 조건 차트 조회 (설계 2026-11-09 챗 "query_charts") — 같은 환자 직전 앞 시술과의 날짜 차(일)"""
+    codes, candidates = _procedure_codes(conn, args["procedure"])
+    if candidates:
+        return {"count": 0, "results": [], "candidates": candidates}
+    prev_codes = []
+    if args["prev_procedure"]:
+        prev_codes, prev_cand = _procedure_codes(conn, args["prev_procedure"])
+        if prev_cand:
+            return {"count": 0, "results": [], "candidates": prev_cand}
+    if not codes or (args["prev_procedure"] and not prev_codes):
+        return {"count": 0, "results": []}
+    sql = [
+        "SELECT t.id, t.patient_id, t.tooth_no, t.performed_at, p.chart_no, pr.name AS procedure,"
+        " n.dx_code, n.note FROM source.emr_treatments t"
+        " JOIN source.emr_patients p ON p.id = t.patient_id"
+        " JOIN source.emr_procedures pr ON pr.code = t.procedure_code"
+        " JOIN source.emr_chart_notes n ON n.treatment_id = t.id"
+        f" WHERE t.procedure_code IN ({','.join('?' * len(codes))}) AND date(t.performed_at) <= ?"
+    ]
+    params = [*codes, clinic.today.isoformat()]
+    for clause, value in (
+        ("date(t.performed_at) >= ?", args["date_from"]),
+        ("date(t.performed_at) <= ?", args["date_to"]),
+        ("p.chart_no = ?", args["chart_no"]),
+    ):
+        if value:
+            sql.append(f"AND {clause}")
+            params.append(value)
+    rows = _rows(conn, " ".join(sql) + " ORDER BY t.performed_at DESC, t.id DESC", *params)
+    out = []
+    for r in rows:
+        item = {
+            "id": f"chart:{r['id']}",
+            "chart_no": r["chart_no"],
+            "performed_at": r["performed_at"],
+            "procedure": r["procedure"],
+            "tooth_no": r["tooth_no"],
+            "dx_code": r["dx_code"],
+            "note": r["note"],
+        }
+        if prev_codes:
+            prev = conn.execute(
+                "SELECT pr.name, t.performed_at,"
+                " CAST(julianday(date(?)) - julianday(date(t.performed_at)) AS INTEGER)"
+                " FROM source.emr_treatments t JOIN source.emr_procedures pr"
+                " ON pr.code = t.procedure_code"
+                f" WHERE t.patient_id = ? AND t.procedure_code IN ({','.join('?' * len(prev_codes))})"
+                " AND t.performed_at < ?"
+                + (" AND t.tooth_no = ?" if args["same_tooth"] else "")
+                + " ORDER BY t.performed_at DESC LIMIT 1",
+                [r["performed_at"], r["patient_id"], *prev_codes, r["performed_at"]]
+                + ([r["tooth_no"]] if args["same_tooth"] else []),
+            ).fetchone()
+            if prev is None:
+                continue
+            gap = prev[2]
+            if (args["min_gap_days"] is not None and gap < args["min_gap_days"]) or (
+                args["max_gap_days"] is not None and gap > args["max_gap_days"]
+            ):
+                continue
+            item["prev"] = {"procedure": prev[0], "performed_at": prev[1], "gap_days": gap}
+        out.append(item)
+    return {"count": len(out), "results": out[: args["limit"]]}
+
+
 def query_tools(clinic: Clinic) -> list[Tool]:
     today = clinic.today.isoformat()
     return [
@@ -251,6 +341,14 @@ def query_tools(clinic: Clinic) -> list[Tool]:
             " 확정 월은 결과와 사유가 함께 나온다.",
             ClaimsArgs,
             lambda ctx, args: _claims(ctx.store.conn, args),
+        ),
+        Tool(
+            "query_charts",
+            "기간·간격 조건이 있는 차트 기록 조회(예: 스케일링하고 닷새도 안 돼서 치주치료). 시술 이름·별칭,"
+            " 바로 앞 시술과 그 간격(일), 같은 치아, 진료 기간, 차트 번호로 거른다. 결과 id(chart:…)는 인용할 수 있다."
+            f" 날짜는 YYYY-MM-DD, 오늘은 {today}. 환자 이름은 나오지 않는다.",
+            ChartArgs,
+            lambda ctx, args: _charts(clinic, ctx.store.conn, args),
         ),
         Tool(
             "refuse",
