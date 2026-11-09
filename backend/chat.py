@@ -115,6 +115,7 @@ def spec(names: tuple) -> AgentSpec:
         max_tool_calls=CHAT_MAX_TOOL_CALLS
         + 2,  # 답변 두 번 몫 — 다른 도구 상한은 훅 chat.call_limit
         max_usd=CHAT_MAX_USD,
+        end_tools=(ANSWER, REFUSE),  # 글로 끝나면 인용·숫자 검사를 못 하므로 한 번 되돌린다
     )
 
 

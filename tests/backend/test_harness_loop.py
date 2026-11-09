@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from backend.harness.hooks import Rule
-from backend.harness.loop import AgentSpec, Runner, external
+from backend.harness.loop import AgentSpec, Runner, external, nudge_text
 from backend.harness.store import RunLocked, RunStore
 from backend.harness.tools import Tool, ToolRegistry
 from shared.llm import BudgetExceeded, LLMResult
@@ -503,3 +503,40 @@ def test_lock_lost_between_steps_stops_before_paid_call(conn, clock):
             "c-1", "녹취록"
         )
     assert len(gw.calls) == 1
+
+
+# ── 끝내는 도구 되돌리기 (AgentSpec.end_tools, 설계 2026-11-09 챗) ─────────────
+
+ENDS = replace(SPEC, end_tools=("lookup",))
+
+
+def test_text_ending_sent_back_once_with_end_tools(conn, clock):
+    gw = Script(answer("글"), call(("lookup", {"chart_no": "C-1"})), answer("또 글"), answer("x"))
+    out = runner(conn, clock, gw, spec=ENDS).start("c-1", "녹취록")
+    assert out.status == "done" and out.result == "또 글"  # 두 번째 글은 그대로 끝
+    assert gw.calls[1]["messages"][-1] == {"role": "user", "content": nudge_text(("lookup",))}
+    assert len(gw.calls) == 3
+
+
+def test_without_end_tools_text_ends_at_once(conn, clock):
+    gw = Script(answer("글"))
+    assert runner(conn, clock, gw).start("c-1", "녹취록").result == "글" and len(gw.calls) == 1
+
+
+def test_resume_after_text_before_nudge_sends_nudge(conn, clock):
+    """글 응답을 저장하고 되돌리기 전에 죽은 실행 — 이어 갈 때 되돌림부터"""
+    store = RunStore(conn, clock)
+    with conn:
+        run_id = store.create_run("후속", "c-1", "v1", "old")
+        store.add_step(run_id, "input", result="녹취록")
+        store.add_step(
+            run_id,
+            "model",
+            response={"text": "글", "tool_calls": [], "content": [{"type": "text", "text": "글"}]},
+        )
+    clock.advance(RunStore.lock_ttl + 1)
+    gw = Script(answer("끝"))
+    out = runner(conn, clock, gw, spec=ENDS).resume(run_id)
+    assert out.status == "done" and gw.calls[0]["messages"][-1]["content"] == nudge_text(
+        ("lookup",)
+    )

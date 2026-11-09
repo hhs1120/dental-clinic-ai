@@ -226,3 +226,18 @@ def test_baseline_one_search_one_answer(conn):
         (chat.BASELINE_TASK,),
     ).fetchone()[0]
     assert sent == 1 and conn.execute("SELECT COUNT(*) FROM ax_agent_runs").fetchone()[0] == 0
+
+
+def test_text_ending_is_sent_back_once_then_answers(conn):
+    """모델이 answer 없이 글로 끝내면 한 번 되돌려 도구로 내게 한다(dev data-03·05)"""
+    out = ask(conn, [SEARCH, ("text", "2시간 무료입니다"), ANSWER()])
+    assert out["status"] == "answered"
+    nudges = conn.execute(
+        "SELECT COUNT(*) FROM ax_agent_steps WHERE kind = 'input' AND result LIKE '%answer%'"
+    ).fetchone()[0]
+    assert nudges == 1
+
+
+def test_text_ending_twice_is_failed(conn):
+    out = ask(conn, [SEARCH, ("text", "2시간"), ("text", "2시간")])
+    assert out["status"] == "failed" and out["answer_text"] == chat.FAILED_TEXT
