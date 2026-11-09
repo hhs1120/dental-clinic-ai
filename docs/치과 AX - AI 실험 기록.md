@@ -388,11 +388,19 @@ tags:
 
   - Solar 오답(480건, 항목)은 `wants_appt` 36, `has_todo` 21, 목적 20, 상대 17, `appt_confirmed` 16 — `wants_appt`·목적·상대는 Haiku의 약 2배. 둘이 같이 틀려 놓친 오류는 `has_todo` 12, `wants_appt` 10, 상대 5, 목적 4 — 라벨 기준의 경계 항목에 몰린다(`has_todo`는 골드도 일관되지 않다, 8번)
   - Qwen은 생성기 라벨 기준을 직접 배워 정답에 가깝기 때문에, Haiku와 엇갈리면 거의 Haiku 오류다. 아래 첫 한계가 판정기 자리에서 더 크게 작용한다
+- **결정 — 판정기 자리**: Qwen을 판정기(`judge v3`)에 둔다. 앱 연결·학습 통화 빼기·비교 규칙은 `docs/superpowers/specs/2026-11-09-qwen-judge-design.md`
+- **앱 경로 확인**: 게이트웨이 로컬 갈래로 1,500통화를 판정했다(ok 1,499, failed 1 — `c-0047` 상대 `student`, 위 파싱 실패와 같은 통화, 다시 돌려도 같다). 건당 약 2.3초. 확인 명령(`gateway-check`) 30건은 실험 예측과 출력이 글자까지 같았다. 분류기 v2 고정, 판정기 학습 통화(재료 구간 945통화)를 양쪽에서 뺀 같은 모수에서 `evaluation/classification.py`로 다시 낸 수치는 위 오프라인 표와 같다
+
+| 판정기 | 판정기 목적 vs 골드 | 자동 종결(검증 405) |
+|---|---|---|
+| Solar v2 | 460/480 | 81통화 닫힘·오류 0 |
+| Qwen v3 | 474/479 | 88통화 닫힘·오류 0 |
 - **한계**
   - 검증 셋은 학습 재료와 같은 생성기에서 나온 silver 라벨이라, 그 라벨 기준을 학습한 Qwen과 프롬프트만 본 Haiku는 같은 조건이 아니다(반대로 Haiku v2 프롬프트는 silver 오답을 보고 고쳤다). 그래서 dev 골드 결과를 함께 근거로 삼는다. 실제 병원 통화에서의 성능은 확인하지 않았다
   - dev·문체 dev는 75건씩이고 문체 3벌은 같은 통화의 변형이라 독립이 아니다. 희귀 목적 1건이 가중값을 크게 움직인다
   - 급함 normal/low는 골드가 추첨(7번)이라 3값 차이에는 잡음이 섞인다
   - heldout은 재료 구간에서 뗀 것이라 학습 재료와 같은 분포다. 시드 하나로 한 번씩만 학습했다
+  - 판정기 자리: 학습한 재료 구간 945통화의 v3 판정은 사실상 외운 silver 라벨인데 앱(`ax_model_judgments`·통화 화면·판정 큐)에 실린다. 앱은 정답을 모르니 지금은 문제가 아니지만, 앱이 생성 통화의 사람 판정으로 판정기를 재게 되면 그 통화는 빼야 한다(평가 쪽은 `trained_on`으로 이미 뺀다)
 - **운영 메모**: mlx-lm 0.32.2 `lora.run`은 넘긴 학습 콜백을 `get_reporting_callbacks` 결과로 덮어써서, 로그용으로 그 함수를 바꿔 끼웠다(`train.py`). 체크포인트에서 이어 돌면 가중치만 이어지고 옵티마이저 상태·데이터 순서는 새로 시작한다 — 시험에서 이어 돈 직후 손실이 잠깐 올랐다가 회복했다. 본 학습은 둘 다 끊김 없이 한 번에 끝났다
-- **위치**: `evaluation/finetune/qwen/` — `data.py`(셋), `train.py`·`lora.yaml`(학습), `infer.py`(예측), `baselines.py`(기준선), `score.py`(채점), 결과 `out/`(`report.md`, `pred_*.jsonl`, `baseline.jsonl`, `train_*.log`, half 끝 어댑터 결과 `report_half_final.md`·`pred_half_final.jsonl`, 학습률 시험 `lr_test/`). 어댑터·체크포인트는 커밋하지 않는다
+- **위치**: `evaluation/finetune/qwen/` — `data.py`(셋), `train.py`·`lora.yaml`(학습), `infer.py`(예측), `baselines.py`(기준선), `score.py`(채점), `gateway_check.py`(앱 경로 확인 — `gateway-check`), 결과 `out/`(`report.md`, `pred_*.jsonl`, `baseline.jsonl`, `train_*.log`, half 끝 어댑터 결과 `report_half_final.md`·`pred_half_final.jsonl`, 학습률 시험 `lr_test/`). 어댑터·체크포인트는 커밋하지 않는다
 - **비용**: 기준선 문체 dev 호출 $0.373(Haiku $0.096, Solar $0.277). 학습·추론은 로컬

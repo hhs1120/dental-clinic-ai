@@ -133,7 +133,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
 
-**판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채운다. 저장 뒤 두 모델 라벨이 보인다
+**판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채우고, 활성 쌍의 엇갈림을 다시 계산하면 대상이 아니게 된 pending 건을 지운다(`backend/judge_queue.py` `prune` — skipped·done·사람 판정은 그대로). 저장 뒤 두 모델 라벨이 보인다
 **dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다(최종 비교의 예외는 [[치과 AX - 평가 설계]] §2.4)
 **블라인드 큐**: [[치과 AX - 평가 설계]] §2.4.
 
@@ -147,7 +147,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | Chroma로 옮길 때 | 조건: 청크가 수십만 이상으로 늘어 전수 계산이 느려질 때. 벡터는 `VectorStore`(`upsert(ids, vectors)`·`query(vector, where, k)`) 뒤에만 있어 청킹·임베딩·`ax_chunks`·FTS5·리랭커는 그대로 — 구현 하나 추가 + 필터용 메타데이터 복사·다중 조건 필터는 Chroma `where`(`$and`)로 번역("SQL 조인 하나" 이점은 사라짐) + `make index` 재실행(임베딩은 다시 계산하거나 `ax_chunk_vectors`에서 복사) |
 | FTS | SQLite FTS5 — 토크나이저·질의 방식은 §3 |
 | 리랭커·임베딩 | Voyage — 모델은 `backend/rag_search.py` `DEFAULT_EMBEDDING`·`DEFAULT_RERANKER`, `haiku`는 비교용 조건(`backend/eval_hooks.py`). 근거는 [[치과 AX - AI 실험 기록]]. 리랭커가 실패하면 합친 순서로 답하고 로그를 남긴다(평가는 실패 횟수를 알린다). 벡터가 없는 청크가 있으면 검색기를 만들지 않는다(`MissingVectors`) |
-| 모델 (확정) | 프로바이더 **Anthropic**·**Upstage**(LLM). ① 분류기 라벨·요약·할 일 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) `solar-mini4`(분류기와 다른 계열 — 별칭은 `config/llm.yaml`), 쌍 비교 판정기는 `config/llm.yaml` `blind_judge`, 골드 점검 중재는 `gold_audit`(평가 설계 §2.3 — `evaluation/`에서만), 처리 정답 라벨은 `action_label`(평가 설계 §5 — `evaluation/`에서만), 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
+| 모델 (확정) | 프로바이더 **Anthropic**·**Upstage**·로컬 **MLX**(LLM). ① 분류기 라벨·요약·할 일 경량 `claude-haiku-5-5` → 최종 vN-final `claude-sonnet-5-5`, 판정기(모델 B) 파인튜닝한 Qwen3.5-2B 로컬(`judge v3`, 분류기와 다른 계열 — 옛 v1·v2는 `solar-mini4`, 별칭은 `config/llm.yaml`, 근거는 `docs/superpowers/specs/2026-11-09-qwen-judge-design.md`), 쌍 비교 판정기는 `config/llm.yaml` `blind_judge`, 골드 점검 중재는 `gold_audit`(평가 설계 §2.3 — `evaluation/`에서만), 처리 정답 라벨은 `action_label`(평가 설계 §5 — `evaluation/`에서만), 그 밖의 에이전트·③ 챗·④ 제안·⑤-4 초안·⑦ 브리핑·⑨ 문자 `claude-sonnet-5-5`, 생성기(통화 녹취록·문서·차트 서술) `claude-sonnet-5-5` |
 | LLM | 게이트웨이 모듈 1개 `shared/llm.py` — §7.1 |
 | 프롬프트 | `prompts/` — §7.2 |
 | 테스트 fixture | **`make fixture`**: fake 게이트웨이로 생성한 데이터로 판정 풀 전체와 판정 풀 밖 일부 통화를 가짜 프롬프트 버전 v1·v2 두 벌로 분류하고 판정기 판정까지 적재(판정 큐에 엇갈림·표본이 생기고 블라인드 큐가 돌게) + 해시 기반 결정적 fake 임베딩으로 벡터 테이블까지 → `tests/fixtures/` 커밋. 테스트는 복사본 사용. CI 키 없이 판정 큐·검색이 동작 |
@@ -157,11 +157,11 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ### 7.1 LLM (원본은 여기)
 
-- **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b단계의 API 채우기도 경유). 프로바이더마다 공식 SDK를 직접 쓴다 — Anthropic, Upstage(OpenAI 호환 API라 openai SDK). 모델의 프로바이더는 `config/llm.yaml` 모델 항목의 `provider`. 두 곳뿐이라 LiteLLM 같은 변환 계층을 두지 않는다
+- **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b단계의 API 채우기도 경유). 프로바이더마다 공식 SDK를 직접 쓴다 — Anthropic, Upstage(OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜닝 판정기 — `mlx-lm`, `finetune` 그룹이라 `make judge`·`make dev`가 `uv run --group finetune`으로 띄운다. 그룹 없이 띄우면 판정만 실패로 남는다). 모델의 프로바이더는 `config/llm.yaml` 모델 항목의 `provider`. 셋뿐이라 LiteLLM 같은 변환 계층을 두지 않는다
 - **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 일시 오류(재시도 소진)·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch 제출은 보지 않는다 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
-- **구조화 출력**: JSON 스키마(Anthropic `output_config.format`, Upstage `response_format` `json_schema` strict)
+- **구조화 출력**: JSON 스키마(Anthropic `output_config.format`, Upstage `response_format` `json_schema` strict). 로컬 MLX는 구조화 출력이 없어 출력의 첫 JSON 객체를 읽고, 판정기는 라벨로 맞는 객체를 다시 찾는다(`backend/classify.py` `first_labels`)
 - **기록**: 호출 1건 = 기록 1행 — 생성기와 골드가 든 `evaluation/` 호출(평가 설계 §2.3·§2.7)은 jsonl, 앱은 `ax_llm_calls`
-- **Batch**(생성기 API 채우기·① 일괄 분류): Anthropic 모델만(Upstage는 일반 호출). 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다
+- **Batch**(생성기 API 채우기·① 일괄 분류): Anthropic 모델만(Upstage·로컬 MLX는 일반 호출). 별칭의 첫 모델만 쓰고 서버 측 거절 폴백을 쓰지 않으며(Batch에서 거부) Batch 단가(`config/llm.yaml` 단가 × `shared/llm.py` `BATCH_PRICE_SHARE`)로 비용을 센다 — 거절 건은 생성기 들여오기에서 실패로 남아 다음 시도로 다시 나온다
 - **`FakeGateway`**: 같은 인터페이스로 입력 해시에서 결정적 응답(스키마가 있으면 스키마에 맞는 JSON) — 테스트·CI·fixture용
 - **도구 호출**: `complete(tools=…)`는 `tool_use` 종료도 성공으로 받아 호출과 블록을 돌려준다. 도구를 주지 않은 호출의 `tool_use`는 실패다. 루프는 §3b
 
@@ -169,7 +169,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `followup`(후속 에이전트), `call_actions`(처리 정답 라벨 — `evaluation/`에서만), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
-  - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge·gold_audit·call_actions만 읽는다
+  - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge·gold_audit·call_actions만 읽는다. judge 버전 파일 머리말의 `model`은 그 버전을 낸 모델이다 — 지금 `judge` 별칭의 첫 모델과 다르면 그 버전은 다시 판정하지 않는다(`backend/classify.py` `judge_model_ok`, 옛 기록을 다른 모델로 덮지 않게)
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 자동 개선은 새 버전 파일을 추가한다. 저장 결과가 없는 task는 바로 전환하고, classify는 `pending_prompt_version`으로 올린다
   - **classify 전환**: 사람이 `POST /jobs/classify-batch`로 대기 버전을 전체 통화에 돌린다(지금은 `make classify`와 `ax_settings` 직접 설정 — 작업 API는 [[치과 AX - 기능 정의]] §9). 그동안 화면·큐·야간은 이전 활성 버전을 쓴다. 전부 `ok`가 되면 같은 트랜잭션에서 활성 버전을 바꾸고 엇갈림을 다시 계산한다. `failed`가 남으면 전환하지 않는다
   - **전환 뒤 상태**: 자동 종결은 `make autoclose`가 새 활성 버전 쌍(분류·판정기)으로 다시 계산한다(그 전에는 옛 쌍의 종결을 종결로 보지 않는다) — 풀기와 사람 되돌림 규칙은 §3b `ax_auto_actions`. 할 일 체크(`ax_todo_checks`)와 처리안(`ax_call_followups`)은 분류 행 단위라 버전을 바꾸면 이어지지 않는다(새 분류 행에 처리안을 다시 낸다)
