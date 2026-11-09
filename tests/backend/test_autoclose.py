@@ -1,0 +1,314 @@
+"""자동 종결 (기능 정의 §4 ①·§3 원칙 1, 앱 설계 §3b) — 조건 함수·실행·풀기."""
+
+from backend.autoclose import autoclose_reason
+
+CLEAN = {
+    "primary_purpose": "confirm",
+    "counterpart": "patient",
+    "urgency": "normal",
+    "emergency": 0,
+    "complaint": 0,
+    "price_inquiry": 0,
+    "wants_appt": 0,
+    "appt_confirmed": 0,
+    "has_todo": 0,
+}
+
+
+def _r(ok=True, fallback=False, todo=(), **over):
+    return {"labels": CLEAN | over, "ok": ok, "fallback": fallback, "todo": list(todo)}
+
+
+def test_clean_pair_closes():
+    assert autoclose_reason(_r(), _r())
+
+
+def test_todo_blocks():
+    assert autoclose_reason(_r(has_todo=1), _r()) is None
+    assert autoclose_reason(_r(), _r(has_todo=1)) is None
+
+
+def test_emergency_complaint_urgent_block():
+    for over in ({"emergency": 1}, {"complaint": 1}, {"urgency": "urgent"}):
+        assert autoclose_reason(_r(**over), _r(**over)) is None
+        assert autoclose_reason(_r(), _r(**over)) is None
+
+
+def test_disagreement_blocks():
+    assert autoclose_reason(_r(primary_purpose="book"), _r()) is None
+    assert autoclose_reason(
+        _r(urgency="low"), _r()
+    )  # 급함은 urgent 여부만 — normal↔low는 엇갈림 아님
+
+
+def test_missing_failed_fallback_block():
+    assert autoclose_reason(_r(), None) is None
+    assert autoclose_reason(None, _r()) is None
+    assert autoclose_reason(_r(ok=False), _r()) is None
+
+
+def test_todo_list_blocks():
+    """두 모델 모두 has_todo 0이어도 분류기 할 일 목록이 있으면 엇갈림(앱의 todo_mismatch)이라 닫지 않는다"""
+    todo = [{"kind": "internal", "text": "원장님께 여쭙기", "who": "", "after": -1}]
+    assert autoclose_reason(_r(todo=todo), _r()) is None
+
+
+def test_fallback_blocks():
+    assert autoclose_reason(_r(), _r(fallback=True)) is None
+    assert autoclose_reason(_r(fallback=True), _r()) is None
+
+
+# ── 실행·풀기 (make autoclose, 새 통화, 사람 판정) ─────────────────────────────
+
+import json  # noqa: E402
+
+import pytest  # noqa: E402
+
+from backend import autoclose, calls, db, judge_queue  # noqa: E402
+from backend.harness.auto import revert_auto_action  # noqa: E402
+from backend.harness.store import SqliteLlmLog  # noqa: E402
+from shared.llm import FakeGateway  # noqa: E402
+from tests.backend.call_db import classify_row, judge_row, make_call_db  # noqa: E402
+
+
+@pytest.fixture
+def conn(tmp_path):
+    """c-0001·c-0003·c-0004(앱 통화)에 깨끗한 분류·판정 — c-0004만 분류가 급함이라 조건을 못 넘는다.
+    c-0002는 판정 풀이라 앱 대상이 아니다"""
+    c = make_call_db(tmp_path)
+    c.execute("DELETE FROM ax_call_classifications")
+    for uid in ("c-0001", "c-0002", "c-0003"):
+        classify_row(c, uid, labels=CLEAN, todo=[])
+        judge_row(c, uid, CLEAN)
+    classify_row(c, "c-0004", labels=CLEAN | {"urgency": "urgent"}, todo=[])
+    judge_row(c, "c-0004", CLEAN)
+    return c
+
+
+def _closed(conn) -> set:
+    return {
+        r[0]
+        for r in conn.execute(
+            "SELECT target FROM ax_auto_actions WHERE kind = ? AND reverted_at IS NULL",
+            (autoclose.KIND,),
+        )
+    }
+
+
+def _blocks(conn) -> int:
+    return conn.execute("SELECT COALESCE(SUM(blocked), 0) FROM ax_rule_counts").fetchone()[0]
+
+
+def test_run_policy_off_does_nothing(conn):
+    assert autoclose.run(conn) == {"off": True}
+    assert _closed(conn) == set() and _blocks(conn) == 0
+
+
+def test_run_closes_clean_calls(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    r = autoclose.run(conn)
+    assert _closed(conn) == {"c-0001", "c-0003"}  # 판정 풀 c-0002·급함 c-0004 제외
+    assert r["closed"] == 2
+    row = conn.execute("SELECT reason FROM ax_auto_actions WHERE target = 'c-0001'").fetchone()
+    assert row["reason"] == autoclose.REASON
+
+
+def test_rerun_is_idempotent(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    r = autoclose.run(conn)
+    assert r["closed"] == 0 and _closed(conn) == {"c-0001", "c-0003"}
+
+
+def test_system_unclose_when_condition_breaks(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    conn.execute(
+        "UPDATE ax_call_classifications SET labels = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(CLEAN | {"has_todo": 1}),),
+    )
+    assert autoclose.run(conn)["opened"] == 1
+    assert "c-0001" not in _closed(conn)
+    assert (
+        conn.execute("SELECT COUNT(*) FROM ax_auto_actions WHERE target = 'c-0001'").fetchone()[0]
+        == 0
+    )
+    conn.execute(
+        "UPDATE ax_call_classifications SET labels = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(CLEAN),),
+    )
+    assert autoclose.run(conn)["closed"] == 1  # 시스템이 푼 통화는 조건을 다시 넘으면 다시 닫힌다
+
+
+def test_human_revert_sticks(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    aid = conn.execute("SELECT id FROM ax_auto_actions WHERE target = 'c-0001'").fetchone()[0]
+    assert revert_auto_action(conn, autoclose.KINDS, aid, "데스크")
+    autoclose.run(conn)
+    row = conn.execute(
+        "SELECT reverted_at FROM ax_auto_actions WHERE target = 'c-0001'"
+    ).fetchone()
+    assert row["reverted_at"] and "c-0001" not in _closed(conn)
+
+
+def test_todo_list_call_not_closed(conn):
+    conn.execute(
+        "UPDATE ax_call_classifications SET todo = ? WHERE call_uid = 'c-0001'",
+        (json.dumps([{"kind": "contact", "text": "회신", "who": "", "after": -1}]),),
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn)
+
+
+def test_fallback_pair_not_closed(conn):
+    conn.execute(
+        "UPDATE ax_llm_calls SET fallback_used = 1 WHERE id = (SELECT llm_call_id FROM"
+        " ax_model_judgments WHERE call_uid = 'c-0001')"
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn)
+
+
+def test_classify_one_closes_after_both(conn):
+    """판정기 버전이 없으면(판정 전) 닫지 않고, 판정이 들어오면 그때 계산한다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    gw = FakeGateway(SqliteLlmLog(conn), scope="runtime")
+    db.set_setting(conn, "prompt_versions", {})
+    calls.classify_one(conn, gw, "c-0003")
+    assert "c-0003" not in _closed(conn)
+    assert autoclose.refresh_call(conn, "c-0003") == "kept"
+
+
+def test_refresh_call_closes_and_opens(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    assert autoclose.refresh_call(conn, "c-0001") == "closed"
+    assert autoclose.refresh_call(conn, "c-0001") == "kept"
+    autoclose.set_policy(conn, autoclose.KIND, False)
+    assert autoclose.refresh_call(conn, "c-0003") == "off"
+
+
+def test_human_judgment_unclose(conn):
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    conn.execute("INSERT INTO ax_judge_state VALUES ('c-0001', 'pending', '2026-11-05 09:00:00')")
+    conn.commit()
+    judge_queue.save(
+        conn, "c-0001", {"has_todo": True}, None, part="데스크", at="2026-11-05 10:00:00"
+    )
+    row = conn.execute(
+        "SELECT reverted_by FROM ax_auto_actions WHERE target = 'c-0001'"
+    ).fetchone()
+    assert row["reverted_by"] == "데스크"
+
+
+# ── 리뷰 반영: 요약 폴백, 먼저 들어온 사람 판정, 판정 예외, 새 통화 경로 ─────────────
+
+from dataclasses import replace  # noqa: E402
+from datetime import date, datetime  # noqa: E402
+
+from shared.llm import BudgetExceeded  # noqa: E402
+
+CLEAN_B = {k: (bool(v) if isinstance(v, int) else v) for k, v in CLEAN.items()}
+
+
+class Clean(FakeGateway):
+    """분류·판정 라벨은 깨끗하게, 요약은 할 일 없이 — raise_judge면 판정에서 하루 상한 예외"""
+
+    def __init__(self, conn, raise_judge=False, labels=None, todo=()):
+        super().__init__(SqliteLlmLog(conn), scope="runtime")
+        self.raise_judge, self.labels, self.todo = raise_judge, labels or CLEAN_B, list(todo)
+
+    def complete(self, alias, **kw):
+        if alias == "judge" and self.raise_judge:
+            raise BudgetExceeded("하루 상한")
+        r = super().complete(alias, **kw)
+        if alias in ("classify", "judge"):
+            return replace(r, data=dict(self.labels))
+        if alias == "summarize":
+            return replace(r, data={"summary": "요약", "todo": self.todo})
+        return r
+
+
+def test_summary_fallback_blocks(conn):
+    """요약 호출만 폴백해도 앱 엇갈림 규칙처럼 닫지 않는다"""
+    conn.execute(  # 라벨 호출과 다른 요약 호출 행 — fixture는 둘이 같은 행을 가리킨다
+        "INSERT INTO ax_llm_calls (task, model_alias, model_actual, ok, fallback_used, created_at)"
+        " VALUES ('summarize', 'summarize', 'sonnet', 1, 1, '2026-11-05 09:00:00')"
+    )
+    conn.execute(
+        "UPDATE ax_call_classifications SET summary_llm_call_id = (SELECT max(id) FROM ax_llm_calls)"
+        " WHERE call_uid = 'c-0001'"
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn) and "c-0003" in _closed(conn)
+
+
+def test_prior_human_judgment_blocks(conn):
+    """종결 전에 사람이 할 일 있음으로 판정한 통화는 닫지 않는다"""
+    conn.execute(
+        "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at)"
+        " VALUES ('c-0001', ?, '데스크', '2026-11-05 10:00:00')",
+        (json.dumps({"has_todo": True}),),
+    )
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    assert "c-0001" not in _closed(conn) and "c-0003" in _closed(conn)
+
+
+def test_judgment_after_close_without_save_unclose(conn):
+    """판정 행이 save 밖에서 들어와도 다음 계산에서 사람 되돌림으로 푼다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    conn.execute(
+        "INSERT INTO ax_judgments (call_uid, labels, judged_by, judged_at)"
+        " VALUES ('c-0001', ?, '원장', '2026-11-05 10:00:00')",
+        (json.dumps({"urgency": "urgent"}),),
+    )
+    autoclose.run(conn)
+    row = conn.execute(
+        "SELECT reverted_by FROM ax_auto_actions WHERE target = 'c-0001'"
+    ).fetchone()
+    assert row["reverted_by"] == "원장"
+
+
+def test_classify_one_judge_exception_still_reopens(conn):
+    """다시 분류로 할 일이 생겼는데 판정이 예외로 끝나도 옛 종결은 풀린다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    autoclose.run(conn)
+    gw = Clean(
+        conn,
+        raise_judge=True,
+        labels=CLEAN_B | {"has_todo": True},
+        todo=[{"kind": "contact", "text": "회신", "who": "", "after": -1}],
+    )
+    with pytest.raises(BudgetExceeded):
+        calls.classify_one(conn, gw, "c-0001")
+    assert "c-0001" not in _closed(conn)
+
+
+def test_classify_one_closes_after_judgment(conn):
+    """판정까지 들어오면 classify_one 흐름에서 바로 닫힌다"""
+    conn.execute("DELETE FROM ax_model_judgments WHERE call_uid = 'c-0003'")
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    calls.classify_one(conn, Clean(conn), "c-0003")
+    assert "c-0003" in _closed(conn)
+
+
+def test_pasted_call_closes(conn):
+    """새로 추가한 통화도 같은 조건으로 닫힌다"""
+    autoclose.set_policy(conn, autoclose.KIND, True)
+    uid = calls.add_call(
+        conn,
+        Clean(conn),
+        direction="inbound",
+        transcript="직원: 네\n환자: 그날 갈게요",
+        phone=None,
+        part="데스크",
+        now=datetime(2026, 11, 5, 14, 30),
+        today=date(2026, 12, 1),
+    )
+    assert uid in _closed(conn)

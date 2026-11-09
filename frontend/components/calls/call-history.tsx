@@ -171,6 +171,7 @@ export function CallHistory({
                   <Badge variant="danger">급함</Badge>
                 )}
                 {c.disagree && <Badge variant="warn">AI 엇갈림</Badge>}
+                {c.closed && <Badge variant="muted">자동 종결</Badge>}
                 {c.status !== "ok" && <Badge variant="danger">분류 없음</Badge>}
                 {c.todo_total > 0 &&
                   (c.todo_left > 0 ? (

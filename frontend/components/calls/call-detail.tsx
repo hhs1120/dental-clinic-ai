@@ -56,6 +56,7 @@ export function CallDetail({
   onClose,
   onCheck,
   onReclassify,
+  onRevertClose,
   busy,
 }: {
   detail: Detail;
@@ -65,6 +66,7 @@ export function CallDetail({
   onClose: () => void;
   onCheck: (item: TodoItem, done: boolean) => void;
   onReclassify: () => void;
+  onRevertClose: (id: number) => void;
   busy: boolean;
 }) {
   const { call, classification: k, judge, disagree } = detail;
@@ -102,6 +104,56 @@ export function CallDetail({
         {busy ? "분류하는 중…" : "다시 분류"}
       </Button>
     </div>
+  );
+  // 자동 종결된 통화 — 이유와 함께 보이고 되돌리면 오늘 할 일로 돌아간다(기능 정의 §4 ①)
+  const closed = detail.autoclose && (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+      <Badge variant="muted">자동 종결</Badge>
+      <span>{detail.autoclose.reason}</span>
+      <span className="text-xs text-muted-foreground">
+        {detail.autoclose.at.slice(0, 16)}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-auto"
+        onClick={() => onRevertClose(detail.autoclose!.id)}
+        disabled={busy}
+      >
+        되돌리기
+      </Button>
+    </div>
+  );
+  // 후속 에이전트 처리안 — 종류·근거·조회 과정(설계 "화면 A안")
+  const fu = detail.followup;
+  const plan = fu && (
+    <Section title="처리안">
+      {fu.status === "done" ? (
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="kind">
+              {names?.action[fu.action ?? ""] ?? fu.action}
+            </Badge>
+            {fu.summary}
+            <span className="text-xs text-muted-foreground">
+              · AI 후속 에이전트
+            </span>
+          </span>
+          {fu.facts.length > 0 && (
+            <ul className="list-disc pl-5 text-sm">
+              {fu.facts.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+          )}
+          <Trace trace={fu.trace} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          처리안 실패{fu.reason ? ` — ${fu.reason}` : ""}
+        </p>
+      )}
+    </Section>
   );
   const todo = (
     <Section title="할 일">
@@ -217,7 +269,9 @@ export function CallDetail({
     return (
       <div className="flex flex-col gap-3">
         {head}
+        {closed}
         {failed}
+        {plan}
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-4">
             {todo}
@@ -245,7 +299,9 @@ export function CallDetail({
       aria-label="통화 상세"
     >
       {head}
+      {closed}
       {failed}
+      {plan}
       {todo}
       {summary}
       {diff}
@@ -253,6 +309,42 @@ export function CallDetail({
       {patient}
       {transcript}
     </aside>
+  );
+}
+
+const TOOL_NAME: Record<string, string> = {
+  query_patient: "환자 조회",
+  query_schedule: "예약 조회",
+  search_docs: "문서 검색",
+};
+
+/** 에이전트가 부른 조회 도구 — 접어 두고 "과정 보기"로 */
+function Trace({
+  trace,
+}: {
+  trace: { tool: string; args: Record<string, unknown> }[];
+}) {
+  const [open, setOpen] = useState(false);
+  if (trace.length === 0) return null;
+  return (
+    <div className="text-xs text-muted-foreground">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "▾" : "▸"} 과정 보기 · 조회 {trace.length}번
+      </button>
+      {open && (
+        <ol className="mt-1 list-decimal pl-5">
+          {trace.map((t, i) => (
+            <li key={i}>
+              {TOOL_NAME[t.tool] ?? t.tool}
+              {Object.keys(t.args).length > 0 &&
+                ` — ${Object.values(t.args)
+                  .filter((v) => v !== null && v !== "")
+                  .join(" · ")}`}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }
 

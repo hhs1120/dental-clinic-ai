@@ -1,5 +1,6 @@
 """통화·판정·블라인드·정확도 API (backend/api.py, 통화·② 판정 화면 설계 "API")."""
 
+import json
 from datetime import date, datetime
 
 import pytest
@@ -178,3 +179,136 @@ def test_list_calls_limit(client):
     assert sum(len(d["calls"]) for d in r["days"]) == 1 and r["next"]
     assert client.get("/calls", params={"limit": 0}).status_code == 422
     assert client.get("/calls", params={"limit": 501}).status_code == 422
+
+
+def _close(tmp_path, uid, *, versions=("v2", "v2"), policy=True):
+    """자동 종결 행을 바로 넣는다(조건 계산은 test_autoclose가 본다). versions = 닫을 때의 활성 버전 쌍"""
+    from backend import autoclose, db
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    c.execute(
+        "INSERT INTO ax_auto_actions (kind, target, result, reason, created_at)"
+        " VALUES (?, ?, ?, ?, '2026-11-05 09:00:00')",
+        (autoclose.KIND, uid, json.dumps({"versions": list(versions)}), autoclose.REASON),
+    )
+    autoclose.set_policy(c, autoclose.KIND, policy)
+    aid = c.execute("SELECT max(id) FROM ax_auto_actions").fetchone()[0]
+    c.close()
+    return aid
+
+
+def _closed_cards(client) -> dict:
+    return {
+        c["call_uid"]: c["closed"] for d in client.get("/calls").json()["days"] for c in d["calls"]
+    }
+
+
+def test_list_and_detail_show_closed(client, tmp_path):
+    _close(tmp_path, "c-0001")
+    closed = _closed_cards(client)
+    assert closed["c-0001"] is True and closed["c-0004"] is False
+    d = client.get("/calls/c-0001").json()
+    assert d["autoclose"]["reason"] and d["autoclose"]["at"] == "2026-11-05 09:00:00"
+    assert client.get("/calls/c-0004").json()["autoclose"] is None
+
+
+def test_stale_close_is_not_shown(client, tmp_path):
+    """정책을 껐거나 활성 버전이 바뀐 뒤의 종결은 종결로 보지 않는다 — 할 일을 숨기지 않게"""
+    _close(tmp_path, "c-0001", policy=False)
+    assert _closed_cards(client)["c-0001"] is False
+    assert "c-0001" in {i["call_uid"] for i in client.get("/calls/today").json()["internal"]}
+    assert client.get("/calls/c-0001").json()["autoclose"] is None
+
+
+def test_close_from_other_versions_is_not_shown(client, tmp_path):
+    _close(tmp_path, "c-0001", versions=("v1", "v2"))
+    assert _closed_cards(client)["c-0001"] is False
+
+
+def test_board_hides_closed(client, tmp_path):
+    _close(tmp_path, "c-0001")
+    b = client.get("/calls/today").json()
+    uids = {i["call_uid"] for col in ("internal", "contact", "done") for i in b[col]}
+    assert "c-0001" not in uids and "c-0004" in uids
+
+
+def test_revert_clears_badge(client, tmp_path):
+    """되돌리면 딱지·상세 줄이 빠진다(다시 닫히지 않는 것은 test_autoclose.test_human_revert_sticks)"""
+    aid = _close(tmp_path, "c-0001")
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 200
+    assert _closed_cards(client)["c-0001"] is False
+    assert client.get("/calls/c-0001").json()["autoclose"] is None
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 409
+    assert client.post("/auto-actions/999/revert", json={"part": "데스크"}).status_code == 404
+
+
+def test_detail_and_revert_pasted(client, tmp_path):
+    uid = client.post(
+        "/calls",
+        json={"direction": "inbound", "transcript": "직원: 네\n환자: 확인이요", "part": "데스크"},
+    ).json()["call_uid"]
+    aid = _close(tmp_path, uid)
+    assert client.get(f"/calls/{uid}").json()["autoclose"]["id"] == aid
+    assert client.post(f"/auto-actions/{aid}/revert", json={"part": "데스크"}).status_code == 200
+    assert client.get(f"/calls/{uid}").json()["autoclose"] is None
+
+
+def _plan(tmp_path, uid, version="v2", status="done"):
+    """처리안 행과 그 실행의 도구 단계를 바로 넣는다(에이전트는 test_followup이 본다)"""
+    from backend import db
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    cid = c.execute(
+        "SELECT id FROM ax_call_classifications WHERE call_uid = ? AND prompt_version = ?",
+        (uid, version),
+    ).fetchone()[0]
+    c.execute(
+        "INSERT INTO ax_agent_runs (agent, target, status, prompt_version, started_at)"
+        " VALUES ('call_followup', ?, 'done', 'v1', '2026-11-05 09:00:00')",
+        (uid,),
+    )
+    run = c.execute("SELECT max(id) FROM ax_agent_runs").fetchone()[0]
+    c.execute(
+        "INSERT INTO ax_agent_steps (run_id, seq, kind, tool_use_id, tool, args, result, hook_status, created_at)"
+        " VALUES (?, 1, 'tool', 't1', 'query_patient', '{\"chart_no\": \"C-00001\"}', '{}', 'pass', '2026-11-05 09:00:01')",
+        (run,),
+    )
+    c.execute(
+        "INSERT INTO ax_call_followups (call_uid, classification_id, action, summary, facts, run_id, status,"
+        " created_at) VALUES (?, ?, 'doctor_reply', '원장님 확인 뒤 회신', '[\"다음 예약 없음\"]', ?, ?,"
+        " '2026-11-05 09:00:02')",
+        (uid, cid, run, status),
+    )
+    c.commit()
+    c.close()
+
+
+def test_board_and_detail_show_followup(client, tmp_path):
+    _plan(tmp_path, "c-0001")
+    b = client.get("/calls/today").json()
+    item = next(i for i in b["internal"] if i["call_uid"] == "c-0001")
+    assert item["followup"] == {
+        "action": "doctor_reply",
+        "summary": "원장님 확인 뒤 회신",
+        "status": "done",
+    }
+    assert next(i for i in b["internal"] if i["call_uid"] == "c-0004")["followup"] is None
+    d = client.get("/calls/c-0001").json()["followup"]
+    assert d["facts"] == ["다음 예약 없음"] and d["trace"] == [
+        {"tool": "query_patient", "args": {"chart_no": "C-00001"}}
+    ]
+
+
+def test_followup_is_per_classification(client, tmp_path):
+    from backend import db
+    from tests.backend.call_db import classify_row
+
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    classify_row(c, "c-0001", version="v1")
+    c.close()
+    _plan(tmp_path, "c-0001", version="v1")
+    assert client.get("/calls/c-0001").json()["followup"] is None
+
+
+def test_labels_has_action(client):
+    assert client.get("/labels").json()["action"]["scaling_timing"] == "스케일링 시기 안내"

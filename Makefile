@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge e2e
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -37,6 +37,36 @@ disagreements:
 blind-judge:
 	$(if $(and $(A),$(B),$(V)),,$(error A=분류 버전 B=분류 버전 V=쌍 비교 프롬프트 버전 필요))
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.classify_batch blind --a $(A) --b $(B) --version $(V)
+
+# 골드 점검(평가 설계 §2.3) — 중재(과금, 빠진 건만)·사람 표본 터미널 화면. 골드를 보므로 evaluation/에서
+gold-arbitrate:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gold_audit arbitrate $(if $(BATCH),--batch)
+
+gold-audit:
+	uv run python -m evaluation.gold_audit audit
+
+# ① 처리 정답(설계 "PR ② 처리 정답") — Opus 라벨(과금, 빠진 건만, Batch)·사람 표본 터미널 화면
+action-label:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.call_actions label
+
+action-audit:
+	uv run python -m evaluation.call_actions audit
+
+# ① 후속 에이전트(backend/followup.py) — 오늘 할 일에 오른 통화 중 처리안 없는 것(일반 호출, 과금). REDO=1이면 옛 프롬프트 버전 처리안을 지우고 다시
+followups:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run $(if $(REDO),--redo)
+
+# ① 후속 처리 평가 실행(evaluation/followup.py) — 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
+followup-eval:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.followup run $(if $(NO_BATCH),--no-batch)
+
+# ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
+autoclose:
+	uv run python -m backend.autoclose run
+
+auto-policy:
+	$(if $(and $(KIND),$(ON)),,$(error KIND=작업 종류 ON=1|0 필요))
+	uv run python -m backend.autoclose policy $(KIND) $(if $(filter 1,$(ON)),on,off)
 
 # 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
 wireframe:

@@ -1,13 +1,13 @@
 """eval.py — 평가 실행. 정의는 docs/치과 AX - 평가 설계.md §7.
 
   uv run python -m evaluation.eval --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|retrieval|chat [--prompt-version v2] [--condition …] [--force]
+  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|auto|retrieval|chat [--prompt-version v2] [--condition …] [--force]
   → reports/eval_<split>_<condition>_<시각>.md + 같은 이름 .json(make gate가 읽음) + reports/eval_runs.jsonl 1줄
 
 - DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
   backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛰고, 앱 경고(rag 색인·리랭커)가 있으면 test를 거절한다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
-- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
+- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·자동 종결·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
   이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
@@ -24,7 +24,16 @@ from pathlib import Path
 
 import yaml
 
-from evaluation import EvalRefused, classification, rag
+from backend.calls import active_versions
+from evaluation import (
+    EvalRefused,
+    autoclose,
+    call_actions,
+    classification,
+    followup,
+    gold_audit,
+    rag,
+)
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
 
@@ -35,10 +44,11 @@ SECTIONS = (
     "classification",
     "judge",
     "crosscheck",
+    "auto",
     "retrieval",
     "chat",
-)  # test 묶음 — 분류·판정·교차검증은 버전, 검색·챗은 조건 단위로 1회
-VERSIONED = ("classification", "judge", "crosscheck")
+)  # test 묶음 — 분류·판정·교차검증·자동 종결은 버전, 검색·챗은 조건 단위로 1회
+VERSIONED = ("classification", "judge", "crosscheck", "auto")
 
 
 class AlreadyRun(Exception):
@@ -101,6 +111,9 @@ def run(
     condition: str | None = None,
     force: bool = False,
     prompts_dir: Path | None = None,
+    gold_audit_path: Path | None = None,
+    followup_runs: Path | None = None,
+    call_actions_path: Path | None = None,
 ) -> dict:
     """section = test 묶음(SECTIONS 하나). dev는 없으면 전부(--retrieval-only면 챗 빼고)"""
     reports_dir, prompts_dir = reports_dir or REPORTS, prompts_dir or PROMPTS
@@ -117,7 +130,7 @@ def run(
         section = section or ("retrieval" if retrieval_only else None)
         if section not in SECTIONS:
             raise EvalRefused(
-                "test는 --section 하나(classification·judge·crosscheck·retrieval·chat)만 돌린다 (평가 설계 §7)"
+                "test는 --section 하나(classification·judge·crosscheck·auto·retrieval·chat)만 돌린다 (평가 설계 §7)"
             )
         if section in VERSIONED and not prompt_version:
             raise EvalRefused(f"test {section}는 --prompt-version 하나")
@@ -158,6 +171,11 @@ def run(
                     f"교차검증 {prompt_version}×{jv}: {x.get('skipped') or '판정기와 겹치는 통화가 없음'}"
                 )
             pv = f"{prompt_version}×{jv}"
+        if section == "auto":
+            jv = classification.judge_version(conn)
+            if not jv:
+                raise EvalRefused("자동 종결을 잴 판정기 버전을 못 정함")
+            pv = f"{prompt_version}×{jv}"
         if section not in VERSIONED and app is None:
             raise EvalRefused("앱 없음 — test RAG는 앱(backend/eval_hooks.py)이 생긴 뒤에")
         history = [
@@ -195,7 +213,24 @@ def run(
         "judge": None,
         "crosscheck": None,
         "rag": None,
+        "gold_audit": None,
+        "autoclose": None,
+        "followup": None,
     }
+    gold_drop = None
+    if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
+        jv = prompt_version if section == "judge" else classification.judge_version(conn)
+        if not jv:
+            result["gold_audit"] = {"error": "판정기 버전을 못 정함"}
+        else:  # 골드 점검(평가 설계 §2.3) — 오류 추정 제외는 dev만, test는 원래 골드 수치뿐
+            cur, stale = gold_audit.current(gold_audit.load(gold_audit_path), conn, jv)
+            result["gold_audit"] = {
+                "judge_version": jv,
+                "summary": gold_audit.summarize(cur),
+                "stale": stale,
+                "missing": len(gold_audit.targets(conn, jv)) - len(cur),
+            }
+            gold_drop = gold_audit.errors(cur) if dev and cur else None
     if do_cls:
         versions = (
             [prompt_version]
@@ -221,11 +256,11 @@ def run(
         if leaked:  # test 통화를 프롬프트 예시로 쓰면 test 점수가 새는 셈 — 평가 설계 §2.1
             raise EvalRefused(f"few-shot에 test 통화가 있음: {', '.join(leaked)}")
         result["classification"] = classification.evaluate(
-            conn, split, versions, fewshot, dump=dev
+            conn, split, versions, fewshot, dump=dev, gold_drop=gold_drop
         )
     if dev or section == "judge":
         result["judge"] = classification.evaluate_judge(
-            conn, split, [prompt_version] if section == "judge" else None
+            conn, split, [prompt_version] if section == "judge" else None, gold_drop
         )
     if dev or section == "crosscheck":
         jv = classification.judge_version(conn)
@@ -242,6 +277,30 @@ def run(
             if jv
             else []
         )
+    if dev or section == "auto":  # 자동 종결 오류율(평가 설계 §5) — dev는 활성 분류 × 활성 판정기
+        jv = classification.judge_version(conn)
+        a = prompt_version if section == "auto" else active_versions(conn)[0]  # 앱과 같은 기본값
+        if jv and a:
+            result["autoclose"] = autoclose.evaluate(conn, split, a, jv)
+    if dev and call_actions_path and call_actions_path.exists():
+        # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
+        acts = call_actions.load(call_actions_path)
+        runs = followup.load(followup_runs) if followup_runs else []
+        truth, split_calls = call_actions.truth(acts), call_actions.eval_calls(conn)
+        versions = sorted({r["prompt_version"] for r in runs if r.get("prompt_version")})
+        result["followup"] = {
+            "prompt_version": followup.followup_version(),
+            "score": followup.score(conn, runs, truth, split_calls),
+            "by_version": {  # 버전 비교 — 같은 통화·같은 정답으로
+                v: followup.score(conn, runs, truth, split_calls, v) for v in versions
+            },
+            "labels": len(acts),
+            # 다시 라벨하다 실패해 옛 프롬프트 버전으로 남은 줄 — 0이 아니면 make action-label을 다시
+            "stale_labels": sum(
+                r.get("prompt_version") != call_actions.PROMPT_VERSION for r in acts
+            ),
+            "agreement": call_actions.agreement(acts),
+        }
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -317,17 +376,25 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         "",
     ]
     if r["classification"] is not None:
-        out += _render_classification(r["classification"])
+        out += _render_classification(
+            r["classification"], (r.get("gold_audit") or {}).get("judge_version")
+        )
+    audit_jv = (r.get("gold_audit") or {}).get("judge_version")
     if r["judge"] is not None:
-        out += _render_judge(r["judge"])
+        out += _render_judge(r["judge"], audit_jv)
+        out += _render_gold_audit(r["gold_audit"])
     if r["crosscheck"] is not None:
         out += _render_crosscheck(r["crosscheck"])
+    if r.get("autoclose") is not None:
+        out += _render_autoclose(r["autoclose"])
+    if r.get("followup") is not None:
+        out += _render_followup(r["followup"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
 
 
-def _render_classification(c: dict) -> list[str]:
+def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
     out = ["## ① 분류", ""]
     if not c["versions"]:
         out += ["분류 기록 없음", ""]
@@ -337,6 +404,7 @@ def _render_classification(c: dict) -> list[str]:
             f"### {v} ({', '.join(x['model_actual'])})",
             "",
             f"목적 Strict — 모델 vs 골드 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])} · 단순 평균 {_pct(g['purpose']['macro'])}",
+            *_audited_line(x.get("model_vs_gold_audited"), audit_jv),
             "카테고리별 n(모델 vs 골드) — "
             + " · ".join(f"{c} {_kn(d)}" for c, d in g["purpose"]["by_category"].items()),
             "",
@@ -395,7 +463,7 @@ def _render_classification(c: dict) -> list[str]:
     return out
 
 
-def _render_judge(j: dict) -> list[str]:
+def _render_judge(j: dict, audit_jv: str | None = None) -> list[str]:
     out = ["## ② 판정기 vs 골드", ""]
     if not j:
         out += ["판정기 결과 없음", ""]
@@ -403,10 +471,121 @@ def _render_judge(j: dict) -> list[str]:
         g = x["judge_vs_gold"]
         out += [
             f"### {v} ({', '.join(x['model_actual'])}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}",
+            *_audited_line(x.get("judge_vs_gold_audited"), audit_jv),
             "",
             " · ".join(f"{i} {_kn(g['items'][i])}" for i in classification.ITEMS),
             "",
         ]
+    return out
+
+
+def _audited_line(g: dict | None, audit_jv: str | None) -> list[str]:
+    """골드 오류 추정을 뺀 수치(dev만) — 원래 골드가 주 수치(평가 설계 §2.3). 어느 판정기 버전의 점검인지 함께"""
+    if g is None:
+        return []
+    return [
+        f"골드 오류 추정 제외(중재 기준·참고, 점검 판정기 {audit_jv}) — 목적 {_kn(g['purpose'])} · 가중 {_pct(g['purpose']['weighted'])}"
+    ]
+
+
+def _render_gold_audit(a: dict | None) -> list[str]:
+    out = ["## 골드 점검", ""]
+    if a is None:
+        return out + ["골드 점검 전", ""]
+    if "error" in a:
+        return out + [f"골드 점검 — {a['error']}", ""]
+    s = a["summary"]
+    out += [
+        f"판정기 {a['judge_version']} · 대상 {s['calls']}통화"
+        + (f" · 낡은 기록(녹취록·값이 바뀜) {a['stale']}" if a["stale"] else "")
+        + (f" · 중재 안 된 대상 {a['missing']}" if a["missing"] else ""),
+        "",
+        "| 항목 | 중재: 골드 쪽 | 판정기 쪽 | 둘 다 아님 | 중재 vs 사람 |",
+        "|---|---|---|---|---|",
+    ]
+    for i in classification.ITEMS:
+        if i not in s["arbiter"]:
+            continue
+        c, ag = s["arbiter"][i], s["agreement"].get(i)
+        out.append(
+            f"| {i} | {c['gold']} | {c['judge']} | {c['neither']} | {_kn(ag) if ag else '—'} |"
+        )
+    t, h = s["agreement_total"], s["human_errors"]
+    names = {"gold": "골드 쪽", "judge": "판정기 쪽", "neither": "둘 다 아님"}
+    out += [
+        "",
+        "중재 선택별 사람 일치 — "
+        + (
+            " · ".join(
+                f"{names[k]} {_kn(s['by_arbiter'][k])}" for k in names if k in s["by_arbiter"]
+            )
+            or "—"
+        ),
+        f"골드 오류 추정(중재) — 판정기 쪽 {sum(c['judge'] for c in s['arbiter'].values())}"
+        f" · 둘 다 아님 {sum(c['neither'] for c in s['arbiter'].values())}",
+        f"중재 vs 사람 전체 {_kn(t) if t['n'] else '—'} · 사람 기준 오류 추정(표본, 참고) 판정기 쪽 {h['judge']}"
+        f" · 둘 다 아님 {h['neither']} · 사람 미판정 {s['human_pending']}통화",
+        "",
+    ]
+    return out
+
+
+def _render_autoclose(a: dict) -> list[str]:
+    e, ci = a["errors"], a["errors"]["ci"]
+    names = {"has_todo": "할 일", "emergency": "응급", "complaint": "불만", "urgent": "급함"}
+    return [
+        f"## ① 자동 종결 — {a['pair']}",
+        "",
+        f"대상 {a['n']}통화 · 조건을 넘은 통화 {a['closed']} ({_pct(a['rate'])})",
+        f"오류(골드가 할 일·응급·불만·급함) {_kn(e)}"
+        + (f" · 95% 구간 {_pct(ci[0])}~{_pct(ci[1])}" if ci else ""),
+        "항목별 — " + " · ".join(f"{names[i]} {k}" for i, k in a["by_item"].items()),
+        "",
+    ]
+
+
+def _render_followup(f: dict) -> list[str]:
+    ag = f["agreement"]
+    out = [
+        "## ① 후속 처리",
+        "",
+        f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}"
+        + (
+            f" · 옛 버전 라벨 {f['stale_labels']}통화(make action-label 다시)"
+            if f.get("stale_labels")
+            else ""
+        ),
+        "",
+        f"후속 에이전트 {f['prompt_version']}",
+        "",
+        "| 구간 | 통화 | 에이전트 | 규칙 기준선 | 실패(이유) | 실행 전 | 비용 | 분류기 놓침 | 분류기만 할 일 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for sp, x in f["score"].items():
+        why = ", ".join(f"{k} {n}" for k, n in x["failed_by_reason"].items())
+        out.append(
+            f"| {sp} | {x['n']} | {_kn(x['agent'])} | {_kn(x['baseline'])} | {x['failed']}"
+            + (f"({why})" if why else "")
+            + f" | {x['not_run']} | ${x['cost_usd']} | {x['missed_by_classifier']}"
+            f" | {x['extra_by_classifier']} |"
+        )
+    out.append("")
+    if len(f.get("by_version", {})) > 1:  # 버전 비교 — 같은 통화·같은 정답
+        out.append(
+            "버전 비교 — "
+            + " / ".join(
+                f"{v}: " + ", ".join(f"{sp} {_kn(x['agent'])}" for sp, x in sc.items())
+                for v, sc in f["by_version"].items()
+            )
+        )
+        out.append("")
+    for sp, x in f["score"].items():
+        rows = [
+            f"{a} 에이전트 {_kn(x['agent']['by_action'][a])} · 기준선 {_kn(x['baseline']['by_action'][a])}"
+            for a in x["agent"]["by_action"]
+        ]
+        if rows:
+            out += [f"{sp} 종류별 — " + " / ".join(rows), ""]
     return out
 
 
@@ -556,6 +735,9 @@ def main(argv=None) -> int:
             prompt_version=args.prompt_version,
             condition=args.condition,
             force=args.force,
+            gold_audit_path=gold_audit.AUDIT_PATH,
+            followup_runs=followup.OUT,
+            call_actions_path=call_actions.ACTIONS_PATH,
         )
     except AlreadyRun as e:
         print(e)

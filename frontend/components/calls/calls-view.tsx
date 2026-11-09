@@ -14,6 +14,7 @@ import {
   fetchBoard,
   fetchCall,
   reclassify,
+  revertAuto,
   setTodoDone,
   useLabels,
 } from "@/lib/calls-api";
@@ -57,6 +58,18 @@ export function CallsView() {
       setFail(errorText(e));
     }
   };
+  const revertClose = async (id: number) => {
+    setBusy(true);
+    setFail(null);
+    try {
+      await revertAuto(id, readPart());
+      refresh();
+    } catch (e) {
+      setFail(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const redo = async () => {
     if (!call) return;
     setBusy(true);
@@ -89,6 +102,7 @@ export function CallsView() {
         onClose={() => go({ call: null, wide: null })}
         onCheck={(t, done) => check(call, t.item, done)}
         onReclassify={redo}
+        onRevertClose={revertClose}
         busy={busy}
       />
     ) : (
@@ -142,6 +156,7 @@ export function CallsView() {
               ) : board.data ? (
                 <TodayBoard
                   board={board.data}
+                  names={names}
                   selected={call}
                   onOpen={open}
                   onCheck={(it, done) => check(it.call_uid, it.item, done)}

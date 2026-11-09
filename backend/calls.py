@@ -30,7 +30,10 @@ CALLS_CTE = (
 )
 ROWS_SQL = (
     CALLS_CTE + " SELECT calls.*, k.id AS classification_id, k.status, k.labels, k.summary,"
-    " k.todo, j.labels AS judge_labels, d.items AS disagree_items, d.is_core"
+    " k.todo, j.labels AS judge_labels, d.items AS disagree_items, d.is_core,"
+    " auto.id AS close_id, auto.reason AS close_reason, auto.created_at AS closed_at,"
+    " fu.action AS fu_action, fu.summary AS fu_summary, fu.facts AS fu_facts, fu.status AS fu_status,"
+    " fu.reason AS fu_reason, fu.run_id AS fu_run"
     " FROM calls"
     " LEFT JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
     "  AND k.model_alias = 'classify' AND k.prompt_version = :a"
@@ -38,6 +41,13 @@ ROWS_SQL = (
     "  AND j.model_alias = 'judge' AND j.prompt_version = :b AND j.status = 'ok'"
     " LEFT JOIN ax_call_disagreements d ON d.call_uid = calls.call_uid"
     "  AND d.a_version = :a AND d.b_version = :b"
+    # 되돌리지 않은 자동 종결 — 앱 상태는 이 행 자체(backend/autoclose.py). 정책이 켜져 있고 지금 활성 버전 쌍으로
+    # 닫은 것만 종결로 본다 — 정책을 끄거나 버전을 바꾼 뒤 make autoclose 전의 낡은 종결이 할 일을 숨기지 않게
+    # 후속 에이전트 처리안 — 활성 분류 행의 것만(backend/followup.py)
+    " LEFT JOIN ax_call_followups fu ON fu.classification_id = k.id"
+    " LEFT JOIN ax_auto_actions auto ON auto.kind = 'call_autoclose'"
+    "  AND auto.target = calls.call_uid AND auto.reverted_at IS NULL AND :closing = 1"
+    "  AND json_extract(auto.result, '$.versions') = json_array(:a, :b)"
 )
 
 
@@ -52,7 +62,8 @@ def _rows(conn, where: str = "", params: dict | None = None) -> list[sqlite3.Row
     sql = (
         ROWS_SQL + (f" WHERE {where}" if where else "") + " ORDER BY calls.at DESC, calls.call_uid"
     )
-    return conn.execute(sql, {"a": a, "b": b, **(params or {})}).fetchall()
+    closing = int(bool(db.get_setting(conn, "auto_policy", {}).get("call_autoclose")))
+    return conn.execute(sql, {"a": a, "b": b, "closing": closing, **(params or {})}).fetchall()
 
 
 def _checks(conn, classification_ids: list[int]) -> dict:
@@ -94,7 +105,8 @@ def today_board(conn: sqlite3.Connection, today: date) -> dict:
     since = (today - timedelta(days=TODAY_WINDOW_DAYS)).isoformat()
     rows = _rows(
         conn,
-        "k.status = 'ok' AND (calls.source = 'pasted' OR calls.at >= :since)",
+        "k.status = 'ok' AND auto.id IS NULL"  # 자동 종결된 통화는 오르지 않는다(기능 정의 §4 ①)
+        " AND (calls.source = 'pasted' OR calls.at >= :since)",
         {"since": since},
     )
     checks = _checks(conn, [r["classification_id"] for r in rows])
@@ -113,6 +125,15 @@ def today_board(conn: sqlite3.Connection, today: date) -> dict:
                     "chart_no": r["chart_no"],
                     "urgent": urgent,
                     "emergency": emergency,
+                    "followup": (
+                        {
+                            "action": r["fu_action"],
+                            "summary": r["fu_summary"],
+                            "status": r["fu_status"],
+                        }
+                        if r["fu_status"]
+                        else None
+                    ),
                 }
             )
     items.sort(key=lambda i: (i["at"], -i["item"]), reverse=True)
@@ -152,6 +173,7 @@ def _card(r, checks: dict) -> dict:
         "todo_total": len(todo),
         "todo_left": sum(not t["done"] for t in todo),
         "summary": r["summary"],
+        "closed": r["close_id"] is not None,
     }
 
 
@@ -232,6 +254,34 @@ def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
             if r["disagree_items"] is not None
             else None
         ),
+        "autoclose": (
+            {"id": r["close_id"], "reason": r["close_reason"], "at": r["closed_at"]}
+            if r["close_id"] is not None
+            else None
+        ),
+        "followup": _followup(conn, r),
+    }
+
+
+def _followup(conn, r) -> dict | None:
+    """처리안 + 조회 과정(끝내는 도구 제외) — 상세 "처리안" 절"""
+    if not r["fu_status"]:
+        return None
+    trace = [
+        {"tool": t, "args": json.loads(a) if a else {}}
+        for t, a in conn.execute(
+            "SELECT tool, args FROM ax_agent_steps WHERE run_id = ? AND kind = 'tool'"
+            " AND tool != 'submit_followup' ORDER BY seq",
+            (r["fu_run"],),
+        )
+    ]
+    return {
+        "action": r["fu_action"],
+        "summary": r["fu_summary"],
+        "facts": json.loads(r["fu_facts"] or "[]"),
+        "status": r["fu_status"],
+        "reason": r["fu_reason"],
+        "trace": trace,
     }
 
 
@@ -335,8 +385,29 @@ def classify_one(conn: sqlite3.Connection, gw, call_uid: str) -> None:
         " AND prompt_version = ?)",
         (call_uid, a),
     )
+    conn.execute(  # 처리안도 그 분류 행 단위 — 새 분류로 다시 낸다
+        "DELETE FROM ax_call_followups WHERE classification_id IN (SELECT id FROM"
+        " ax_call_classifications WHERE call_uid = ? AND model_alias = 'classify'"
+        " AND prompt_version = ?)",
+        (call_uid, a),
+    )
     conn.commit()
-    if b:
-        cl.save_judgment(conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b))
-        disagreements.compute_call(conn, call_uid, a, b)
-    judge_queue.refresh_call(conn, call_uid)
+    from backend import autoclose  # autoclose가 이 모듈을 import한다
+
+    try:
+        if b:
+            cl.save_judgment(
+                conn, call_uid, b, cl.judge(gw, row["transcript"], row["direction"], b)
+            )
+            disagreements.compute_call(conn, call_uid, a, b)
+        judge_queue.refresh_call(conn, call_uid)
+    finally:  # 판정이 예외(하루 상한 등)로 끝나도 새 분류로 다시 계산 — 낡은 종결이 할 일을 숨기지 않게
+        autoclose.refresh_call(conn, call_uid)  # 두 결과가 다 있어야 닫는다 — 판정 전이면 그대로
+        conn.commit()
+    from backend import followup  # followup이 이 모듈을 import한다
+
+    try:  # 할 일이 있으면 처리안 — 실패해도 분류 흐름은 막지 않는다(실패는 처리안 행에 남는다)
+        followup.run_for_call(conn, gw, call_uid, searcher=followup.app_searcher(conn))
+    except Exception:  # noqa: BLE001
+        conn.rollback()
+        log.exception("처리안 실패 %s", call_uid)
