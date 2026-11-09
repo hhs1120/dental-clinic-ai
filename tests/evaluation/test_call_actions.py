@@ -138,3 +138,10 @@ def test_reopen_human(tmp_path):
         "a": None,
         "b": "billing",
     }
+
+
+def test_reopen_requires_known_action():
+    """reopen은 --action이 꼭 있어야 하고 처리 종류 밖의 값은 받지 않는다"""
+    for argv in (["reopen"], ["reopen", "--action", "othr"]):
+        with pytest.raises(SystemExit):
+            call_actions.main(argv)

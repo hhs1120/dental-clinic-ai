@@ -199,8 +199,17 @@ def test_baseline_doctor_note():
     assert b([{"text": "원장님께 전달하고 회신 전화"}]) == "doctor_reply"
 
 
+class Costly(BatchScript):
+    """호출마다 비용 0.01 — 이번 실행 비용이 요약에 더해지는지 보려고"""
+
+    def complete(self, alias, **kw):
+        from dataclasses import replace
+
+        return replace(super().complete(alias, **kw), cost_usd=0.01)
+
+
 def test_reported_cost_is_this_run_only(paths):
-    """요약 비용은 이번 실행의 통화만 — 사본에 남은 앞 버전 실행 비용을 다시 더하지 않는다"""
+    """요약 비용은 이번 실행의 통화만 — 사본에 남은 앞 버전 실행 비용은 빼고, 이번 실행 비용은 더한다"""
     import json
     import sqlite3
 
@@ -213,4 +222,33 @@ def test_reported_cost_is_this_run_only(paths):
     (paths / "runs.jsonl").write_text(
         "".join(json.dumps(dict(r, prompt_version="v0")) + "\n" for r in rows)
     )
-    assert _run(paths, {})["cost_usd"] == 0  # 가짜 게이트웨이 — 이번 실행 비용은 0
+    r = ev_followup.run(
+        paths / "app.sqlite",
+        paths / "source.sqlite",
+        paths / "truth.sqlite",
+        out=paths / "runs.jsonl",
+        copy=paths / "runs" / "copy.sqlite",
+        state=paths / "runs" / "state.json",
+        gw_factory=lambda c: Costly(c, [("tool", "submit_followup", SUBMIT)]),
+        min_batch=0,
+        poll_seconds=0,
+    )
+    new = [x for x in ev_followup.load(paths / "runs.jsonl") if x["prompt_version"] != "v0"]
+    assert 0 < r["cost_usd"] < 5.0
+    assert r["cost_usd"] == pytest.approx(sum(x["cost_usd"] for x in new))
+
+
+def test_dev_report_flags_old_labels(tmp_path):
+    """다시 라벨하다 실패해 옛 프롬프트 버전 라벨이 남으면 리포트에 그 수를 보인다"""
+    from evaluation import eval as ev
+    from tests.evaluation.test_rag import FakeApp, make_rag_db
+
+    conn = make_rag_db(tmp_path)
+    acts = tmp_path / "acts.jsonl"
+    acts.write_text(
+        '{"call_uid": "c-0001", "llm_action": "other", "human_action": null, "prompt_version": "v0"}\n'
+    )
+    out = ev.run(
+        conn, reports_dir=tmp_path / "r", app=FakeApp(), split="dev", call_actions_path=acts
+    )
+    assert "옛 버전 라벨 1통화" in out["report_path"].read_text(encoding="utf-8")

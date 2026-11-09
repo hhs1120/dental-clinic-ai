@@ -295,6 +295,10 @@ def run(
                 v: followup.score(conn, runs, truth, split_calls, v) for v in versions
             },
             "labels": len(acts),
+            # 다시 라벨하다 실패해 옛 프롬프트 버전으로 남은 줄 — 0이 아니면 make action-label을 다시
+            "stale_labels": sum(
+                r.get("prompt_version") != call_actions.PROMPT_VERSION for r in acts
+            ),
             "agreement": call_actions.agreement(acts),
         }
     if parts and app is not None:
@@ -545,7 +549,12 @@ def _render_followup(f: dict) -> list[str]:
     out = [
         "## ① 후속 처리",
         "",
-        f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}",
+        f"처리 정답 {f['labels']}통화(Opus 라벨 + 사람 표본) · 라벨 vs 사람 {_kn(ag) if ag['n'] else '—'}"
+        + (
+            f" · 옛 버전 라벨 {f['stale_labels']}통화(make action-label 다시)"
+            if f.get("stale_labels")
+            else ""
+        ),
         "",
         f"후속 에이전트 {f['prompt_version']}",
         "",

@@ -206,3 +206,18 @@ def test_prompts_carry_action_definitions():
     ):
         text = f.read_text(encoding="utf-8")
         assert all(f"- {a} — {d}" in text for a, d in ACTION_DESC.items()), f
+
+
+def test_drop_stale_redoes_only_old_prompt_plans(conn):
+    """REDO — 오늘 할 일 통화 중 옛 프롬프트 버전으로 낸 처리안만 지워 다시 낼 대상으로 만든다"""
+    for uid in ("c-0001", "c-0004"):
+        followup.run_for_call(
+            conn, Script(conn, [("tool", "submit_followup", SUBMIT)]), uid, CLINIC
+        )
+    conn.execute(
+        "UPDATE ax_agent_runs SET prompt_version = 'v0' WHERE target = 'c-0001'"
+    )  # 옛 버전 처리안
+    assert followup.targets(conn, CLINIC.today) == []
+    assert followup.drop_stale(conn, CLINIC.today) == 1
+    assert followup.targets(conn, CLINIC.today) == ["c-0001"]
+    assert followup.drop_stale(conn, CLINIC.today) == 0

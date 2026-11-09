@@ -244,6 +244,26 @@ def targets(conn: sqlite3.Connection, today: date) -> list[str]:
     return sorted(u for u, cid in seen.items() if cid not in have)
 
 
+def drop_stale(conn: sqlite3.Connection, today: date) -> int:
+    """오늘 할 일 통화 중 지금과 다른 프롬프트 버전으로 낸 처리안을 지운다(make followups REDO=1) — 지운 수.
+    처리안은 분류 행마다 하나라 에이전트 버전만 바꾸면 다시 나오지 않는다(앱 설계 §1 `ax_call_followups`)"""
+    board = calls.today_board(conn, today)
+    cids = {i["classification_id"] for col in ("internal", "contact", "done") for i in board[col]}
+    stale = [
+        cid
+        for cid, pv in conn.execute(
+            "SELECT f.classification_id, r.prompt_version FROM ax_call_followups f"
+            " LEFT JOIN ax_agent_runs r ON r.id = f.run_id"
+        )
+        if cid in cids and pv != PROMPT_VERSION
+    ]
+    conn.executemany(
+        "DELETE FROM ax_call_followups WHERE classification_id = ?", [(c,) for c in stale]
+    )
+    conn.commit()
+    return len(stale)
+
+
 def _searcher(conn, clinic, quiet: bool = False):
     """검색 화면과 같은 모델 — 키·색인이 없으면 문서 검색 없이 돈다"""
     try:
@@ -267,9 +287,12 @@ def app_searcher(conn):
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m backend.followup")
     p.add_argument("command", choices=("run",))
-    p.parse_args(argv)
+    p.add_argument("--redo", action="store_true", help="옛 프롬프트 버전 처리안을 지우고 다시")
+    args = p.parse_args(argv)
     conn = db.connect(ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite")
     clinic = load_clinic()
+    if args.redo:
+        print(f"옛 버전 처리안 {drop_stale(conn, clinic.today)}통화 지움")
     gw = Gateway(load_config(), SqliteLlmLog(conn), "runtime")
     searcher = _searcher(conn, clinic)
     todo = targets(conn, clinic.today)

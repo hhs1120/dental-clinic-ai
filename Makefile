@@ -52,9 +52,9 @@ action-label:
 action-audit:
 	uv run python -m evaluation.call_actions audit
 
-# ① 후속 에이전트(backend/followup.py) — 오늘 할 일에 오른 통화 중 처리안 없는 것(일반 호출, 과금)
+# ① 후속 에이전트(backend/followup.py) — 오늘 할 일에 오른 통화 중 처리안 없는 것(일반 호출, 과금). REDO=1이면 옛 프롬프트 버전 처리안을 지우고 다시
 followups:
-	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run $(if $(REDO),--redo)
 
 # ① 후속 처리 평가 실행(evaluation/followup.py) — 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
 followup-eval:

@@ -222,8 +222,12 @@ def agreement(records: list[dict]) -> dict:
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m evaluation.call_actions")
     p.add_argument("command", choices=("label", "audit", "reopen"))
-    p.add_argument("--action", help="reopen: 사람 답이 이 종류인 표본을 다시 판정 대상으로")
+    p.add_argument(
+        "--action", choices=ACTIONS, help="reopen: 사람 답이 이 종류인 표본을 다시 판정 대상으로"
+    )
     args = p.parse_args(argv)
+    if args.command == "reopen" and not args.action:
+        p.error("reopen은 --action이 필요하다")
     conn = connect(
         ROOT / "data" / "app.sqlite",
         ROOT / "data" / "source.sqlite",

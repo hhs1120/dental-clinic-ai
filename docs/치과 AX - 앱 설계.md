@@ -31,7 +31,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_pasted_calls` | 새로 추가한 통화(통화 화면 "새 통화 추가") — 앱이 만든 통화라 앱 DB. 목록·분류·판정에서는 생성 통화와 합쳐 보인다(`backend/calls.py`) |
 | `ax_todo_checks` | "오늘 할 일" 할 일 체크 — 분류 행의 할 일 항목 번호 단위로 끝낸 파트·시각. 되돌리면 지운다 |
 | (정확도 뷰) | 정확도 표의 집계 — `backend/metrics.py`. `agreement`: 분류 버전 × 항목 9개 행(모델 vs 판정기 `k/n`, 모수는 분류·판정기 모두 ok인 dev 판정 풀, 급함 3값). `blind_rates`: 버전 쌍마다 LLM 쌍 비교·사람 투표의 B 나음·A 나음·비슷·둘 다 틀림·좌우 선택과 같은 쌍에서 둘의 일치(모수는 dev 블라인드 통화). `human_share`: 판정 큐 대상 중 사람이 볼 몫(엇갈림 또는 표본) `k/n`. 테이블이 아니라 고정 쿼리 |
-| `ax_call_followups` | 후속 에이전트 처리안 — 분류 행 단위 1행(분류 버전이 바뀌면 새 처리안): 처리 종류(`shared/followup.py` `ACTIONS`)·요지·근거·실행 id·`done`/`failed`와 이유. 할 일 체크(`ax_todo_checks`)와 따로 — 처리안이 체크를 대신하지 않는다. 쓰는 곳은 `backend/followup.py` |
+| `ax_call_followups` | 후속 에이전트 처리안 — 분류 행 단위 1행(분류 버전이 바뀌면 새 처리안, 에이전트 프롬프트만 바꾸면 `make followups REDO=1`이 오늘 할 일 통화의 옛 버전 처리안을 지우고 다시 낸다): 처리 종류(`shared/followup.py` `ACTIONS`)·요지·근거·실행 id·`done`/`failed`와 이유. 할 일 체크(`ax_todo_checks`)와 따로 — 처리안이 체크를 대신하지 않는다. 쓰는 곳은 `backend/followup.py` |
 | `ax_model_blind_votes` | LLM 쌍 비교 판정 — 좌·우 분류 ID·쌍 비교 판정기(`blind_judge`) 버전·두 번 판정(좌우 바꿈)과 합친 `choice`·두 호출의 LLM 호출 id(폴백 제외용). 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 | `ax_blind_votes` | 사람 블라인드 투표(대상은 [[치과 AX - 평가 설계]] §2.4). 좌·우 분류 ID(FK → classifications) + `choice(left/right/tie/both_wrong)`. 좌우 배치·승률·큐 규칙은 [[치과 AX - 평가 설계]] §2.4 |
 
