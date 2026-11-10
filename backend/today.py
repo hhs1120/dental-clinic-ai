@@ -1,13 +1,13 @@
 """오늘 화면 한 장 (기능 정의 §4 앱 구성 "오늘 화면", 앱 설계 §4 "오늘 화면"). 요약 카드 → 사람이 볼 일 → AI가 한 일.
 숫자는 전부 쿼리(기능 정의 §3 원칙 2)이고, 숫자마다 그 숫자가 가리키는 화면과 같은 함수로 센다 — 예약·신환·주의·
 예약 미확인은 준비표(prep.prep_facts), 할 일·급한 통화는 통화 화면 오늘 할 일(calls.today_board), 확인할 통화는
-calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자동 처리는 통화 화면과 같은 유효 조건.
+calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 미예약 환자는 그 화면 목록(missed.top), 자동 처리는 통화 화면과 같은 유효 조건.
 LLM을 부르지 않는다."""
 
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from backend import autoclose, calls, judge_queue, prep
+from backend import autoclose, calls, judge_queue, missed, prep
 
 AUTO_RECENT = 20  # "AI가 한 일" 펼친 자동 처리 목록 — 최근에 닫힌 순, 나머지는 통화 기록에서
 REFUSED_DAYS = 7  # 근거 없는 질문 — 실제 시계 기준 최근 이 날수(확인함 없이 지나면 빠진다)
@@ -126,6 +126,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             "todo_left": {k: todo[k] for k in ("items", "calls")},
             "judge_pending": judge_queue.pending_count(conn),
             "refused": _refused(conn, now),
+            "missed_top": missed.top(conn, today, now),
         },
         "ai": _auto(conn) | {"prep": _prep_saved(conn, today)} | _failures(conn),
     }
