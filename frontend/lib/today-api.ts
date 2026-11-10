@@ -28,7 +28,7 @@ export interface TodaySheet {
     };
     new_patients: number;
     alert_patients: number;
-    todo: { items: number; calls: number; urgent_calls: number };
+    todo: { items: number; calls: number; urgent_items: number };
   };
   people: {
     urgent_calls: {
@@ -82,6 +82,7 @@ const AI_TEXT: Record<Review["ai"], string> = {
 export function reviewText(r: Review, names: LabelNames | null): string {
   const ai = `AI: ${AI_TEXT[r.ai]}`;
   if (!r.flags.length) return `${ai}, 사람: 다시 열림`;
+  if (!names) return `${ai}, 사람 판정: …`; // 라벨 이름을 불러오기 전 — 빈 이름을 보이지 않는다
   const name = (f: HumanFlag) =>
     (f === "urgent" ? names?.urgency.urgent : names?.flag[f]) ?? "";
   return `${ai}, 사람 판정: ${r.flags.map(name).join("·")}`;

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { errorText, useFetch } from "@/lib/api";
+import { ApiError, errorText, useFetch } from "@/lib/api";
 import { revertAuto, shortAt, useLabels } from "@/lib/calls-api";
 import { readPart } from "@/lib/part";
 import {
@@ -17,7 +17,6 @@ import {
 } from "@/lib/today-api";
 
 // 이미 다시 연 건(다른 창에서 먼저 누름) — 오류가 아니라 다시 조회만 한다(backend/api.py revert_auto 409)
-const ALREADY = "이미 되돌린 자동 처리입니다";
 
 /** 오늘 화면 — 요약 카드 → 사람이 볼 일 → AI가 한 일(기능 정의 §4 오늘 화면). 보여 주고 보내기만 하고, 예외는 다시 열기 */
 export function TodayView() {
@@ -63,7 +62,7 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
       href: "/calls",
       value: `${c.todo.items}건`,
       label: "오늘 할 일",
-      sub: `급함 ${c.todo.urgent_calls}`,
+      sub: `급함 ${c.todo.urgent_items}`,
     },
   ];
   return (
@@ -221,7 +220,8 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
     try {
       await revertAuto(id, readPart());
     } catch (e) {
-      if (errorText(e) !== ALREADY) {
+      // 409 = 다른 사람이 먼저 다시 엶 — 오류 없이 다시 조회만
+      if (!(e instanceof ApiError && e.status === 409)) {
         setFail(errorText(e));
         setBusy((b) => new Set([...b].filter((x) => x !== id)));
       }

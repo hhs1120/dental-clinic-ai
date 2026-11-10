@@ -7,7 +7,7 @@ import hashlib
 import json
 import sqlite3
 
-from backend.calls import CALLS_CTE, active_versions
+from backend.calls import CALLS_CTE, active_versions, human_flags
 from backend.classify import ENUMS
 from shared.call_labels import FLAGS, ITEMS
 
@@ -159,9 +159,8 @@ def save(
         (call_uid, at),
     )
     conn.commit()
-    if any(labels.get(k) for k in ("has_todo", "emergency", "complaint")) or (
-        labels.get("urgency") == "urgent"
-    ):  # 자동 종결된 통화면 푼다 — 사람 되돌림이라 다시 닫히지 않는다(기능 정의 §4 ①)
+    # 자동 종결된 통화면 푼다 — 사람 되돌림이라 다시 닫히지 않는다(기능 정의 §4 ①)
+    if human_flags(labels):
         from backend import autoclose  # autoclose가 calls를 거쳐 이 모듈과 얽힌다
 
         if autoclose.unclose_by_human(conn, call_uid, part):

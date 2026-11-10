@@ -8,7 +8,7 @@ const EMPTY = {
     appointments: { total: 0, treatment: 0, hygiene: 0, consult: 0 },
     new_patients: 0,
     alert_patients: 0,
-    todo: { items: 0, calls: 0, urgent_calls: 0 },
+    todo: { items: 0, calls: 0, urgent_items: 0 },
   },
   people: {
     urgent_calls: [],
@@ -70,7 +70,7 @@ const FULL = {
     appointments: { total: 26, treatment: 17, hygiene: 7, consult: 2 },
     new_patients: 4,
     alert_patients: 6,
-    todo: { items: 34, calls: 16, urgent_calls: 1 },
+    todo: { items: 34, calls: 16, urgent_items: 4 },
   },
   people: {
     urgent_calls: [
@@ -116,6 +116,10 @@ async function fakeToday(page: Page, body: unknown | (() => unknown)) {
 test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await fakeToday(page, FULL);
   await page.goto("/today");
+  // 할 일 카드의 두 숫자는 같은 단위(줄 수)
+  await expect(
+    page.getByRole("link", { name: /^34건\s*오늘 할 일/ }),
+  ).toContainText("급함 4");
   await page.getByRole("link", { name: /^6명\s*주의 환자/ }).click(); // 카드
   await expect(page).toHaveURL(/\/prep\?chip=alert$/);
   await page.goto("/today");
@@ -221,4 +225,26 @@ test("다시 열기 — AI가 한 일에서 빠지고 확인할 통화에 뜸", 
     page.getByRole("region", { name: "사람이 볼 일" }),
   ).toContainText("최수진 · AI: 종결, 사람: 다시 열림");
   expect(posted).toHaveLength(1);
+});
+
+test("이미 다시 연 건 — 상태 코드로 알아보고 오류 띠 없이 다시 조회", async ({
+  page,
+}) => {
+  let posted = false;
+  await fakeToday(page, () =>
+    posted
+      ? { ...FULL, ai: { ...FULL.ai, auto_total: 0, auto_recent: [] } }
+      : FULL,
+  );
+  await page.route("**/api/auto-actions/1/revert", (r) => {
+    posted = true;
+    // 서버 문구가 바뀌어도 409면 "이미 처리됨"으로 본다
+    return r.fulfill({ status: 409, json: { detail: "다른 문구" } });
+  });
+  await page.goto("/today");
+  const ai = page.getByRole("region", { name: "AI가 한 일" });
+  await ai.getByRole("button", { name: "펼치기" }).click();
+  await ai.getByRole("button", { name: "다시 열기" }).click();
+  await expect(ai.getByRole("button", { name: "다시 열기" })).toHaveCount(0);
+  await expect(page.getByText("다른 문구")).toHaveCount(0); // 오류 띠 없음
 });

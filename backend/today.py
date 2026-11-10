@@ -24,7 +24,8 @@ def _cards(rows: list[dict]) -> dict:
 
 
 def _todo(board: dict) -> tuple[dict, list[dict]]:
-    """열린 할 일 수와 급한 통화(응급·급함, 통화마다 한 줄 — 첫 열린 할 일). 순서는 오늘 할 일과 같다(통화 시각 최근 순)"""
+    """열린 할 일 수(줄·통화·급한 줄 — 카드의 두 숫자를 같은 단위로)와 급한 통화(응급·급함, 통화마다 한 줄 — 첫 열린
+    할 일). 순서는 오늘 할 일과 같다(통화 시각 최근 순)"""
     open_ = board["internal"] + board["contact"]
     urgent: dict[str, dict] = {}
     for i in sorted(open_, key=lambda i: (i["at"], -i["item"]), reverse=True):  # 시각 최근·번호 순
@@ -34,6 +35,7 @@ def _todo(board: dict) -> tuple[dict, list[dict]]:
                 {k: i[k] for k in ("call_uid", "name", "text", "at", "emergency")},
             )
     counts = {"items": len(open_), "calls": len({i["call_uid"] for i in open_})}
+    counts["urgent_items"] = sum(bool(i["urgent"] or i["emergency"]) for i in open_)
     return counts, list(urgent.values())
 
 
@@ -62,14 +64,18 @@ def _auto(conn) -> dict:
 
 
 def _failures(conn) -> dict:
-    """활성 분류 행 기준 — 분류 실패(ok가 아님)·처리안 실패 통화 수. 판정 풀 통화는 CALLS_CTE가 뺀다"""
+    """활성 분류 행 기준 — 분류 실패(ok가 아님, 또는 분류 행 없이 남은 새 통화 — 분류 중 예외로 통화만 남는
+    경우, calls.add_call)·처리안 실패 통화 수. 분류 행 없는 생성 통화(버전 전환 직후 일괄 분류 전)는 세지 않는다.
+    판정 풀 통화는 CALLS_CTE가 뺀다"""
     a, _ = calls.active_versions(conn)
     base = (
         calls.CALLS_CTE + " SELECT COUNT(*) FROM calls"
-        " JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
+        " LEFT JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
         "  AND k.model_alias = 'classify' AND k.prompt_version = ?"
     )
-    classify = conn.execute(base + " WHERE k.status != 'ok'", (a,)).fetchone()[0]
+    classify = conn.execute(
+        base + " WHERE k.status != 'ok' OR (k.id IS NULL AND calls.source = 'pasted')", (a,)
+    ).fetchone()[0]
     followup = conn.execute(
         base + " JOIN ax_call_followups fu ON fu.classification_id = k.id"
         " WHERE fu.status = 'failed'",
@@ -89,13 +95,15 @@ def _prep_saved(conn, today: date) -> dict:
 
 
 def _refused(conn, now: datetime) -> list[dict]:
-    """근거 없는 질문 — 물어보기에서 거절된 질문(챗·검색 요약, 평가 실행 제외), 실제 시계 최근 REFUSED_DAYS일"""
+    """근거 없는 질문 — 물어보기에서 문서 근거를 못 찾아 거절된 질문(챗·검색 요약, 평가 실행 제외), 실제 시계 최근
+    REFUSED_DAYS일. 비공개 정보라 거절한 챗(refuse_reason restricted)은 문서가 없어서가 아니라 뺀다"""
     since = (now - timedelta(days=REFUSED_DAYS)).isoformat(sep=" ", timespec="seconds")
     return [
         dict(r)
         for r in conn.execute(
             "SELECT id, kind, question, created_at AS at FROM ax_search_logs"
-            " WHERE status = 'refused' AND is_eval = 0 AND replace(created_at, 'T', ' ') >= ?"
+            " WHERE status = 'refused' AND COALESCE(refuse_reason, '') != 'restricted'"
+            " AND is_eval = 0 AND replace(created_at, 'T', ' ') >= ?"
             " ORDER BY created_at DESC, id DESC",
             (since,),
         )
@@ -109,13 +117,13 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
     todo, urgent = _todo(calls.today_board(conn, today))
     return {
         "date": today.isoformat(),
-        "cards": cards | {"todo": todo | {"urgent_calls": len(urgent)}},
+        "cards": cards | {"todo": todo},
         "people": {
             "urgent_calls": urgent,
             "review_calls": calls.review_calls(conn, today),
             "unconfirmed": sum("unconfirmed" in r["chips"] for r in rows),
             "alert_patients": cards["alert_patients"],
-            "todo_left": todo,
+            "todo_left": {k: todo[k] for k in ("items", "calls")},
             "judge_pending": judge_queue.pending_count(conn),
             "refused": _refused(conn, now),
         },

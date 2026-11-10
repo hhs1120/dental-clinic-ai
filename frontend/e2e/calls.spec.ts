@@ -56,3 +56,28 @@ test("확인할 통화 띠의 확인함", async ({ page }) => {
   await expect(detail).not.toContainText("사람 판정");
   expect(checked).toBe(true);
 });
+
+test("이미 확인된 통화에 확인함 — 오류 띠 없이 띠가 사라짐", async ({
+  page,
+}) => {
+  // 다른 탭에서 먼저 확인함 — 서버는 404, 다시 불러온 상세에는 확인할 통화가 없다
+  let posted = false;
+  await patchDetail(page, "c-0450", (d) => ({
+    ...d,
+    review: posted
+      ? null
+      : { ai: "none", reopened: false, flags: ["emergency"] },
+  }));
+  await page.route("**/api/calls/c-0450/check", (r) => {
+    posted = true;
+    return r.fulfill({
+      status: 404,
+      json: { detail: "확인할 통화가 아닙니다" },
+    });
+  });
+  await page.goto("/calls?call=c-0450");
+  const detail = page.getByRole("complementary", { name: "통화 상세" });
+  await detail.getByRole("button", { name: "확인함" }).click();
+  await expect(detail).not.toContainText("사람 판정");
+  await expect(page.getByText("확인할 통화가 아닙니다")).toHaveCount(0); // 오류 띠 없음
+});

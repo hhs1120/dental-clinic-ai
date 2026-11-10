@@ -9,7 +9,7 @@ import { CallHistory } from "@/components/calls/call-history";
 import { ScreenTabs } from "@/components/screen-tabs";
 import { TodayBoard } from "@/components/calls/today-board";
 import { Button } from "@/components/ui/button";
-import { errorText, useFetch } from "@/lib/api";
+import { ApiError, errorText, useFetch } from "@/lib/api";
 import {
   fetchBoard,
   fetchCall,
@@ -79,7 +79,9 @@ export function CallsView() {
       await checkCall(call, readPart());
       refresh();
     } catch (e) {
-      setFail(errorText(e));
+      // 404 = 이미 확인할 통화가 아님(다른 탭에서 먼저 확인함) — 다시 열기처럼 오류 없이 다시 불러온다
+      if (e instanceof ApiError && e.status === 404) refresh();
+      else setFail(errorText(e));
     } finally {
       setBusy(false);
     }

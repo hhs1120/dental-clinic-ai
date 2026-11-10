@@ -62,8 +62,8 @@ def test_todo_counts_match_board(tconn):
     assert todo == {
         "items": len(open_),
         "calls": 2,
-        "urgent_calls": 1,
-    }  # c-0001·c-0004, 급함 c-0004
+        "urgent_items": 2,
+    }  # c-0001·c-0004 — 급함은 줄 수(앞 숫자와 같은 단위): 급한 c-0004의 할 일 2줄
     assert s["people"]["todo_left"] == {"items": len(open_), "calls": 2}
 
 
@@ -109,11 +109,11 @@ def test_judge_pending_equals_next_call_left(tconn):
     assert jq.pending_count(tconn) == left == _sheet(tconn)["people"]["judge_pending"]
 
 
-def _log(conn, kind, question, status, at, is_eval=0):
+def _log(conn, kind, question, status, at, is_eval=0, reason=None):
     conn.execute(
-        "INSERT INTO ax_search_logs (kind, question, status, is_eval, created_at)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (kind, question, status, is_eval, at),
+        "INSERT INTO ax_search_logs (kind, question, status, is_eval, created_at, refuse_reason)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (kind, question, status, is_eval, at, reason),
     )
 
 
@@ -123,6 +123,8 @@ def test_refused_recent_non_eval_only(tconn):
     _log(tconn, "chat", "평가 질문", "refused", "2026-11-09 11:00:00", is_eval=1)
     _log(tconn, "chat", "오래된 질문", "refused", "2026-11-02 10:00:00")  # 8일 전
     _log(tconn, "chat", "답한 질문", "answered", "2026-11-09 12:00:00")
+    # 비공개 정보라 거절한 질문은 문서가 없어서가 아니다 — 근거 없는 질문이 아니다
+    _log(tconn, "chat", "직원 급여 얼마야", "refused", "2026-11-09 13:00:00", reason="restricted")
     got = _sheet(tconn)["people"]["refused"]
     assert [(r["kind"], r["question"], r["at"]) for r in got] == [
         ("chat", "유치는 언제 빠져?", "2026-11-09 10:00:00"),
@@ -196,6 +198,18 @@ def test_failures_counted(tconn):
     tconn.commit()
     ai = _sheet(tconn)["ai"]
     assert (ai["classify_failed"], ai["followup_failed"]) == (1, 1)
+
+
+def test_new_call_without_classification_is_failed(tconn):
+    """새로 추가한 통화가 분류 중 예외로 분류 행 없이 남으면(하루 상한 등) 분류 실패로 센다 — 어디에도 안 뜨지 않게.
+    분류 행 없는 생성 통화(버전 전환 직후 일괄 분류 전)는 세지 않는다"""
+    tconn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, added_by, added_at)"
+        " VALUES ('p-0001', 'inbound', '2026-12-01 09:00:00', '내용', '데스크', '2026-11-10 09:00:00')"
+    )
+    tconn.execute("DELETE FROM ax_call_classifications WHERE call_uid = 'c-0003'")
+    tconn.commit()
+    assert _sheet(tconn)["ai"]["classify_failed"] == 1
 
 
 def _save_prep(conn, appt, suggestion, valid, day=TODAY):
