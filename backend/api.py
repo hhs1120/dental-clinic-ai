@@ -28,6 +28,7 @@ from backend import (
     metrics,
     prep,
     search_summary,
+    today,
 )
 from backend.embeddings import make_embedder
 from backend.harness.auto import revert_auto_action
@@ -492,10 +493,10 @@ def calls_list(
 
 
 @app.get("/calls/{call_uid}")
-def call_detail(call_uid: str, paths: Paths) -> dict:
+def call_detail(call_uid: str, paths: Paths, clinic: ClinicDep) -> dict:
     conn = _open_rw(paths)
     try:
-        d = calls.call_detail(conn, call_uid)
+        d = calls.call_detail(conn, call_uid, clinic.today)
     finally:
         conn.close()
     if d is None:
@@ -532,13 +533,13 @@ def add_call(body: NewCall, paths: Paths, clinic: ClinicDep, now: Now, gw: Gatew
 
 
 @app.post("/calls/{call_uid}/classify")
-def reclassify(call_uid: str, paths: Paths, gw: GatewayFactory) -> dict:
+def reclassify(call_uid: str, paths: Paths, clinic: ClinicDep, gw: GatewayFactory) -> dict:
     conn = _open_rw(paths)
     try:
         if calls.call_detail(conn, call_uid) is None:
             raise HTTPException(404, "통화를 찾을 수 없습니다")
         calls.classify_one(conn, gw(conn), call_uid)
-        return calls.call_detail(conn, call_uid)
+        return calls.call_detail(conn, call_uid, clinic.today)
     finally:
         conn.close()
 
@@ -571,12 +572,35 @@ def todo_done(call_uid: str, item: int, body: TodoDone, paths: Paths, now: Now) 
         conn.close()
 
 
-class Revert(BaseModel):
+class Part(BaseModel):
     part: str
 
 
+@app.post("/calls/{call_uid}/check")
+def check_call(call_uid: str, body: Part, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    """확인할 통화의 확인함(기능 정의 §4 오늘 화면) — 지금 대상이 아니면 404"""
+    conn = _open_rw(paths)
+    try:
+        if not calls.check_call(conn, call_uid, today=clinic.today, by=body.part, at=_stamp(now)):
+            raise HTTPException(404, "확인할 통화가 아닙니다")
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@app.get("/today")
+def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    """오늘 화면 한 장(backend/today.py) — 앱 기준일 기준, 근거 없는 질문만 실제 시계"""
+    conn = _open_rw(paths)
+    try:
+        return today.sheet(conn, clinic.today, now)
+    finally:
+        conn.close()
+
+
 @app.post("/auto-actions/{action_id}/revert")
-def revert_auto(action_id: int, body: Revert, paths: Paths, now: Now) -> dict:
+def revert_auto(action_id: int, body: Part, paths: Paths, now: Now) -> dict:
     """자동 처리 되돌리기(앱 설계 §3b) — 앱 상태만 복원하고 해당 큐로 돌려보낸다"""
     conn = _open_rw(paths)
     try:
