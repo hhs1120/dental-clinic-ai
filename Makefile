@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -46,6 +46,13 @@ gold-audit:
 	uv run python -m evaluation.gold_audit audit
 
 # ① 분류 프롬프트 관문(평가 설계 §2.7) — 검증 구간에서 기준 A·후보 B를 3번씩 다수결 비교(과금, 저장된 실행은 다시 씀)
+# 코어 합격 기준(기능 정의 §6) — 무료 검사 먼저, 과금하는 dev 평가(evaluation/gate.py)는 마지막. make dev를 끄고 돌린다
+gate: frontend/node_modules
+	$(MAKE) test
+	npm --prefix frontend run -s build
+	$(MAKE) e2e
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.gate
+
 prompt-gate:
 	$(if $(and $(A),$(B),$(ITEM)),,$(error A=기준 버전 B=후보 버전 ITEM=목표 항목 필요))
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.prompt_gate --a $(A) --b $(B) --item $(ITEM)

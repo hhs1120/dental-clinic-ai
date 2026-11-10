@@ -17,10 +17,14 @@ ACTION_AUDIT_SAMPLE = 30  # 처리 정답 사람 표본 통화 수(evaluation/ca
 
 # ① 분류 프롬프트 관문(평가 설계 §2.7 — evaluation/prompt_gate.py). 고치면 시도 수가 다시 0부터
 GATE_RUNS = 3  # 버전마다 검증 구간을 분류하는 횟수 — 통화·항목마다 다수결
-GATE_P = 0.05  # 목표 항목 오름·다른 항목 하락의 McNemar 기준
+GATE_P = 0.05  # 목표 항목 오름의 McNemar 기준
 GATE_FALSE_ALARM_CAP = 2  # 응급·불만 오탐 증가 상한(건)
 GATE_REGRESSION_CAP = 3  # 목표 밖 항목의 다수결 오답 증가 상한(건)
 GATE_ATTEMPTS = 2  # 같은 기준에 판정할 수 있는 서로 다른 후보 수
+
+# 코어 합격 기준 make gate(기능 정의 §6 — evaluation/gate.py). dev 비율 하한
+CORE_TOOL_MIN = 0.5  # ③ 데이터형 도구 선택
+CORE_HIT5_MIN = 0.5  # ③ 문서 검색형 Hit@5(--retrieval-only와 같은 검색)
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
