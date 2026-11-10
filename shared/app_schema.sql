@@ -257,3 +257,34 @@ CREATE TABLE ax_chunk_vectors (
     embedding BLOB NOT NULL,
     PRIMARY KEY (chunk_id, model)
 ) WITHOUT ROWID;
+
+-- ④ 진료 준비표 행(앱 설계 §4, 설계 docs/superpowers/specs/2026-11-10-prep-sheet-design.md). 예약당 1행 — 새 버전으로 만들면 덮어쓴다.
+-- facts = backend/prep.py prep_facts 행(그날 개원 전 기준), facts_hash = 제안 입력(llm_facts)의 해시 — 해시·버전·모델이 같고 통과한 행은 다시 부르지 않는다.
+-- suggestion = {action, text, used_facts[{key,value}]}, 후검증 실패면 NULL·suggestion_valid 0
+CREATE TABLE ax_prep_sheets (
+    id               INTEGER PRIMARY KEY,
+    sheet_date       TEXT NOT NULL,
+    patient_id       INTEGER NOT NULL,
+    appointment_id   INTEGER NOT NULL,
+    facts            TEXT NOT NULL,
+    facts_hash       TEXT NOT NULL,
+    suggestion       TEXT,
+    suggestion_valid INTEGER NOT NULL DEFAULT 0,
+    prompt_version   TEXT NOT NULL,
+    model            TEXT NOT NULL,
+    created_at       TEXT NOT NULL,
+    UNIQUE (sheet_date, patient_id, appointment_id)
+);
+
+-- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜). 화면이 GET /jobs/{id}로 폴링
+CREATE TABLE ax_jobs (
+    id          INTEGER PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    arg         TEXT,
+    status      TEXT NOT NULL CHECK (status IN ('running', 'done', 'failed')),
+    done        INTEGER NOT NULL DEFAULT 0,
+    total       INTEGER NOT NULL DEFAULT 0,
+    error       TEXT,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT
+);

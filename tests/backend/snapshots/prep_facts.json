@@ -1,0 +1,141 @@
+[
+ {
+  "appointment_id": 101,
+  "patient_id": 1,
+  "time": "10:00",
+  "duration_min": 30,
+  "chair_no": 1,
+  "type": "treatment",
+  "procedure": "단순발치",
+  "procedure_code": "U0011",
+  "staff": "강태현",
+  "status": "scheduled",
+  "confirmed": false,
+  "patient": {
+   "name": "김철수",
+   "chart_no": "C-00001",
+   "age": 56,
+   "sex": "M",
+   "new_patient": false
+  },
+  "last_visit": "2026-11-20",
+  "balance": 30000,
+  "alerts": [
+   {
+    "code": "ANTICOAG",
+    "label": "항응고제 복용",
+    "related": true,
+    "action": "복용 여부 확인, 지혈 준비"
+   },
+   {
+    "code": "GAG",
+    "label": "구역반사",
+    "related": false,
+    "action": "상체를 세우고 구역반사 대비"
+   }
+  ],
+  "scaling_unused": true,
+  "family_recall": [
+   {
+    "chart_no": "C-00003",
+    "name": "김민수",
+    "last_hygiene": "2025-10-01"
+   }
+  ],
+  "open_plan": [
+   {
+    "procedure": "크라운",
+    "tooth": "46",
+    "est_fee": 450000
+   },
+   {
+    "procedure": "잇몸치료",
+    "tooth": "00",
+    "est_fee": 50000
+   }
+  ],
+  "chips": [
+   "appointment",
+   "insurance",
+   "balance",
+   "family_recall",
+   "alert",
+   "open_plan",
+   "unconfirmed"
+  ]
+ },
+ {
+  "appointment_id": 102,
+  "patient_id": 2,
+  "time": "11:00",
+  "duration_min": 30,
+  "chair_no": 2,
+  "type": "hygiene",
+  "procedure": "스케일링",
+  "procedure_code": "U0001",
+  "staff": "임재윤",
+  "status": "scheduled",
+  "confirmed": true,
+  "patient": {
+   "name": "박영희",
+   "chart_no": "C-00002",
+   "age": 54,
+   "sex": "F",
+   "new_patient": false
+  },
+  "last_visit": "2025-11-01",
+  "balance": 0,
+  "alerts": [
+   {
+    "code": "LATEX",
+    "label": "라텍스 알레르기",
+    "related": true,
+    "action": "비라텍스 장갑 사용"
+   }
+  ],
+  "scaling_unused": false,
+  "family_recall": [
+   {
+    "chart_no": "C-00003",
+    "name": "김민수",
+    "last_hygiene": "2025-10-01"
+   }
+  ],
+  "open_plan": [],
+  "chips": [
+   "appointment",
+   "family_recall",
+   "alert"
+  ]
+ },
+ {
+  "appointment_id": 103,
+  "patient_id": 4,
+  "time": "14:00",
+  "duration_min": 30,
+  "chair_no": null,
+  "type": "consult",
+  "procedure": "상담",
+  "procedure_code": "U0019",
+  "staff": "강태현",
+  "status": "scheduled",
+  "confirmed": false,
+  "patient": {
+   "name": "정다은",
+   "chart_no": "C-00004",
+   "age": 16,
+   "sex": "F",
+   "new_patient": true
+  },
+  "last_visit": null,
+  "balance": 0,
+  "alerts": [],
+  "scaling_unused": false,
+  "family_recall": [],
+  "open_plan": [],
+  "chips": [
+   "appointment",
+   "unconfirmed"
+  ]
+ }
+]
