@@ -301,7 +301,7 @@ tags:
 **앱 착수 조건**: 데이터 상태가 고정([[치과 AX - 가상 데이터 생성 설계]] §0)
 
 **`make gate`** (종료 코드. ④ 착수 조건 — `make dev`를 끄고 돌린다)
-1. ①·②·③ 완료 기준 전부(§4) — pytest 기준은 `make test`, UI 테스트(Playwright)는 `make e2e`(§4 ②, fixture는 §9), 수치는 `evaluation/gate.py`가 실데이터 DB(캐시된 실모델 분류)에서 판정 풀 `ok`를 보고 dev 평가를 새로 돌려 확인한다(과금 — 무료 검사를 다 넘은 뒤에만)
+1. ①·②·③ 완료 기준 전부(§4) — pytest 기준은 `make test`, UI 테스트(Playwright)는 `make e2e`(§4 ②, fixture는 §9), 수치는 `evaluation/gate.py`가 실데이터 DB(캐시된 실모델 분류)에서 판정 풀 `ok`를 보고 dev 평가를 새로 돌려 확인한다(과금 — 무료 검사를 다 넘은 뒤에만). dev 평가에 앱 경고(빈 색인·리랭커 실패)가 있으면 불합격
 2. `next build` exit 0
 
 `make ci`(fixture가 생긴 뒤 CI가 돌릴 타깃: `make lint` + fixture + fake 게이트웨이 + pytest + verify + `next build` + Playwright. 그 전의 CI는 `CLAUDE.md` 깃 절)와는 다른 타겟.
