@@ -118,7 +118,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 4. 준비표·오늘 화면·리포트
 
-**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행(`id` PK). `facts json` + `facts_hash`(같으면 LLM 생략) + `suggestion{action, text, used_facts[{key,value}]}` + `suggestion_valid`. UNIQUE `(sheet_date, patient_id, appointment_id)`. `facts`에 남은 치료계획·체어 번호가 들어간다(회의 보기·체어 보기가 같은 행을 쓴다)
+**`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행 — 칸은 `shared/app_schema.sql`. `facts`는 `backend/prep.py` `prep_facts` 행 그대로, `facts_hash`는 제안 입력(`llm_facts`)의 해시 — 해시·`prompt_version`·`model`이 같고 `suggestion_valid`면 다시 부르지 않는다. 예약당 1행이라 새 버전으로 만들면 덮어쓴다. 준비표·체어 보기가 같은 행을 쓴다
 
 **오늘 화면**(`GET /today`): 쿼리로 모은다. 자동 처리·환자 묶음은 §3b 테이블을 읽는다(항목은 [[치과 AX - 기능 정의]] §4 앱 구성). **⑦ 브리핑**은 `ax_briefings`(날짜, 문장, 쓴 숫자, 후검증 통과 여부 — ④와 같은 틀), 슬롯 착수 시 추가.
 **⑥ 리포트**: 숫자는 쿼리로 모으고 `metrics`로 저장한다. 앱 테이블 `ax_reports`(기간 종류·기간, `metrics`, 문장, 후검증 통과 여부 — ④와 같은 틀)는 슬롯 착수 시 추가. 튄 숫자 조사 결과는 근거 쿼리·실행 id와 함께 저장한다. 인건비가 들어간 값은 `metrics`에서 추정 항목으로 구분해 화면이 `[추정]`을 붙인다. 항목은 [[치과 AX - 기능 정의]] §5 ⑥.
@@ -136,7 +136,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 **`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움, 자동 개선 착수 때), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **동시 쓰기**: 앱 연결은 WAL + `busy_timeout`(`backend/db.py`) — 챗 SSE가 쓰는 동안 다른 쓰기가 막히지 않게. 그래서 `app.sqlite`를 복사하는 곳(`save-demo`, `make e2e` — `frontend/playwright.config.ts`)은 `-wal` 파일까지 함께 복사한다(또는 체크포인트 뒤 복사)
-**`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률. 프론트는 폴링
+**`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 재생성·야간 실행)의 상태·진행률 — 칸은 `shared/app_schema.sql`, 지금 쓰는 것은 준비표 다시 만들기(`kind` `prep`). 같은 작업이 `running`이면 새로 만들지 않고, `backend/api.py` `JOB_STALE`보다 오래 `running`인 행은 죽은 것으로 본다. 프론트는 폴링
 
 **판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채우고, 활성 쌍의 엇갈림을 다시 계산하면 대상이 아니게 된 pending 건을 지운다(`backend/judge_queue.py` `prune` — skipped·done·사람 판정은 그대로). 저장 뒤 두 모델 라벨이 보인다
 **dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다(최종 비교의 예외는 [[치과 AX - 평가 설계]] §2.4)
@@ -202,8 +202,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 8. 미결
 
-- [ ] `prep_facts` fact 키 목록 (④ 착수 시 — 후검증·회귀 테스트의 기준)
-- [ ] backend가 `master` 값을 읽는 방법 (④·⑤·⑧ 착수 시) — 주의 칩의 관련 시술·행동(④, `ALERT_TYPES`), 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 원본은 `generator/master.py`인데 backend는 `generator/`를 import하지 않는다(CLAUDE.md). 앱이 읽는 `source.sqlite`에는 코드·이름(`emr_alert_types`·`emr_diagnoses`)만 있다. 후보: 생성기가 `ax_` 테이블로 적재 / 매핑을 `shared/`로 옮겨 생성기·backend가 같이 읽음. 평가(반영률·과잉 언급률)도 같은 매핑을 써야 한다. 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`
+- [ ] backend가 읽을 `master` 값을 `source.ax_master_values`에 더하기 (⑤·⑧ 착수 시 — 방법은 가상 데이터 생성 설계 §3 `ax_master_values`, ④가 처음 씀) — 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`
 - [ ] ⑨ 점수 규칙과 값 (⑨ 착수 시) — 앱 로직이라 `master`가 아니라 앱 쪽 설정이 원본
 
 ## 9. 프론트
@@ -218,7 +217,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/today` | 오늘 | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
-| `/prep` | 준비표(표·회의·체어) | [[치과 AX - 기능 정의]] §4 ④ |
+| `/prep` | 준비표·체어 보기(`?view=chair`) — 와이어프레임의 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
 | `/ask` | 질문하기, 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③ |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |

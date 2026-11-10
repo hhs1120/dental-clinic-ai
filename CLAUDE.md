@@ -43,6 +43,7 @@
 - `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
 - `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, `make dev`를 끄고)
 - `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
+- `make prep [DATE=] [NO_BATCH=1]` — ④ 준비표 만들기(과금, `backend/prep.py`, 날짜 탭 전체를 Batch로 — 통과한 행은 건너뜀)
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
 - ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)

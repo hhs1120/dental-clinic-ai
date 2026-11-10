@@ -21,7 +21,7 @@ tags:
 | 보험 | 건강보험 단일. 월 1회 일괄 청구. 실손은 환자 플래그 + 통화 소재만. 수가·심사는 흉내만 — 급여 청구액 = 수가 × (1 − 본인부담률), 값은 `master.PROCEDURES`. 소아 급여 특례 없음 |
 | 데이터 상태 | **고정**(고정·재설계 규칙은 `CLAUDE.md` 절대 규칙 — 고정 중에 바뀌면 LLM 캐시·녹취록·사람 판정까지 연쇄 무효) |
 | DB 파일 | 생성기는 `data/source.sqlite`(`emr_`·`fin_`·생성기가 적재하는 `ax_`)에만 쓴다. 앱은 `data/app.sqlite`에 자기 테이블을 쓰고 source를 읽기 전용으로 붙인다([[치과 AX - 앱 설계]] §7). 정답은 `ground_truth/truth.sqlite` |
-| 테이블 접두어 | 현실의 소속 시스템 기준: `emr_*` 전자차트 원본(진료·수납·청구·차트·문자) / `fin_*` 재무 원본(금융기관 내역·회계 증빙) / `ax_*` AX 시스템 / `truth_*` 정답 별도 DB. `ax_calls`·`ax_documents`는 생성기가 채우지만 현실에선 AX 도입 후 쌓이므로 `ax_`. |
+| 테이블 접두어 | 현실의 소속 시스템 기준: `emr_*` 전자차트 원본(진료·수납·청구·차트·문자) / `fin_*` 재무 원본(금융기관 내역·회계 증빙) / `ax_*` AX 시스템 / `truth_*` 정답 별도 DB. `ax_calls`·`ax_documents`는 생성기가 채우지만 현실에선 AX 도입 후 쌓이므로 `ax_`. `ax_master_values`는 AX 시스템의 설정(주의사항 → 관련 시술 등)이라 `ax_`. |
 
 ## 1. 병원 프로필
 
@@ -255,7 +255,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 
 ## 3. 생성기가 적재하는 `ax_*`
 
-생성기는 `ax_calls`와 `ax_documents`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
+생성기는 `ax_calls`·`ax_documents`·`ax_master_values`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). `ax_master_values`는 backend가 `generator/`를 import하지 않고 master 값을 읽는 길이다 — 이름 → JSON(`generator/clinic.py` `master_values_rows`, 원본은 `master`). 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
 
 **`ax_calls`**
 | 컬럼 | 의미 |
@@ -464,6 +464,7 @@ make data [FAKE_LLM=1]
  8c. 재무 지출    §2.7 ⑧-2 거래처·출금·증빙 템플릿                (코드)
  9. RAG 문서       §4.2 문서 계획(코드) → 본문(새 문서는 뒤에 붙임)  (LLM, 캐시)
  9b. 차트 서술    §4.3 특이 케이스·디코이                         (LLM, 캐시)
+ 9c. master 값    backend가 읽는 master 값 → ax_master_values         (코드)
 10. 적재·검증     source.sqlite까지가 make data. make verify·make index(앱 코드가 app.sqlite에 — 앱 설계 §3)는 따로 실행
 ```
 
@@ -491,7 +492,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 **필수**(실패 시 중단. `planned_procedure_code`·`tooth_no` 값 있음과 대조 키 유일은 스키마(NOT NULL·UNIQUE)가 보장해 검사하지 않음)
 | 영역 | 검사 |
 |---|---|
-| 참조 | FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.id`의 출처)는 타입별 조인(app.sqlite를 붙였을 때) |
+| 참조 | `ax_master_values` = `master`(`check_master_values`); FK 전부 유효. 다형 참조(`ax_llm_calls.ref_*`, `ax_chunks.id`의 출처)는 타입별 조인(app.sqlite를 붙였을 때) |
 | TODAY 구간 | TODAY 당일은 `scheduled/cancelled`만; TODAY 이후는 예약만(treatments·payments·claims 없음); `started_at`·`sent_at`·`submitted_at`·`effective_date`·`created_at`·`cancelled_at`·`registered_at`·`birth_date`·`recorded_at`·`reviewed_at` ≤ TODAY; `confirmed`는 직전 진료일 ≤ TODAY인 예약만; 청구 상태는 §2.4(전월 `pending`, 제출 월은 `submitted`·결과 없음). `fin_*` 날짜 칸 ≤ TODAY; 생성 기간은 `truth_gen_meta`에서 읽음(없으면 실패) |
 | 나이 | 치아 단위 시술은 시술일 `master.TOOTH_TREATMENT_MIN_AGE`세 이상; 등록일 `master.MIN_VISIT_AGE`세 이상 |
 | 충돌·운영 제약 | 같은 환자 같은 날 중복 없음(응급 내원 제외); 같은 체어 시간 겹침 없음, 위생사 동시 1건, 원장 동시 ≤ `master.DOCTOR_CONCURRENCY`(창 안 비취소 예약 — 창 이전 내원은 체어·담당만 균등으로 두고 제외), 상담은 체어 없음·그 밖은 체어 1~`master.CHAIRS`(④ 체어 보기가 의존 — §1 (1)·(2)는 생성 코드가 보장해 검사하지 않음) |
