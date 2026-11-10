@@ -109,7 +109,7 @@ def _scaling_unused(conn, p, day: date, planned: str, mv: dict) -> bool:
 
 
 def _family_recall(conn, p, day: date) -> list[dict]:
-    """리콜이 지난 가족 — 그날 전 마지막 위생 내원 + 리콜 주기 < 그날, 그날 이후 위생 예약이 잡힌 사람은 뺀다"""
+    """리콜이 지난 가족 — 그날 전 마지막 위생 내원 + 리콜 주기 < 그날, 그날 아침 이후 위생 예약이 잡혀 있던 사람은 뺀다"""
     if p["family_id"] is None:
         return []
     d = day.isoformat()
@@ -118,10 +118,12 @@ def _family_recall(conn, p, day: date) -> list[dict]:
         "SELECT f.id, f.chart_no, f.name, f.recall_cycle_months AS months,"
         " (SELECT MAX(date(scheduled_at)) FROM source.emr_appointments WHERE patient_id = f.id"
         "  AND status = 'completed' AND type = 'hygiene' AND date(scheduled_at) < ?) AS last,"
+        # 그날 아침 잡혀 있던 위생 예약 — 그날 전에 잡았고 그날 전에 취소되지 않음(뒤의 노쇼·취소도 그날엔 잡힌 것)
         " EXISTS (SELECT 1 FROM source.emr_appointments WHERE patient_id = f.id AND type = 'hygiene'"
-        "  AND status IN ('scheduled', 'completed') AND date(scheduled_at) >= ?) AS booked"
+        "  AND date(scheduled_at) >= ? AND created_at < ?"
+        "  AND (cancelled_at IS NULL OR date(cancelled_at) >= ?)) AS booked"
         " FROM source.emr_patients f WHERE f.family_id = ? AND f.id != ? ORDER BY f.id",
-        (d, d, p["family_id"], p["id"]),
+        (d, d, d, d, p["family_id"], p["id"]),
     ):
         if m["last"] is None or m["booked"]:
             continue
@@ -327,10 +329,26 @@ def _valid(result, facts: dict):
     """통과한 제안 dict, 아니면 None"""
     if result is None or not result.ok or not isinstance(result.data, dict):
         return None
-    return result.data if check_suggestion(facts, result.data) else None
+    try:
+        return result.data if check_suggestion(facts, result.data) else None
+    except (
+        KeyError,
+        TypeError,
+        AttributeError,
+    ):  # 칸이 빠진 답 — 그 행만 실패(스키마를 강제하지 않는 공급자)
+        return None
 
 
-def _save(conn, day: date, row: dict, facts_hash: str, suggestion, model: str) -> None:
+def _save(
+    conn,
+    day: date,
+    row: dict,
+    facts_hash: str,
+    suggestion,
+    model: str,
+    created_at: str | None = None,
+) -> None:
+    """created_at이 있으면 그대로(건너뛴 행 — 제안을 만든 시각을 지킨다)"""
     with conn:  # 행마다 커밋 — 다시 부르는 동안 쓰기 잠금을 쥐지 않는다
         conn.execute(
             "INSERT INTO ax_prep_sheets (sheet_date, patient_id, appointment_id, facts, facts_hash,"
@@ -350,7 +368,7 @@ def _save(conn, day: date, row: dict, facts_hash: str, suggestion, model: str) -
                 int(suggestion is not None),
                 PROMPT_VERSION,
                 model,
-                datetime.now().isoformat(timespec="seconds"),
+                created_at or datetime.now().isoformat(timespec="seconds"),
             ),
         )
 
@@ -382,7 +400,7 @@ def build(
             facts = llm_facts(r)
             h = _hash(facts)
             old = conn.execute(
-                "SELECT facts_hash, prompt_version, model, suggestion, suggestion_valid"
+                "SELECT facts_hash, prompt_version, model, suggestion, suggestion_valid, created_at"
                 " FROM ax_prep_sheets WHERE sheet_date = ? AND patient_id = ? AND appointment_id = ?",
                 (day.isoformat(), r["patient_id"], r["appointment_id"]),
             ).fetchone()
@@ -391,7 +409,7 @@ def build(
                 and old["suggestion_valid"]
                 and (old[0], old[1], old[2]) == (h, PROMPT_VERSION, model)
             ):
-                _save(conn, day, r, h, json.loads(old["suggestion"]), model)
+                _save(conn, day, r, h, json.loads(old["suggestion"]), model, old["created_at"])
                 out["skipped"] += 1
                 continue
             todo.append((f"{day.isoformat()}_{r['appointment_id']}", day, r, facts, h))
@@ -414,11 +432,13 @@ def build(
 
     for key, day, r, facts, h in todo:
         out["called"] += 1
-        got = _valid(first.get(key) or plain(facts), facts)
+        used = first.get(key) or plain(facts)
+        got = _valid(used, facts)
         if got is None:
-            got = _valid(plain(facts), facts)
+            used = plain(facts)
+            got = _valid(used, facts)
         out["failed"] += got is None
-        _save(conn, day, r, h, got, model)
+        _save(conn, day, r, h, got, used.model if used else model)  # 실제로 답한 모델(폴백 포함)
     return out
 
 

@@ -77,7 +77,9 @@ def test_regenerate_returns_running_job(client, tmp_path):
         )
     conn.close()
     assert client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"] == 7
-    assert client.post("/jobs/prep-regenerate?date=2026-11-30").json()["job_id"] != 7
+    other = client.post("/jobs/prep-regenerate?date=2026-11-30").json()["job_id"]
+    assert other != 7
+    _wait(client, other)  # 작업 스레드가 테스트 뒤에 tmp DB에 쓰지 않게 끝을 기다린다
 
 
 def test_regenerate_ignores_stale_running_job(client, tmp_path):
@@ -101,3 +103,27 @@ def test_regenerate_out_of_range_400(client):
 
 def test_unknown_job_404(client):
     assert client.get("/jobs/999").status_code == 404
+
+
+def test_job_failure_is_recorded(client, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("터짐")
+
+    monkeypatch.setattr(api.prep, "build", boom)
+    job = _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    assert job["status"] == "failed" and "터짐" in job["error"] and job["finished_at"]
+
+
+def test_job_connect_failure_is_recorded(client, monkeypatch):
+    real = api.db.connect
+    calls = []
+
+    def flaky(*a, **k):
+        calls.append(1)
+        if len(calls) == 2:  # 요청 연결 다음, 작업 스레드의 첫 연결
+            raise RuntimeError("연결 실패")
+        return real(*a, **k)
+
+    monkeypatch.setattr(api.db, "connect", flaky)
+    job = _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    assert job["status"] == "failed" and "연결 실패" in job["error"]

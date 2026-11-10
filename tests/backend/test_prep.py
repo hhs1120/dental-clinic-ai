@@ -70,6 +70,8 @@ def make_source(path: Path) -> sqlite3.Connection:
             (104, 3, 2, "2026-12-01 15:00:00", "hygiene", "U0001", "cancelled", 0, 2, None),
         ],
     )
+    # 취소 예약에는 취소 시각이 있다(가상 데이터 생성 설계 검사 "예약")
+    conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-28 10:00:00' WHERE id = 104")
     conn.executemany(
         "INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,"
         " performed_at, fee_total, insured_amount, patient_amount) VALUES (?, ?, 1, ?, ?, ?, 0, 0, 0)",
@@ -173,6 +175,68 @@ def test_family_recall_excludes_booked_member(src):
         APPT, (105, 3, 2, "2026-12-08 10:00:00", "hygiene", "U0001", "scheduled", 0, 2, None)
     )
     assert rows(src)[101]["family_recall"] == []
+
+
+def _hygiene(conn, appt_id, at, status, created, cancelled=None):
+    conn.execute(
+        "INSERT INTO emr_appointments (id, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " planned_procedure_code, status, booked_via, confirmed, created_at, cancelled_at, chair_no)"
+        " VALUES (?, 3, 2, ?, 30, 'hygiene', 'U0001', ?, 'phone', 0, ?, ?, 2)",
+        (appt_id, at, status, created, cancelled),
+    )
+
+
+def test_family_recall_booking_as_of_morning(src):
+    # 그날 뒤에 잡은 예약은 그날 아침엔 없었다 — 김민수는 여전히 리콜 지남
+    _hygiene(src, 105, "2026-12-08 10:00:00", "scheduled", "2026-12-01 12:00:00")
+    assert [m["name"] for m in rows(src)[101]["family_recall"]] == ["김민수"]
+
+
+def test_family_recall_booking_cancelled_later_still_booked(src):
+    # 그날 아침엔 잡혀 있었고 뒤에 취소 — 그날 기준으로는 잡힌 예약
+    _hygiene(
+        src, 105, "2026-12-08 10:00:00", "cancelled", "2026-11-20 09:00:00", "2026-12-03 09:00:00"
+    )
+    assert rows(src)[101]["family_recall"] == []
+
+
+def test_family_recall_booking_cancelled_before_day_not_booked(src):
+    _hygiene(
+        src, 105, "2026-12-08 10:00:00", "cancelled", "2026-11-20 09:00:00", "2026-11-25 09:00:00"
+    )
+    assert [m["name"] for m in rows(src)[101]["family_recall"]] == ["김민수"]
+
+
+def test_open_plan_full_mouth_replaced_by_same_code(src):
+    # 계획 2의 잇몸치료(전체 구강) — 계획 밖 잇몸치료가 11/25에 들어가면 12/01에는 대체됨
+    src.execute(
+        APPT, (96, 1, 1, "2026-11-25 10:00:00", "treatment", "U0018", "completed", 1, 1, None)
+    )
+    src.execute(
+        "INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,"
+        " performed_at, fee_total, insured_amount, patient_amount)"
+        " VALUES (4, 96, 1, 'U0018', '00', '2026-11-25 10:00:00', 0, 0, 0)"
+    )
+    assert [p["procedure"] for p in rows(src)[101]["open_plan"]] == ["크라운"]
+
+
+def test_open_plan_same_plan_item_same_tooth_not_replaced(src):
+    # 같은 계획의 항목(46번 크라운)이 이행되며 46번에 진료가 들어가도, 같은 계획의 다른 항목은 대체가 아니다
+    src.execute(
+        "INSERT INTO emr_treatment_plan_items VALUES (14, 1, 4, 'U0008', '46', 100000, 'open')"
+    )
+    src.execute(
+        APPT, (97, 1, 1, "2026-11-26 10:00:00", "treatment", "U0009", "completed", 1, 1, 12)
+    )
+    src.execute(
+        "INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,"
+        " performed_at, fee_total, insured_amount, patient_amount)"
+        " VALUES (5, 97, 1, 'U0009', '46', '2026-11-26 10:00:00', 0, 0, 0)"
+    )
+    assert [(p["procedure"], p["tooth"]) for p in rows(src)[101]["open_plan"]] == [
+        ("신경치료", "46"),
+        ("잇몸치료", "00"),
+    ]
 
 
 def test_open_plan_as_of_day(src):
@@ -345,6 +409,30 @@ def test_build_recalls_failed_row(app):
     gw = FakeGw(res(SUGGEST))
     prep.build(app, gw, [TODAY], TODAY, use_batch=False)
     assert len(gw.calls) == 1 and _saved(app)[101]["suggestion_valid"] == 1
+
+
+def test_build_malformed_answer_fails_row_not_job(app):
+    gw = FakeGw(res({"text": "칸 빠짐"}), res({"action": "suggest"}), res(NONE), res(NONE))
+    out = prep.build(app, gw, [TODAY], TODAY, use_batch=False)
+    assert out["failed"] == 1 and _saved(app)[101]["suggestion"] is None
+
+
+def test_build_records_answering_model(app):
+    gw = FakeGw(res(SUGGEST, model="claude-sonnet-5"), res(NONE), res(NONE))
+    prep.build(app, gw, [TODAY], TODAY, use_batch=False)
+    assert _saved(app)[101]["model"] == "claude-sonnet-5"
+    # 폴백 모델로 만든 행은 다음에 다시 부른다(건너뛰기 조건은 별칭 첫 모델)
+    gw2 = FakeGw(res(SUGGEST))
+    prep.build(app, gw2, [TODAY], TODAY, use_batch=False)
+    assert len(gw2.calls) == 1
+
+
+def test_build_skipped_row_keeps_created_at(app):
+    prep.build(app, FakeGw(res(SUGGEST), res(NONE), res(NONE)), [TODAY], TODAY, use_batch=False)
+    app.execute("UPDATE ax_prep_sheets SET created_at = '2026-12-01T05:30:00'")
+    app.commit()
+    prep.build(app, FakeGw(), [TODAY], TODAY, use_batch=False)
+    assert {r["created_at"] for r in _saved(app).values()} == {"2026-12-01T05:30:00"}
 
 
 def test_build_recalls_on_prompt_version_change(app, monkeypatch):

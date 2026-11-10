@@ -722,20 +722,28 @@ def prep_sheet(paths: Paths, clinic: ClinicDep, date: str | None = None) -> dict
 
 
 def _run_prep_job(paths, gw_factory, job_id: int, day: dt.date, today: dt.date) -> None:
-    """작업 스레드 — 연결을 따로 열고 일반 호출로 만든다(사람이 기다린다)"""
-    conn = db.connect(*paths)
+    """작업 스레드 — 연결을 따로 열고 일반 호출로 만든다(사람이 기다린다). 어디서 실패해도 작업 행을 끝낸다"""
+    status, error, done = "failed", None, 0
+    conn = None
     try:
+        conn = db.connect(*paths)
         out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False)
-        status, error, done = "done", None, out["rows"]
+        status, done = "done", out["rows"]
     except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
-        conn.rollback()
-        status, error, done = "failed", f"{type(e).__name__}: {e}", 0
-    with conn:
-        conn.execute(
-            "UPDATE ax_jobs SET status = ?, error = ?, done = ?, finished_at = ? WHERE id = ?",
-            (status, error, done, dt.datetime.now().isoformat(timespec="seconds"), job_id),
-        )
-    conn.close()
+        error = f"{type(e).__name__}: {e}"
+    finally:
+        if conn is not None:
+            conn.close()
+        end = db.connect(*paths)  # 작업 연결이 깨졌어도 끝 표시는 새 연결로
+        try:
+            with end:
+                end.execute(
+                    "UPDATE ax_jobs SET status = ?, error = ?, done = ?, finished_at = ?"
+                    " WHERE id = ?",
+                    (status, error, done, dt.datetime.now().isoformat(timespec="seconds"), job_id),
+                )
+        finally:
+            end.close()
 
 
 @app.post("/jobs/prep-regenerate")
