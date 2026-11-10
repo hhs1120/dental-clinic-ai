@@ -446,12 +446,27 @@ def tab_days(today: date) -> list[date]:
     return [today - timedelta(days=k) for k in range(DAYS - 1, -1, -1)]
 
 
+def _changed(before: dict, after: dict) -> list[dict]:
+    """제안 입력 키별 전후 값 — 지금 키 순서, 그다음 사라진 키"""
+    keys = list(after) + [k for k in before if k not in after]
+    return [
+        {
+            "key": k,
+            "before": None if k not in before else str(before[k]),
+            "after": None if k not in after else str(after[k]),
+        }
+        for k in keys
+        if before.get(k) != after.get(k)
+    ]
+
+
 def sheet(conn, day: date, today: date) -> dict:
-    """화면 한 장 — 지금 사실(prep_facts) + 저장된 제안. 저장 뒤 제안 입력이 바뀐 행은 stale(다시 만들기 대상)"""
+    """화면 한 장 — 지금 사실(prep_facts) + 저장된 제안. 저장 뒤 제안 입력이 바뀐 행은 stale(갱신 대상)이고
+    changed에 바뀐 제안 입력 키와 전후 값(없으면 None)을 단다"""
     saved = {
         r["appointment_id"]: r
         for r in conn.execute(
-            "SELECT appointment_id, facts_hash, suggestion, suggestion_valid, created_at"
+            "SELECT appointment_id, facts, facts_hash, suggestion, suggestion_valid, created_at"
             " FROM ax_prep_sheets WHERE sheet_date = ?",
             (day.isoformat(),),
         )
@@ -459,13 +474,17 @@ def sheet(conn, day: date, today: date) -> dict:
     rows = []
     for r in prep_facts(conn, day, today):
         s = saved.get(r["appointment_id"])
+        now = llm_facts(r)
+        stale = bool(s and s["facts_hash"] != _hash(now))
         rows.append(
             r
             | {
                 "generated": s is not None,
                 "suggestion": json.loads(s["suggestion"]) if s and s["suggestion"] else None,
                 "suggestion_valid": bool(s and s["suggestion_valid"]),
-                "stale": bool(s and s["facts_hash"] != _hash(llm_facts(r))),
+                "stale": stale,
+                "changed": _changed(llm_facts(json.loads(s["facts"])), now) if stale else [],
+                "made_at": s["created_at"] if s else None,
             }
         )
     tabs = tab_days(today)

@@ -12,6 +12,7 @@ import {
   hasTodo,
   type PrepRow,
   type PrepSheet,
+  type Suggestion,
   TYPE_LABEL,
   won,
 } from "@/lib/prep-api";
@@ -213,28 +214,52 @@ export function PrepTable({
 }
 
 export function SuggestionLine({ row }: { row: PrepRow }) {
-  if (!row.generated)
+  const prev = row.refreshed?.prev;
+  return (
+    <span>
+      {row.refreshed && (
+        <Badge variant="info" className="mr-1.5">
+          방금 갱신
+        </Badge>
+      )}
+      <SuggestionText s={row.suggestion} generated={row.generated} />
+      {row.refreshed && "prev" in row.refreshed && (
+        <span className="block text-xs text-muted-foreground">
+          이전:{" "}
+          {prev
+            ? prev.action === "none"
+              ? "그대로 진행"
+              : prev.text
+            : "제안 없음 — 후검증 실패"}
+        </span>
+      )}
+      {row.stale && (
+        <span className="block text-xs text-status-warn-fg">
+          제안 만든 뒤 바뀜: {row.changed.map(changeText).join(", ") || "사실"}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SuggestionText({
+  s,
+  generated,
+}: {
+  s: Suggestion | null;
+  generated: boolean;
+}) {
+  if (!generated)
     return <span className="text-muted-foreground">아직 만들지 않음</span>;
-  if (!row.suggestion)
+  if (!s)
     return (
       <span className="font-bold text-status-danger-fg">
         제안 없음 — 후검증 실패
       </span>
     );
-  return (
-    <span>
-      {row.suggestion.action === "none" ? (
-        <span className="text-muted-foreground">그대로 진행</span>
-      ) : (
-        row.suggestion.text
-      )}
-      {row.stale && (
-        <span className="block text-xs text-status-warn-fg">
-          사실이 바뀜 — 다시 만들기
-        </span>
-      )}
-    </span>
-  );
+  if (s.action === "none")
+    return <span className="text-muted-foreground">그대로 진행</span>;
+  return <>{s.text}</>;
 }
 
 function Expand({ row }: { row: PrepRow }) {
@@ -345,6 +370,36 @@ function factLabel(key: string, row: PrepRow): string {
     return `가족 리콜: ${f?.name ?? rest}`;
   }
   return FACT_LABEL[key] ?? key;
+}
+
+const LIST_FACT: Record<string, string> = {
+  alert: "주의",
+  plan: "남은 치료계획",
+  family: "가족 리콜",
+};
+
+/** 제안 만든 뒤 바뀐 제안 입력 한 건(backend/prep.py sheet changed) → 한 구절 */
+function changeText(c: PrepRow["changed"][number]): string {
+  const head = c.key.split(".")[0];
+  if (head in LIST_FACT) {
+    const v = (c.after ?? c.before ?? "")
+      .split(" — ")[0]
+      .replace(/(\d+)원/, (_, n) => won(Number(n)));
+    const what =
+      c.before === null ? "생김" : c.after === null ? "빠짐" : "바뀜";
+    return `${LIST_FACT[head]} ${what}: ${v}`;
+  }
+  if (c.key === "scaling_unused")
+    return c.after ? "올해 스케일링 급여 미사용" : "올해 스케일링 급여 사용함";
+  const fmt = (v: string | null) =>
+    v === null
+      ? "없음"
+      : c.key === "balance"
+        ? won(Number(v))
+        : c.key === "type"
+          ? (TYPE_LABEL[v as PrepRow["type"]] ?? v)
+          : v;
+  return `${FACT_LABEL[c.key] ?? c.key} ${fmt(c.before)} → ${fmt(c.after)}`;
 }
 
 /** 시작 시각 기준 시간대별 예약 수 */

@@ -25,6 +25,8 @@ const base = {
   generated: true,
   suggestion_valid: true,
   stale: false,
+  changed: [],
+  made_at: "2026-12-01T05:30:00",
 };
 
 const ROWS = [
@@ -265,5 +267,63 @@ test("체어 보기 — 지금 환자가 있으면 바로 뒤 환자에 다음",
   );
   await expect(page.getByRole("button", { name: /11:30/ })).toContainText(
     "다음",
+  );
+});
+
+test("갱신 전 — 바뀐 사실과 갱신할 인원", async ({ page }) => {
+  const stale = {
+    ...ROWS[0],
+    stale: true,
+    changed: [{ key: "balance", before: "50000", after: "30000" }],
+  };
+  await fakePrep(page, () => [stale, ROWS[1], ROWS[2]]);
+  await page.goto("/prep?date=2026-12-01");
+  await expect(page.getByRole("row", { name: /김철수/ })).toContainText(
+    "제안 만든 뒤 바뀜: 미수 잔액 50,000원 → 30,000원",
+  );
+  await expect(page.getByText(/AI 제안: 12\/1\(화\) 05:30 기준/)).toContainText(
+    "사실이 바뀐 환자 1명",
+  );
+  // 사실이 바뀐 김철수 + 후검증 실패 정다은
+  await expect(
+    page.getByRole("button", { name: "AI 제안 갱신하기 (2명)" }),
+  ).toBeEnabled();
+});
+
+test("모두 최신이면 갱신 버튼이 꺼진다", async ({ page }) => {
+  await fakePrep(page, () => [ROWS[0], ROWS[1]]);
+  await page.goto("/prep?date=2026-12-01");
+  await expect(
+    page.getByRole("button", { name: "AI 제안 최신" }),
+  ).toBeDisabled();
+});
+
+test("갱신 뒤 — 방금 갱신한 행에 이전 제안", async ({ page }) => {
+  let refreshed = false;
+  const renewed = {
+    ...ROWS[0],
+    suggestion: {
+      action: "suggest",
+      text: "항응고제 복용 확인",
+      used_facts: [ROWS[0].suggestion!.used_facts[0]],
+    },
+    made_at: "2026-12-01T09:00:00",
+  };
+  await fakePrep(page, () => (refreshed ? [renewed, ROWS[1], ROWS[2]] : ROWS));
+  await page.route("**/api/jobs/**", (r) => {
+    if (r.request().method() === "POST") {
+      refreshed = true;
+      return r.fulfill({ json: { job_id: 1 } });
+    }
+    return r.fulfill({ json: { id: 1, status: "done", error: null } });
+  });
+  await page.goto("/prep?date=2026-12-01");
+  await page.getByRole("button", { name: "AI 제안 갱신하기 (1명)" }).click();
+  const row = page.getByRole("row", { name: /김철수/ });
+  await expect(row).toContainText("방금 갱신");
+  await expect(row).toContainText("이전: 항응고제 복용 확인, 미수 3만 원 안내");
+  await expect(page.getByText("1명 갱신함")).toBeVisible();
+  await expect(page.getByRole("row", { name: /박영희/ })).not.toContainText(
+    "방금 갱신",
   );
 });

@@ -62,7 +62,38 @@ def test_job_done_after_build(client):
     first = body["rows"][0]
     assert first["generated"] is True and first["suggestion"]["action"] == "suggest"
     assert first["suggestion_valid"] is True and first["stale"] is False
-    assert body["generated_at"] is not None
+    assert first["changed"] == [] and first["made_at"] == body["generated_at"] is not None
+
+
+def test_stale_row_lists_changed_facts(client, tmp_path):
+    """저장 때 사실과 지금 사실을 제안 입력(llm_facts) 키로 비교해 바뀐 것만 — 화면의 "제안 만든 뒤 바뀜" """
+    import json
+
+    from backend import db
+
+    _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    conn = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    facts = json.loads(
+        conn.execute("SELECT facts FROM ax_prep_sheets WHERE appointment_id = 101").fetchone()[0]
+    )
+    old = facts | {"balance": 50000, "alerts": facts["alerts"][1:]}
+    with conn:  # 제안을 만들 때는 미수가 50000원, 항응고제 주의사항이 없었던 것으로
+        conn.execute(
+            "UPDATE ax_prep_sheets SET facts = ?, facts_hash = 'old' WHERE appointment_id = 101",
+            (json.dumps(old),),
+        )
+    conn.close()
+    row = client.get("/prep").json()["rows"][0]
+    assert row["stale"] is True
+    assert row["changed"] == [
+        {"key": "balance", "before": "50000", "after": "30000"},
+        {"key": "alert.ANTICOAG", "before": None, "after": facts_alert(facts)},
+    ]
+
+
+def facts_alert(facts):
+    a = facts["alerts"][0]
+    return f"{a['label']} — {a['action']}"
 
 
 def test_regenerate_returns_running_job(client, tmp_path):
