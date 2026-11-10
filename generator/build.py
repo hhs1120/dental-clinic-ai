@@ -80,6 +80,7 @@ STAGES: list = [
     ("doc_plan", documents.stage_plan),
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
+    ("master_values", clinic.stage_master_values),
 ]
 
 

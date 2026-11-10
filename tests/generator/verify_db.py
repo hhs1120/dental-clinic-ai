@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
+from generator.clinic import master_values_rows
 from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import ALERT_TYPES, DIAGNOSES, PROCEDURES
 from generator.verify import Ctx
@@ -259,6 +260,7 @@ def make_db(tmp_path) -> sqlite3.Connection:
         "INSERT INTO emr_alert_types VALUES (?, ?, ?)",
         [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()],
     )
+    conn.executemany("INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows())
     conn.executescript(SEED)
     conn.executemany(
         "INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS]

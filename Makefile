@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -71,6 +71,10 @@ followups:
 # ① 후속 처리 평가 실행(evaluation/followup.py) — 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
 followup-eval:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.followup run $(if $(NO_BATCH),--no-batch)
+
+# ④ 진료 준비표(backend/prep.py) — 기준일 포함 최근 8일(과금), Batch(NO_BATCH=1이면 일반 호출). 사실·버전·모델이 같고 통과한 행은 건너뜀
+prep:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.prep run $(if $(DATE),--date $(DATE)) $(if $(NO_BATCH),--no-batch)
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:

@@ -26,6 +26,7 @@ from backend import (
     emr,
     judge_queue,
     metrics,
+    prep,
     search_summary,
 )
 from backend.embeddings import make_embedder
@@ -693,3 +694,97 @@ def accuracy(paths: Paths, clinic: ClinicDep) -> dict:
         }
     finally:
         conn.close()
+
+
+# ── ④ 진료 준비표 (기능 정의 §4 ④) ──────────────────────────────────
+
+JOB_STALE = dt.timedelta(minutes=30)  # 이보다 오래 running인 작업은 죽은 것으로 보고 막지 않는다
+
+
+def _tab_day(date: str | None, clinic: Clinic) -> dt.date:
+    try:
+        day = dt.date.fromisoformat(date) if date else clinic.today
+    except ValueError as e:
+        raise HTTPException(422, f"date: {e}") from e
+    if day not in prep.tab_days(clinic.today):
+        raise HTTPException(400, "준비표는 기준일 포함 최근 8일만")
+    return day
+
+
+@app.get("/prep")
+def prep_sheet(paths: Paths, clinic: ClinicDep, date: str | None = None) -> dict:
+    day = _tab_day(date, clinic)
+    conn = _open_rw(paths)
+    try:
+        return prep.sheet(conn, day, clinic.today)
+    finally:
+        conn.close()
+
+
+def _run_prep_job(paths, gw_factory, job_id: int, day: dt.date, today: dt.date) -> None:
+    """작업 스레드 — 연결을 따로 열고 일반 호출로 만든다(사람이 기다린다). 어디서 실패해도 작업 행을 끝낸다"""
+    status, error, done = "failed", None, 0
+    conn = None
+    try:
+        conn = db.connect(*paths)
+        out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False)
+        status, done = "done", out["rows"]
+    except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
+        error = f"{type(e).__name__}: {e}"
+    finally:
+        if conn is not None:
+            conn.close()
+        end = db.connect(*paths)  # 작업 연결이 깨졌어도 끝 표시는 새 연결로
+        try:
+            with end:
+                end.execute(
+                    "UPDATE ax_jobs SET status = ?, error = ?, done = ?, finished_at = ?"
+                    " WHERE id = ?",
+                    (status, error, done, dt.datetime.now().isoformat(timespec="seconds"), job_id),
+                )
+        finally:
+            end.close()
+
+
+@app.post("/jobs/prep-regenerate")
+def prep_regenerate(paths: Paths, clinic: ClinicDep, gw: GatewayFactory, date: str) -> dict:
+    day = _tab_day(date, clinic)
+    conn = _open_rw(paths)
+    try:
+        conn.execute(
+            "BEGIN IMMEDIATE"
+        )  # 같은 날짜를 두 번 누른 요청이 둘 다 새 작업을 만들지 않게
+        since = (dt.datetime.now() - JOB_STALE).isoformat(timespec="seconds")
+        running = conn.execute(
+            "SELECT id FROM ax_jobs WHERE kind = 'prep' AND arg = ? AND status = 'running'"
+            " AND replace(started_at, ' ', 'T') >= ? ORDER BY id DESC",
+            (day.isoformat(), since),
+        ).fetchone()
+        if running:
+            conn.commit()
+            return {"job_id": running[0]}
+        total = len(prep.prep_facts(conn, day, clinic.today))
+        job_id = conn.execute(
+            "INSERT INTO ax_jobs (kind, arg, status, total, started_at)"
+            " VALUES ('prep', ?, 'running', ?, ?)",
+            (day.isoformat(), total, dt.datetime.now().isoformat(timespec="seconds")),
+        ).lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    threading.Thread(
+        target=_run_prep_job, args=(paths, gw, job_id, day, clinic.today), daemon=True
+    ).start()
+    return {"job_id": job_id}
+
+
+@app.get("/jobs/{job_id}")
+def job(job_id: int, paths: Paths) -> dict:
+    conn = _open_rw(paths)
+    try:
+        row = conn.execute("SELECT * FROM ax_jobs WHERE id = ?", (job_id,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(404, "작업 없음")
+    return dict(row)
