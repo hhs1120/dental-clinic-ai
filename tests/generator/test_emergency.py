@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from generator import build, emergency
+from generator import emergency
 from generator.calls import FMT, prev_open_day
 from generator.master import (
     EMERGENCY_AFTER_VISIT_SCENE,
@@ -33,9 +33,8 @@ TODAY = "2026-12-01"
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("emergency")
-    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def db(generated):
+    out, _ = generated("emergency")
     conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

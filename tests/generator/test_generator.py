@@ -259,10 +259,10 @@ def test_cli_reports_exhausted_items(tmp_path, monkeypatch, capsys):
     )
 
 
-def _run_cli(out, hashseed):
+def _start_cli(out, hashseed):
     out.mkdir()
     env = {**os.environ, "PYTHONHASHSEED": str(hashseed)}
-    subprocess.run(
+    return subprocess.Popen(
         [
             sys.executable,
             "-m",
@@ -275,16 +275,21 @@ def _run_cli(out, hashseed):
         ],
         cwd=ROOT,
         env=env,
-        check=True,
     )
+
+
+def _hashes(out):
     conn = sqlite3.connect(out / "source.sqlite")
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
     return verify.canonical_hash(conn), verify.canonical_hash(conn, "truth")
 
 
 def test_same_seed_twice_same_hash_across_hashseeds(tmp_path):
-    # PYTHONHASHSEED를 다르게 — 같으면 set 순회 순서에 기댄 버그가 가려진다 (verify docstring)
-    assert _run_cli(tmp_path / "a", 0) == _run_cli(tmp_path / "b", 1)
+    # PYTHONHASHSEED를 다르게 — 같으면 set 순회 순서에 기댄 버그가 가려진다 (verify docstring). 두 실행은 동시에
+    outs = [tmp_path / "a", tmp_path / "b"]
+    procs = [_start_cli(out, seed) for out, seed in zip(outs, (0, 1), strict=True)]
+    assert [p.wait() for p in procs] == [0, 0]
+    assert _hashes(outs[0]) == _hashes(outs[1])
 
 
 def test_db_and_truth_must_be_given_together(tmp_path):

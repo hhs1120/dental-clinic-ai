@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from generator import build, verify
+from generator import verify
 from generator.master import ALERT_TYPES, age_on
 from generator.paths import ROOT
 
@@ -16,9 +16,8 @@ CONFIG = ROOT / "config" / "generator.yaml"
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("alerts")
-    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def db(generated):
+    out, _ = generated("alerts")
     conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

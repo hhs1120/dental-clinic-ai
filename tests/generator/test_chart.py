@@ -33,9 +33,8 @@ def _open(out):
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("chart")
-    RUN["run"] = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def db(generated):
+    out, RUN["run"] = generated("chart")
     conn = _open(out)
     ctx = verify.load_ctx(CONFIG, conn)
     return conn, ctx, verify._chart_lines(conn, ctx)
@@ -86,10 +85,11 @@ def test_decoys_stratified_by_procedure(db):
     """디코이 수 = round(특이 × CHART_DECOY_RATIO), 시술별로 평범한 창 안 줄 수에 비례(최대 나머지 배분 ±1) — 디코이는
     5b단계가 고르므로 6b단계 응급 내원 줄은 빼고 센다"""
     conn, _, lines = db
+    visits = emergency_appointments(conn)
     emergency = {
         r[0]
         for r in conn.execute("SELECT id, appointment_id FROM emr_treatments")
-        if r[1] in emergency_appointments(conn)
+        if r[1] in visits
     }
     window = [r for r in lines if r["window"] and r["id"] not in emergency]
     specials = sum(r["is_special"] for r in window)
@@ -498,17 +498,13 @@ def test_narrative_drafts_pass_their_checks(db):
             "SELECT t.id, p.name FROM emr_treatments t JOIN emr_patients p ON p.id = t.patient_id"
         )
     }
-    narratives = [
-        x
-        for x in RUN["run"].state["chart"]
-        if x["id"]
-        in {
-            r[0]
-            for r in conn.execute(
-                "SELECT treatment_id FROM truth.truth_chart_notes WHERE kind = 'narrative'"
-            )
-        }
-    ]
+    narrative = {
+        r[0]
+        for r in conn.execute(
+            "SELECT treatment_id FROM truth.truth_chart_notes WHERE kind = 'narrative'"
+        )
+    }
+    narratives = [x for x in RUN["run"].state["chart"] if x["id"] in narrative]
     assert narratives
     failed = {
         x["id"]: problems

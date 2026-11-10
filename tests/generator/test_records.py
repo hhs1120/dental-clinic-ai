@@ -36,9 +36,8 @@ def _open(out):
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("records")
-    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def db(generated):
+    out, run = generated("records")
     conn = _open(out)
     return conn, verify.load_ctx(CONFIG, conn), run
 
