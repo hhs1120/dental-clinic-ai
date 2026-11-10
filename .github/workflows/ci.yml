@@ -27,7 +27,7 @@ jobs:
       - name: 코드 컨벤션
         run: make lint
 
-  # 테스트는 러너 둘에 나눠 동시에 — 의미 묶음이 아니라 실행 시간이 반반이 되게 파일로 나눈 것.
+  # 테스트는 러너 둘에 나눠 동시에 — part1은 데이터를 다시 생성하는 무거운 파일, part2는 나머지(실행 시간이 비슷하게).
   # 새 테스트는 part2로 들어간다. part2가 part1보다 30초 넘게 길어지면 무거운 파일을 part1로 옮긴다
   test:
     name: test (${{ matrix.part.name }})
@@ -36,9 +36,9 @@ jobs:
       matrix:
         part:
           - name: part1
-            tests: tests/generator/test_records.py tests/generator/test_chart.py tests/generator/test_calls.py tests/generator/test_verify_required.py
+            tests: tests/generator/test_records.py tests/generator/test_chart.py tests/generator/test_calls.py tests/generator/test_generator.py
           - name: part2
-            tests: --ignore=tests/generator/test_records.py --ignore=tests/generator/test_chart.py --ignore=tests/generator/test_calls.py --ignore=tests/generator/test_verify_required.py
+            tests: --ignore=tests/generator/test_records.py --ignore=tests/generator/test_chart.py --ignore=tests/generator/test_calls.py --ignore=tests/generator/test_generator.py
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
