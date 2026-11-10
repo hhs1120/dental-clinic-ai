@@ -4,7 +4,8 @@ import sqlite3
 from evaluation import gate
 
 
-def report(tool=(6, 6), hit5=(20, 20), agent=44, baseline=37, warnings=(), chat_skipped=False):
+def report(tool=(6, 6), hit5=(20, 20), agent=44, baseline=37, warnings=(), chat_skipped=False,
+           n=54, not_run=0, fu_failed=0, stale=0):  # fmt: skip
     return {
         "rag": {
             "retrieval": {"hit5": {"k": hit5[0], "n": hit5[1]}},
@@ -13,8 +14,10 @@ def report(tool=(6, 6), hit5=(20, 20), agent=44, baseline=37, warnings=(), chat_
             "chat_skipped": chat_skipped,
         },
         "followup": {
-            "score": {"dev": {"n": 54, "agent": {"k": agent, "n": 54},
-                              "baseline": {"k": baseline, "n": 54}}}
+            "score": {"dev": {"n": n, "agent": {"k": agent, "n": n},
+                              "baseline": {"k": baseline, "n": n},
+                              "not_run": not_run, "failed": fu_failed}},
+            "stale_labels": stale,
         },
     }  # fmt: skip
 
@@ -49,6 +52,24 @@ def test_followup_tie_passes():
 
 def test_chat_skipped_fails():
     assert "tool" in failed(report(tool=(0, 0), chat_skipped=True))
+
+
+def test_followup_empty_population_fails():
+    assert failed(report(agent=0, baseline=0, n=0)) == ["followup"]
+
+
+def test_missing_followup_fails_with_reason():
+    checks = gate.check_report(report() | {"followup": None})
+    assert not checks["followup"][0] and "make followup-eval" in checks["followup"][1]
+
+
+def test_missing_rag_fails():
+    assert failed(report() | {"rag": None}) == ["warnings", "tool", "hit5"]
+
+
+def test_followup_text_shows_not_run_failed_stale():
+    text = gate.check_report(report(not_run=2, fu_failed=3, stale=1))["followup"][1]
+    assert "미실행 2" in text and "실패 3" in text and "낡은 라벨 1" in text
 
 
 def test_app_warning_fails():
@@ -91,16 +112,43 @@ def test_pool_failure_stops_before_paid_eval(tmp_path, monkeypatch, capsys):
     assert called == [] and "판정 풀" in capsys.readouterr().out
 
 
-def test_main_reads_new_report(tmp_path, monkeypatch, capsys):
+def _run(tmp_path, monkeypatch, new_lines, old=True):
+    """옛 이력 1줄(합격 리포트 old.json)을 깔고, 가짜 eval이 new_lines(이름 → 리포트)를 덧붙인다"""
     app, src = _app(tmp_path, [("c1", "v2", "ok"), ("c2", "v2", "ok")])
     reports = tmp_path / "reports"
     reports.mkdir()
+    runs = reports / "eval_runs.jsonl"
+    line = {"split": "dev", "section": "all", "condition": "base"}
+    if old:
+        (reports / "old.json").write_text(json.dumps(report(agent=0)))
+        runs.write_text(json.dumps(line | {"report_path": "old.md"}) + "\n")
 
     def fake_eval(argv):
-        (reports / "r.json").write_text(json.dumps(report(agent=30)))
-        (reports / "eval_runs.jsonl").write_text(json.dumps({"report_path": "r.md"}) + "\n")
+        for name, (extra, result) in new_lines.items():
+            (reports / f"{name}.json").write_text(json.dumps(result))
+            with runs.open("a") as f:
+                f.write(json.dumps(line | extra | {"report_path": f"{name}.md"}) + "\n")
         return 0
 
     monkeypatch.setattr(gate.eval_, "main", fake_eval)
-    code = gate.main(["--app", str(app), "--source", str(src), "--reports-dir", str(reports)])
-    assert code == 1 and "followup" in capsys.readouterr().out
+    return gate.main(["--app", str(app), "--source", str(src), "--reports-dir", str(reports)])
+
+
+def test_main_reads_new_report(tmp_path, monkeypatch, capsys):
+    assert _run(tmp_path, monkeypatch, {"r": ({}, report(agent=30))}, old=False) == 1
+    assert "followup" in capsys.readouterr().out
+
+
+def test_main_passes_on_new_line_after_old(tmp_path, monkeypatch, capsys):
+    assert _run(tmp_path, monkeypatch, {"r": ({}, report())}) == 0
+    assert capsys.readouterr().out.rstrip().endswith("합격")
+
+
+def test_main_no_new_line_fails(tmp_path, monkeypatch, capsys):
+    assert _run(tmp_path, monkeypatch, {}) == 1
+    assert "리포트" in capsys.readouterr().out
+
+
+def test_main_skips_other_condition_line(tmp_path, monkeypatch):
+    other = ({"condition": "reranker=off"}, report(agent=0))
+    assert _run(tmp_path, monkeypatch, {"r": ({}, report()), "x": other}) == 0

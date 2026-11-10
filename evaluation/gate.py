@@ -32,19 +32,36 @@ def _at_least(s: dict, share: float) -> bool:
     return s["n"] > 0 and s["k"] >= share * s["n"]
 
 
+def _followup(fu: dict | None) -> tuple[bool, str]:
+    """dev에서 에이전트 ≥ 규칙 기준선, 모수 0이면 불통과. 점수는 make followup-eval이 쌓은 실행을 채점한 것"""
+    if fu is None:
+        return False, "리포트에 ① 후속 처리 없음 — make action-label·make followup-eval"
+    d = fu["score"]["dev"]
+    text = (
+        f"① 후속 처리안 {d['agent']['k']}/{d['n']} · 기준선 {d['baseline']['k']}/{d['n']}"
+        f" · 미실행 {d['not_run']} · 실패 {d['failed']} · 낡은 라벨 {fu['stale_labels']}"
+    )
+    return d["n"] > 0 and d["agent"]["k"] >= d["baseline"]["k"], text
+
+
 def check_report(result: dict) -> dict[str, tuple[bool, str]]:
     """조건 이름 → (통과, 설명) — dev 리포트(eval.py)에서"""
-    rag, fu = result["rag"], result["followup"]["score"]["dev"]
+    rag = result["rag"]
+    if rag is None:
+        none = (False, "리포트에 ③ 없음 — 앱 DB·색인 확인")
+        return {
+            "warnings": none,
+            "tool": none,
+            "hit5": none,
+            "followup": _followup(result["followup"]),
+        }
     tool = {"k": 0, "n": 0} if rag["chat_skipped"] else rag["chat"]["tool"]
     hit5 = rag["retrieval"]["hit5"]
     return {
         "warnings": (not rag["warnings"], ", ".join(rag["warnings"]) or "앱 경고 없음"),
         "tool": (_at_least(tool, CORE_TOOL_MIN), f"③ 도구 선택 {fraction(tool['k'], tool['n'])}"),
         "hit5": (_at_least(hit5, CORE_HIT5_MIN), f"③ Hit@5 {fraction(hit5['k'], hit5['n'])}"),
-        "followup": (
-            fu["agent"]["k"] >= fu["baseline"]["k"],
-            f"① 후속 처리안 {fu['agent']['k']}/{fu['n']} · 기준선 {fu['baseline']['k']}/{fu['n']}",
-        ),
+        "followup": _followup(result["followup"]),
     }
 
 
@@ -67,11 +84,13 @@ def main(argv=None) -> int:
     if eval_.main(argv_eval) != 0:
         print("불합격 — dev 평가 실패")
         return 1
-    lines = runs.read_text().splitlines()
-    if len(lines) <= before:
-        print("불합격 — dev 평가가 리포트를 남기지 않음")
+    # 이번 실행이 남긴 기본 조건 dev 줄 — 다른 평가가 함께 끝나도 그 리포트를 읽지 않게
+    new = [json.loads(x) for x in runs.read_text().splitlines()[before:]]
+    mine = [r for r in new if r["split"] == "dev" and r["condition"] == "base"]
+    if len(mine) != 1:
+        print(f"불합격 — 이번 dev 평가 리포트를 하나로 찾지 못함({len(mine)}개)")
         return 1
-    path = (args.reports_dir / json.loads(lines[-1])["report_path"]).with_suffix(".json")
+    path = (args.reports_dir / mine[0]["report_path"]).with_suffix(".json")
     checks = check_report(json.loads(path.read_text()))
     for name, (ok, text) in checks.items():
         print(f"{name:10} {'통과' if ok else '불통과'}  {text}")
