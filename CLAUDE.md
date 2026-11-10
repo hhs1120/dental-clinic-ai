@@ -39,14 +39,14 @@
 과금하는 명령은 (과금), 실패·빠진 건만 다시 도는 명령은 (이어 돎). 인자·동작은 Makefile 주석과 원본 모듈 독스트링.
 - `uv sync` — lock 커밋 필수(Faker 버전이 이름 결정성에 영향), 파이썬은 uv 관리 빌드만(sqlite-vec이 확장을 연다). 그룹: `generator`·`backend`·`dev`, Qwen 파인튜닝은 `finetune`(기본 아님 — `uv run --group finetune`)
 - `make data` / `make verify` / `make test` — 테스트는 같은 생성을 임시 폴더에 돌린다. `make data FAKE_LLM=1`은 가짜 게이트웨이
-- LLM 단계: `make data`가 캐시에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. 옛 캐시 줄은 `make llm-prune`
-- `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3), `make data`와 따로
+- LLM 단계: `make data`가 캐시에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…`(과금) 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. 옛 캐시 줄은 `make llm-prune`
+- `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
 - `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, `make dev`를 끄고)
 - `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
-- ① `make classify V=` / `judge V=` / `disagreements A= B=`(`backend/classify_batch.py`, 이어 돎) · `make blind-judge A= B= V=`(평가 설계 §2.4) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
-- ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
-- ② `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 평가 설계 §2.7 — 같은 기준에 후보 `GATE_ATTEMPTS`개까지)
+- ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
+- ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
+- ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)
