@@ -76,7 +76,15 @@ export function AskView() {
         : { kind: "done", data: answer.data };
 
   // 질문하기 입력 — 탭을 바꿔도 남고, "이걸로 질문하기"가 검색어를 넣는다(보내지는 않는다)
-  const [question, setQuestion] = useState("");
+  // 오늘 화면의 근거 없는 질문은 ?draft=로 온다 — 입력칸에 채우기만 하고(실행 안 함) 주소에서는 지운다
+  const [question, setQuestion] = useState(() => params.get("draft") ?? "");
+  const hasDraft = params.has("draft");
+  useEffect(() => {
+    if (!hasDraft) return;
+    const next = new URLSearchParams(params);
+    next.delete("draft");
+    router.replace(`/ask?${next}`);
+  }, [hasDraft, params, router]);
   const hasResults =
     status.kind === "done" &&
     status.data.manual_results.length + status.data.case_results.length > 0;

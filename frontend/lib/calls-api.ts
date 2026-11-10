@@ -1,5 +1,6 @@
 // 통화 화면 API — 응답 모양의 원본은 backend/calls.py·backend/api.py (통화·② 판정 화면 설계 "API")
 import { getJson, postJson, useFetch } from "@/lib/api";
+import type { Review } from "@/lib/today-api";
 
 export type Direction = "inbound" | "outbound";
 export type TodoKind = "contact" | "internal";
@@ -95,6 +96,8 @@ export interface CallDetail {
     reason: string | null;
     trace: { tool: string; args: Record<string, unknown> }[];
   } | null;
+  /** 확인할 통화면 그 판단(기능 정의 §4 오늘 화면), 아니면 null */
+  review: Review | null;
 }
 
 export interface LabelNames {

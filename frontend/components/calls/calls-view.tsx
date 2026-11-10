@@ -19,6 +19,7 @@ import {
   useLabels,
 } from "@/lib/calls-api";
 import { readPart } from "@/lib/part";
+import { checkCall } from "@/lib/today-api";
 
 /** 통화 화면 — 탭·고른 통화·넓게 보기는 URL에 둔다(/calls?tab=…&call=…&wide=1) */
 export function CallsView() {
@@ -70,6 +71,19 @@ export function CallsView() {
       setBusy(false);
     }
   };
+  const checkReview = async () => {
+    if (!call) return;
+    setBusy(true);
+    setFail(null);
+    try {
+      await checkCall(call, readPart());
+      refresh();
+    } catch (e) {
+      setFail(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const redo = async () => {
     if (!call) return;
     setBusy(true);
@@ -103,6 +117,7 @@ export function CallsView() {
         onCheck={(t, done) => check(call, t.item, done)}
         onReclassify={redo}
         onRevertClose={revertClose}
+        onCheckReview={checkReview}
         busy={busy}
       />
     ) : (

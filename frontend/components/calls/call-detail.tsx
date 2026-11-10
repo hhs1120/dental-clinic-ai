@@ -15,6 +15,7 @@ import {
   type TodoItem,
 } from "@/lib/calls-api";
 import { fetchPatient, won } from "@/lib/emr-api";
+import { reviewText } from "@/lib/today-api";
 import { cn } from "@/lib/utils";
 
 const FLAGS = [
@@ -57,6 +58,7 @@ export function CallDetail({
   onCheck,
   onReclassify,
   onRevertClose,
+  onCheckReview,
   busy,
 }: {
   detail: Detail;
@@ -67,6 +69,7 @@ export function CallDetail({
   onCheck: (item: TodoItem, done: boolean) => void;
   onReclassify: () => void;
   onRevertClose: (id: number) => void;
+  onCheckReview: () => void;
   busy: boolean;
 }) {
   const { call, classification: k, judge, disagree } = detail;
@@ -105,7 +108,7 @@ export function CallDetail({
       </Button>
     </div>
   );
-  // 자동 종결된 통화 — 이유와 함께 보이고 되돌리면 오늘 할 일로 돌아간다(기능 정의 §4 ①)
+  // 자동 종결된 통화 — 이유와 함께 보이고 다시 열면 확인할 통화로 간다(기능 정의 §4 ①·오늘 화면)
   const closed = detail.autoclose && (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
       <Badge variant="muted">자동 종결</Badge>
@@ -120,7 +123,23 @@ export function CallDetail({
         onClick={() => onRevertClose(detail.autoclose!.id)}
         disabled={busy}
       >
-        되돌리기
+        다시 열기
+      </Button>
+    </div>
+  );
+  // 확인할 통화 — 사람이 일이 남았다고 표시했는데 오늘 할 일에 안 뜨는 통화. 확인함을 누르면 빠진다(기능 정의 §4 오늘 화면)
+  const review = detail.review && (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-status-warn-border bg-status-warn-bg px-3 py-2 text-sm text-status-warn-fg">
+      <Badge variant="warn">확인할 통화</Badge>
+      <span>{reviewText(detail.review, names)}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-auto"
+        onClick={onCheckReview}
+        disabled={busy}
+      >
+        확인함
       </Button>
     </div>
   );
@@ -269,6 +288,7 @@ export function CallDetail({
     return (
       <div className="flex flex-col gap-3">
         {head}
+        {review}
         {closed}
         {failed}
         {plan}
@@ -299,6 +319,7 @@ export function CallDetail({
       aria-label="통화 상세"
     >
       {head}
+      {review}
       {closed}
       {failed}
       {plan}
