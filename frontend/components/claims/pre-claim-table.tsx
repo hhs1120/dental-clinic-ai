@@ -7,7 +7,8 @@ import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/api";
-import { fetchPreClaim, krw, type PreSheet, toothText } from "@/lib/claims-api";
+import { fetchPreClaim, type PreSheet, toothText } from "@/lib/claims-api";
+import { won } from "@/lib/format";
 
 type PreChip = "lines" | "warning";
 
@@ -95,7 +96,7 @@ export function PreClaimTable({
                   {toothText(r.tooth_no) && ` (${toothText(r.tooth_no)})`}
                 </td>
                 <td className="px-3 py-2 text-right align-top tabular-nums">
-                  {krw(r.claim_amount)}
+                  {won(r.claim_amount)}
                 </td>
                 <td className="px-3 py-2 align-top">{r.dx_name ?? "-"}</td>
                 <td className="px-3 py-2 align-top">
@@ -107,7 +108,7 @@ export function PreClaimTable({
                       {r.warning.past_count > 0 && (
                         <span className="text-xs text-muted-foreground tabular-nums">
                           지난 조정에서 이 조합 {r.warning.past_count}건,{" "}
-                          {krw(r.warning.past_amount)} 못 받음
+                          {won(r.warning.past_amount)} 못 받음
                         </span>
                       )}
                     </div>

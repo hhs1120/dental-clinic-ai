@@ -98,6 +98,8 @@ function sheet(rows: (typeof DOC | typeof DX | typeof REQ | typeof OLD)[]) {
   return {
     date: "2026-12-01",
     appeal_days: 90,
+    soon_days: 30,
+    watch_days: 60,
     chips: Object.fromEntries(
       CHIPS.map((c) => {
         const hit = rows.filter((r) => r.chips.includes(c));
@@ -183,7 +185,7 @@ test("5칸과 기한 표시", async ({ page }) => {
   const doc = bodyRows(page).filter({ hasText: "김하나" });
   await expect(doc).toContainText("12/08 · 7일 남음");
   await expect(doc).toContainText("30일 이내");
-  await expect(doc).toContainText("₩12,340 (전액)");
+  await expect(doc).toContainText("12,340원 (전액)");
   await expect(doc).toContainText("내역설명 미기재로 인정 근거 없음");
   await expect(doc).toContainText("보완 후 재청구(제안)");
   const req = bodyRows(page).filter({ hasText: "이두리" });
@@ -200,11 +202,11 @@ test("5칸과 기한 표시", async ({ page }) => {
 test("칩 건수와 합계", async ({ page }) => {
   await fakeClaims(page, () => sheet(ALL));
   await page.goto("/claims");
-  await expect(page.getByText("못 받은 돈 합계 ₩57,340")).toBeVisible();
+  await expect(page.getByText("못 받은 돈 합계 57,340원")).toBeVisible();
   await page.getByRole("button", { name: "신청 기한 30일 이내 1" }).click();
   await expect(page).toHaveURL(/\/claims\?chip=soon$/);
   await expect(bodyRows(page)).toHaveCount(1);
-  await expect(page.getByText("못 받은 돈 합계 ₩12,340")).toBeVisible();
+  await expect(page.getByText("못 받은 돈 합계 12,340원")).toBeVisible();
   await page.getByRole("button", { name: "기한 지남 1" }).click();
   await expect(page).toHaveURL(/chip=expired/);
   const old = bodyRows(page).filter({ hasText: "최네오" });
@@ -261,7 +263,7 @@ test("보완 후 재청구 제안은 채울 항목", async ({ page }) => {
   await bodyRows(page).filter({ hasText: "김하나" }).click();
   const detail = page.getByRole("region", { name: "김하나 청구 상세" });
   await expect(detail).toContainText("채울 항목: 내역설명 기재");
-  await expect(detail).toContainText("청구 ₩12,340 → 지급 ₩0");
+  await expect(detail).toContainText("청구 12,340원 → 지급 0원");
   await expect(detail).toContainText("전액 불능");
 });
 
@@ -276,7 +278,7 @@ test("청구 전 점검 — 경고 칩 기본, 과거 이력 문구", async ({ p
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("허용 상병 밖 — 이 시술은 매복치");
   await expect(rows.first()).toContainText(
-    "지난 조정에서 이 조합 2건, ₩22,000 못 받음",
+    "지난 조정에서 이 조합 2건, 22,000원 못 받음",
   );
   await page.getByRole("button", { name: "청구 전 2줄" }).click();
   await expect(rows).toHaveCount(2);

@@ -132,7 +132,9 @@ test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await expect(page).toHaveURL(/\/prep\?chip=unconfirmed$/);
   await page.goto("/today");
   await page.getByRole("link", { name: /유치는 언제 빠져/ }).click();
-  await expect(page).toHaveURL(/\/ask\?tab=chat&draft=/);
+  // ?draft=는 물어보기 화면이 입력칸을 채우자마자 주소에서 지우니 지운 뒤 모습을 본다
+  await expect(page.getByLabel("질문 입력")).toHaveValue(/유치는 언제 빠져/);
+  await expect(page).toHaveURL(/\/ask\?tab=chat$/);
 });
 
 // 미예약 환자 줄은 숫자 없는 고정 링크라 0건 숨김 없이 늘 보인다 — 문구(MISSED_LINK_TEXT)는 바뀔 수 있어 링크 주소로 찾는다

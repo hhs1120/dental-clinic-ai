@@ -14,7 +14,8 @@ import {
   type LabelNames,
   type TodoItem,
 } from "@/lib/calls-api";
-import { fetchPatient, won } from "@/lib/emr-api";
+import { fetchPatient } from "@/lib/emr-api";
+import { won } from "@/lib/format";
 import { reviewText } from "@/lib/today-api";
 import { cn } from "@/lib/utils";
 

@@ -9,8 +9,8 @@ import {
   type PatientRecord,
   type PatientSummary as Summary,
   STATUS_LABEL,
-  won,
 } from "@/lib/emr-api";
+import { won } from "@/lib/format";
 
 /** 환자 요약 카드 — 예약표 패널. 준비표 체어 보기에서 다시 쓴다(전환 전 EMR·일별 예약표 설계안).
  * 카드 하나를 얇은 구분선으로 나누고 상자 안에 상자를 넣지 않는다 */

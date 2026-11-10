@@ -101,5 +101,3 @@ export const fetchJob = (id: number) => getJson<Job>(`/jobs/${id}`);
 
 /** 할 일 있는 환자 = 통과한 제안이 suggest */
 export const hasTodo = (r: PrepRow) => r.suggestion?.action === "suggest";
-
-export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;

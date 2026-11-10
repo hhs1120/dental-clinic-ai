@@ -10,22 +10,18 @@ import {
   type AdjustRow,
   type AdjustSheet,
   type Chip,
-  CHIP_LABEL,
+  chipLabel,
   CHIPS,
   fetchClaims,
   type Judgment,
   JUDGMENT_LABEL,
   JUDGMENTS,
-  krw,
   monthDay,
   postJudgment,
   toothText,
 } from "@/lib/claims-api";
+import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
-
-// 꼬리표 경계 — backend/claims.py SOON_DAYS·WATCH_DAYS와 같다(칩 집계는 서버가 낸다)
-const SOON_DAYS = 30;
-const WATCH_DAYS = 60;
 
 /** 삭감 대응 — 조정·불능 청구 5칸 목록(설계 §1). 칩은 서버가 행마다 붙인 chips로 거르고, 순서는 서버 그대로(기한 순) */
 export function AdjustTable({
@@ -80,13 +76,13 @@ export function AdjustTable({
                 onChip(c === "all" ? null : c);
               }}
             >
-              {CHIP_LABEL[c]} {sheet.chips[c].count}
+              {chipLabel(c, sheet.soon_days)} {sheet.chips[c].count}
             </Button>
           ))}
         </div>
         <span className="flex-1" />
         <span className="text-sm font-bold tabular-nums">
-          못 받은 돈 합계 {krw(sheet.chips[chip].amount)}
+          못 받은 돈 합계 {won(sheet.chips[chip].amount)}
         </span>
       </div>
       <div className="overflow-x-auto rounded-md border">
@@ -119,7 +115,7 @@ export function AdjustTable({
                   }}
                 >
                   <td className="px-3 py-2 align-top whitespace-nowrap tabular-nums">
-                    <Deadline row={r} />
+                    <Deadline row={r} sheet={sheet} />
                   </td>
                   <td className="px-3 py-2 align-top">
                     <div className="font-bold">
@@ -132,7 +128,7 @@ export function AdjustTable({
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right align-top whitespace-nowrap tabular-nums">
-                    {krw(r.unpaid)}
+                    {won(r.unpaid)}
                     {r.status === "denied" && " (전액)"}
                   </td>
                   <td className="px-3 py-2 align-top">{r.adjust_note}</td>
@@ -169,8 +165,8 @@ export function AdjustTable({
   );
 }
 
-/** 기한 칸 — 기한 지남, 상병 착오는 날짜 대신 재청구 불가, 그 밖은 남은 날과 30·60일 꼬리표 */
-function Deadline({ row: r }: { row: AdjustRow }) {
+/** 기한 칸 — 기한 지남, 상병 착오는 날짜 대신 재청구 불가, 그 밖은 남은 날과 위험·주의 꼬리표(경계는 서버 값) */
+function Deadline({ row: r, sheet }: { row: AdjustRow; sheet: AdjustSheet }) {
   const day = monthDay(r.deadline);
   if (r.expired) return <>{day} · 기한 지남</>;
   if (r.type === "diagnosis") return <Badge variant="muted">재청구 불가</Badge>;
@@ -179,10 +175,10 @@ function Deadline({ row: r }: { row: AdjustRow }) {
       <span>
         {day} · {r.days_left === 0 ? "오늘까지" : `${r.days_left}일 남음`}
       </span>
-      {r.days_left <= SOON_DAYS ? (
-        <Badge variant="danger">30일 이내</Badge>
-      ) : r.days_left <= WATCH_DAYS ? (
-        <Badge variant="warn">60일 이내</Badge>
+      {r.days_left <= sheet.soon_days ? (
+        <Badge variant="danger">{sheet.soon_days}일 이내</Badge>
+      ) : r.days_left <= sheet.watch_days ? (
+        <Badge variant="warn">{sheet.watch_days}일 이내</Badge>
       ) : null}
     </div>
   );
@@ -233,7 +229,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         <h3 className="font-bold">왜 깎였나</h3>
         <p>{r.adjust_note}</p>
         <p className="tabular-nums">
-          청구 {krw(r.claim_amount)} → 지급 {krw(r.paid_amount)} ·{" "}
+          청구 {won(r.claim_amount)} → 지급 {won(r.paid_amount)} ·{" "}
           {r.status === "denied" ? "전액 불능" : "일부 조정"}
         </p>
         <p className="text-xs text-muted-foreground tabular-nums">

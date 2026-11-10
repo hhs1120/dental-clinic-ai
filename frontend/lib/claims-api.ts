@@ -5,16 +5,26 @@ import { getJson, postJson } from "@/lib/api";
 export type Chip =
   "all" | "diagnosis" | "soon" | "denied" | "adjusted" | "expired";
 
-/** 삭감 대응 칩 이름(설계 §1 그대로) — 순서 = 화면 순서(backend/claims.py CHIPS) */
-export const CHIP_LABEL: Record<Chip, string> = {
-  all: "전체",
-  diagnosis: "상병 착오",
-  soon: "신청 기한 30일 이내",
-  denied: "전액 불능",
-  adjusted: "일부 조정",
-  expired: "기한 지남",
-};
-export const CHIPS = Object.keys(CHIP_LABEL) as Chip[];
+/** 삭감 대응 칩 — 순서 = 화면 순서(backend/claims.py CHIPS) */
+export const CHIPS: Chip[] = [
+  "all",
+  "diagnosis",
+  "soon",
+  "denied",
+  "adjusted",
+  "expired",
+];
+
+/** 칩 이름(설계 §1 그대로) — 임박 일수는 서버가 내려준 soon_days */
+export const chipLabel = (c: Chip, soonDays: number) =>
+  ({
+    all: "전체",
+    diagnosis: "상병 착오",
+    soon: `신청 기한 ${soonDays}일 이내`,
+    denied: "전액 불능",
+    adjusted: "일부 조정",
+    expired: "기한 지남",
+  })[c];
 
 export type Judgment = "justified" | "contestable" | "resubmit";
 
@@ -53,6 +63,9 @@ export interface AdjustRow {
 export interface AdjustSheet {
   date: string;
   appeal_days: number;
+  /** 꼬리표 경계 — 남은 날이 이 이하면 위험·주의(backend/claims.py SOON_DAYS·WATCH_DAYS) */
+  soon_days: number;
+  watch_days: number;
   chips: Record<Chip, { count: number; amount: number }>;
   rows: AdjustRow[];
 }
@@ -90,9 +103,6 @@ export const postJudgment = (
   judgment: Judgment,
   part: string,
 ) => postJson<{ ok: true }>(`/claims/${claimId}/judgment`, { judgment, part });
-
-/** 12340 → ₩12,340 */
-export const krw = (n: number) => `₩${n.toLocaleString("ko-KR")}`;
 
 /** 2026-12-08(또는 시각) → 12/08 */
 export const monthDay = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}`;

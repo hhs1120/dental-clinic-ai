@@ -194,5 +194,3 @@ export function mdw(date: string): string {
   const d = new Date(`${date}T00:00:00`);
   return `${date.slice(5)} (${WEEK[d.getDay()]})`;
 }
-
-export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;

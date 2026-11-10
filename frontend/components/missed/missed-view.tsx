@@ -31,7 +31,7 @@ import {
   RESULTS,
 } from "@/lib/missed-api";
 import { readPart } from "@/lib/part";
-import { won } from "@/lib/prep-api";
+import { won } from "@/lib/format";
 
 const CHIP_VARIANT: Record<Chip, "danger" | "warn" | "info" | "muted"> = {
   recall: "info",
