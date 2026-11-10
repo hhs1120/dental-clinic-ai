@@ -27,7 +27,17 @@ jobs:
       - name: 코드 컨벤션
         run: make lint
 
+  # 테스트는 러너 둘에 나눠 동시에 — 설정을 바꿔 다시 생성하는 무거운 세 파일과 나머지(실행 시간이 거의 반반)
   test:
+    name: test (${{ matrix.part.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        part:
+          - name: heavy
+            tests: tests/generator/test_records.py tests/generator/test_chart.py tests/generator/test_calls.py
+          - name: rest
+            tests: --ignore=tests/generator/test_records.py --ignore=tests/generator/test_chart.py --ignore=tests/generator/test_calls.py
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,7 +48,7 @@ jobs:
       - name: 의존성 (uv.lock 그대로, 파이썬은 .python-version)
         run: uv sync --locked
       - name: 테스트 (러너 코어 전부)
-        run: make test JOBS=auto
+        run: make test JOBS=auto TESTS="${{ matrix.part.tests }}"
 
   build:
     runs-on: ubuntu-latest
