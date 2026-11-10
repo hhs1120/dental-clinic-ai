@@ -1,6 +1,7 @@
 // 따라 보기 네 단계 — 진료 전에 데스크가 확인하는 것과 그것이 전환 전 EMR의 어디에 있는지(전환 전 EMR·일별 예약표 설계안)
 import type { EmrNav, Highlight } from "@/components/emr/emr-window";
-import { type PatientRecord, won } from "@/lib/emr-api";
+import { type PatientRecord } from "@/lib/emr-api";
+import { won } from "@/lib/format";
 
 export type StepKey = "balance" | "alert" | "remaining" | "confirm";
 export type TourStep = {

@@ -309,3 +309,12 @@ CREATE TABLE ax_missed_contacts (
 );
 
 CREATE INDEX ix_missed_contacts_patient ON ax_missed_contacts(patient_id, contacted_at);
+
+-- ⑤ 조정 건 사람 판단(기능 정의 §5 ⑤, backend/claims.py) — 청구 id 단위, 다시 누르면 덮어씀.
+-- 판단한 사람 = 파트(frontend/lib/part.ts), 시각은 실제 시계. 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_claim_judgments (
+    claim_id   INTEGER PRIMARY KEY,  -- source.emr_claims.id
+    judgment   TEXT NOT NULL CHECK (judgment IN ('justified', 'contestable', 'resubmit')),
+    judged_by  TEXT NOT NULL,
+    judged_at  TEXT NOT NULL
+);

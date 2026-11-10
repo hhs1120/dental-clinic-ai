@@ -49,6 +49,10 @@ export interface TodaySheet {
       question: string;
       at: string;
     }[];
+    /** 재심 신청 기한 30일 이내(상병 착오 제외) — /claims soon 칩과 같은 함수 */
+    appeal_soon: number;
+    /** 청구 전 상병 확인 경고 줄 — /claims?tab=pre와 같은 함수 */
+    preclaim_warning: number;
   };
   ai: {
     autoclose_on: boolean;

@@ -6,10 +6,12 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from backend import autoclose, calls, db, missed, prep, today
+from backend import autoclose, calls, claims, db, missed, prep, today
 from backend import judge_queue as jq
 from generator.clinic import master_values_rows
 from tests.backend.call_db import LABELS, TODAY, classify_row, make_call_db
+from tests.backend.test_claims import NOTE, add_claim, reviewed_for
+from tests.backend.test_missed import Source
 from tests.backend.test_prep import make_source
 
 NOW = datetime(2026, 11, 10, 9, 0, 0)
@@ -245,3 +247,25 @@ def test_today_does_not_count_missed(pconn, monkeypatch):
 
     monkeypatch.setattr(missed, "facts", boom)
     assert "missed_top" not in _sheet(pconn)["people"]
+
+
+# ── ⑤ 청구 점검 줄 (설계 2026-11-10 청구 점검 §1 "오늘 화면 줄") ─────────────────────
+
+
+def test_today_claim_lines_match_screen(tmp_path):
+    """재심 신청 기한 임박 = /claims `soon` 칩(상병 착오 제외), 청구 전 상병 경고 = 청구 전 점검 경고 줄 수"""
+    s = Source(tmp_path / "source.sqlite")
+    add_claim(s, 1, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    add_claim(s, 2, note=NOTE["diagnosis"][1], reviewed=reviewed_for(10))
+    add_claim(s, 3, day="2026-11-12", status="pending", dx="D07")
+    conn = s.app()
+    people = _sheet(conn)["people"]
+    assert people["appeal_soon"] == 1
+    assert people["preclaim_warning"] == 1
+    assert people["appeal_soon"] == claims.adjusted(conn, TODAY)["chips"]["soon"]["count"]
+    assert people["preclaim_warning"] == claims.pre_claim(conn, TODAY)["counts"]["warning"]
+
+
+def test_today_claim_lines_zero(pconn):
+    people = _sheet(pconn)["people"]
+    assert (people["appeal_soon"], people["preclaim_warning"]) == (0, 0)

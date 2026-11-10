@@ -14,8 +14,8 @@ import {
   type PrepSheet,
   type Suggestion,
   TYPE_LABEL,
-  won,
 } from "@/lib/prep-api";
+import { won } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Go = (patch: Record<string, string | null>) => void;
