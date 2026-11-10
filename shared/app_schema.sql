@@ -296,3 +296,16 @@ CREATE TABLE ax_jobs (
     started_at  TEXT NOT NULL,
     finished_at TEXT
 );
+
+-- ⑨ 미예약 환자 연락 기록(기능 정의 §5 ⑨, backend/missed.py) — 가장 최근 기록이 목록 빠짐·점수 감점을 정한다.
+-- 연락한 사람 = 파트(frontend/lib/part.ts), 시각은 실제 시계. 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_missed_contacts (
+    id           INTEGER PRIMARY KEY,
+    patient_id   INTEGER NOT NULL,  -- source.emr_patients.id
+    result       TEXT NOT NULL CHECK (result IN ('booked', 'no_answer', 'later', 'declined', 'other_clinic')),
+    channel      TEXT NOT NULL CHECK (channel IN ('call', 'text')),
+    contacted_by TEXT NOT NULL,
+    contacted_at TEXT NOT NULL
+);
+
+CREATE INDEX ix_missed_contacts_patient ON ax_missed_contacts(patient_id, contacted_at);

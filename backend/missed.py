@@ -310,3 +310,86 @@ def score(row: dict, contact: dict | None, now: datetime, w: dict) -> int:
             if contact["result"] == result and days < w[f"{result}_days"]:
                 total += w[result]
     return math.floor(total + 0.5)
+
+
+# ── 연락 기록과 목록 (설계 §4) ─────────────────────────────────
+
+# 연락 결과·수단 — 화면 문구는 frontend/lib/missed-api.ts(예약함·부재중·안 받음·나중에 다시·안 오겠다고 함·다른 치과 다님 / 전화·문자)
+RESULTS = ("booked", "no_answer", "later", "declined", "other_clinic")
+CHANNELS = ("call", "text")
+
+
+def record_contact(
+    conn: sqlite3.Connection,
+    patient_id: int,
+    result: str,
+    channel: str,
+    by: str,
+    at: str,
+    day: date,
+) -> None:
+    """연락 결과 한 줄 — 모르는 결과·수단이나 그날 미예약 환자(facts)가 아닌 환자면 ValueError. 커밋은 부르는 쪽.
+    목록에서 빠진 환자도 facts에는 있어 결과를 고쳐 남길 수 있다(가장 최근 기록이 이긴다)"""
+    if result not in RESULTS or channel not in CHANNELS:
+        raise ValueError(f"모르는 결과·수단: {result}, {channel}")
+    if all(r["patient_id"] != patient_id for r in facts(conn, day)):
+        raise ValueError(f"미예약 환자가 아님: {patient_id}")
+    conn.execute(
+        "INSERT INTO ax_missed_contacts (patient_id, result, channel, contacted_by, contacted_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (patient_id, result, channel, by, at),
+    )
+
+
+def _contacts(conn) -> dict[int, dict]:
+    """연락 기록 한 번 — 환자마다 가장 최근 기록(시각, 같으면 나중 줄)과 부재중 횟수"""
+    return {
+        r["patient_id"]: {k: r[k] for k in ("result", "channel", "by", "at", "no_answer")}
+        for r in conn.execute(
+            "SELECT * FROM (SELECT patient_id, result, channel, contacted_by AS by,"
+            " contacted_at AS at,"
+            " ROW_NUMBER() OVER (PARTITION BY patient_id"
+            "  ORDER BY contacted_at DESC, id DESC) AS n,"
+            " SUM(result = 'no_answer') OVER (PARTITION BY patient_id) AS no_answer"
+            " FROM ax_missed_contacts) WHERE n = 1"
+        )
+    }
+
+
+def _removed(contact: dict | None, now: datetime, w: dict) -> bool:
+    """목록에서 빠짐 — 예약함·다른 치과 다님은 기간 없이, 안 오겠다고 함은 declined_days 동안"""
+    if contact is None:
+        return False
+    if contact["result"] in ("booked", "other_clinic"):
+        return True
+    days = (now - datetime.fromisoformat(contact["at"])).total_seconds() / 86400
+    return contact["result"] == "declined" and days < w["declined_days"]
+
+
+def sheet(conn: sqlite3.Connection, day: date, now: datetime) -> dict:
+    """GET /missed — day = 앱 기준일(사실), now = 실제 시계(연락 기록 기간). 칩별 인원수는 목록 전체(화면의 칩 필터·
+    연락함 숨기기 전). 순서 = 점수 내림차순 → 마지막 방문 최근 → 차트번호"""
+    w = weights(conn)
+    contacts = _contacts(conn)
+    rows = []
+    for r in facts(conn, day):
+        c = contacts.get(r["patient_id"])
+        if _removed(c, now, w):
+            continue
+        shown = None if c is None else {k: c[k] for k in ("result", "channel", "by", "at")}
+        rows.append(r | {"score": score(r, c, now, w), "contact": shown})
+    rows.sort(key=lambda r: r["chart_no"])
+    rows.sort(key=lambda r: (r["score"], r["last_visit"]), reverse=True)
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
+    return {
+        "date": day.isoformat(),
+        "chip_counts": {k: sum(k in r["chips"] for r in rows) for k in CHIPS},
+        "rows": rows,
+        "rules": rules(w),
+    }
+
+
+def top(conn: sqlite3.Connection, day: date, now: datetime, n: int = 10) -> int:
+    """오늘 화면 "사람이 볼 일"의 미예약 환자 줄 — 목록 앞 n명 중 있는 수(0이면 화면에서 숨김)"""
+    return min(n, len(sheet(conn, day, now)["rows"]))

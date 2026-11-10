@@ -4,7 +4,7 @@
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -460,3 +460,121 @@ def test_query_count_independent_of_patients(tmp_path):
         counts.append(_count(conn))
         conn.close()
     assert counts[0] == counts[1]
+
+
+# ── 연락 기록과 목록 (설계 §4) ─────────────────────────────────
+
+
+@pytest.fixture
+def three(src):
+    """미예약 환자 셋 — 1은 최근 방문 + 진료계획, 2·3은 오래전 방문(스케일링 칩만)"""
+    for pid in (1, 2, 3):
+        src.patient(pid)
+    src.appt(1, "2026-10-01")
+    src.plan(1, "2026-10-01 10:30:00", [("U0009", "46")])
+    src.appt(2, "2025-06-01")
+    src.appt(3, "2025-01-01")
+    conn = src.app()
+    yield conn
+    conn.close()
+
+
+def _at(days_ago: float) -> str:
+    return (NOW - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _sheet(conn, now=NOW) -> dict[int, dict]:
+    return {r["patient_id"]: r for r in missed.sheet(conn, DAY, now)["rows"]}
+
+
+def _record(conn, pid, result, days_ago=0.0, channel="call"):
+    missed.record_contact(conn, pid, result, channel, by="데스크", at=_at(days_ago), day=DAY)
+    conn.commit()
+
+
+def test_sheet_order_and_rank(three):
+    s = missed.sheet(three, DAY, NOW)
+    assert [r["patient_id"] for r in s["rows"]] == [1, 2, 3]
+    assert [r["rank"] for r in s["rows"]] == [1, 2, 3]
+    assert s["date"] == "2026-12-01"
+    assert all(r["contact"] is None for r in s["rows"])
+    assert s["rules"] == missed.rules(missed.WEIGHTS)
+
+
+def test_booked_contact_removes(three):
+    _record(three, 1, "booked", days_ago=400)  # 기간 없이
+    assert 1 not in _sheet(three)
+
+
+def test_declined_removes_for_180_days(three):
+    _record(three, 1, "declined", days_ago=179)
+    _record(three, 2, "declined", days_ago=181)
+    got = _sheet(three)
+    assert 1 not in got
+    assert got[2]["contact"]["result"] == "declined"
+
+
+def test_other_clinic_contact_removes(three):
+    _record(three, 1, "other_clinic", days_ago=400)
+    assert 1 not in _sheet(three)
+
+
+def test_no_answer_lowers_for_7_days(three):
+    base = _sheet(three)[1]["score"]
+    _record(three, 1, "no_answer", days_ago=6)
+    got = _sheet(three)[1]
+    assert got["score"] == base + missed.WEIGHTS["no_answer"]
+    assert got["contact"] == {
+        "result": "no_answer",
+        "channel": "call",
+        "by": "데스크",
+        "at": _at(6),
+    }
+    later = NOW.replace(day=NOW.day + 2)  # 기록 8일 뒤
+    assert _sheet(three, later)[1]["score"] == base
+
+
+def test_later_lowers_for_14_days(three):
+    base = _sheet(three)[1]["score"]
+    _record(three, 1, "later", days_ago=13)
+    assert _sheet(three)[1]["score"] == base + missed.WEIGHTS["later"]
+    _record(three, 2, "later", days_ago=15)
+    assert _sheet(three)[2]["contact"]["result"] == "later"
+
+
+def test_repeated_no_answer_is_no_reply(three):
+    """부재중이 여러 번 겹치면 무응답 신호(설계 §4)"""
+    base = _sheet(three)[3]["score"]
+    for days in (30, 20):
+        _record(three, 3, "no_answer", days_ago=days)
+    assert _sheet(three)[3]["score"] == base + missed.WEIGHTS["no_reply"]
+
+
+def test_latest_contact_wins(three):
+    _record(three, 1, "booked", days_ago=10)
+    _record(three, 1, "later", days_ago=1)  # 고쳐 남김
+    assert _sheet(three)[1]["contact"]["result"] == "later"
+    _record(three, 2, "later", days_ago=10)
+    _record(three, 2, "booked", days_ago=1)
+    assert 2 not in _sheet(three)
+
+
+def test_record_contact_rejects_unknown(three):
+    for args in ((1, "maybe", "call"), (1, "booked", "fax"), (99, "booked", "call")):
+        with pytest.raises(ValueError):
+            missed.record_contact(three, *args, by="데스크", at=_at(0), day=DAY)
+    assert three.execute("SELECT COUNT(*) FROM ax_missed_contacts").fetchone()[0] == 0
+
+
+def test_chip_counts_before_hiding(three):
+    _record(three, 2, "no_answer")  # 남음 — 화면의 연락함 숨기기 대상
+    _record(three, 3, "booked")  # 빠짐
+    s = missed.sheet(three, DAY, NOW)
+    assert s["chip_counts"]["scaling_unused"] == 2
+    assert s["chip_counts"]["open_plan"] == 1
+    assert set(s["chip_counts"]) == set(missed.CHIPS)
+
+
+def test_top(three):
+    assert missed.top(three, DAY, NOW) == 3
+    assert missed.top(three, DAY, NOW, n=2) == 2
