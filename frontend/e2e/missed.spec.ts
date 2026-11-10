@@ -15,7 +15,13 @@ type Row = {
   signals: Record<string, number | boolean>;
   score: number;
   rank: number;
-  contact: { result: string; channel: string; by: string; at: string } | null;
+  contact: {
+    result: string;
+    channel: string;
+    by: string;
+    at: string;
+    active: boolean;
+  } | null;
 };
 
 const CHIPS = [
@@ -41,6 +47,7 @@ function row(i: number): Row {
     signals: { months_since_visit: 6 },
     score: 100 - i,
     rank: i,
+    // 2: 부재중(감점 기간 안 — 연락함 숨기기 대상), 5: 나중에 다시(기간 지남 — 숨기지 않음)
     contact:
       i === 2
         ? {
@@ -48,14 +55,24 @@ function row(i: number): Row {
             channel: "call",
             by: "데스크",
             at: "2026-11-09 15:20:00",
+            active: true,
           }
-        : null,
+        : i === 5
+          ? {
+              result: "later",
+              channel: "call",
+              by: "데스크",
+              at: "2026-10-01 10:00:00",
+              active: false,
+            }
+          : null,
   };
 }
 
-function sheet(rows: Row[]) {
+function sheet(rows: Row[], page = 10) {
   return {
     date: "2026-12-01",
+    page,
     chip_counts: Object.fromEntries(
       CHIPS.map((c) => [c, rows.filter((r) => r.chips.includes(c)).length]),
     ),
@@ -100,8 +117,23 @@ test("처음 10명, 더보기로 10명씩", async ({ page }) => {
   await expect(page.getByRole("button", { name: /더보기/ })).toHaveCount(0);
   await expect(page.getByText("1순위", { exact: true })).toHaveCount(0);
   await expect(
+    table(page).getByRole("columnheader", { name: "전체 순위" }),
+  ).toBeVisible();
+  await expect(
     table(page).getByRole("link", { name: "환자1", exact: true }),
   ).toHaveAttribute("href", "/emr?chart=C-00001");
+});
+
+test("처음·더보기 수는 응답의 page", async ({ page }) => {
+  await fakeMissed(page, () => sheet(ROWS, 4));
+  await page.goto("/missed");
+  await expect(
+    table(page).getByRole("link", { name: /^환자\d+$/ }),
+  ).toHaveCount(4);
+  await page.getByRole("button", { name: /더보기/ }).click();
+  await expect(
+    table(page).getByRole("link", { name: /^환자\d+$/ }),
+  ).toHaveCount(8);
 });
 
 test("칩 필터와 인원수", async ({ page }) => {
@@ -132,14 +164,16 @@ test("칩 필터와 인원수", async ({ page }) => {
   ]);
 });
 
-test("연락함 숨기기", async ({ page }) => {
+test("연락함 숨기기 — 연락 효과가 남은 환자만", async ({ page }) => {
   await fakeMissed(page, () => sheet(ROWS));
   await page.goto("/missed");
   await expect(table(page)).toContainText("부재중·안 받음");
-  await page.getByRole("button", { name: /연락함 숨기기/ }).click();
+  await page.getByRole("button", { name: /^연락함 숨기기 1$/ }).click();
   await expect(page).toHaveURL(/\/missed\?hide=1$/);
   await expect(table(page)).not.toContainText("부재중·안 받음");
   expect(await names(page)).not.toContain("환자2");
+  expect(await names(page)).toContain("환자5"); // 나중에 다시 기간이 지남 — 다시 연락할 차례
+  await expect(table(page)).toContainText("나중에 다시");
   await expect(
     table(page).getByRole("link", { name: /^환자\d+$/ }),
   ).toHaveCount(10);
@@ -160,6 +194,7 @@ test("연락 결과 남기면 다시 조회", async ({ page }) => {
               channel: "text",
               by: "데스크",
               at: "2026-11-10 10:05:00",
+              active: true,
             },
           }
         : x,
@@ -198,10 +233,9 @@ test("더보기 뒤 연락함 — 중복 없이 다시 조회", async ({ page })
   ).toHaveCount(20);
   const third = table(page).getByRole("row").nth(3);
   await third.getByRole("button", { name: "연락 남기기" }).click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "예약함" })
-    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "예약함" }).click();
+  await dialog.getByRole("button", { name: "빼기" }).click();
   await expect(
     table(page).getByRole("link", { name: "환자3", exact: true }),
   ).toHaveCount(0);
@@ -211,6 +245,36 @@ test("더보기 뒤 연락함 — 중복 없이 다시 조회", async ({ page })
   const shown = await names(page);
   expect(new Set(shown).size).toBe(shown.length);
   expect(shown.at(-1)).toBe("환자21");
+});
+
+test("목록에서 빠지는 결과는 한 번 더 묻는다", async ({ page }) => {
+  const posted: unknown[] = [];
+  await fakeMissed(page, () => sheet(ROWS));
+  await page.route("**/api/missed/*/contacts", async (r) => {
+    posted.push(r.request().postDataJSON());
+    await r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/missed");
+  const first = table(page).getByRole("row").nth(1);
+  const dialog = page.getByRole("dialog");
+  for (const result of ["예약함", "안 오겠다고 함", "다른 치과 다님"]) {
+    await first.getByRole("button", { name: "연락 남기기" }).click();
+    await dialog.getByRole("button", { name: result }).click();
+    await expect(dialog).toContainText("환자1님을 목록에서 뺄까요?");
+    await dialog.getByRole("button", { name: "취소" }).click();
+    await expect(dialog).not.toContainText("목록에서 뺄까요?");
+    await expect(dialog.getByRole("button", { name: result })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  }
+  expect(posted).toHaveLength(0);
+  await first.getByRole("button", { name: "연락 남기기" }).click();
+  await dialog.getByRole("button", { name: "안 오겠다고 함" }).click();
+  await dialog.getByRole("button", { name: "빼기" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(posted).toEqual([
+    { result: "declined", channel: "call", part: "데스크" },
+  ]);
 });
 
 test("순위 설명 펼치기", async ({ page }) => {

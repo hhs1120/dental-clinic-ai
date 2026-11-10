@@ -25,14 +25,13 @@ import {
   type MissedRow,
   type MissedSheet,
   recordContact,
+  REMOVES,
   type Result,
   RESULT_LABEL,
   RESULTS,
 } from "@/lib/missed-api";
 import { readPart } from "@/lib/part";
 import { won } from "@/lib/prep-api";
-
-const PAGE = 10; // 처음 10명, 더보기마다 10명(설계 §6 — 사용자 결정)
 
 const CHIP_VARIANT: Record<Chip, "danger" | "warn" | "info" | "muted"> = {
   recall: "info",
@@ -69,14 +68,14 @@ export function MissedView() {
       if (v === null) next.delete(k);
       else next.set(k, v);
     }
-    setShown(PAGE); // 필터가 바뀌면 다시 처음 10명
+    setMore(null); // 필터가 바뀌면 다시 처음 page명
     router.replace(`/missed${next.size ? `?${next}` : ""}`);
   };
 
   const [attempt, setAttempt] = useState(0);
   const [sheet, setSheet] = useState<MissedSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shown, setShown] = useState(PAGE);
+  const [more, setMore] = useState<number | null>(null); // 더보기로 늘린 보이는 수, null = 처음(page명)
   const [how, setHow] = useState(false);
   const [target, setTarget] = useState<MissedRow | null>(null);
   useEffect(() => {
@@ -100,11 +99,12 @@ export function MissedView() {
       </p>
     );
 
+  const shown = more ?? sheet.page;
   // 다시 조회한 목록에서 매번 자른다 — 연락 뒤 순위가 바뀌어도 같은 사람이 두 번 보이거나 빠지지 않는다
   const rows = sheet.rows
     .filter((r) => !chip || r.chips.includes(chip))
-    .filter((r) => !hide || !r.contact);
-  const contacted = sheet.rows.filter((r) => r.contact).length;
+    .filter((r) => !hide || !r.contact?.active);
+  const contacted = sheet.rows.filter((r) => r.contact?.active).length;
 
   return (
     <div className="flex flex-col gap-3">
@@ -154,7 +154,7 @@ export function MissedView() {
         <table className="w-full text-sm">
           <thead className="bg-muted text-left text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-right">순위</th>
+              <th className="px-3 py-2 text-right">전체 순위</th>
               <th className="px-3 py-2">환자</th>
               <th className="px-3 py-2">칩</th>
               <th className="px-3 py-2">마지막 내원</th>
@@ -236,7 +236,7 @@ export function MissedView() {
         <Button
           variant="outline"
           className="self-center"
-          onClick={() => setShown(shown + PAGE)}
+          onClick={() => setMore(shown + sheet.page)}
         >
           더보기 ({Math.min(shown, rows.length)}/{rows.length}명)
         </Button>
@@ -279,7 +279,8 @@ function Rules({ rules }: { rules: MissedSheet["rules"] }) {
   );
 }
 
-/** 연락 결과 남기기 — 수단(전화·문자)을 고르고 결과 5개 중 하나를 누르면 바로 남긴다(설계 §4) */
+/** 연락 결과 남기기 — 수단(전화·문자)을 고르고 결과 5개 중 하나를 누르면 남긴다(설계 §4). 목록에서 빠지는
+ * 결과(REMOVES)는 한 번 더 묻고, 부재중·나중에 다시는 바로 남긴다 */
 function ContactDialog({
   row,
   onClose,
@@ -292,6 +293,7 @@ function ContactDialog({
   const [channel, setChannel] = useState<Channel>("call");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Result | null>(null);
   const save = (result: Result) => {
     if (!row) return;
     setBusy(true);
@@ -300,6 +302,7 @@ function ContactDialog({
       () => {
         setBusy(false);
         setChannel("call");
+        setConfirm(null);
         onSaved();
       },
       (e) => {
@@ -314,6 +317,7 @@ function ContactDialog({
       onOpenChange={(v) => {
         if (!v && !busy) {
           setError(null);
+          setConfirm(null);
           onClose();
         }
       }}
@@ -338,19 +342,38 @@ function ContactDialog({
             </Button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1.5" aria-label="결과">
-          {RESULTS.map((r) => (
+        {confirm ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="flex-1 text-sm">
+              {RESULT_LABEL[confirm]} — {row?.name}님을 목록에서 뺄까요?
+            </span>
+            <Button size="sm" disabled={busy} onClick={() => save(confirm)}>
+              빼기
+            </Button>
             <Button
-              key={r}
               size="sm"
               variant="outline"
               disabled={busy}
-              onClick={() => save(r)}
+              onClick={() => setConfirm(null)}
             >
-              {RESULT_LABEL[r]}
+              취소
             </Button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5" aria-label="결과">
+            {RESULTS.map((r) => (
+              <Button
+                key={r}
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => (REMOVES.includes(r) ? setConfirm(r) : save(r))}
+              >
+                {RESULT_LABEL[r]}
+              </Button>
+            ))}
+          </div>
+        )}
         {error && <ErrorBand text={error} />}
       </DialogContent>
     </Dialog>

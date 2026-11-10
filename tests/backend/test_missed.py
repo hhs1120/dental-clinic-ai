@@ -12,7 +12,7 @@ import pytest
 from backend import db, missed, prep
 from generator.clinic import master_values_rows
 from generator.master import ADJUST_REASONS, PROCEDURES, SCALING_CODE
-from tests.backend.test_prep import make_source
+from tests.backend.test_prep import APPT, make_source
 
 ROOT = Path(__file__).resolve().parents[2]
 DAY = date(2026, 12, 1)
@@ -155,7 +155,10 @@ def facts(conn, day=DAY) -> dict[int, dict]:
 
 @pytest.fixture
 def prep_src(tmp_path):
-    """④ 준비표 테스트 source에 미수·스케일링 청구를 더한 앱 연결"""
+    """④ 준비표 테스트 source에 미수·스케일링 청구와 치료계획 경계 사례를 더한 앱 연결.
+    김철수(1): 11/18 검진(전체 구강 '00', 다른 시술코드 — 계획 2의 U0018 항목을 대체하지 않음),
+    11/22 같은 계획(1)의 46번 항목 완료(같은 치아의 항목 12를 대체하지 않음), 11/24 다른 계획(2)의 36번 항목
+    완료(계획 1의 36번 항목 11을 대체)"""
     s = make_source(tmp_path / "source.sqlite")
     s.execute(
         "INSERT INTO emr_payments (patient_id, kind, amount_due, amount_paid, paid_at, method)"
@@ -168,6 +171,27 @@ def prep_src(tmp_path):
         " VALUES (1, 3, 'C-00003', '00', '2026-11', '2026-11-12', ?, 10000, 'paid')",
         (SCALING_CODE,),
     )
+    s.executemany(
+        "INSERT INTO emr_treatment_plan_items VALUES (?, ?, ?, ?, ?, 80000, 'open')",
+        [(14, 1, 4, "U0005", "46"), (22, 2, 2, "U0005", "36")],
+    )
+    s.executemany(
+        APPT,
+        [
+            (96, 1, 1, "2026-11-18 10:00:00", "consult", "U0002", "completed", 1, 1, None),
+            (97, 1, 1, "2026-11-22 10:00:00", "treatment", "U0005", "completed", 1, 1, 14),
+            (98, 1, 1, "2026-11-24 10:00:00", "treatment", "U0005", "completed", 1, 1, 22),
+        ],
+    )
+    s.executemany(
+        "INSERT INTO emr_treatments (id, appointment_id, patient_id, procedure_code, tooth_no,"
+        " performed_at, fee_total, insured_amount, patient_amount) VALUES (?, ?, 1, ?, ?, ?, 0, 0, 0)",
+        [
+            (3, 96, "U0002", "00", "2026-11-18 10:00:00"),
+            (4, 97, "U0005", "46", "2026-11-22 10:00:00"),
+            (5, 98, "U0005", "36", "2026-11-24 10:00:00"),
+        ],
+    )
     s.commit()
     s.close()
     conn = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
@@ -176,10 +200,14 @@ def prep_src(tmp_path):
 
 
 def test_same_as_prep_rules(prep_src):
-    """스케일링 급여 미사용·남은 치료계획·잔액·리콜 연체가 ④ 도우미와 같다(테스트에서만 ④ 도우미를 부른다)"""
+    """스케일링 급여 미사용·남은 치료계획·잔액·리콜 연체가 ④ 도우미와 같다(테스트에서만 ④ 도우미를 부른다).
+    비교일 = 계획을 만든 날(11/10·11/15 — 그날 만든 계획은 아직 없음), 예약을 취소한 날(11/28 — 그날 아침엔
+    잡혀 있음), 대체·완료 진료 앞뒤"""
     mv = prep.master_values(prep_src)
     pats = prep_src.execute("SELECT * FROM source.emr_patients").fetchall()
-    for day in (date(2026, 11, 12), date(2026, 11, 16), date(2026, 11, 21), DAY):
+    days = [date(2026, 11, d) for d in (10, 12, 15, 16, 19, 21, 23, 25, 28)] + [DAY]
+    want_plans = {}
+    for day in days:
         d = day.isoformat()
         claims = missed._claims(prep_src, d, mv)
         plans = missed._open_plans(prep_src, d)
@@ -189,7 +217,10 @@ def test_same_as_prep_rules(prep_src):
             scaled = claims.get(p["id"], {}).get("scaled", False)
             want = prep._scaling_unused(prep_src, p, day, "", mv)
             assert missed._scaling_unused(p["birth_date"], scaled, day, mv) == want, (day, p["id"])
-            assert plans.get(p["id"], 0) == len(prep._open_plan(prep_src, p["id"], day, None))
+            want_plan = len(prep._open_plan(prep_src, p["id"], day, None))
+            assert plans.get(p["id"], 0) == want_plan, (day, p["id"])
+            if p["id"] == 1:
+                want_plans[d] = want_plan
             want_bal = prep_src.execute(
                 "SELECT COALESCE(SUM(amount_due - amount_paid), 0) FROM source.emr_payments"
                 " WHERE patient_id = ? AND date(paid_at) < ?",
@@ -207,6 +238,27 @@ def test_same_as_prep_rules(prep_src):
             and not v["booked"]
         }
         assert got == {m["chart_no"] for m in prep._family_recall(prep_src, p1, day)}, day
+    # ④ 도우미와 같을 뿐 아니라 경계 사례가 실제로 걸린다(둘이 같이 틀리지 않게) — 김철수의 열린 항목 수
+    assert want_plans == {
+        "2026-11-10": 0,  # 그날 만든 계획 1은 아직
+        "2026-11-12": 4,  # 계획 1: 11·12·13·14
+        "2026-11-15": 4,  # 그날 만든 계획 2는 아직
+        "2026-11-16": 6,  # + 계획 2: 21(전체 구강)·22
+        "2026-11-19": 6,  # 11/18 '00' 검진은 다른 시술코드 — 21 그대로
+        "2026-11-21": 5,  # 13은 11/20 계획 밖 진료로 대체
+        "2026-11-23": 4,  # 14 끝남 — 같은 치아(46)의 12는 같은 계획 진료라 그대로
+        "2026-11-25": 2,  # 22 끝남, 11은 다른 계획(2)의 36번 진료로 대체 → 12·21
+        "2026-11-28": 2,
+        "2026-12-01": 2,
+    }
+    family = {
+        d: {m["chart_no"] for m in prep._family_recall(prep_src, p1, date.fromisoformat(d))}
+        for d in ("2026-11-28", "2026-11-29")
+    }
+    assert family == {
+        "2026-11-28": set(),
+        "2026-11-29": {"C-00003"},
+    }  # 11/28 취소 — 그날 아침엔 잡혀 있음
 
 
 # ── 목록에 오르는 조건 ─────────────────────────────────────────
@@ -344,10 +396,13 @@ def test_other_clinic_by_external_claim(src):
     src.claim(
         3, "2026-03-01", status="denied", note=EXTERNAL, reviewed="2026-12-05"
     )  # 그날 뒤 통보
+    src.patient(4)
+    src.claim(4, "2026-03-01", status="adjusted", note=EXTERNAL, reviewed=DAY.isoformat())
     got = facts(src.app())
     assert "other_clinic" in got[1]["chips"] and got[1]["signals"]["external_claim"]
     assert "other_clinic" not in got[2]["chips"]
     assert "other_clinic" not in got[3]["chips"]
+    assert not got[4]["signals"]["external_claim"]  # 그날 통보는 그날 아침엔 없다
 
 
 def test_other_clinic_by_no_reply_run(src):
@@ -497,6 +552,7 @@ def test_sheet_order_and_rank(three):
     assert [r["patient_id"] for r in s["rows"]] == [1, 2, 3]
     assert [r["rank"] for r in s["rows"]] == [1, 2, 3]
     assert s["date"] == "2026-12-01"
+    assert s["page"] == missed.PAGE  # 화면의 처음 몇 명·더보기 단위
     assert all(r["contact"] is None for r in s["rows"])
     assert s["rules"] == missed.rules(missed.WEIGHTS)
 
@@ -529,6 +585,7 @@ def test_no_answer_lowers_for_7_days(three):
         "channel": "call",
         "by": "데스크",
         "at": _at(6),
+        "active": True,
     }
     later = NOW.replace(day=NOW.day + 2)  # 기록 8일 뒤
     assert _sheet(three, later)[1]["score"] == base
@@ -548,6 +605,28 @@ def test_repeated_no_answer_is_no_reply(three):
     for days in (30, 20):
         _record(three, 3, "no_answer", days_ago=days)
     assert _sheet(three)[3]["score"] == base + missed.WEIGHTS["no_reply"]
+
+
+def test_no_answer_counts_only_since_other_result(three):
+    """부재중 누적은 가장 최근의 다른 결과 뒤 연달아 남은 것만 — 그 앞 부재중은 세지 않는다"""
+    base = _sheet(three)[3]["score"]
+    _record(three, 3, "no_answer", days_ago=30)
+    _record(three, 3, "later", days_ago=25)
+    _record(three, 3, "no_answer", days_ago=20)
+    assert _sheet(three)[3]["score"] == base
+    _record(three, 3, "no_answer", days_ago=10)
+    assert _sheet(three)[3]["score"] == base + missed.WEIGHTS["no_reply"]
+
+
+def test_contact_active_flag(three):
+    """contact.active = 최근 연락의 효과(감점 기간)가 아직 있음 — 화면 "연락함 숨기기"가 이것만 숨긴다"""
+    _record(three, 1, "no_answer", days_ago=6)
+    _record(three, 2, "later", days_ago=13)
+    _record(three, 3, "declined", days_ago=181)  # 빠지는 기간이 지나 다시 목록에
+    got = _sheet(three)
+    assert [got[p]["contact"]["active"] for p in (1, 2, 3)] == [True, True, False]
+    two_days = _sheet(three, NOW + timedelta(days=2))  # 부재중 8일, 나중에 다시 15일
+    assert [two_days[p]["contact"]["active"] for p in (1, 2)] == [False, False]
 
 
 def test_latest_contact_wins(three):
@@ -573,8 +652,3 @@ def test_chip_counts_before_hiding(three):
     assert s["chip_counts"]["scaling_unused"] == 2
     assert s["chip_counts"]["open_plan"] == 1
     assert set(s["chip_counts"]) == set(missed.CHIPS)
-
-
-def test_top(three):
-    assert missed.top(three, DAY, NOW) == 3
-    assert missed.top(three, DAY, NOW, n=2) == 2

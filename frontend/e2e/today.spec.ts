@@ -18,7 +18,6 @@ const EMPTY = {
     todo_left: { items: 0, calls: 0 },
     judge_pending: 0,
     refused: [],
-    missed_top: 0,
   },
   ai: {
     autoclose_on: false,
@@ -88,7 +87,6 @@ const FULL = {
     alert_patients: 6,
     todo_left: { items: 34, calls: 16 },
     judge_pending: 3,
-    missed_top: 10,
     refused: [
       {
         id: 7,
@@ -135,11 +133,16 @@ test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await expect(page).toHaveURL(/\/ask\?tab=chat&draft=/);
 });
 
-test("미예약 환자 줄 → /missed", async ({ page }) => {
-  await fakeToday(page, FULL);
+// 미예약 환자 줄은 숫자 없는 고정 링크라 0건 숨김 없이 늘 보인다 — 문구(MISSED_LINK_TEXT)는 바뀔 수 있어 링크 주소로 찾는다
+test("미예약 환자 줄은 늘 있고 → /missed", async ({ page }) => {
+  await fakeToday(page, EMPTY);
   await page.goto("/today");
   const people = page.getByRole("region", { name: "사람이 볼 일" });
-  await people.getByRole("link", { name: /미예약 환자 · 상위 10명/ }).click();
+  await expect(people.getByText("오늘 남은 일이 없습니다")).toBeVisible();
+  const link = people.locator('a[href="/missed"]');
+  await expect(link).toHaveCount(1);
+  await expect(link).not.toContainText(/\d/);
+  await link.click();
   await expect(page).toHaveURL(/\/missed$/);
 });
 
@@ -161,11 +164,10 @@ test("확인할 통화 문구", async ({ page }) => {
 test("0건 줄은 숨김", async ({ page }) => {
   await fakeToday(page, {
     ...FULL,
-    people: { ...FULL.people, refused: [], review_calls: [], missed_top: 0 },
+    people: { ...FULL.people, refused: [], review_calls: [] },
   });
   await page.goto("/today");
   await expect(page.getByText("근거 없음")).toHaveCount(0);
-  await expect(page.getByText(/미예약 환자 · 상위/)).toHaveCount(0);
   await expect(page.getByText("확인할 통화")).toHaveCount(0);
   await expect(page.getByText("급한 통화")).toBeVisible();
   await page.unroute("**/api/today");

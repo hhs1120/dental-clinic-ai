@@ -237,12 +237,11 @@ def test_empty_day(pconn):
     assert s["people"]["urgent_calls"] == [] and s["ai"]["prep"]["rows"] == 0
 
 
-def test_today_has_missed_top(pconn):
-    """미예약 환자 줄 — 미예약 환자 화면과 같은 함수(missed.top)로 센다"""
-    s = _sheet(pconn)
-    assert s["people"]["missed_top"] == missed.top(pconn, TODAY, NOW) == 1  # 김민수(예약 취소)
+def test_today_does_not_count_missed(pconn, monkeypatch):
+    """미예약 환자 줄은 숫자 없는 고정 링크 — 오늘 화면은 미예약 목록을 계산하지 않는다(기능 정의 §4 오늘 화면)"""
 
+    def boom(*a, **k):
+        raise AssertionError("오늘 화면이 미예약 목록을 계산함")
 
-def test_today_missed_top_zero(tconn):
-    """미예약 환자가 없으면 0(화면에서 줄을 숨긴다)"""
-    assert _sheet(tconn)["people"]["missed_top"] == 0
+    monkeypatch.setattr(missed, "facts", boom)
+    assert "missed_top" not in _sheet(pconn)["people"]

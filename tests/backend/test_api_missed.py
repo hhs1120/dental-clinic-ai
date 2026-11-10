@@ -24,7 +24,7 @@ def client(tmp_path):
 
 def test_get_missed_shape(client):
     r = client.get("/missed").json()
-    assert set(r) == {"date", "chip_counts", "rows", "rules"}
+    assert set(r) == {"date", "page", "chip_counts", "rows", "rules"}
     assert r["date"] == "2026-12-01"
     assert set(r["chip_counts"]) == set(missed.CHIPS)
     assert [x["patient_id"] for x in r["rows"]] == [1, 2]
@@ -57,6 +57,7 @@ def test_post_contact_then_hidden(client, tmp_path):
         "channel": "text",
         "by": "상담실",
         "at": "2026-11-05 14:30:00",
+        "active": True,
     }
     c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
     assert c.execute("SELECT COUNT(*) FROM ax_missed_contacts").fetchone()[0] == 2
