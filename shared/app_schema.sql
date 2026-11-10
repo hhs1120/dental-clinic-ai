@@ -99,6 +99,14 @@ CREATE TABLE ax_todo_checks (
     PRIMARY KEY (classification_id, item)
 );
 
+-- 확인할 통화의 "확인함"(기능 정의 §4 오늘 화면) — 통화 단위, 다시 확인하면 덮어씀. 확인한 파트·실제 시계.
+-- 확인 뒤에 사람 판정·다시 열기가 새로 생기면 다시 뜬다(backend/calls.py review_calls)
+CREATE TABLE ax_call_checks (
+    call_uid   TEXT PRIMARY KEY,
+    checked_by TEXT NOT NULL,
+    checked_at TEXT NOT NULL
+);
+
 -- 사람 판정(운영 구간 엇갈림·표본, 평가 설계 §2.3) — 운영 감사라 eval.py는 읽지 않는다. 통화당 1행(재판정은 덮어씀). judged_at은 실제 시계
 CREATE TABLE ax_judgments (
     id        INTEGER PRIMARY KEY,
