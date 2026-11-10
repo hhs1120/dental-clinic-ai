@@ -56,7 +56,14 @@ export interface PrepRow {
   generated: boolean;
   suggestion: Suggestion | null;
   suggestion_valid: boolean;
+  /** 갱신하면 다시 부르는 행 — backend/prep.py build와 같은 조건(안 만듦·후검증 실패·사실·프롬프트 버전·모델이 다름) */
+  refresh: boolean;
   stale: boolean;
+  /** 제안 만든 뒤 바뀐 제안 입력(backend/prep.py llm_facts 키) — 없던 값·사라진 값은 null */
+  changed: { key: string; before: string | null; after: string | null }[];
+  made_at: string | null;
+  /** 화면 전용 — 방금 갱신으로 제안이 새로 만들어진 행. prev는 갱신 전 제안(전에 안 만들었으면 없음) */
+  refreshed?: { prev?: Suggestion | null };
 }
 
 export interface PrepSheet {

@@ -24,7 +24,10 @@ const base = {
   open_plan: [],
   generated: true,
   suggestion_valid: true,
+  refresh: false,
   stale: false,
+  changed: [],
+  made_at: "2026-12-01T05:30:00",
 };
 
 const ROWS = [
@@ -128,6 +131,7 @@ const ROWS = [
     chips: ["appointment", "unconfirmed"],
     suggestion: null,
     suggestion_valid: false,
+    refresh: true,
   },
 ];
 
@@ -186,7 +190,9 @@ test("행을 펼치면 근거와 후검증이 보인다", async ({ page }) => {
   await fakePrep(page);
   await page.goto("/prep?date=2026-12-01");
   await page.getByRole("row", { name: /김철수/ }).click();
-  await expect(page.getByText("alert.ANTICOAG")).toBeVisible();
+  // 근거는 내부 키가 아니라 사람이 읽는 이름으로
+  await expect(page.getByText("주의: 항응고제 복용")).toBeVisible();
+  await expect(page.getByText("alert.ANTICOAG")).toHaveCount(0);
   await expect(page.getByText("후검증 통과")).toBeVisible();
   await expect(page.getByText(/^신환$/)).toBeVisible(); // 정다은 행의 딱지
 });
@@ -263,5 +269,72 @@ test("체어 보기 — 지금 환자가 있으면 바로 뒤 환자에 다음",
   );
   await expect(page.getByRole("button", { name: /11:30/ })).toContainText(
     "다음",
+  );
+});
+
+test("갱신 전 — 바뀐 사실과 갱신할 인원", async ({ page }) => {
+  const stale = {
+    ...ROWS[0],
+    refresh: true,
+    stale: true,
+    changed: [{ key: "balance", before: "50000", after: "30000" }],
+  };
+  await fakePrep(page, () => [stale, ROWS[1], ROWS[2]]);
+  await page.goto("/prep?date=2026-12-01");
+  await expect(page.getByRole("row", { name: /김철수/ })).toContainText(
+    "제안 만든 뒤 바뀜: 미수 잔액 50,000원 → 30,000원",
+  );
+  await expect(page.getByText(/AI 제안: 12\/1\(화\) 05:30 기준/)).toContainText(
+    "사실이 바뀐 환자 1명",
+  );
+  // 사실이 바뀐 김철수 + 후검증 실패 정다은
+  await expect(
+    page.getByRole("button", { name: "AI 제안 갱신하기 (2명)" }),
+  ).toBeEnabled();
+});
+
+test("모두 최신이면 갱신 버튼이 꺼진다", async ({ page }) => {
+  await fakePrep(page, () => [ROWS[0], ROWS[1]]);
+  await page.goto("/prep?date=2026-12-01");
+  await expect(
+    page.getByRole("button", { name: "AI 제안 최신" }),
+  ).toBeDisabled();
+});
+
+test("갱신 뒤 — 다시 만든 행에만 방금 갱신과 이전 제안", async ({ page }) => {
+  let refreshed = false;
+  // 갱신 대상은 후검증에 실패했던 정다은뿐 — 다시 만들어 만든 시각이 바뀌고, 김철수는 건너뛰어 그대로
+  const renewed = {
+    ...ROWS[2],
+    suggestion: { action: "none", text: "", used_facts: [] },
+    suggestion_valid: true,
+    refresh: false,
+    made_at: "2026-12-01T09:00:00",
+  };
+  await fakePrep(page, () => (refreshed ? [ROWS[0], ROWS[1], renewed] : ROWS));
+  await page.route("**/api/jobs/**", (r) => {
+    if (r.request().method() === "POST") {
+      refreshed = true;
+      return r.fulfill({ json: { job_id: 1 } });
+    }
+    return r.fulfill({ json: { id: 1, status: "done", error: null } });
+  });
+  await page.goto("/prep?date=2026-12-01");
+  await page.getByRole("button", { name: "AI 제안 갱신하기 (1명)" }).click();
+  const row = page.getByRole("row", { name: /정다은/ });
+  await expect(row).toContainText("방금 갱신");
+  await expect(row).toContainText("이전: 제안 없음 — 후검증 실패");
+  await expect(page.getByText("1명 갱신함")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "AI 제안 최신" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("row", { name: /김철수/ })).not.toContainText(
+    "방금 갱신",
+  );
+  // 체어 보기도 같은 제안 칸
+  await page.getByRole("button", { name: "체어 보기" }).click();
+  await page.getByRole("button", { name: /^상담실/ }).click();
+  await expect(page.getByRole("region", { name: "지금 환자" })).toContainText(
+    "방금 갱신",
   );
 });

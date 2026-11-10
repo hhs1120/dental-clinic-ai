@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // make e2e는 켜 둔 make dev와 따로 빌드 폴더를 쓴다 — Next는 빌드 폴더마다 개발 서버 하나만 띄운다(<distDir>/dev/lock)
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

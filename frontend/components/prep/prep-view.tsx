@@ -11,6 +11,7 @@ import { ApiError, useClinic } from "@/lib/api";
 import {
   fetchJob,
   fetchPrep,
+  type PrepRow,
   type PrepSheet,
   regenerate,
 } from "@/lib/prep-api";
@@ -57,8 +58,10 @@ export function PrepView() {
     return () => ac.abort();
   }, [date, key]);
 
-  // 다시 만들기 — 작업을 폴링하고 끝나면 다시 조회한다
-  const [job, setJob] = useState<{ id: number; date: string } | null>(null);
+  // AI 제안 갱신 — 작업을 폴링하고 끝나면 다시 조회한다. 갱신 전 행을 들고 있다가 만든 시각이 바뀐 행에 "방금 갱신"
+  type Before = { date: string; rows: Map<number, PrepRow> };
+  const [job, setJob] = useState<({ id: number } & Before) | null>(null);
+  const [done, setDone] = useState<Before | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
   useEffect(() => {
     if (!job) return;
@@ -67,7 +70,9 @@ export function PrepView() {
         (j) => {
           if (j.status === "running") return;
           setJob(null);
-          if (j.status === "failed") setJobError(j.error ?? "다시 만들기 실패");
+          if (j.status === "failed")
+            setJobError(j.error ?? "AI 제안 갱신 실패");
+          else setDone({ date: job.date, rows: job.rows });
           setAttempt((n) => n + 1);
         },
         (e) => {
@@ -86,23 +91,39 @@ export function PrepView() {
   });
   if (failed && !date && sheet && "error" in sheet)
     return <ErrorBand text={sheet.error} />;
-  const current = sheet && "data" in sheet ? sheet.data : null;
-  if (!current)
+  const loaded = sheet && "data" in sheet ? sheet.data : null;
+  if (!loaded)
     return (
       <p className="py-10 text-center text-sm text-muted-foreground">
         불러오는 중…
       </p>
     );
 
+  // 다시 조회가 도착한 뒤에만 — 그 전 렌더는 옛 행이라 "갱신한 환자 없음"으로 잘못 보인다
+  const fresh = sheet !== null && sheet.key === key;
+  const marked =
+    fresh && done?.date === loaded.date
+      ? markRefreshed(loaded.rows, done.rows)
+      : null;
+  const current = marked ? { ...loaded, rows: marked } : loaded;
   const today = clinic && clinic !== "error" ? clinic.today : null;
-  const busy = job?.date === current.date; // 다른 날짜를 만드는 중이면 이 날짜는 누를 수 있다
+  // 다른 날짜를 만드는 중이면 이 날짜는 누를 수 있다. 끝난 뒤 다시 조회가 올 때까지도 갱신 중
+  const busy =
+    job?.date === current.date || (done?.date === current.date && !fresh);
+  const need = current.rows.filter((r) => r.refresh).length;
+  const staleCount = current.rows.filter((r) => r.stale).length;
   const start = () => {
     setJobError(null);
+    setDone(null);
+    const rows = new Map(current.rows.map((r) => [r.appointment_id, r]));
     regenerate(current.date).then(
-      ({ job_id }) => setJob({ id: job_id, date: current.date }),
+      ({ job_id }) => setJob({ id: job_id, date: current.date, rows }),
       (e) => setJobError(message(e)),
     );
   };
+  const gen = current.generated_at;
+  const refreshed = marked?.filter((r) => r.refreshed) ?? null;
+  const failedNow = refreshed?.filter((r) => !r.suggestion).length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -144,22 +165,33 @@ export function PrepView() {
             </Button>
           ))}
         </div>
-        <span className="text-sm text-muted-foreground">
-          {dayLabel(current.date)}{" "}
-          {current.generated_at
-            ? `· ${dayLabel(current.generated_at.slice(0, 10))} ${current.generated_at.slice(11, 16)}에 만듦`
-            : "· 아직 만들지 않음"}
-        </span>
-        <span className="flex-1" />
-        <Button
-          size="sm"
-          variant="outline"
-          className="print:hidden"
-          disabled={busy}
-          onClick={start}
-        >
-          {busy ? "만드는 중…" : "다시 만들기"}
-        </Button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <span className="text-sm text-muted-foreground">
+            AI 제안:{" "}
+            {gen
+              ? `${dayLabel(gen.slice(0, 10))} ${gen.slice(11, 16)} 기준`
+              : "아직 만들지 않음"}
+            {staleCount > 0 && ` · 사실이 바뀐 환자 ${staleCount}명`}
+            {refreshed &&
+              (refreshed.length
+                ? ` · ${refreshed.length}명 갱신함`
+                : " · 갱신한 환자 없음")}
+            {failedNow > 0 && ` · ${failedNow}명은 후검증 실패로 비워 둠`}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="print:hidden"
+            disabled={busy || need === 0}
+            onClick={start}
+          >
+            {busy
+              ? "갱신 중…"
+              : need
+                ? `AI 제안 갱신하기 (${need}명)`
+                : "AI 제안 최신"}
+          </Button>
+        </div>
       </div>
       {jobError && <ErrorBand text={jobError} />}
       {current.rows.length === 0 ? (
@@ -173,6 +205,15 @@ export function PrepView() {
       )}
     </div>
   );
+}
+
+/** 갱신 뒤 행 중 제안을 만든 시각이 갱신 전과 다른 행 — 이전 제안을 붙인다 */
+function markRefreshed(rows: PrepRow[], before: Map<number, PrepRow>) {
+  return rows.map((r) => {
+    const b = before.get(r.appointment_id);
+    if (!r.generated || b?.made_at === r.made_at) return r;
+    return { ...r, refreshed: b?.generated ? { prev: b.suggestion } : {} };
+  });
 }
 
 export function ErrorBand({ text }: { text: string }) {
