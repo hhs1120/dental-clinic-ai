@@ -17,10 +17,11 @@ FILES = ("source.sqlite", "truth.sqlite")
 
 
 @pytest.fixture(scope="session")
-def generated(tmp_path_factory, worker_id):
+def generated(tmp_path_factory, request):
     """generated(이름) → (복사본 폴더, run) — run은 state만 있다(pickle 안 되는 값은 빠진다)"""
     base = tmp_path_factory.getbasetemp()
-    root = base if worker_id == "master" else base.parent
+    # xdist 작업자면 작업자 basetemp의 부모(실행 하나에 하나)를 함께 쓴다 — xdist 없이 돌면 자기 basetemp
+    root = base.parent if hasattr(request.config, "workerinput") else base
     cache = root / "generated"
     with FileLock(str(root / "generated.lock")):
         if not (cache / "state.pickle").exists():
@@ -29,7 +30,7 @@ def generated(tmp_path_factory, worker_id):
             for k, v in run.state.items():
                 try:
                     state[k] = pickle.dumps(v)
-                except TypeError:
+                except (TypeError, AttributeError, pickle.PicklingError):
                     continue
             (cache / "state.pickle").write_bytes(pickle.dumps(state))
     state = pickle.loads((cache / "state.pickle").read_bytes())

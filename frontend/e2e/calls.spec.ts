@@ -9,7 +9,8 @@ test("과정 보기 — 조회 조건은 영어 값이 아니라 이름으로", 
   await expect(page.getByText(/hygiene/)).toHaveCount(0);
 });
 
-// 상세 응답을 가로채 칸 하나를 바꾼다 — 실데이터는 자동 종결·사람 판정이 0건
+// 상세 응답을 가로채 칸 하나를 바꾼다 — 실데이터는 자동 종결·사람 판정이 0건. 띠(review·autoclose)를 통째로 정해 주므로
+// 같이 도는 eval.spec이 이 통화를 판정해도 결과가 달라지지 않는다
 async function patchDetail(
   page: import("@playwright/test").Page,
   uid: string,
