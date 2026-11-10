@@ -83,7 +83,7 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
 }
 
 /** 오늘 화면 미예약 환자 줄 — 숫자 없는 고정 링크라 0건 숨김 없이 늘 보인다(기능 정의 §4 오늘 화면) */
-export const MISSED_LINK_TEXT = "미예약 환자 · 먼저 연락할 환자 보기";
+export const MISSED_LINK_TEXT = "미예약 환자 · 다시 오실 만한 분께 연락하기";
 
 type Tone = "danger" | "warn" | "info" | "muted";
 type Line = {
