@@ -54,6 +54,8 @@ def test_get_today_shape(client):
         "todo_left",
         "judge_pending",
         "refused",
+        "appeal_soon",
+        "preclaim_warning",
     }
     assert set(r["ai"]) == {
         "autoclose_on",
