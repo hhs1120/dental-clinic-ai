@@ -41,6 +41,7 @@
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
 - `make classify V=<버전> [LIMIT=N] [NO_BATCH=1]` / `make judge V=<버전>` / `make disagreements A=<분류 버전> B=<판정 버전>` — ① 전체 통화 분류·판정·엇갈림(`backend/classify_batch.py`, 실패·빠진 건만 다시 돈다). 느린 일반 호출은 `python -m backend.classify_batch … --shard K/N`을 N개 띄워 나눈다
 - `make blind-judge A=<분류 버전> B=<분류 버전> V=<쌍 비교 프롬프트 버전>` — 블라인드 LLM 쌍 비교(dev 블라인드 통화). `make e2e` — 화면 Playwright(`data/` 복사본, 로컬 전용 — 설치된 Chrome 사용, `make dev`를 끄고 돌린다, 설정 `frontend/playwright.config.ts`)
+- `make gate` — 코어 합격 기준(기능 정의 §6, ④ 착수 조건, 마지막 단계 `evaluation/gate.py`는 dev 평가라 과금). `make dev`를 끄고 돌린다
 - `make prompt-gate A=<기준> B=<후보> ITEM=<목표 항목>` — ① 분류 프롬프트 관문(평가 설계 §2.7, `evaluation/prompt_gate.py`): silver 검증 구간에서 버전마다 `GATE_RUNS`번 분류해 다수결 짝 비교(과금, 저장된 실행은 다시 씀), 같은 기준에 후보 `GATE_ATTEMPTS`개까지(`evaluation/metrics.py`)
 - `make gold-arbitrate [BATCH=1]` / `make gold-audit` — 골드 점검: 판정기와 골드가 다른 통화의 중재(과금, 빠진 건만, `BATCH=1`은 Batch API)·사람 표본 터미널 화면(평가 설계 §2.3, `evaluation/gold_audit.py`)
 - `make action-label` / `make action-audit` / `make followups [REDO=1]` / `make followup-eval [NO_BATCH=1]` — ① 처리 정답(Opus 라벨·사람 표본, `evaluation/call_actions.py`)·후속 에이전트 처리안(오늘 할 일, `backend/followup.py`)·후속 처리 평가 실행(라운드 배치, `evaluation/followup.py`)

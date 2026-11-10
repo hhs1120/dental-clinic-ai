@@ -128,9 +128,10 @@ def gold_rows(n=40, extra=()):
     return rows + list(extra)
 
 
-def test_population_rejects_holdout():
+@pytest.mark.parametrize("split", ["dev", "test"])
+def test_population_rejects_holdout(split):
     with pytest.raises(SystemExit, match="holdout_in_population"):
-        pg.population(gold_rows(extra=[gold_rows(1)[0] | {"call_uid": "d1", "split": "dev"}]))
+        pg.population(gold_rows(extra=[gold_rows(1)[0] | {"call_uid": "d1", "split": split}]))
 
 
 def test_population_is_validation_only():

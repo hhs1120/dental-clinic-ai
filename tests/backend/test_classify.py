@@ -79,6 +79,20 @@ def test_classify_input_only_transcript_direction(conn):
     assert cl.user_message("T", "inbound") == "방향: inbound\n\nT"
 
 
+def test_judge_input_only_transcript_direction_no_tools(conn):
+    """판정기 입력은 녹취록·방향뿐이고 도구가 없다(기능 정의 §4 ② 완료 기준)"""
+    from backend import prompts
+
+    gw = Recording(SqliteLlmLog(conn))
+    cl.judge(gw, "직원: 네\n환자: 취소할게요", "outbound", "v1")
+    ((alias, kw),) = gw.calls
+    assert alias == "judge" and "tools" not in kw
+    assert kw["system"] == prompts.load("judge", "v1")["system"]
+    assert kw["messages"] == [
+        {"role": "user", "content": cl.user_message("직원: 네\n환자: 취소할게요", "outbound")}
+    ]
+
+
 def test_judge_saves_row(conn):
     j = cl.judge(_gw(conn), "직원: 네\n환자: 아파요", "inbound", "v1")
     assert j.ok and set(j.labels) == set(call_labels.ITEMS)

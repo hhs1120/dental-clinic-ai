@@ -29,7 +29,7 @@ tags:
 
 1. **정답은 앱 DB 밖**(`CLAUDE.md` 절대 규칙). 평가 스크립트만 `truth.sqlite`를 `ATTACH`해 조인
 2. **튜닝 셋 ≠ 보고 셋.** 튜닝 중 본 항목이 보고 수치에 섞이지 않게
-   - 모든 평가셋은 dev/test로 나눔. `make gate`·CI는 `--split dev`만, 튜닝은 dev와 §6 `tune_qa.json`만
+   - 모든 평가셋은 dev/test로 나눔. `make gate`는 `--split dev`만, 튜닝은 dev와 §6 `tune_qa.json`만
    - **test는 데모 직전 묶음마다 1회**(묶음·이력·`--force`는 §7). 사람이 실행하고 자동 개선 루프는 test를 읽지 않는다
    - 골드로 재는 지표(모델 vs 골드)도 같다 — dev는 test 판정 풀 통화를 뺀 녹취록(비풀 + dev 풀), test는 **test 판정 풀만**(역확률 가중). dev 골드는 희귀 카테고리가 test로 빠져 실제보다 적으므로 역확률 가중(§2.2)을 주 수치로, 비가중을 보조로 병기한다
 3. **절대값보다 조건 간 차이.** 합성 데이터라 절대 수치는 높게 나옴. README의 주 지표는 "리랭커 on/off", "프롬프트 v1→vN" 같은 차이
@@ -272,7 +272,7 @@ tags:
 eval.py --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
 eval.py --split test --section classification|judge|crosscheck|auto|retrieval|chat [--prompt-version v2] [--condition reranker=off] [--force]
         [--reports-dir 경로]   # 기본 reports/
-  → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json(make gate가 읽음)  (+ reports/eval_runs.jsonl 1줄)
+  → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json  (+ reports/eval_runs.jsonl 1줄)
 ```
 - 실행 이력 `reports/eval_runs.jsonl`(커밋 — `make data`가 `truth.sqlite`를 다시 만들어도 남게). 한 줄 = `split, section, condition, prompt_version, started_at, report_path`
 - 분류: §2.2 모델 vs 골드 + 버전 비교(교집합) + 블라인드 쌍별 승률·LLM 쌍 비교와 사람 투표의 일치율(§2.4)·위치 편향
@@ -288,7 +288,7 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록 — dev 판정 풀만, 골드 기준. 비풀은 관문 검증 구간이라 건별로 보이지 않는다, §2.7)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
 - **few-shot 예시 제외**: 예시는 사람이 판정한 운영 판정 건에서만 고르고(골드 점검 표본은 골드로 뽑은 통화라 쓰지 않는다), 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`, classify는 버전 폴더의 `labels.md`)의 예시 `call_uid`를 dev 집계와 관문 모수에서 뺀다. 자동 개선은 few-shot을 추가하지 않는다
 
-`make gate`는 이 스크립트의 `--split dev` 출력을 읽음. 기준은 [[치과 AX - 기능 정의]] §6.
+`make gate`(`evaluation/gate.py`)는 이 스크립트를 `--split dev`로 새로 돌려 그 .json을 읽는다. 기준은 [[치과 AX - 기능 정의]] §6.
 
 ## 8. 비용
 

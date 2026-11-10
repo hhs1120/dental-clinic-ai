@@ -175,7 +175,10 @@ test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 �
   await page.goto("/ask?tab=search&q=틀니");
   const summary = page.getByRole("region", { name: "AI 요약" });
   await expect(summary).toContainText("접수한다");
-  await page.getByRole("tab", { name: "질문하기" }).click();
+  // 탭은 URL로 바뀐다 — 앞 전환이 끝나기 전에 누르면 그 클릭이 묻힌다
+  const chatTab = page.getByRole("tab", { name: "질문하기" });
+  await chatTab.click();
+  await expect(chatTab).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "기록 검색" }).click();
   await expect(summary).toContainText("접수한다");
   expect(calls).toBe(1);

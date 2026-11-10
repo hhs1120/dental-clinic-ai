@@ -130,6 +130,33 @@ def _gw(conn, fail=False):
 NOW = datetime(2026, 11, 5, 14, 30, 0)
 
 
+def test_add_call_judges_and_marks_disagreement(cconn):
+    """새 통화도 판정 1행 ok, 라벨이 다르면 엇갈림 행(기능 정의 §4 ① 완료 기준)"""
+    from dataclasses import replace
+
+    gw = _gw(cconn)
+
+    class Flip:
+        """판정기 라벨 = 분류기 라벨에서 complaint만 뒤집은 것"""
+
+        labels = None
+
+        def complete(self, alias, **kw):
+            r = gw.complete(alias, **kw)
+            if alias == "classify":
+                Flip.labels = r.data
+            if alias == "judge":
+                return replace(r, data={**Flip.labels, "complaint": not Flip.labels["complaint"]})
+            return r
+
+    uid = calls.add_call(cconn, Flip(), direction="inbound", transcript="직원: 네\n환자: 예약",
+                         phone="010-1111-2222", part="데스크", now=NOW, today=TODAY)  # fmt: skip
+    rows = cconn.execute("SELECT status FROM ax_model_judgments WHERE call_uid = ?", (uid,))
+    assert [r["status"] for r in rows] == ["ok"]
+    d = calls.call_detail(cconn, uid)
+    assert d["disagree"] == {"items": ["complaint"], "is_core": False}
+
+
 def test_add_call_classifies_and_links_patient(cconn):
     uid = calls.add_call(
         cconn,
