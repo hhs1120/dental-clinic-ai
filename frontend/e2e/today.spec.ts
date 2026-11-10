@@ -18,6 +18,8 @@ const EMPTY = {
     todo_left: { items: 0, calls: 0 },
     judge_pending: 0,
     refused: [],
+    appeal_soon: 0,
+    preclaim_warning: 0,
   },
   ai: {
     autoclose_on: false,
@@ -260,4 +262,28 @@ test("이미 다시 연 건 — 상태 코드로 알아보고 오류 띠 없이 
   await ai.getByRole("button", { name: "다시 열기" }).click();
   await expect(ai.getByRole("button", { name: "다시 열기" })).toHaveCount(0);
   await expect(page.getByText("다른 문구")).toHaveCount(0); // 오류 띠 없음
+});
+
+test("재심 기한 임박·청구 전 상병 경고 줄 → /claims", async ({ page }) => {
+  await fakeToday(page, {
+    ...EMPTY,
+    people: { ...EMPTY.people, appeal_soon: 36, preclaim_warning: 7 },
+  });
+  await page.goto("/today");
+  const people = page.getByRole("region", { name: "사람이 볼 일" });
+  await expect(people).toContainText("30일 이내 · 상병 착오 제외");
+  await people.getByRole("link", { name: /재심 신청 기한 임박 36건/ }).click();
+  await expect(page).toHaveURL(/\/claims\?chip=soon$/);
+  await page.goto("/today");
+  await page
+    .getByRole("region", { name: "사람이 볼 일" })
+    .getByRole("link", { name: /청구 전 상병 경고 7건/ })
+    .click();
+  await expect(page).toHaveURL(/\/claims\?tab=pre$/);
+  await page.unroute("**/api/today");
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByText("오늘 남은 일이 없습니다")).toBeVisible();
+  await expect(page.getByText(/재심 신청 기한 임박/)).toHaveCount(0);
+  await expect(page.getByText(/청구 전 상병 경고/)).toHaveCount(0);
 });

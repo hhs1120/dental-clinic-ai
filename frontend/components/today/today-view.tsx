@@ -154,6 +154,24 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "급함 먼저 · 끝내면 빠짐",
   );
   count(
+    p.appeal_soon,
+    "appeal",
+    "재심 기한",
+    "danger",
+    "/claims?chip=soon",
+    `재심 신청 기한 임박 ${p.appeal_soon}건`,
+    "30일 이내 · 상병 착오 제외",
+  );
+  count(
+    p.preclaim_warning,
+    "preclaim",
+    "청구 전 경고",
+    "warn",
+    "/claims?tab=pre",
+    `청구 전 상병 경고 ${p.preclaim_warning}건`,
+    "청구 점검에서 허용 상병 밖 줄 보기",
+  );
+  count(
     p.judge_pending,
     "judge",
     "판정 대기",
