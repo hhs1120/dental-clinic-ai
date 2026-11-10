@@ -24,31 +24,29 @@
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`·`evaluation/`를 참조하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
 - 정답은 `data/`(source.sqlite·app.sqlite)에 한 줄도 넣지 않는다
-- 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트(착수 전)의 실행 기록은 골드가 들어 있어 `app.sqlite`에 쓰지 않고, 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만 한다(평가 설계 §2.7)
-- 앱의 도구 설명·도구 권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보와 재현 테스트까지만 만들고 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
-- 테이블 접두어는 현실의 소속 시스템 기준: `emr_` 전자차트 원본(진료·수납·청구·차트·문자) · `fin_` 재무 원본(금융기관 내역·회계 증빙) · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다. 상세는 가상 데이터 생성 설계 §0
-- 시드 고정(`config/generator.yaml`) — 같은 시드 → 같은 결과. 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다 — 단계를 추가해도 기존 결과가 바뀌지 않게, 가상 데이터 생성 설계 §5.1)
-- 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않는다. 추가 데이터는 새 테이블로. 상태를 **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인을 마친다
-- 정형(코드) 단계를 고치면 그 뒤 LLM 입력이 바뀐 건의 캐시가 미스 나 다시 채워야 한다(앞 단계일수록 넓게). 고치기 전에 `make data`로 다시 나갈 작업 수를 확인한다. 단계 목록·순서는 가상 데이터 생성 설계 §5.1
+- 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트(착수 전)의 실행 기록은 `app.sqlite`에 쓰지 않고 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만(평가 설계 §2.7)
+- 앱의 도구 설명·권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보·재현 테스트까지만, 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
+- 테이블 접두어는 소속 시스템 기준: `emr_` 전자차트 원본 · `fin_` 재무 원본 · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다(가상 데이터 생성 설계 §0)
+- 시드 고정(`config/generator.yaml`), 생성기는 단계마다 `seed`와 단계 이름으로 따로 만든 난수 생성기를 쓴다 — 단계를 더해도 기존 결과가 그대로(가상 데이터 생성 설계 §5.1)
+- 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않고 추가 데이터는 새 테이블로. **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인
+- 정형(코드) 단계를 고치면 그 뒤 LLM 입력이 바뀐 건의 캐시가 다시 나간다(앞 단계일수록 넓게) — 고치기 전에 `make data`로 나갈 작업 수를 확인(단계 순서는 가상 데이터 생성 설계 §5.1)
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
-- 분류기의 통화 입력은 `transcript`·`direction`만(`backend/classify.py` `classify(gw, transcript, direction, version)` — 나머지는 게이트웨이·프롬프트 버전)
-- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만 둔다(하루 상한 값만 `config/generator.yaml`의 `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
-- 문서에만 있는 생성 값(시술 가중표, 심사 결과 분포, 통화 분포 등)을 코드로 옮길 때는 반드시 둘 중 하나: 문서에서 지우고 코드 이름으로 가리키거나, 문서에 남기면 `tests/generator/test_doc_sync.py`에 비교를 추가한다
+- 분류기의 통화 입력은 `transcript`·`direction`만(`backend/classify.py` `classify`)
+- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만(하루 상한만 `config/generator.yaml` `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
+- 문서에만 있는 생성 값을 코드로 옮기면 문서에서 지우고 코드 이름으로 가리키거나, 남기면 `tests/generator/test_doc_sync.py`에 비교를 더한다
 
 ## 명령
-- `uv sync` — 의존성 설치 (lock 파일 커밋 필수: Faker 버전이 이름 결정성에 영향. 파이썬은 uv 관리 빌드만 쓴다 — sqlite-vec이 SQLite 확장을 연다). 의존성은 `pyproject.toml`의 그룹으로 나눈다 — 생성기는 `generator`, 앱은 `backend`, 테스트·린트(pytest·ruff)는 `dev`, Qwen 파인튜닝(mlx-lm)은 `finetune`(기본 그룹 아님 — `uv run --group finetune`)
-- `make data` / `make verify` / `make test` — 규모는 하나(`config/generator.yaml`). 테스트는 같은 생성을 임시 폴더에 돌린다
-- `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
-- `make classify V=<버전> [LIMIT=N] [NO_BATCH=1]` / `make judge V=<버전>` / `make disagreements A=<분류 버전> B=<판정 버전>` — ① 전체 통화 분류·판정·엇갈림(`backend/classify_batch.py`, 실패·빠진 건만 다시 돈다). 느린 일반 호출은 `python -m backend.classify_batch … --shard K/N`을 N개 띄워 나눈다
-- `make blind-judge A=<분류 버전> B=<분류 버전> V=<쌍 비교 프롬프트 버전>` — 블라인드 LLM 쌍 비교(dev 블라인드 통화). `make e2e` — 화면 Playwright(`data/` 복사본, 로컬 전용 — 설치된 Chrome 사용, `make dev`를 끄고 돌린다, 설정 `frontend/playwright.config.ts`)
-- `make gate` — 코어 합격 기준(기능 정의 §6, ④ 착수 조건, 마지막 단계 `evaluation/gate.py`는 dev 평가라 과금). `make dev`를 끄고 돌린다
-- `make prompt-gate A=<기준> B=<후보> ITEM=<목표 항목>` — ① 분류 프롬프트 관문(평가 설계 §2.7, `evaluation/prompt_gate.py`): silver 검증 구간에서 버전마다 `GATE_RUNS`번 분류해 다수결 짝 비교(과금, 저장된 실행은 다시 씀), 같은 기준에 후보 `GATE_ATTEMPTS`개까지(`evaluation/metrics.py`)
-- `make gold-arbitrate [BATCH=1]` / `make gold-audit` — 골드 점검: 판정기와 골드가 다른 통화의 중재(과금, 빠진 건만, `BATCH=1`은 Batch API)·사람 표본 터미널 화면(평가 설계 §2.3, `evaluation/gold_audit.py`)
-- `make action-label` / `make action-audit` / `make followups [REDO=1]` / `make followup-eval [NO_BATCH=1]` — ① 처리 정답(Opus 라벨·사람 표본, `evaluation/call_actions.py`)·후속 에이전트 처리안(오늘 할 일, `backend/followup.py`)·후속 처리 평가 실행(라운드 배치, `evaluation/followup.py`)
-- `make autoclose` / `make auto-policy KIND=<작업 종류> ON=1|0` — ① 자동 종결을 활성 버전 쌍으로 다시 계산(`auto_policy`가 꺼져 있으면 아무것도 안 함)·자동 처리 스위치(`backend/autoclose.py`)
-- `make dev` — 앱 실행(API 8000 + 화면 3000, Ctrl+C로 둘 다 종료). `data/`와 색인이 있어야 검색이 된다
-- `make fmt`(모양 정리 + 안전한 자동 수정) / `make lint`(검사만) — 파이썬 ruff, 프론트 ESLint·Prettier·tsc(처음에 `npm ci`가 돈다 — Node 필요), 아래 코드 컨벤션
-- LLM 단계(7·9·9b): `make data`가 캐시(`generator/llm/cache/`, 커밋)에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. `make data FAKE_LLM=1`은 가짜 게이트웨이(과금 없음). 프롬프트·입력이 바뀐 옛 시도 줄은 `make llm-prune`으로 지운다(빈 건이 없을 때만)
+과금하는 명령은 (과금), 실패·빠진 건만 다시 도는 명령은 (이어 돎). 인자·동작은 Makefile 주석과 원본 모듈 독스트링.
+- `uv sync` — lock 커밋 필수(Faker 버전이 이름 결정성에 영향), 파이썬은 uv 관리 빌드만(sqlite-vec이 확장을 연다). 그룹: `generator`·`backend`·`dev`, Qwen 파인튜닝은 `finetune`(기본 아님 — `uv run --group finetune`)
+- `make data` / `make verify` / `make test` — 테스트는 같은 생성을 임시 폴더에 돌린다. `make data FAKE_LLM=1`은 가짜 게이트웨이
+- LLM 단계: `make data`가 캐시에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…` 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. 옛 캐시 줄은 `make llm-prune`
+- `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3), `make data`와 따로
+- `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, `make dev`를 끄고)
+- `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
+- `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
+- ① `make classify V=` / `judge V=` / `disagreements A= B=`(`backend/classify_batch.py`, 이어 돎) · `make blind-judge A= B= V=`(평가 설계 §2.4) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
+- ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
+- ② `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 평가 설계 §2.7 — 같은 기준에 후보 `GATE_ATTEMPTS`개까지)
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)
