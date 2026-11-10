@@ -4,6 +4,7 @@
 import json
 
 from generator.master import (
+    ADJUST_REASONS,
     ALERT_TYPES,
     CLINIC_NAME,
     DIAGNOSES,
@@ -37,7 +38,7 @@ def stage(run, rng, fake) -> None:
 
 
 def master_values_rows() -> list[tuple[str, str]]:
-    """(이름, JSON) — ④ 주의 칩 기준표(관련 시술·행동)와 보험 잔여 칩 기준. verify도 이것과 비교한다"""
+    """(이름, JSON) — ④ 주의 칩 기준표(관련 시술·행동)와 보험 잔여 칩 기준, ⑨ 외부 이력 사유. verify도 이것과 비교한다"""
     values = {
         "alert_rules": {
             code: {"action": a["action"], "procedures": sorted(a["procedures"])}
@@ -45,6 +46,10 @@ def master_values_rows() -> list[tuple[str, str]]:
         },
         "scaling_min_age": SCALING_MIN_AGE,
         "scaling_code": SCALING_CODE,
+        # ⑨ 다른 치과 추정 칩 — 외부 이력 사유(병행 환자의 거절·조정 청구, §2.2)
+        "external_adjust_notes": sorted(
+            r["note"] for r in ADJUST_REASONS.values() if r["type"] == "external"
+        ),
     }
     return [(name, json.dumps(v, ensure_ascii=False)) for name, v in values.items()]
 
