@@ -20,7 +20,8 @@ process.env.AX_E2E_DIR ??= (() => {
 export default defineConfig({
   testDir: "e2e",
   globalTeardown: "./e2e/global-teardown.ts",
-  workers: 1,
+  // 파일 단위 병렬(파일 안은 차례로) — 4개 넘게 늘려도 거의 빨라지지 않는다. DB 복사본은 함께 쓴다
+  workers: 4,
   timeout: 120_000,
   use: { baseURL: "http://localhost:3100", channel: "chrome" },
   webServer: [

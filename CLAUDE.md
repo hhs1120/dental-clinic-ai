@@ -38,7 +38,7 @@
 ## 명령
 과금하는 명령은 (과금), 실패·빠진 건만 다시 도는 명령은 (이어 돎). 인자·동작은 Makefile 주석과 원본 모듈 독스트링.
 - `uv sync` — lock 커밋 필수(Faker 버전이 이름 결정성에 영향), 파이썬은 uv 관리 빌드만(sqlite-vec이 확장을 연다). 그룹: `generator`·`backend`·`dev`, Qwen 파인튜닝은 `finetune`(기본 아님 — `uv run --group finetune`)
-- `make data` / `make verify` / `make test` — 테스트는 같은 생성을 임시 폴더에 돌린다. `make data FAKE_LLM=1`은 가짜 게이트웨이
+- `make data` / `make verify` / `make test` — 테스트는 같은 생성을 임시 폴더에 돌린다(병렬, 작업자 수 `JOBS=`). `make data FAKE_LLM=1`은 가짜 게이트웨이
 - LLM 단계: `make data`가 캐시에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…`(과금) 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. 옛 캐시 줄은 `make llm-prune`
 - `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
 - `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, 켜 둔 `make dev`와 따로 `.next-e2e`로 띄운다)
@@ -62,7 +62,7 @@
 - 브랜치는 작업 묶음마다 `feat/<묶음>`(예: `feat/eval-set`) — main에서 따고, PR 머지 뒤 main에서 다음 브랜치
 - 커밋 메시지는 `<영역>: <무엇>` + 본문 글머리. 영역: `generator` · `eval` · `backend` · `frontend` · `docs` · `claude`(`.claude/` 설정) · `chore`(도구·의존성) · `style`(동작 없는 정리)
 - `git add`는 파일 이름으로 — 폴더 단위·`-A` 금지(임시 파일이 섞이지 않게)
-- PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`(파이썬·프론트)·`make test`·프론트 빌드를 돌린다
+- PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`(파이썬·프론트)·`make test`·프론트 빌드를 따로 동시에 돌린다
 
 ## 현재 단계
 진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.

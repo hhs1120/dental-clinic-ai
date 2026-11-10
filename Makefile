@@ -88,8 +88,11 @@ auto-policy:
 wireframe:
 	uv run python docs/wireframe/export.py
 
+# 테스트는 병렬(pytest-xdist) — 작업자 수 JOBS(기본 8, 12코어 중 make dev 몫을 남긴다, 한 줄로 보려면 JOBS=0).
+# worksteal은 먼저 끝난 작업자가 남은 테스트를 가져가 무거운 생성 테스트가 한 작업자에 몰려도 꼬리가 짧다
+JOBS ?= 8
 test:
-	uv run pytest
+	uv run pytest -n $(JOBS) --dist worksteal
 
 # 코드 컨벤션(파이썬 PEP 8은 pyproject.toml [tool.ruff], 프론트는 ESLint·Prettier·tsc) — lint는 검사만, fmt는 모양 정리 + 안전한 자동 수정.
 # 커밋 훅이 make lint를 돌리므로 새 worktree에서도 npm ci가 먼저 돈다
