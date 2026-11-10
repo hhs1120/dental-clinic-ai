@@ -90,9 +90,6 @@ def _row(conn, call_uid: str):
     ).fetchone()
 
 
-HUMAN_FLAGS = ("has_todo", "emergency", "complaint")
-
-
 def human_flag(conn, call_uid: str) -> str | None:
     """사람 판정이 할 일·응급·불만·급함 중 하나를 켰으면 판정한 파트 — 그런 통화는 닫지 않는다(기능 정의 §4 ①)"""
     row = conn.execute(
@@ -100,9 +97,7 @@ def human_flag(conn, call_uid: str) -> str | None:
     ).fetchone()
     if row is None:
         return None
-    lab = json.loads(row["labels"])
-    hit = any(lab.get(k) for k in HUMAN_FLAGS) or lab.get("urgency") == "urgent"
-    return row["judged_by"] if hit else None
+    return row["judged_by"] if calls.human_flags(json.loads(row["labels"])) else None
 
 
 def policy_on(conn) -> bool:

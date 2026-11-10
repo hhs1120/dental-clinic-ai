@@ -60,7 +60,15 @@ export interface Clinic {
   today: string;
 }
 
-export class ApiError extends Error {}
+/** status — 서버가 답한 HTTP 상태(연결 실패면 없음). "이미 처리됨"(409·404)은 문구가 아니라 이 값으로 가른다 */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 const NO_SERVER = "서버에 연결하지 못했습니다";
 
@@ -86,9 +94,12 @@ export async function getJson<T>(
   }
   if (!res.ok) {
     const detail = (body as { detail?: unknown }).detail;
-    if (typeof detail === "string") throw new ApiError(detail);
+    if (typeof detail === "string") throw new ApiError(detail, res.status);
     if (Array.isArray(detail))
-      throw new ApiError(detail.map((d: { msg?: string }) => d.msg).join(", "));
+      throw new ApiError(
+        detail.map((d: { msg?: string }) => d.msg).join(", "),
+        res.status,
+      );
     throw new ApiError(NO_SERVER);
   }
   return body as T;
@@ -114,9 +125,12 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   }
   if (!res.ok) {
     const detail = (data as { detail?: unknown }).detail;
-    if (typeof detail === "string") throw new ApiError(detail);
+    if (typeof detail === "string") throw new ApiError(detail, res.status);
     if (Array.isArray(detail))
-      throw new ApiError(detail.map((d: { msg?: string }) => d.msg).join(", "));
+      throw new ApiError(
+        detail.map((d: { msg?: string }) => d.msg).join(", "),
+        res.status,
+      );
     throw new ApiError(NO_SERVER);
   }
   return data as T;

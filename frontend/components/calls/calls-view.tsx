@@ -9,7 +9,7 @@ import { CallHistory } from "@/components/calls/call-history";
 import { ScreenTabs } from "@/components/screen-tabs";
 import { TodayBoard } from "@/components/calls/today-board";
 import { Button } from "@/components/ui/button";
-import { errorText, useFetch } from "@/lib/api";
+import { ApiError, errorText, useFetch } from "@/lib/api";
 import {
   fetchBoard,
   fetchCall,
@@ -19,6 +19,7 @@ import {
   useLabels,
 } from "@/lib/calls-api";
 import { readPart } from "@/lib/part";
+import { checkCall } from "@/lib/today-api";
 
 /** 통화 화면 — 탭·고른 통화·넓게 보기는 URL에 둔다(/calls?tab=…&call=…&wide=1) */
 export function CallsView() {
@@ -70,6 +71,21 @@ export function CallsView() {
       setBusy(false);
     }
   };
+  const checkReview = async () => {
+    if (!call) return;
+    setBusy(true);
+    setFail(null);
+    try {
+      await checkCall(call, readPart());
+      refresh();
+    } catch (e) {
+      // 404 = 이미 확인할 통화가 아님(다른 탭에서 먼저 확인함) — 다시 열기처럼 오류 없이 다시 불러온다
+      if (e instanceof ApiError && e.status === 404) refresh();
+      else setFail(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const redo = async () => {
     if (!call) return;
     setBusy(true);
@@ -103,6 +119,7 @@ export function CallsView() {
         onCheck={(t, done) => check(call, t.item, done)}
         onReclassify={redo}
         onRevertClose={revertClose}
+        onCheckReview={checkReview}
         busy={busy}
       />
     ) : (

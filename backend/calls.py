@@ -146,6 +146,86 @@ def today_board(conn: sqlite3.Connection, today: date) -> dict:
     }
 
 
+# 사람 판정이 켠 항목 — 심각도 순(기능 정의 §4 오늘 화면 "확인할 통화"). 자동 종결을 막는 조건과 같다(backend/autoclose.py)
+HUMAN_FLAGS = ("emergency", "urgent", "complaint", "has_todo")
+
+
+def human_flags(labels: dict) -> list[str]:
+    """사람 판정 라벨에서 켠 항목을 HUMAN_FLAGS 순서로 — 급함은 urgency가 urgent일 때"""
+    on = {k: bool(labels.get(k)) for k in ("emergency", "complaint", "has_todo")}
+    on["urgent"] = labels.get("urgency") == "urgent"
+    return [f for f in HUMAN_FLAGS if on[f]]
+
+
+REVIEW_SQL = (
+    CALLS_CTE + " SELECT calls.call_uid, calls.name, calls.at, calls.source, k.todo,"
+    " j.labels AS human, j.judged_at, r.reverted_at, ch.checked_at FROM calls"
+    " JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
+    "  AND k.model_alias = 'classify' AND k.prompt_version = :a AND k.status = 'ok'"
+    " LEFT JOIN ax_judgments j ON j.call_uid = calls.call_uid"
+    " LEFT JOIN ax_auto_actions r ON r.kind = 'call_autoclose' AND r.target = calls.call_uid"
+    "  AND r.reverted_at IS NOT NULL"
+    " LEFT JOIN ax_call_checks ch ON ch.call_uid = calls.call_uid"
+    " WHERE (j.call_uid IS NOT NULL OR r.id IS NOT NULL)"
+)
+
+
+def _review(r, today: date) -> dict | None:
+    """확인할 통화면 {ai, reopened, flags}, 아니면 None. ai = closed(사람이 다시 연 자동 종결) | none(AI 할 일 목록 빔)
+    | old_todo(할 일은 있지만 오늘 할 일 7일 창 밖). 확인함 뒤에 판정·다시 열기가 새로 생기면 다시 뜬다"""
+    flags = human_flags(json.loads(r["human"])) if r["human"] else []
+    reopened = r["reverted_at"] is not None
+    if not (flags or reopened):
+        return None
+    has_todo = bool(todo_items(json.loads(r["todo"] or "[]")))
+    since = (today - timedelta(days=TODAY_WINDOW_DAYS)).isoformat()
+    if has_todo and (r["source"] == "pasted" or r["at"] >= since):
+        return None  # 통화 화면 오늘 할 일(today_board)에 이미 뜬다
+    if r["checked_at"]:
+        checked = datetime.fromisoformat(r["checked_at"])
+        later = [t for t in (r["judged_at"], r["reverted_at"]) if t]
+        if all(datetime.fromisoformat(t) <= checked for t in later):
+            return None
+    ai = "closed" if reopened else "old_todo" if has_todo else "none"
+    return {"ai": ai, "reopened": reopened, "flags": flags}
+
+
+def _review_rows(conn, where: str = "", params: dict | None = None) -> list:
+    a, _ = active_versions(conn)
+    sql = (
+        REVIEW_SQL + (f" AND {where}" if where else "") + " ORDER BY calls.at DESC, calls.call_uid"
+    )
+    return conn.execute(sql, {"a": a, **(params or {})}).fetchall()
+
+
+def review_calls(conn: sqlite3.Connection, today: date) -> list[dict]:
+    """확인할 통화(기능 정의 §4 오늘 화면) — 판정 풀 밖 통화 중 사람이 일이 남았다고 표시했는데(자동 종결을 다시
+    열었거나 사람 판정이 할 일·응급·불만·급함을 켬) 통화 화면 오늘 할 일에 뜨지 않는 통화. 날짜 제한 없음,
+    활성 분류가 ok인 통화만(아니면 분류 실패로 센다). 통화 시각 최근 순"""
+    out = []
+    for r in _review_rows(conn):
+        if rv := _review(r, today):
+            out.append({"call_uid": r["call_uid"], "name": r["name"], "at": r["at"]} | rv)
+    return out
+
+
+def _review_one(conn, call_uid: str, today: date) -> dict | None:
+    rows = _review_rows(conn, "calls.call_uid = :uid", {"uid": call_uid})
+    return _review(rows[0], today) if rows else None
+
+
+def check_call(conn: sqlite3.Connection, call_uid: str, *, today: date, by: str, at: str) -> bool:
+    """확인할 통화를 확인함 — 지금 대상이 아니면 False. today = 앱 기준일(7일 창), at = 실제 시계. 커밋은 부르는 쪽"""
+    if _review_one(conn, call_uid, today) is None:
+        return False
+    conn.execute(
+        "INSERT INTO ax_call_checks VALUES (?, ?, ?) ON CONFLICT (call_uid) DO UPDATE SET"
+        " checked_by = excluded.checked_by, checked_at = excluded.checked_at",
+        (call_uid, by, at),
+    )
+    return True
+
+
 FILTERS = {
     "inbound": lambda c: c["direction"] == "inbound",
     "outbound": lambda c: c["direction"] == "outbound",
@@ -219,8 +299,9 @@ def list_calls(
     return {"days": days, "next": f"{last['at']}|{last['call_uid']}" if last else None}
 
 
-def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
-    """상세 — 통화·분류(할 일 체크 상태 포함)·판정기 라벨·엇갈림. 판정 풀 통화·없는 통화는 None"""
+def call_detail(conn: sqlite3.Connection, call_uid: str, today: date | None = None) -> dict | None:
+    """상세 — 통화·분류(할 일 체크 상태 포함)·판정기 라벨·엇갈림. 판정 풀 통화·없는 통화는 None.
+    today(앱 기준일)를 주면 review = 확인할 통화일 때 {ai, reopened, flags}(review_calls와 같은 판단), 아니면 None"""
     rows = _rows(conn, "calls.call_uid = :uid", {"uid": call_uid})
     if not rows:
         return None
@@ -260,6 +341,7 @@ def call_detail(conn: sqlite3.Connection, call_uid: str) -> dict | None:
             else None
         ),
         "followup": _followup(conn, r),
+        "review": _review_one(conn, call_uid, today) if today else None,
     }
 
 

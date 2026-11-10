@@ -183,3 +183,19 @@ test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 �
   await expect(summary).toContainText("접수한다");
   expect(calls).toBe(1);
 });
+
+test("draft로 오면 질문하기 입력칸만 채움", async ({ page }) => {
+  // 오늘 화면의 근거 없는 질문 — 입력칸만 채우고 보내지 않는다(기능 정의 §4 오늘 화면)
+  let chats = 0;
+  await page.route("**/api/chat", (r) => {
+    chats++;
+    return r.abort();
+  });
+  await page.goto(
+    `/ask?tab=chat&draft=${encodeURIComponent("유치는 언제 빠져?")}`,
+  );
+  await expect(page.getByLabel("질문 입력")).toHaveValue("유치는 언제 빠져?");
+  await expect(page).toHaveURL(/\/ask\?tab=chat$/); // 채운 뒤 주소에서 draft를 지운다
+  await page.waitForTimeout(500);
+  expect(chats).toBe(0);
+});

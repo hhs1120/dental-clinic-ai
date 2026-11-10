@@ -7,7 +7,7 @@ import hashlib
 import json
 import sqlite3
 
-from backend.calls import CALLS_CTE, active_versions
+from backend.calls import CALLS_CTE, active_versions, human_flags
 from backend.classify import ENUMS
 from shared.call_labels import FLAGS, ITEMS
 
@@ -77,19 +77,31 @@ def refresh_call(conn: sqlite3.Connection, call_uid: str) -> None:
         conn.commit()
 
 
+# 판정을 기다리는 통화 — 다음 건(next_call)과 오늘 화면 "판정 대기" 수(pending_count)가 같이 쓴다
+WAITING_SQL = (
+    " FROM ax_judge_state s JOIN calls ON calls.call_uid = s.call_uid"
+    " JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
+    "  AND k.model_alias = 'classify' AND k.prompt_version = ? AND k.status = 'ok'"
+    " LEFT JOIN ax_call_disagreements d ON d.call_uid = calls.call_uid"
+    "  AND d.a_version = ? AND d.b_version = ?"
+    " WHERE s.state IN ('pending', 'skipped')"
+)
+
+
+def pending_count(conn: sqlite3.Connection) -> int:
+    """판정 대기 수 — next_call의 left와 같은 대상(기능 정의 §4 오늘 화면 "판정 대기")"""
+    a, b = active_versions(conn)
+    return conn.execute(CALLS_CTE + " SELECT COUNT(*)" + WAITING_SQL, (a, a, b)).fetchone()[0]
+
+
 def next_call(conn: sqlite3.Connection, day: str) -> dict | None:
     """다음 건 — 녹취록·방향·시각과 진행 현황(남은 수·day에 판정한 수·누적). 모델 라벨 없음. 비면 None"""
     a, b = active_versions(conn)
     rows = conn.execute(
         CALLS_CTE + " SELECT calls.call_uid, calls.direction, calls.at, calls.transcript, s.state,"
         " calls.source, d.is_core, d.call_uid IS NOT NULL AS disagree"
-        " FROM ax_judge_state s JOIN calls ON calls.call_uid = s.call_uid"
-        " JOIN ax_call_classifications k ON k.call_uid = calls.call_uid"
-        "  AND k.model_alias = 'classify' AND k.prompt_version = ? AND k.status = 'ok'"
-        " LEFT JOIN ax_call_disagreements d ON d.call_uid = calls.call_uid"
-        "  AND d.a_version = ? AND d.b_version = ?"
-        " WHERE s.state IN ('pending', 'skipped')"
-        " ORDER BY s.state = 'skipped', calls.source != 'pasted', NOT COALESCE(d.is_core, 0),"
+        + WAITING_SQL
+        + " ORDER BY s.state = 'skipped', calls.source != 'pasted', NOT COALESCE(d.is_core, 0),"
         "  d.call_uid IS NULL, CASE WHEN s.state = 'skipped' THEN s.updated_at END, calls.call_uid",
         (a, a, b),
     ).fetchall()
@@ -147,9 +159,8 @@ def save(
         (call_uid, at),
     )
     conn.commit()
-    if any(labels.get(k) for k in ("has_todo", "emergency", "complaint")) or (
-        labels.get("urgency") == "urgent"
-    ):  # 자동 종결된 통화면 푼다 — 사람 되돌림이라 다시 닫히지 않는다(기능 정의 §4 ①)
+    # 자동 종결된 통화면 푼다 — 사람 되돌림이라 다시 닫히지 않는다(기능 정의 §4 ①)
+    if human_flags(labels):
         from backend import autoclose  # autoclose가 calls를 거쳐 이 모듈과 얽힌다
 
         if autoclose.unclose_by_human(conn, call_uid, part):
