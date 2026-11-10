@@ -8,7 +8,6 @@ from datetime import date, datetime, timedelta
 import pytest
 import yaml
 
-from generator import build
 from generator.calls import next_open_day
 from generator.master import (
     CLINIC_NAME,
@@ -31,9 +30,8 @@ HOLIDAYS = frozenset(
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("messages")
-    build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def db(generated):
+    out, _ = generated("messages")
     conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

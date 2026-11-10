@@ -51,9 +51,8 @@ def test_allocate_oversamples_rare_and_lifts_small_categories():
 
 
 @pytest.fixture(scope="module")
-def gen(tmp_path_factory):
-    out = tmp_path_factory.mktemp("calls")
-    run = build.generate(out / "source.sqlite", out / "truth.sqlite", CONFIG, fake_llm=True)
+def gen(generated):
+    out, run = generated("calls")
     conn = sqlite3.connect(out / "source.sqlite")
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))

@@ -57,10 +57,9 @@ APPOINTMENT_CHECKS = [
 
 
 @pytest.fixture(scope="module")
-def db(tmp_path_factory):
-    out = tmp_path_factory.mktemp("sim")
+def db(generated):
+    out, run = generated("sim")
     app, truth = out / "source.sqlite", out / "truth.sqlite"
-    run = build.generate(app, truth, CONFIG, fake_llm=True)
     conn = sqlite3.connect(app)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS truth", (str(truth),))

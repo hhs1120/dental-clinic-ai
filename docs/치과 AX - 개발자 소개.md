@@ -31,7 +31,7 @@ tags:
 | 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·① 후속 에이전트·FastAPI 검색·EMR 조회·통화·판정·블라인드 API·③ 질문하기 에이전트·챗 SSE·④ 준비표(작업 폴링)·오늘 화면 집계·⑨ 미예약 환자(칩·점수·연락 기록) 구현 |
 | 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색·물어보기·일별 예약표·전환 전 EMR·통화·준비표·오늘·미예약 환자·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
-| 배포·UI 테스트 | `docker compose` 로컬 배포 · Playwright | 앱 착수 뒤 |
+| 배포 | `docker compose` 로컬 배포 | 앱 착수 뒤 |
 
 선택 이유(왜 Chroma가 아니라 sqlite-vec인지, 왜 LiteLLM 없이 SDK 직접인지 등)는 [[치과 AX - 앱 설계]] §7에 근거와 함께 있습니다.
 
