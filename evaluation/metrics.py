@@ -15,6 +15,13 @@ GOLD_AUDIT_SAMPLE = 50  # 골드 점검 사람 표본 통화 수(평가 설계 �
 
 ACTION_AUDIT_SAMPLE = 30  # 처리 정답 사람 표본 통화 수(evaluation/call_actions.py)
 
+# ① 분류 프롬프트 관문(평가 설계 §2.7 — evaluation/prompt_gate.py). 고치면 시도 수가 다시 0부터
+GATE_RUNS = 3  # 버전마다 검증 구간을 분류하는 횟수 — 통화·항목마다 다수결
+GATE_P = 0.05  # 목표 항목 오름·다른 항목 하락의 McNemar 기준
+GATE_FALSE_ALARM_CAP = 2  # 응급·불만 오탐 증가 상한(건)
+GATE_REGRESSION_CAP = 3  # 목표 밖 항목의 다수결 오답 증가 상한(건)
+GATE_ATTEMPTS = 2  # 같은 기준에 판정할 수 있는 서로 다른 후보 수
+
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
     """비율 k/n의 Wilson 95% 구간 — 모수가 작은 test 자동 종결 오류율용(평가 설계 §5). n=0이면 None"""

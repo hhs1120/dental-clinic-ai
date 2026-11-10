@@ -16,7 +16,7 @@
 - `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 앱 설계 §9(와이어프레임 `index-v2.html`과 그 예외), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·자동 개선·시나리오 DB
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·(착수 때) 자동 개선·시나리오 DB
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기·LLM 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
@@ -24,7 +24,7 @@
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`·`evaluation/`를 참조하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
 - 정답은 `data/`(source.sqlite·app.sqlite)에 한 줄도 넣지 않는다
-- 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트의 실행 기록은 골드가 들어 있어 `app.sqlite`에 쓰지 않고, 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만 한다(평가 설계 §2.7)
+- 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트(착수 전)의 실행 기록은 골드가 들어 있어 `app.sqlite`에 쓰지 않고, 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만 한다(평가 설계 §2.7)
 - 앱의 도구 설명·도구 권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보와 재현 테스트까지만 만들고 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
 - 테이블 접두어는 현실의 소속 시스템 기준: `emr_` 전자차트 원본(진료·수납·청구·차트·문자) · `fin_` 재무 원본(금융기관 내역·회계 증빙) · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다. 상세는 가상 데이터 생성 설계 §0
 - 시드 고정(`config/generator.yaml`) — 같은 시드 → 같은 결과. 생성기는 **단계별 독립 시드**: 단계마다 `seed`와 단계 이름으로 난수 생성기를 따로 만든다(전역 난수 생성기 하나를 이어 쓰지 않는다 — 단계를 추가해도 기존 결과가 바뀌지 않게, 가상 데이터 생성 설계 §5.1)
@@ -41,6 +41,7 @@
 - `make index EMBEDDING=<모델>` — 검색 색인(앱 설계 §3). `make data`와 따로 실행
 - `make classify V=<버전> [LIMIT=N] [NO_BATCH=1]` / `make judge V=<버전>` / `make disagreements A=<분류 버전> B=<판정 버전>` — ① 전체 통화 분류·판정·엇갈림(`backend/classify_batch.py`, 실패·빠진 건만 다시 돈다). 느린 일반 호출은 `python -m backend.classify_batch … --shard K/N`을 N개 띄워 나눈다
 - `make blind-judge A=<분류 버전> B=<분류 버전> V=<쌍 비교 프롬프트 버전>` — 블라인드 LLM 쌍 비교(dev 블라인드 통화). `make e2e` — 화면 Playwright(`data/` 복사본, 로컬 전용 — 설치된 Chrome 사용, `make dev`를 끄고 돌린다, 설정 `frontend/playwright.config.ts`)
+- `make prompt-gate A=<기준> B=<후보> ITEM=<목표 항목>` — ① 분류 프롬프트 관문(평가 설계 §2.7, `evaluation/prompt_gate.py`): silver 검증 구간에서 버전마다 `GATE_RUNS`번 분류해 다수결 짝 비교(과금, 저장된 실행은 다시 씀), 같은 기준에 후보 `GATE_ATTEMPTS`개까지(`evaluation/metrics.py`)
 - `make gold-arbitrate [BATCH=1]` / `make gold-audit` — 골드 점검: 판정기와 골드가 다른 통화의 중재(과금, 빠진 건만, `BATCH=1`은 Batch API)·사람 표본 터미널 화면(평가 설계 §2.3, `evaluation/gold_audit.py`)
 - `make action-label` / `make action-audit` / `make followups [REDO=1]` / `make followup-eval [NO_BATCH=1]` — ① 처리 정답(Opus 라벨·사람 표본, `evaluation/call_actions.py`)·후속 에이전트 처리안(오늘 할 일, `backend/followup.py`)·후속 처리 평가 실행(라운드 배치, `evaluation/followup.py`)
 - `make autoclose` / `make auto-policy KIND=<작업 종류> ON=1|0` — ① 자동 종결을 활성 버전 쌍으로 다시 계산(`auto_policy`가 꺼져 있으면 아무것도 안 함)·자동 처리 스위치(`backend/autoclose.py`)
