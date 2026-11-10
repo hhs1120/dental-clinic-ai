@@ -32,7 +32,7 @@
 - 정형(코드) 단계를 고치면 그 뒤 LLM 입력이 바뀐 건의 캐시가 다시 나간다(앞 단계일수록 넓게) — 고치기 전에 `make data`로 나갈 작업 수를 확인(단계 순서는 가상 데이터 생성 설계 §5.1)
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기의 통화 입력은 `transcript`·`direction`만(`backend/classify.py` `classify`)
-- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만(하루 상한만 `config/generator.yaml` `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다
+- 병원 상수(시술·영업시간·스케일링 규칙)는 `generator/master.py`에만(하루 상한만 `config/generator.yaml` `visits_per_day`). 생성기·verify·테스트 모두 여기서 읽는다, backend는 생성기가 적재한 `source.ax_master_values`로 읽는다
 - 문서에만 있는 생성 값을 코드로 옮기면 문서에서 지우고 코드 이름으로 가리키거나, 남기면 `tests/generator/test_doc_sync.py`에 비교를 더한다
 
 ## 명령
@@ -43,11 +43,11 @@
 - `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
 - `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, `make dev`를 끄고)
 - `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
-- `make prep [DATE=] [NO_BATCH=1]` — ④ 준비표 만들기(과금, `backend/prep.py`, 날짜 탭 전체를 Batch로 — 통과한 행은 건너뜀)
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
 - ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
 - ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
+- ④ `make prep [DATE=] [NO_BATCH=1]`(과금, 이어 돎, `backend/prep.py`)
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)

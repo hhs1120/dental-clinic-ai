@@ -202,7 +202,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 8. 미결
 
-- [ ] backend가 읽을 `master` 값을 `source.ax_master_values`에 더하기 (⑤·⑧ 착수 시 — 방법은 가상 데이터 생성 설계 §3 `ax_master_values`, ④가 처음 씀) — 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`
+- [ ] backend가 읽을 `master` 값을 `source.ax_master_values`에 더하기 (⑤·⑧ 착수 시 — 방법은 가상 데이터 생성 설계 §3 `ax_master_values`) — 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`, `backend/prep.py` `DAYS_PER_MONTH`·`FULL_MOUTH`
 - [ ] ⑨ 점수 규칙과 값 (⑨ 착수 시) — 앱 로직이라 `master`가 아니라 앱 쪽 설정이 원본
 
 ## 9. 프론트

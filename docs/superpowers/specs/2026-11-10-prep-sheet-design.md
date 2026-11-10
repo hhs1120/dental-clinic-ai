@@ -38,7 +38,7 @@
 - 데이터 상태는 고정 — 새 테이블 추가만이라 허용된다. 기존 테이블·LLM 입력은 바뀌지 않으므로 실데이터에 `make data`(과금 없음) → `make verify`. `app.sqlite`는 `make data`가 건드리지 않는다
 - `backend/query_tools.py`에 박혀 있는 `SCALING` 같은 값은 이번에 옮기지 않는다(앱 설계 §8에 남김)
 
-### 2. 사실 모으기 `prep_facts(conn, date)` (`backend/prep.py`)
+### 2. 사실 모으기 `prep_facts(conn, day, today)` (`backend/prep.py`)
 
 - 그날 예약(취소 제외, 지난 날짜는 `completed`·`noshow` 포함 — 결과 칸) 한 건 = 한 행. 사실은 **그날 개원 전 기준**(그날 이전 수납·내원만). 주의사항은 평가 설계 §4대로 기록일 ≤ 그날 < 끝나는 날
 - 지난 날짜의 치료계획 항목(**내 판단**): 지금 `status`를 쓰지 않고 그날 기준으로 다시 계산한다 — "끝남"은 그날 전에 `completed`된 연결 예약(`plan_item_id`), "대체됨"은 그날 전에 다른 계획으로 같은 치아(전체 구강 시술은 같은 시술)에 들어간 `completed` 진료(생성 규칙 `generator/records.py` — 대체는 그 진료 시각에 일어난다). 그날 내원에서 새로 만든 계획은 넣지 않는다(만든 날 < 그날)
@@ -57,7 +57,7 @@
 - 출력 스키마 `{action: suggest|none, text, used_facts: [{key, value}]}`. `none`이면 `text`·`used_facts`는 비운다
 - 후검증(`suggestion_valid`, 평가 설계 §4): `used_facts`의 모든 (key, value)가 입력 사실과 일치 and `text`의 숫자가 전부 `used_facts.value`에 속함(단위 정규화). **`none`은 `used_facts`가 비어 있으면 통과**(**내 판단** — 평가 설계 §4 "`none`의 후검증 처리"를 이렇게 닫는다. 주의 칩이 켜졌는데 `none`인 행은 반영률에서 걸린다)
 - 실패하면 한 번 다시 부르고, 또 실패하면 `suggestion`을 null·`suggestion_valid` 0으로 저장(화면은 "제안 없음 — 후검증 실패")
-- 다시 부르지 않는 조건(**내 판단**): `facts_hash`·프롬프트 버전·모델이 모두 같고 저장된 제안이 후검증을 통과했을 때. 후검증 실패(null) 행은 "다시 만들기"마다 다시 부른다. 행은 예약당 하나(UNIQUE 그대로) — 새 버전으로 만들면 덮어쓴다. v1 vs vN 비교가 필요해지면 그때 버전별 행을 둔다(기능 정의 §9 ④ 항목)
+- 다시 부르지 않는 조건(**내 판단**): `facts_hash`·프롬프트 버전·모델이 모두 같고 저장된 제안이 후검증을 통과했을 때. 후검증 실패(null) 행은 "다시 만들기"마다 다시 부른다. 행은 예약당 하나(UNIQUE 그대로) — 새 버전으로 만들면 덮어쓴다. v1 vs vN 비교가 필요해지면 그때 버전별 행을 둔다
 
 ### 4. 저장·실행
 
