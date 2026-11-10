@@ -34,7 +34,7 @@ export default defineConfig({
     },
     {
       command: "npx next dev -p 3100",
-      env: { AX_API_URL: "http://localhost:8100" },
+      env: { AX_API_URL: "http://localhost:8100", NEXT_DIST_DIR: ".next-e2e" },
       url: "http://localhost:3100/eval",
       reuseExistingServer: false,
       timeout: 180_000,
