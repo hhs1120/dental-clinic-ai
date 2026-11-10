@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from generator.clinic import master_values_rows
 from generator.master import (
     ADJUST_REASONS,
     AGE_BANDS,
@@ -111,6 +112,16 @@ def check_foreign_keys(conn, ctx):
     return [
         {"table": t, "rowid": rowid, "parent": parent}
         for t, rowid, parent, _ in conn.execute("PRAGMA foreign_key_check")
+    ]
+
+
+def check_master_values(conn, ctx):
+    """ax_master_values = generator/master.py (backend가 읽는 master 값 — 이름마다 값이 같아야 한다)"""
+    have = dict(conn.execute("SELECT name, value FROM ax_master_values").fetchall())
+    return [
+        {"name": name, "have": have.get(name)}
+        for name, value in master_values_rows()
+        if name not in have or json.loads(have[name]) != json.loads(value)
     ]
 
 

@@ -99,6 +99,7 @@ from generator.verify.common import (
     ROOT,
     Ctx,
     check_foreign_keys,
+    check_master_values,
     check_no_records_after_today,
     check_status_from_today,
     check_timestamps_not_future,
@@ -413,6 +414,7 @@ __all__ = [
 
 REQUIRED = [
     check_foreign_keys,
+    check_master_values,
     check_tooth_treatment_age,
     check_registration_age,
     check_chart_plan,

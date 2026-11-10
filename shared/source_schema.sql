@@ -244,7 +244,7 @@ CREATE INDEX ix_card_sales_at   ON fin_card_sales(approved_at);
 CREATE INDEX ix_bank_tx_at      ON fin_bank_transactions(occurred_at);
 
 -- ── ax_* (§3) ───────────────────────────────────────────────
--- 생성기는 ax_calls(6~7단계)·ax_documents만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.
+-- 생성기는 ax_calls(6~7단계)·ax_documents·ax_master_values만 적재. ax_chunks·ax_chunks_fts·ax_chunk_vectors는 make index(앱 색인 코드)가 채움.
 -- 분류·판정·투표·LLM 로그는 앱이 쓰고 evaluation/eval.py가 읽는다 — 지금은 그 칸만(앱 설계 §1·§2), 나머지 칸·테이블은 해당 기능
 -- 구현 때 추가. 검색 로그(ax_search_logs)는 eval.py가 읽지 않는다 — 챗 채점은 앱 chat()의 반환값(evaluation/rag.py)
 
@@ -269,6 +269,12 @@ CREATE TABLE ax_calls (
 
 CREATE INDEX ix_calls_blind   ON ax_calls(in_blind_pool, blind_sort_order);
 CREATE INDEX ix_calls_started ON ax_calls(started_at);
+
+-- backend가 읽는 master 값(마지막 단계) — 원본은 generator/master.py, 이름 → JSON(④ 주의 칩 기준표 등)
+CREATE TABLE ax_master_values (
+    name  TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 
 -- RAG 문서 (9단계). 방해 여부·심은 사실은 truth_doc_meta에만. 방해 문서의 type은 짝과 같은 값
 CREATE TABLE ax_documents (
