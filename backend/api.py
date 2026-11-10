@@ -21,6 +21,7 @@ from backend import (
     blind,
     calls,
     chat,
+    claims,
     db,
     documents,
     emr,
@@ -663,6 +664,52 @@ def missed_contact(
             by=body.part,
             at=_stamp(now),
             day=clinic.today,
+        )
+        conn.commit()
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+# ── ⑤ 청구 점검 (설계 docs/superpowers/specs/2026-11-10-claim-review-design.md §1) ─────────
+
+
+@app.get("/claims")
+def claims_adjusted(paths: Paths, clinic: ClinicDep) -> dict:
+    """삭감 대응 — 조정·불능 청구 전부와 칩 집계(backend/claims.py). 기한·남은 날은 앱 기준일, 화면이 행 칩으로 거른다"""
+    conn = _open_rw(paths)
+    try:
+        return claims.adjusted(conn, clinic.today)
+    finally:
+        conn.close()
+
+
+@app.get("/claims/pre")
+def claims_pre(paths: Paths, clinic: ClinicDep) -> dict:
+    """청구 전 점검 — 대기 청구 줄과 상병 확인 경고. 지난 조정은 앱 기준일 전 통보"""
+    conn = _open_rw(paths)
+    try:
+        return claims.pre_claim(conn, clinic.today)
+    finally:
+        conn.close()
+
+
+class ClaimJudgment(BaseModel):
+    judgment: str
+    part: str
+
+
+@app.post("/claims/{claim_id}/judgment")
+def claim_judgment(
+    claim_id: int, body: ClaimJudgment, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """사람 판단 기록(덮어씀) — 기한은 앱 기준일, 기록 시각은 실제 시계. 모르는 값·기한 지남·상병 착오에 정당 외는 400"""
+    conn = _open_rw(paths)
+    try:
+        claims.record_judgment(
+            conn, claim_id, body.judgment, by=body.part, at=_stamp(now), today=clinic.today
         )
         conn.commit()
         return {"ok": True}
