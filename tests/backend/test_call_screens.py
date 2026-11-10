@@ -151,10 +151,8 @@ def test_add_call_judges_and_marks_disagreement(cconn):
 
     uid = calls.add_call(cconn, Flip(), direction="inbound", transcript="직원: 네\n환자: 예약",
                          phone="010-1111-2222", part="데스크", now=NOW, today=TODAY)  # fmt: skip
-    row = cconn.execute(
-        "SELECT status FROM ax_model_judgments WHERE call_uid = ?", (uid,)
-    ).fetchone()
-    assert row["status"] == "ok"
+    rows = cconn.execute("SELECT status FROM ax_model_judgments WHERE call_uid = ?", (uid,))
+    assert [r["status"] for r in rows] == ["ok"]
     d = calls.call_detail(cconn, uid)
     assert d["disagree"] == {"items": ["complaint"], "is_core": False}
 
