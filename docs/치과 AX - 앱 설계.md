@@ -204,10 +204,11 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 ## 8. 미결
 
 - [ ] backend가 읽을 `master` 값을 `source.ax_master_values`에 더하기 (⑤·⑧ 착수 시 — 방법은 가상 데이터 생성 설계 §3 `ax_master_values`) — 시술별 허용 상병(⑤-2 상병 확인 경고, `PROCEDURE_DIAGNOSES`), 재심 기한 일수(⑤-3, `APPEAL_DAYS`), 거래처 계정 과목(⑧ 전 ⑥ 재료비, `VENDORS`), 급여 적용 연령 범위(⑤-2 나이 규칙), ⑧ 원인·계정 과목 enum과 구강용품 가격표·카드사 수수료율·정산 지연·현금 입금 요일(⑧-1 규칙 기준선). 이미 박혀 있는 값도 같은 방법으로 옮긴다 — `backend/query_tools.py` `SCALING`·`DAYS_PER_MONTH`, `backend/prep.py` `DAYS_PER_MONTH`·`FULL_MOUTH`
+- [ ] 인증을 붙일 때 저장된 질문 읽기(`GET /chat/{log_id}`)도 같이 막는다 — 번호가 차례라 번호만 알면 질문·답(환자 이름 포함)을 읽는다
 
 ## 9. 프론트
 
-화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준, 미예약 환자 화면은 [[치과 AX - 기능 정의]] §5 ⑨가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면, 메뉴 순서와 물어보기 창은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준, 미예약 환자 화면은 [[치과 AX - 기능 정의]] §5 ⑨가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
 
 **페이지**
 
@@ -219,7 +220,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
 | `/prep` | 준비표·체어 보기(`?view=chair`) — 와이어프레임의 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
 | `/missed` | 미예약 환자(칩·연락함 숨기기 `?chip=…&hide=1`, 행마다 연락 결과) | §5 ⑨ |
-| `/ask` | 질문하기, 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③ |
+| `/ask` | 메뉴에 없음([[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창"). 질문하기(`?tab=chat&log=<id>`는 저장된 그 질문·답·출처를 다시 묻지 않고 첫 줄에 보인다, `?draft=`는 입력칸만 채운다), 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③, 여기: `GET /chat/{log_id}`(저장된 질문 1개를 답 이벤트 모양으로 — 평가·요약·아직 도는 질문은 404, `backend/api.py` `get_chat`) |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |
 | `/claims` | 삭감 대응, 청구 전 점검 | [[치과 AX - 기능 정의]] §5 ⑤, 착수 때 |
@@ -228,7 +229,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - `/emr/*`은 `source.sqlite`만 읽기 전용으로 연다(색인 없이도 동작). 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
-**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`) + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
+**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`) + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다. 포털 layout에 떠 있는 물어보기 버튼·창(`frontend/components/ask/ask-floating.tsx` — 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창")을 두어 메뉴를 옮겨도 창이 남고, 창 안은 물어보기 화면과 같은 `ChatPanel`이다.
 
 **배치**: 하는 일·결과는 왼쪽, 근거 자료(녹취록)는 오른쪽 — 통화 상세 넓게 보기·판정·블라인드. 화면 말은 하는 일로 짓고(시스템 말·코드 값을 보이지 않는다) 라벨 이름은 `GET /labels`(`shared/call_labels.py` `*_KO`, 처리 종류는 `shared/followup.py` `ACTION_KO`).
 

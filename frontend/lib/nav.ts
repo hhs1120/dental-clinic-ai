@@ -1,14 +1,13 @@
-// 메뉴와 별도 공간 (기능 정의 §4 앱 구성, 앱 설계 §9)
+// 메뉴와 별도 공간 (기능 정의 §4 앱 구성, 앱 설계 §9). 물어보기(/ask)는 메뉴가 아니라 떠 있는 버튼·창으로 간다
 export const MENU = [
   { href: "/today", label: "오늘" },
-  { href: "/calls", label: "통화" },
   { href: "/schedule", label: "예약" },
   { href: "/prep", label: "준비표" },
-  { href: "/ask", label: "물어보기" },
-  { href: "/claims", label: "청구 점검" },
-  { href: "/report", label: "경영 리포트" },
-  { href: "/finance", label: "재무 대조" },
+  { href: "/calls", label: "통화" },
   { href: "/missed", label: "미예약 환자" },
+  { href: "/claims", label: "청구 점검" },
+  { href: "/finance", label: "재무 대조" },
+  { href: "/report", label: "경영 리포트" },
 ];
 
 /** 메뉴에 넣지 않는 공간 — 들어가면 메뉴 자리에 이름과 돌아가기 */
@@ -17,7 +16,7 @@ export const SPACES: Record<string, string> = {
   emr: "전환 전 EMR",
 };
 
-const BUILT = ["/today", "/ask", "/schedule", "/calls", "/prep", "/missed"];
+const BUILT = ["/today", "/schedule", "/calls", "/prep", "/missed"];
 
 /** 아직 화면이 없는 라우트 조각 → 화면 이름 (/emr은 화면이 있다) */
 export const COMING_SOON: Record<string, string> = {

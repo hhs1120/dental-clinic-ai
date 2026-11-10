@@ -291,6 +291,68 @@ def test_chat_log_written_even_if_stream_closed(chat_client, indexed_paths):
     assert _log_rows(indexed_paths) == ["answered"]
 
 
+def _answer_of(client, question="틀니 수리 어떻게 해?") -> dict:
+    events = _events(client.post("/chat", json={"question": question}).text)
+    return next(data for kind, data in events if kind == "answer")
+
+
+def test_chat_answer_carries_log_id(chat_client, indexed_paths):
+    answer = _answer_of(chat_client(SEARCH_RUN))
+    conn = db.connect(*indexed_paths)
+    (log_id,) = conn.execute("SELECT id FROM ax_search_logs").fetchone()
+    conn.close()
+    assert answer["log_id"] == log_id
+
+
+def test_saved_chat_replays_answer_without_gateway(chat_client):
+    from backend.api import get_chat_gateway
+
+    c = chat_client(SEARCH_RUN)
+    answer = _answer_of(c)
+
+    def no_gateway(conn):
+        raise AssertionError("저장된 답을 읽는데 게이트웨이를 불렀다")
+
+    app.dependency_overrides[get_chat_gateway] = lambda: no_gateway
+    r = c.get(f"/chat/{answer['log_id']}")
+    assert r.status_code == 200
+    assert r.json() == {
+        "log_id": answer["log_id"],
+        "question": "틀니 수리 어떻게 해?",
+        "steps": ["search_docs"],
+        "status": answer["status"],
+        "text": answer["text"],
+        "sources": answer["sources"],
+    }
+
+
+def test_saved_chat_steps_match_live_steps_without_blocked_calls(chat_client):
+    """막힌 도구 호출(권한 없음)은 실시간 진행 표시에 안 뜨므로 다시 볼 때도 빠진다"""
+    c = chat_client([("tool", "nope", {}), *SEARCH_RUN])
+    events = _events(c.post("/chat", json={"question": "틀니 수리 어떻게 해?"}).text)
+    live = [data["tool"] for kind, data in events if kind == "step"]
+    answer = next(data for kind, data in events if kind == "answer")
+    assert live == ["search_docs"]
+    assert c.get(f"/chat/{answer['log_id']}").json()["steps"] == live
+
+
+def test_saved_chat_404_for_missing_eval_and_other_kinds(chat_client, indexed_paths):
+    c = chat_client(SEARCH_RUN)
+    log_id = _answer_of(c)["log_id"]
+    conn = db.connect(*indexed_paths)
+    for kind, is_eval in (("chat", 1), ("search_summary", 0)):
+        conn.execute(
+            "INSERT INTO ax_search_logs (kind, question, status, is_eval, answer_text, created_at)"
+            " VALUES (?, '틀니', 'answered', ?, '답', '2026-01-01 00:00:00')",
+            (kind, is_eval),
+        )
+    conn.commit()
+    eval_id, summary_id = log_id + 1, log_id + 2
+    conn.close()
+    for missing in (log_id + 99, eval_id, summary_id):
+        assert c.get(f"/chat/{missing}").status_code == 404
+
+
 def test_chat_without_index_is_503(client_with, source_paths, tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

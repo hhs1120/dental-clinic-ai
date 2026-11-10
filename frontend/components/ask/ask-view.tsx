@@ -85,6 +85,9 @@ export function AskView() {
     next.delete("draft");
     router.replace(`/ask?${next}`);
   }, [hasDraft, params, router]);
+  // 물어보기 창의 "전체 화면으로"는 ?log=<저장 번호>로 온다 — 같은 질문·답을 다시 묻지 않고 읽는다
+  const logParam = params.get("log");
+  const log = logParam && /^\d+$/.test(logParam) ? Number(logParam) : undefined;
   const hasResults =
     status.kind === "done" &&
     status.data.manual_results.length + status.data.case_results.length > 0;
@@ -132,7 +135,7 @@ export function AskView() {
         forceMount
         className="data-[state=inactive]:hidden"
       >
-        <ChatPanel draft={question} onDraftChange={setQuestion} />
+        <ChatPanel draft={question} onDraftChange={setQuestion} log={log} />
       </TabsContent>
       <TabsContent value="docs">
         <DocsPanel />

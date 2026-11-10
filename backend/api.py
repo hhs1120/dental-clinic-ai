@@ -266,28 +266,30 @@ def _sse(event: dict) -> str:
     return f"event: {kind}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
+def _chat_sources(conn, cited_ids: list[str], replaced_by: dict) -> list[dict]:
+    """인용 id → 화면 카드(인용 순서). 색인 청크가 아닌 인용(조회 결과 차트 id)은 카드가 없다"""
+    rows = {
+        r["id"]: dict(r)
+        for r in conn.execute(
+            f"SELECT * FROM ax_chunks WHERE id IN ({','.join('?' * len(cited_ids))})", cited_ids
+        )
+    }
+    return [card(conn, rows[i], replaced_by) for i in cited_ids if i in rows]
+
+
 def _chat_worker(paths, models, gateway, question: str, events: queue.Queue) -> None:
-    """작업 스레드 — 자기 연결로 챗을 끝까지 돌린다. 스트림이 끊겨도 기록이 남게(설계 2026-11-09 챗 "API·화면")"""
+    """작업 스레드 — 자기 연결로 챗을 끝까지 돌린다. 스트림이 끊겨도 기록이 남게"""
     conn = db.connect(*paths)
     try:
         searcher = Searcher(conn, _clinic(), *models)
         out = chat.chat(conn, gateway(conn), searcher, _clinic(), question, on_event=events.put)
-        rows = {
-            r["id"]: dict(r)
-            for r in conn.execute(
-                f"SELECT * FROM ax_chunks WHERE id IN ({','.join('?' * len(out['cited_ids']))})",
-                out["cited_ids"],
-            )
-        }
-        sources = [
-            card(conn, rows[i], searcher.replaced_by) for i in out["cited_ids"] if i in rows
-        ]
         events.put(
             {
                 "type": "answer",
+                "log_id": out["log_id"],
                 "status": out["status"],
                 "text": out["answer_text"],
-                "sources": sources,
+                "sources": _chat_sources(conn, out["cited_ids"], searcher.replaced_by),
             }
         )
     except MissingVectors:
@@ -323,6 +325,43 @@ def post_chat(
             yield _sse(event)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@app.get("/chat/{log_id}")
+def get_chat(log_id: int, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
+    """저장된 질문 1개를 POST /chat의 answer 이벤트와 같은 모양으로 — 모델을 다시 부르지 않는다
+    (기능 정의 §4 앱 구성 "물어보기 창", 앱 설계 §9). 평가 실행·검색 요약·아직 도는 질문은 404"""
+    conn = _open(paths, NO_INDEX)
+    try:
+        row = conn.execute(
+            "SELECT * FROM ax_search_logs WHERE id = ? AND kind = 'chat' AND is_eval = 0"
+            " AND status != 'running'",
+            (log_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "저장된 질문이 없습니다")
+        sources = _chat_sources(conn, json.loads(row["cited_ids"]), documents.replacements(conn))
+        # 진행 표시와 같게 — 진행 이벤트는 도구가 실제로 돈 단계만 낸다(backend/chat.py registry):
+        # 통과·도구 오류·실행 뒤 막힘(raw_result 있음)은 돌았고, 실행 전 막힘은 안 돌았다
+        steps = [
+            r[0]
+            for r in conn.execute(
+                "SELECT s.tool FROM ax_agent_steps s JOIN ax_agent_runs r ON r.id = s.run_id"
+                " WHERE r.agent = ? AND r.target = ? AND s.kind = 'tool' AND s.tool NOT IN (?, ?)"
+                " AND (s.hook_status = 'pass' OR s.raw_result IS NOT NULL) ORDER BY s.seq",
+                (chat.AGENT, str(log_id), chat.ANSWER, chat.REFUSE),
+            )
+        ]
+    finally:
+        conn.close()
+    return {
+        "log_id": row["id"],
+        "question": row["question"],
+        "steps": steps,
+        "status": row["status"],
+        "text": row["answer_text"] or chat.FAILED_TEXT,
+        "sources": sources,
+    }
 
 
 def _open_source(paths: tuple[Path, Path]) -> sqlite3.Connection:

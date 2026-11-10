@@ -1,10 +1,27 @@
 // 질문하기 SSE — 이벤트 모양의 원본은 backend/api.py POST /chat (설계 2026-11-09 챗 "API·화면")
-import type { SearchCard } from "@/lib/api";
+import { getJson, type SearchCard } from "@/lib/api";
+
+/** log_id — 이 질문의 저장 번호(ax_search_logs.id). 전체 화면이 이 번호로 같은 답을 다시 읽는다 */
+export interface ChatAnswer {
+  log_id: number;
+  status: string;
+  text: string;
+  sources: SearchCard[];
+}
 
 export type ChatEvent =
   | { type: "step"; tool: string }
-  | { type: "answer"; status: string; text: string; sources: SearchCard[] }
+  | ({ type: "answer" } & ChatAnswer)
   | { type: "error"; message: string };
+
+/** GET /chat/{log_id} — 저장된 질문 1개. 모델을 다시 부르지 않는다(앱 설계 §9) */
+export interface SavedChat extends ChatAnswer {
+  question: string;
+  steps: string[];
+}
+
+export const getSavedChat = (logId: number, signal: AbortSignal) =>
+  getJson<SavedChat>(`/chat/${logId}`, undefined, signal);
 
 const NO_SERVER = "서버에 연결하지 못했습니다";
 
