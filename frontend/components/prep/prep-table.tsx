@@ -303,9 +303,9 @@ function Expand({ row }: { row: PrepRow }) {
           <div className="flex flex-wrap items-center gap-1 text-xs">
             근거
             {s.used_facts.map((u) => (
-              <code key={u.key} className="rounded-sm bg-muted px-1">
-                {u.key}
-              </code>
+              <span key={u.key} className="rounded-sm bg-muted px-1">
+                {factLabel(u.key, row)}
+              </span>
             ))}
           </div>
         )}
@@ -319,6 +319,32 @@ function Expand({ row }: { row: PrepRow }) {
       </div>
     </div>
   );
+}
+
+const FACT_LABEL: Record<string, string> = {
+  procedure: "예정 시술",
+  type: "예약 종류",
+  last_visit: "마지막 내원",
+  balance: "미수 잔액",
+  scaling_unused: "올해 스케일링 급여",
+};
+
+/** 근거 키(backend/prep.py llm_facts) → 사실 목록과 같은 이름. 모르는 키는 그대로 */
+function factLabel(key: string, row: PrepRow): string {
+  const [head, rest] = key.split(/\.(.*)/);
+  if (head === "alert") {
+    const a = row.alerts.find((x) => x.code === rest);
+    return `주의: ${a?.label ?? rest}`;
+  }
+  if (head === "plan") {
+    const p = row.open_plan[Number(rest) - 1];
+    return p ? `남은 치료계획: ${p.procedure}` : key;
+  }
+  if (head === "family") {
+    const f = row.family_recall.find((x) => x.chart_no === rest);
+    return `가족 리콜: ${f?.name ?? rest}`;
+  }
+  return FACT_LABEL[key] ?? key;
 }
 
 /** 시작 시각 기준 시간대별 예약 수 */

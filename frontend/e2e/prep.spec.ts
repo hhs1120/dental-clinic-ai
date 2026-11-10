@@ -186,7 +186,9 @@ test("행을 펼치면 근거와 후검증이 보인다", async ({ page }) => {
   await fakePrep(page);
   await page.goto("/prep?date=2026-12-01");
   await page.getByRole("row", { name: /김철수/ }).click();
-  await expect(page.getByText("alert.ANTICOAG")).toBeVisible();
+  // 근거는 내부 키가 아니라 사람이 읽는 이름으로
+  await expect(page.getByText("주의: 항응고제 복용")).toBeVisible();
+  await expect(page.getByText("alert.ANTICOAG")).toHaveCount(0);
   await expect(page.getByText("후검증 통과")).toBeVisible();
   await expect(page.getByText(/^신환$/)).toBeVisible(); // 정다은 행의 딱지
 });

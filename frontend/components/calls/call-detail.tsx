@@ -318,6 +318,44 @@ const TOOL_NAME: Record<string, string> = {
   search_docs: "문서 검색",
 };
 
+// 조회 조건 값(backend/query_tools.py·rag_search.py 인자) → 화면 이름
+const ARG_VALUE: Record<string, Record<string, string>> = {
+  status: {
+    scheduled: "예정",
+    completed: "내원",
+    cancelled: "취소",
+    noshow: "노쇼",
+  },
+  type: { treatment: "진료", hygiene: "위생", consult: "상담" },
+  has_unpaid_balance: { true: "미수 있음", false: "미수 없음" },
+  is_new_patient: { true: "신환만", false: "재진만" },
+};
+const SOURCE_TYPE: Record<string, string> = {
+  document: "문서",
+  call: "통화",
+  message_thread: "문자",
+  chart_note: "차트 기록",
+};
+
+/** 조회 조건 한 줄 — 기간은 MM-DD로 묶고, 결과 수(top_k)처럼 사람이 볼 일 없는 값은 뺀다 */
+function argsText(args: Record<string, unknown>): string {
+  const { date_from: from, date_to: to, ...rest } = args;
+  const day = (d: unknown) => String(d).slice(5);
+  const parts: string[] = [];
+  if (from || to)
+    parts.push(
+      from === to ? day(from) : `${from ? day(from) : ""}~${to ? day(to) : ""}`,
+    );
+  for (const [k, v] of Object.entries(rest)) {
+    if (v === null || v === "" || k === "top_k") continue;
+    if (k === "query") parts.push(`"${v}"`);
+    else if (k === "source_types" && Array.isArray(v))
+      parts.push(v.map((s) => SOURCE_TYPE[s] ?? s).join("·"));
+    else parts.push(ARG_VALUE[k]?.[String(v)] ?? String(v));
+  }
+  return parts.join(" · ");
+}
+
 /** 에이전트가 부른 조회 도구 — 접어 두고 "과정 보기"로 */
 function Trace({
   trace,
@@ -336,10 +374,7 @@ function Trace({
           {trace.map((t, i) => (
             <li key={i}>
               {TOOL_NAME[t.tool] ?? t.tool}
-              {Object.keys(t.args).length > 0 &&
-                ` — ${Object.values(t.args)
-                  .filter((v) => v !== null && v !== "")
-                  .join(" · ")}`}
+              {argsText(t.args) && ` — ${argsText(t.args)}`}
             </li>
           ))}
         </ol>
