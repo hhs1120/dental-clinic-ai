@@ -219,7 +219,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 예약 미확인(기준일만)·예약 확인(`confirm` — 전날 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`). 응급 여부는 ① 착수 때 그 통화의 `ax_call_classifications`로 붙이고 판정 풀 통화는 뺀다), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준) |
 | `/prep` | 준비표·체어 보기(`?view=chair`) — 와이어프레임의 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
 | `/missed` | 미예약 환자(칩·연락함 숨기기 `?chip=…&hide=1`, 행마다 연락 결과) | §5 ⑨ |
-| `/ask` | 질문하기, 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③ |
+| `/ask` | 메뉴에 없음 — 물어보기 창의 "전체 화면으로"·시작 화면·링크로 온다. 질문하기(`?tab=chat&log=<id>`는 저장된 그 질문·답·출처를 다시 묻지 않고 첫 줄에 보인다, `?draft=`는 입력칸만 채운다), 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③, 여기: `GET /chat/{log_id}`(`kind='chat'`·`is_eval=0`·끝난 질문만, 아니면 404 — `{log_id, question, steps, status, text, sources}`, `steps`는 진행 표시와 같게 `refuse`를 뺀 `tool_calls` 이름, 출처는 `cited_ids` 중 색인 청크 카드) |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |
 | `/claims` | 삭감 대응, 청구 전 점검 | [[치과 AX - 기능 정의]] §5 ⑤, 착수 때 |
@@ -228,7 +228,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - `/emr/*`은 `source.sqlite`만 읽기 전용으로 연다(색인 없이도 동작). 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
-**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`) + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다.
+**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`) + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다. 포털 layout에 떠 있는 물어보기 버튼·창(`frontend/components/ask/ask-floating.tsx` — 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창")을 두어 메뉴를 옮겨도 창이 남고, 창 안은 물어보기 화면과 같은 `ChatPanel`이다. 겹침 순서: 화면·옆 패널 < 물어보기 버튼·창(`z-40`) < 대화 상자(`components/ui/dialog.tsx` `z-50`) — 대화 상자가 Esc를 먼저 쓰면 창은 닫지 않는다.
 
 **배치**: 하는 일·결과는 왼쪽, 근거 자료(녹취록)는 오른쪽 — 통화 상세 넓게 보기·판정·블라인드. 화면 말은 하는 일로 짓고(시스템 말·코드 값을 보이지 않는다) 라벨 이름은 `GET /labels`(`shared/call_labels.py` `*_KO`, 처리 종류는 `shared/followup.py` `ACTION_KO`).
 
