@@ -56,6 +56,8 @@ export interface PrepRow {
   generated: boolean;
   suggestion: Suggestion | null;
   suggestion_valid: boolean;
+  /** 갱신하면 다시 부르는 행 — backend/prep.py build와 같은 조건(안 만듦·후검증 실패·사실·프롬프트 버전·모델이 다름) */
+  refresh: boolean;
   stale: boolean;
   /** 제안 만든 뒤 바뀐 제안 입력(backend/prep.py llm_facts 키) — 없던 값·사라진 값은 null */
   changed: { key: string; before: string | null; after: string | null }[];
@@ -96,10 +98,6 @@ export const regenerate = (date: string) =>
   );
 
 export const fetchJob = (id: number) => getJson<Job>(`/jobs/${id}`);
-
-/** 갱신하면 다시 만드는 행 — 안 만듦·후검증 실패·사실이 바뀜(backend/prep.py build의 건너뛰기 조건) */
-export const needsRefresh = (r: PrepRow) =>
-  !r.generated || !r.suggestion_valid || r.stale;
 
 /** 할 일 있는 환자 = 통과한 제안이 suggest */
 export const hasTodo = (r: PrepRow) => r.suggestion?.action === "suggest";

@@ -158,3 +158,42 @@ def test_job_connect_failure_is_recorded(client, monkeypatch):
     monkeypatch.setattr(api.db, "connect", flaky)
     job = _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
     assert job["status"] == "failed" and "연결 실패" in job["error"]
+
+
+def _tamper(tmp_path, sql, *args):
+    from backend import db
+
+    conn = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    with conn:
+        conn.execute(sql, args)
+    conn.close()
+
+
+@pytest.mark.parametrize("col, value", [("prompt_version", "v0"), ("model", "claude-sonnet-5")])
+def test_refresh_follows_build_skip_rule(client, tmp_path, col, value):
+    """갱신 대상 = build가 다시 부르는 행 — 사실이 같아도 프롬프트 버전·모델(폴백 답 포함)이 다르면"""
+    _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    assert [r["refresh"] for r in client.get("/prep").json()["rows"]] == [False] * 3
+    _tamper(tmp_path, f"UPDATE ax_prep_sheets SET {col} = ? WHERE appointment_id = 101", value)
+    row = client.get("/prep").json()["rows"][0]
+    assert row["refresh"] is True and row["stale"] is False
+
+
+def test_unbuilt_and_invalid_rows_are_refresh(client, tmp_path):
+    assert all(r["refresh"] for r in client.get("/prep").json()["rows"])  # 안 만듦
+    _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    _tamper(tmp_path, "UPDATE ax_prep_sheets SET suggestion_valid = 0 WHERE appointment_id = 102")
+    assert client.get("/prep").json()["rows"][1]["refresh"] is True
+
+
+def test_old_facts_missing_keys_do_not_break_sheet(client, tmp_path):
+    """제안 입력이 새 필드를 읽게 바뀌어 옛 facts에 키가 없어도 화면은 뜬다 — 바뀐 항목만 비운다"""
+    _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
+    _tamper(
+        tmp_path,
+        "UPDATE ax_prep_sheets SET facts = '{}', facts_hash = 'old' WHERE appointment_id = 101",
+    )
+    resp = client.get("/prep")
+    assert resp.status_code == 200
+    row = resp.json()["rows"][0]
+    assert row["stale"] is True and row["changed"] == []

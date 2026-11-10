@@ -470,3 +470,13 @@ def test_build_input_has_no_confirmed(app):
     gw = FakeGw(res(NONE), res(NONE), res(NONE))
     prep.build(app, gw, [TODAY], TODAY, use_batch=False)
     assert all("confirm" not in c["messages"][0]["content"] for c in gw.calls)
+
+
+def test_changed_plan_compares_values_not_positions():
+    """남은 치료계획 키는 순번이라, 앞 항목이 끝나면 값으로 비교해야 끝난 항목만 빠짐으로 나온다"""
+    before = {"procedure": "x", "plan.1": "A", "plan.2": "B", "plan.3": "C"}
+    after = {"procedure": "x", "plan.1": "B", "plan.2": "C", "plan.3": "D"}
+    assert prep._changed(before, after) == [
+        {"key": "plan", "before": "A", "after": None},
+        {"key": "plan", "before": None, "after": "D"},
+    ]

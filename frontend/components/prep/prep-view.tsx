@@ -11,7 +11,6 @@ import { ApiError, useClinic } from "@/lib/api";
 import {
   fetchJob,
   fetchPrep,
-  needsRefresh,
   type PrepRow,
   type PrepSheet,
   regenerate,
@@ -100,12 +99,18 @@ export function PrepView() {
       </p>
     );
 
+  // 다시 조회가 도착한 뒤에만 — 그 전 렌더는 옛 행이라 "갱신한 환자 없음"으로 잘못 보인다
+  const fresh = sheet !== null && sheet.key === key;
   const marked =
-    done?.date === loaded.date ? markRefreshed(loaded.rows, done.rows) : null;
+    fresh && done?.date === loaded.date
+      ? markRefreshed(loaded.rows, done.rows)
+      : null;
   const current = marked ? { ...loaded, rows: marked } : loaded;
   const today = clinic && clinic !== "error" ? clinic.today : null;
-  const busy = job?.date === current.date; // 다른 날짜를 만드는 중이면 이 날짜는 누를 수 있다
-  const need = current.rows.filter(needsRefresh).length;
+  // 다른 날짜를 만드는 중이면 이 날짜는 누를 수 있다. 끝난 뒤 다시 조회가 올 때까지도 갱신 중
+  const busy =
+    job?.date === current.date || (done?.date === current.date && !fresh);
+  const need = current.rows.filter((r) => r.refresh).length;
   const staleCount = current.rows.filter((r) => r.stale).length;
   const start = () => {
     setJobError(null);

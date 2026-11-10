@@ -329,7 +329,7 @@ function Expand({ row }: { row: PrepRow }) {
             근거
             {s.used_facts.map((u) => (
               <span key={u.key} className="rounded-sm bg-muted px-1">
-                {factLabel(u.key, row)}
+                {factLabel(u.key, u.value)}
               </span>
             ))}
           </div>
@@ -354,51 +354,47 @@ const FACT_LABEL: Record<string, string> = {
   scaling_unused: "올해 스케일링 급여",
 };
 
-/** 근거 키(backend/prep.py llm_facts) → 사실 목록과 같은 이름. 모르는 키는 그대로 */
-function factLabel(key: string, row: PrepRow): string {
-  const [head, rest] = key.split(/\.(.*)/);
-  if (head === "alert") {
-    const a = row.alerts.find((x) => x.code === rest);
-    return `주의: ${a?.label ?? rest}`;
-  }
-  if (head === "plan") {
-    const p = row.open_plan[Number(rest) - 1];
-    return p ? `남은 치료계획: ${p.procedure}` : key;
-  }
-  if (head === "family") {
-    const f = row.family_recall.find((x) => x.chart_no === rest);
-    return `가족 리콜: ${f?.name ?? rest}`;
-  }
-  return FACT_LABEL[key] ?? key;
-}
-
 const LIST_FACT: Record<string, string> = {
   alert: "주의",
   plan: "남은 치료계획",
   family: "가족 리콜",
 };
 
+/** 목록 사실(alert.·plan.·family.) 값(backend/prep.py llm_facts) → 항목 이름. 지금 행이 아니라 값에서 읽는다 —
+ * 남은 치료계획 키는 순번이라 계획이 바뀌면 다른 항목을 가리킨다 */
+function itemName(head: string, value: string): string {
+  if (head === "alert") return value.split(" — ")[0];
+  if (head === "family") return value.split(" ")[0];
+  return value.replace(/(\d+)원/, (_, n) => won(Number(n)));
+}
+
+/** 근거 한 건 → 사실 목록과 같은 이름. 모르는 키는 그대로 */
+function factLabel(key: string, value: string): string {
+  const head = key.split(".")[0];
+  if (head in LIST_FACT) return `${LIST_FACT[head]}: ${itemName(head, value)}`;
+  return FACT_LABEL[key] ?? key;
+}
+
 /** 제안 만든 뒤 바뀐 제안 입력 한 건(backend/prep.py sheet changed) → 한 구절 */
 function changeText(c: PrepRow["changed"][number]): string {
   const head = c.key.split(".")[0];
   if (head in LIST_FACT) {
-    const v = (c.after ?? c.before ?? "")
-      .split(" — ")[0]
-      .replace(/(\d+)원/, (_, n) => won(Number(n)));
     const what =
       c.before === null ? "생김" : c.after === null ? "빠짐" : "바뀜";
-    return `${LIST_FACT[head]} ${what}: ${v}`;
+    return `${LIST_FACT[head]} ${what}: ${itemName(head, c.after ?? c.before ?? "")}`;
   }
-  if (c.key === "scaling_unused")
-    return c.after ? "올해 스케일링 급여 미사용" : "올해 스케일링 급여 사용함";
   const fmt = (v: string | null) =>
     v === null
-      ? "없음"
+      ? c.key === "scaling_unused"
+        ? "해당 없음"
+        : "없음"
       : c.key === "balance"
         ? won(Number(v))
         : c.key === "type"
           ? (TYPE_LABEL[v as PrepRow["type"]] ?? v)
-          : v;
+          : c.key === "scaling_unused"
+            ? "미사용"
+            : v;
   return `${FACT_LABEL[c.key] ?? c.key} ${fmt(c.before)} → ${fmt(c.after)}`;
 }
 

@@ -348,6 +348,7 @@ function argsText(args: Record<string, unknown>): string {
     );
   for (const [k, v] of Object.entries(rest)) {
     if (v === null || v === "" || k === "top_k") continue;
+    if (Array.isArray(v) && v.length === 0) continue;
     if (k === "query") parts.push(`"${v}"`);
     else if (k === "source_types" && Array.isArray(v))
       parts.push(v.map((s) => SOURCE_TYPE[s] ?? s).join("·"));

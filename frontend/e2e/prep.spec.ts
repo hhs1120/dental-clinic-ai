@@ -24,6 +24,7 @@ const base = {
   open_plan: [],
   generated: true,
   suggestion_valid: true,
+  refresh: false,
   stale: false,
   changed: [],
   made_at: "2026-12-01T05:30:00",
@@ -130,6 +131,7 @@ const ROWS = [
     chips: ["appointment", "unconfirmed"],
     suggestion: null,
     suggestion_valid: false,
+    refresh: true,
   },
 ];
 
@@ -273,6 +275,7 @@ test("체어 보기 — 지금 환자가 있으면 바로 뒤 환자에 다음",
 test("갱신 전 — 바뀐 사실과 갱신할 인원", async ({ page }) => {
   const stale = {
     ...ROWS[0],
+    refresh: true,
     stale: true,
     changed: [{ key: "balance", before: "50000", after: "30000" }],
   };
@@ -298,18 +301,17 @@ test("모두 최신이면 갱신 버튼이 꺼진다", async ({ page }) => {
   ).toBeDisabled();
 });
 
-test("갱신 뒤 — 방금 갱신한 행에 이전 제안", async ({ page }) => {
+test("갱신 뒤 — 다시 만든 행에만 방금 갱신과 이전 제안", async ({ page }) => {
   let refreshed = false;
+  // 갱신 대상은 후검증에 실패했던 정다은뿐 — 다시 만들어 만든 시각이 바뀌고, 김철수는 건너뛰어 그대로
   const renewed = {
-    ...ROWS[0],
-    suggestion: {
-      action: "suggest",
-      text: "항응고제 복용 확인",
-      used_facts: [ROWS[0].suggestion!.used_facts[0]],
-    },
+    ...ROWS[2],
+    suggestion: { action: "none", text: "", used_facts: [] },
+    suggestion_valid: true,
+    refresh: false,
     made_at: "2026-12-01T09:00:00",
   };
-  await fakePrep(page, () => (refreshed ? [renewed, ROWS[1], ROWS[2]] : ROWS));
+  await fakePrep(page, () => (refreshed ? [ROWS[0], ROWS[1], renewed] : ROWS));
   await page.route("**/api/jobs/**", (r) => {
     if (r.request().method() === "POST") {
       refreshed = true;
@@ -319,11 +321,20 @@ test("갱신 뒤 — 방금 갱신한 행에 이전 제안", async ({ page }) =>
   });
   await page.goto("/prep?date=2026-12-01");
   await page.getByRole("button", { name: "AI 제안 갱신하기 (1명)" }).click();
-  const row = page.getByRole("row", { name: /김철수/ });
+  const row = page.getByRole("row", { name: /정다은/ });
   await expect(row).toContainText("방금 갱신");
-  await expect(row).toContainText("이전: 항응고제 복용 확인, 미수 3만 원 안내");
+  await expect(row).toContainText("이전: 제안 없음 — 후검증 실패");
   await expect(page.getByText("1명 갱신함")).toBeVisible();
-  await expect(page.getByRole("row", { name: /박영희/ })).not.toContainText(
+  await expect(
+    page.getByRole("button", { name: "AI 제안 최신" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("row", { name: /김철수/ })).not.toContainText(
+    "방금 갱신",
+  );
+  // 체어 보기도 같은 제안 칸
+  await page.getByRole("button", { name: "체어 보기" }).click();
+  await page.getByRole("button", { name: /^상담실/ }).click();
+  await expect(page.getByRole("region", { name: "지금 환자" })).toContainText(
     "방금 갱신",
   );
 });

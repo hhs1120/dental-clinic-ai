@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from backend import db, prompts
+from shared.llm import load_config
 
 # 칩 순서 = 화면 순서(기능 정의 §4 ④)
 CHIPS = (
@@ -404,11 +405,7 @@ def build(
                 " FROM ax_prep_sheets WHERE sheet_date = ? AND patient_id = ? AND appointment_id = ?",
                 (day.isoformat(), r["patient_id"], r["appointment_id"]),
             ).fetchone()
-            if (
-                old
-                and old["suggestion_valid"]
-                and (old[0], old[1], old[2]) == (h, PROMPT_VERSION, model)
-            ):
+            if _reusable(old, h, model):
                 _save(conn, day, r, h, json.loads(old["suggestion"]), model, old["created_at"])
                 out["skipped"] += 1
                 continue
@@ -446,10 +443,24 @@ def tab_days(today: date) -> list[date]:
     return [today - timedelta(days=k) for k in range(DAYS - 1, -1, -1)]
 
 
+def _reusable(old, h: str, model: str) -> bool:
+    """저장된 제안을 그대로 쓰는 행 — 해시·버전·모델이 같고 통과(build는 부르지 않고, 화면은 갱신 대상이 아님)"""
+    return bool(
+        old
+        and old["suggestion_valid"]
+        and (old["facts_hash"], old["prompt_version"], old["model"]) == (h, PROMPT_VERSION, model)
+    )
+
+
 def _changed(before: dict, after: dict) -> list[dict]:
-    """제안 입력 키별 전후 값 — 지금 키 순서, 그다음 사라진 키"""
+    """제안 입력 키별 전후 값 — 지금 키 순서, 그다음 사라진 키. 남은 치료계획(plan.n)은 순번 키라 값으로 비교해
+    빠진 값·생긴 값을 key "plan"으로"""
+    plan = [str(v) for k, v in before.items() if k.startswith("plan.")]
+    now = [str(v) for k, v in after.items() if k.startswith("plan.")]
+    before = {k: v for k, v in before.items() if not k.startswith("plan.")}
+    after = {k: v for k, v in after.items() if not k.startswith("plan.")}
     keys = list(after) + [k for k in before if k not in after]
-    return [
+    out = [
         {
             "key": k,
             "before": None if k not in before else str(before[k]),
@@ -458,16 +469,28 @@ def _changed(before: dict, after: dict) -> list[dict]:
         for k in keys
         if before.get(k) != after.get(k)
     ]
+    out += [{"key": "plan", "before": v, "after": None} for v in plan if v not in now]
+    out += [{"key": "plan", "before": None, "after": v} for v in now if v not in plan]
+    return out
 
 
-def sheet(conn, day: date, today: date) -> dict:
-    """화면 한 장 — 지금 사실(prep_facts) + 저장된 제안. 저장 뒤 제안 입력이 바뀐 행은 stale(갱신 대상)이고
-    changed에 바뀐 제안 입력 키와 전후 값(없으면 None)을 단다"""
+def _old_changes(saved_facts: str, now: dict) -> list[dict]:
+    """저장된 facts가 지금 llm_facts가 읽는 키를 갖지 않으면(입력 필드가 늘어난 뒤의 옛 행) 비운다 — 화면은 뜬다"""
+    try:
+        return _changed(llm_facts(json.loads(saved_facts)), now)
+    except KeyError:
+        return []
+
+
+def sheet(conn, day: date, today: date, model: str | None = None) -> dict:
+    """화면 한 장 — 지금 사실(prep_facts) + 저장된 제안. refresh = 갱신하면 다시 부르는 행(build와 같은 조건),
+    stale = 저장 뒤 제안 입력이 바뀐 행이고 changed에 바뀐 키와 전후 값(없으면 None)을 단다"""
+    model = model or load_config()["aliases"][ALIAS][0]
     saved = {
         r["appointment_id"]: r
         for r in conn.execute(
-            "SELECT appointment_id, facts, facts_hash, suggestion, suggestion_valid, created_at"
-            " FROM ax_prep_sheets WHERE sheet_date = ?",
+            "SELECT appointment_id, facts, facts_hash, prompt_version, model, suggestion,"
+            " suggestion_valid, created_at FROM ax_prep_sheets WHERE sheet_date = ?",
             (day.isoformat(),),
         )
     }
@@ -475,15 +498,17 @@ def sheet(conn, day: date, today: date) -> dict:
     for r in prep_facts(conn, day, today):
         s = saved.get(r["appointment_id"])
         now = llm_facts(r)
-        stale = bool(s and s["facts_hash"] != _hash(now))
+        h = _hash(now)
+        stale = bool(s and s["facts_hash"] != h)
         rows.append(
             r
             | {
                 "generated": s is not None,
                 "suggestion": json.loads(s["suggestion"]) if s and s["suggestion"] else None,
                 "suggestion_valid": bool(s and s["suggestion_valid"]),
+                "refresh": not _reusable(s, h, model),
                 "stale": stale,
-                "changed": _changed(llm_facts(json.loads(s["facts"])), now) if stale else [],
+                "changed": _old_changes(s["facts"], now) if stale else [],
                 "made_at": s["created_at"] if s else None,
             }
         )
