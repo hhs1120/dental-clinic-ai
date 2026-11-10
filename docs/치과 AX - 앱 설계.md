@@ -207,7 +207,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 9. 프론트
 
-화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면, 메뉴 순서와 물어보기 창은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준, 미예약 환자 화면은 [[치과 AX - 기능 정의]] §5 ⑨가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면, 메뉴 순서와 물어보기 창은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준, 미예약 환자 화면은 [[치과 AX - 기능 정의]] §5 ⑨, 청구 점검 화면은 §5 ⑤가 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
 
 **페이지**
 
