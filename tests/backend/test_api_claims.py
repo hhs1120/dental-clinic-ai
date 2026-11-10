@@ -31,7 +31,7 @@ def client(tmp_path, ids):
 
 def test_get_claims_shape(client):
     r = client.get("/claims").json()
-    assert set(r) == {"date", "appeal_days", "chips", "rows"}
+    assert set(r) == {"date", "appeal_days", "soon_days", "watch_days", "chips", "rows"}
     assert r["date"] == "2026-12-01"
     assert set(r["chips"]) == set(claims.CHIPS)
     assert len(r["rows"]) == 3

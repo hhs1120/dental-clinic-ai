@@ -103,6 +103,23 @@ def test_deadline_boundary(src):
     assert got[gone]["expired"] is True
 
 
+def test_future_notice_hidden(src):
+    """기준일을 앞당겨 보면 그 뒤에 온 심사 결과는 아직 없다 — 목록·판단 기록 모두. 기준일 당일 통보는 보인다"""
+    note = NOTE["requirement"][1]
+    today = add_claim(src, 1, note=note, reviewed=DAY.isoformat())
+    later = add_claim(src, 2, note=note, reviewed=(DAY + timedelta(days=1)).isoformat())
+    conn = src.app()
+    assert set(rows(conn)) == {today}
+    with pytest.raises(ValueError):
+        claims.record_judgment(conn, later, "contestable", "데스크", AT, DAY)
+
+
+def test_tag_bounds_in_sheet(src):
+    """꼬리표 경계는 서버가 내려준다 — 화면이 숫자를 따로 적지 않게"""
+    out = claims.adjusted(src.app(), DAY)
+    assert (out["soon_days"], out["watch_days"]) == (claims.SOON_DAYS, claims.WATCH_DAYS)
+
+
 def test_deadline_from_master_values(src):
     cid = add_claim(src, 1, note=NOTE["documentation"][1], reviewed="2026-11-20")
     src.conn.execute("UPDATE ax_master_values SET value = '30' WHERE name = 'appeal_days'")

@@ -50,8 +50,8 @@ def _chips(status: str, type_: str, days_left: int) -> list[str]:
 
 
 def adjusted(conn: sqlite3.Connection, today: date) -> dict:
-    """조정·불능 청구 전부(기한 지난 건 포함) — 행과 칩 집계(건수·못 받은 돈). 정렬: 기한 남은 행은 기한 이른 순,
-    지난 행은 그 뒤에 기한 늦은 순(최근에 지난 것 먼저)"""
+    """기준일까지 통보된 조정·불능 청구 전부(기한 지난 건 포함) — 행과 칩 집계(건수·못 받은 돈), 화면 꼬리표 경계.
+    정렬: 기한 남은 행은 기한 이른 순, 지난 행은 그 뒤에 기한 늦은 순(최근에 지난 것 먼저)"""
     mv = master_values(conn)
     days, types, headings = mv["appeal_days"], mv["adjust_note_types"], mv["adjust_note_headings"]
     rows = []
@@ -63,8 +63,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
         " JOIN source.emr_patients p ON p.id = c.patient_id"
         " JOIN source.emr_procedures pr ON pr.code = c.procedure_code"
         " LEFT JOIN ax_claim_judgments j ON j.claim_id = c.id"
-        " WHERE c.status IN (?, ?)",
-        CUT,
+        " WHERE c.status IN (?, ?) AND c.reviewed_at <= ?",
+        (*CUT, today.isoformat()),
     ):
         type_ = types[r["adjust_note"]]
         deadline = _deadline(r["reviewed_at"], days)
@@ -111,7 +111,14 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
         for c in x["chips"]:
             chips[c]["count"] += 1
             chips[c]["amount"] += x["unpaid"]
-    return {"date": today.isoformat(), "appeal_days": days, "chips": chips, "rows": rows}
+    return {
+        "date": today.isoformat(),
+        "appeal_days": days,
+        "soon_days": SOON_DAYS,
+        "watch_days": WATCH_DAYS,
+        "chips": chips,
+        "rows": rows,
+    }
 
 
 def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
@@ -175,7 +182,7 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
 def record_judgment(
     conn: sqlite3.Connection, claim_id: int, judgment: str, by: str, at: str, today: date
 ) -> None:
-    """사람 판단 한 줄(덮어씀) — 모르는 값, 없거나 조정·불능이 아닌 청구, 기한 지난 청구, 상병 착오에 정당이 아닌
+    """사람 판단 한 줄(덮어씀) — 모르는 값, 없거나 조정·불능이 아닌 청구, 기준일 뒤 통보·기한 지난 청구, 상병 착오에 정당이 아닌
     판단이면 ValueError(설계 "하면 실패인 것"). 커밋은 부르는 쪽"""
     if judgment not in JUDGMENTS:
         raise ValueError(f"모르는 판단: {judgment}")
@@ -184,6 +191,8 @@ def record_judgment(
     ).fetchone()
     if c is None or c["status"] not in CUT:
         raise ValueError(f"조정·불능 청구가 아님: {claim_id}")
+    if c["reviewed_at"] > today.isoformat():
+        raise ValueError(f"기준일 뒤에 통보된 청구: {claim_id}")
     mv = master_values(conn)
     if _deadline(c["reviewed_at"], mv["appeal_days"]) < today:
         raise ValueError(f"재심 신청 기한 지남: {claim_id}")
