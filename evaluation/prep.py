@@ -52,15 +52,18 @@ def score(conn, days: list[date]) -> dict:
             out["reflect"]["k"] += all(f"alert.{c}" in keys for c in rel)
         out["over_mention"]["n"] += 1
         out["over_mention"]["k"] += any(f"alert.{c}" in keys for c in unrel)
-        if not _chips_on(facts, rel):
+        if s and not _chips_on(
+            facts, rel
+        ):  # 제안이 없는 행(후검증 실패)은 과잉 제안을 판단할 수 없다
             out["over_suggest"]["n"] += 1
             out["over_suggest"]["k"] += bool(s and s["action"] == "suggest")
-    appts = conn.execute(
-        f"SELECT COUNT(*) FROM source.emr_appointments WHERE status != 'cancelled'"
-        f" AND date(scheduled_at) IN ({marks})",
+    missing = conn.execute(  # 저장 행이 없는 예약 — 취소된 예약의 남은 행은 세지 않는다
+        f"SELECT COUNT(*) FROM source.emr_appointments a WHERE a.status != 'cancelled'"
+        f" AND date(a.scheduled_at) IN ({marks}) AND NOT EXISTS (SELECT 1 FROM ax_prep_sheets s"
+        " WHERE s.appointment_id = a.id AND s.sheet_date = date(a.scheduled_at))",
         ds,
     ).fetchone()[0]
     return out | {
-        "not_generated": appts - len(rows),
+        "not_generated": missing,
         "by_prompt_version": dict(Counter(r[3] for r in rows)),
     }

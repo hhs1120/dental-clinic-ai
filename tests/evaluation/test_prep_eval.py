@@ -91,3 +91,15 @@ def test_relatedness_from_master_not_stored(conn):
 def test_suggest_with_all_chips_off_is_over(conn):
     put(conn, row(103, "U0019", chips=("appointment", "unconfirmed")), suggest("procedure"))
     assert prep_eval.score(conn, [DAY])["over_suggest"] == {"k": 1, "n": 1}
+
+
+def test_null_suggestion_out_of_over_suggest_denominator(conn):
+    # 칩이 다 꺼진 행이라도 제안이 없으면(후검증 실패) 과잉 제안을 판단할 수 없다
+    put(conn, row(103, "U0019"), None, valid=False)
+    assert prep_eval.score(conn, [DAY])["over_suggest"] == {"k": 0, "n": 0}
+
+
+def test_not_generated_ignores_rows_of_cancelled_appointments(conn):
+    # 만든 뒤 취소된 예약(104)의 남은 행은 "만들지 않은 예약" 계산에 섞이지 않는다
+    put(conn, row(104, "U0001"), NONE)
+    assert prep_eval.score(conn, [DAY])["not_generated"] == 3
