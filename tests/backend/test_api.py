@@ -326,6 +326,16 @@ def test_saved_chat_replays_answer_without_gateway(chat_client):
     }
 
 
+def test_saved_chat_steps_match_live_steps_without_blocked_calls(chat_client):
+    """막힌 도구 호출(권한 없음)은 실시간 진행 표시에 안 뜨므로 다시 볼 때도 빠진다"""
+    c = chat_client([("tool", "nope", {}), *SEARCH_RUN])
+    events = _events(c.post("/chat", json={"question": "틀니 수리 어떻게 해?"}).text)
+    live = [data["tool"] for kind, data in events if kind == "step"]
+    answer = next(data for kind, data in events if kind == "answer")
+    assert live == ["search_docs"]
+    assert c.get(f"/chat/{answer['log_id']}").json()["steps"] == live
+
+
 def test_saved_chat_404_for_missing_eval_and_other_kinds(chat_client, indexed_paths):
     c = chat_client(SEARCH_RUN)
     log_id = _answer_of(c)["log_id"]

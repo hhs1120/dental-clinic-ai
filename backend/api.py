@@ -278,7 +278,7 @@ def _chat_sources(conn, cited_ids: list[str], replaced_by: dict) -> list[dict]:
 
 
 def _chat_worker(paths, models, gateway, question: str, events: queue.Queue) -> None:
-    """작업 스레드 — 자기 연결로 챗을 끝까지 돌린다. 스트림이 끊겨도 기록이 남게(설계 2026-11-09 챗 "API·화면")"""
+    """작업 스레드 — 자기 연결로 챗을 끝까지 돌린다. 스트림이 끊겨도 기록이 남게"""
     conn = db.connect(*paths)
     try:
         searcher = Searcher(conn, _clinic(), *models)
@@ -341,13 +341,23 @@ def get_chat(log_id: int, paths: Annotated[tuple[Path, Path], Depends(get_db_pat
         if row is None:
             raise HTTPException(404, "저장된 질문이 없습니다")
         sources = _chat_sources(conn, json.loads(row["cited_ids"]), documents.replacements(conn))
+        # 진행 표시와 같게 — 진행 이벤트는 도구가 실제로 돈 단계만 낸다(backend/chat.py registry):
+        # 통과·도구 오류·실행 뒤 막힘(raw_result 있음)은 돌았고, 실행 전 막힘은 안 돌았다
+        steps = [
+            r[0]
+            for r in conn.execute(
+                "SELECT s.tool FROM ax_agent_steps s JOIN ax_agent_runs r ON r.id = s.run_id"
+                " WHERE r.agent = ? AND r.target = ? AND s.kind = 'tool' AND s.tool NOT IN (?, ?)"
+                " AND (s.hook_status = 'pass' OR s.raw_result IS NOT NULL) ORDER BY s.seq",
+                (chat.AGENT, str(log_id), chat.ANSWER, chat.REFUSE),
+            )
+        ]
     finally:
         conn.close()
     return {
         "log_id": row["id"],
         "question": row["question"],
-        # 진행 표시와 같게 — 화면 진행 이벤트는 refuse를 내지 않는다(backend/chat.py registry)
-        "steps": [t["name"] for t in json.loads(row["tool_calls"]) if t["name"] != chat.REFUSE],
+        "steps": steps,
         "status": row["status"],
         "text": row["answer_text"] or chat.FAILED_TEXT,
         "sources": sources,
