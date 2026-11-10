@@ -24,6 +24,7 @@ from pathlib import Path
 
 import yaml
 
+from backend import prep as backend_prep
 from backend.calls import active_versions
 from evaluation import (
     EvalRefused,
@@ -32,10 +33,12 @@ from evaluation import (
     classification,
     followup,
     gold_audit,
+    prep,
     rag,
 )
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
+from shared.clinic import load_clinic
 
 REPORTS = ROOT / "reports"
 PROMPTS = ROOT / "prompts"
@@ -218,6 +221,7 @@ def run(
         "gold_audit": None,
         "autoclose": None,
         "followup": None,
+        "prep": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -315,6 +319,15 @@ def run(
             ),
             "agreement": call_actions.agreement(acts),
         }
+    has_prep = conn.execute(
+        "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_prep_sheets'"
+    ).fetchone()
+    if dev and has_prep:
+        # ④ 준비표(평가 설계 §4) — 정답 없는 코드 채점, 범위는 날짜 탭(기준일 포함 최근 8일)
+        days = backend_prep.tab_days(load_clinic().today)
+        result["prep"] = {"days": [days[0].isoformat(), days[-1].isoformat()]} | prep.score(
+            conn, days
+        )
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -411,6 +424,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
             out += _render_autoclose(a)
     if r.get("followup") is not None:
         out += _render_followup(r["followup"])
+    if r.get("prep") is not None:
+        out += _render_prep(r["prep"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -562,6 +577,24 @@ def _render_autoclose(a: dict) -> list[str]:
         f"오류(골드가 할 일·응급·불만·급함) {_kn(e)}"
         + (f" · 95% 구간 {_pct(ci[0])}~{_pct(ci[1])}" if ci else ""),
         "항목별 — " + " · ".join(f"{names[i]} {k}" for i, k in a["by_item"].items()),
+        "",
+    ]
+
+
+def _render_prep(p: dict) -> list[str]:
+    versions = ", ".join(f"{v} {n}행" for v, n in p["by_prompt_version"].items()) or "없음"
+    return [
+        "## ④ 준비표",
+        "",
+        f"{p['days'][0]} ~ {p['days'][1]} · 저장 행 {p['valid']['n']}({versions})"
+        f" · 만들지 않은 예약 {p['not_generated']}",
+        "",
+        "| 지표 | 값 |",
+        "|---|---|",
+        f"| 후검증 통과 | {_kn(p['valid'])} |",
+        f"| 주의사항 반영률(관련 주의사항이 있는 행) | {_kn(p['reflect'])} |",
+        f"| 과잉 언급률(무관 주의사항을 근거로 씀) | {_kn(p['over_mention'])} |",
+        f"| 과잉 제안률(칩이 다 꺼진 행의 suggest) | {_kn(p['over_suggest'])} |",
         "",
     ]
 
