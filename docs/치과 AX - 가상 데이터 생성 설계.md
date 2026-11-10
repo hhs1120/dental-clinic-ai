@@ -255,7 +255,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 
 ## 3. 생성기가 적재하는 `ax_*`
 
-생성기는 `ax_calls`·`ax_documents`·`ax_master_values`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). `ax_master_values`는 backend가 `generator/`를 import하지 않고 master 값을 읽는 길이다 — 이름 → JSON(`generator/clinic.py` `master_values_rows`, 원본은 `master`). 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
+생성기는 `ax_calls`·`ax_documents`·`ax_master_values`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). `ax_master_values`는 backend가 `generator/`를 import하지 않고 master 값을 읽는 길이다 — 이름 → JSON(`generator/clinic.py` `master_values_rows`, 원본은 `master`) — ④ 주의 칩 기준표 `alert_rules`, 보험 잔여 칩 `scaling_min_age`·`scaling_code`, ⑨ 다른 치과 추정의 외부 이력 사유 문구 `external_adjust_notes`(`master.ADJUST_REASONS` 중 `external` 유형). 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
 
 **`ax_calls`**
 | 컬럼 | 의미 |

@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from backend import autoclose, calls, db, prep, today
+from backend import autoclose, calls, db, missed, prep, today
 from backend import judge_queue as jq
 from generator.clinic import master_values_rows
 from tests.backend.call_db import LABELS, TODAY, classify_row, make_call_db
@@ -235,3 +235,13 @@ def test_empty_day(pconn):
     assert s["cards"]["appointments"] == {"total": 0, "treatment": 0, "hygiene": 0, "consult": 0}
     assert s["cards"]["new_patients"] == s["cards"]["alert_patients"] == 0
     assert s["people"]["urgent_calls"] == [] and s["ai"]["prep"]["rows"] == 0
+
+
+def test_today_does_not_count_missed(pconn, monkeypatch):
+    """미예약 환자 줄은 숫자 없는 고정 링크 — 오늘 화면은 미예약 목록을 계산하지 않는다(기능 정의 §4 오늘 화면)"""
+
+    def boom(*a, **k):
+        raise AssertionError("오늘 화면이 미예약 목록을 계산함")
+
+    monkeypatch.setattr(missed, "facts", boom)
+    assert "missed_top" not in _sheet(pconn)["people"]

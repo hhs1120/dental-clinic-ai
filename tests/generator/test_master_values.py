@@ -3,7 +3,7 @@
 import json
 
 from generator.clinic import master_values_rows
-from generator.master import ALERT_TYPES, SCALING_CODE, SCALING_MIN_AGE
+from generator.master import ADJUST_REASONS, ALERT_TYPES, SCALING_CODE, SCALING_MIN_AGE
 from generator.verify.common import check_master_values
 from tests.generator.verify_db import CTX, make_db
 
@@ -16,6 +16,9 @@ def test_master_values_rows_match_master():
         code: {"action": a["action"], "procedures": sorted(a["procedures"])}
         for code, a in ALERT_TYPES.items()
     }
+    assert got["external_adjust_notes"] == sorted(
+        r["note"] for r in ADJUST_REASONS.values() if r["type"] == "external"
+    )
 
 
 def test_check_master_values_passes_on_loaded(tmp_path):
@@ -27,4 +30,4 @@ def test_check_master_values_flags_missing_and_wrong(tmp_path):
     conn.execute("UPDATE ax_master_values SET value = '20' WHERE name = 'scaling_min_age'")
     assert [r["name"] for r in check_master_values(conn, CTX)] == ["scaling_min_age"]
     conn.execute("DELETE FROM ax_master_values")
-    assert len(check_master_values(conn, CTX)) == 3
+    assert len(check_master_values(conn, CTX)) == 4

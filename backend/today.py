@@ -2,7 +2,7 @@
 숫자는 전부 쿼리(기능 정의 §3 원칙 2)이고, 숫자마다 그 숫자가 가리키는 화면과 같은 함수로 센다 — 예약·신환·주의·
 예약 미확인은 준비표(prep.prep_facts), 할 일·급한 통화는 통화 화면 오늘 할 일(calls.today_board), 확인할 통화는
 calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자동 처리는 통화 화면과 같은 유효 조건.
-LLM을 부르지 않는다."""
+미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. LLM을 부르지 않는다."""
 
 import sqlite3
 from datetime import date, datetime, timedelta

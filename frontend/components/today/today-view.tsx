@@ -82,6 +82,9 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
   );
 }
 
+/** 오늘 화면 미예약 환자 줄 — 숫자 없는 고정 링크라 0건 숨김 없이 늘 보인다(기능 정의 §4 오늘 화면) */
+export const MISSED_LINK_TEXT = "미예약 환자 · 다시 오실 만한 분께 연락하기";
+
 type Tone = "danger" | "warn" | "info" | "muted";
 type Line = {
   key: string;
@@ -95,7 +98,7 @@ type Line = {
 function People({ sheet }: { sheet: TodaySheet }) {
   const names = useLabels();
   const p = sheet.people;
-  // 급한 것부터. 0건인 줄은 숨긴다(목록 줄·숫자 줄 모두)
+  // 급한 것부터. 0건인 줄은 숨긴다(목록 줄·숫자 줄 모두, 예외: 미예약 환자 고정 링크)
   const lines: Line[] = [
     ...p.urgent_calls.map((u) => ({
       key: `u-${u.call_uid}`,
@@ -169,28 +172,37 @@ function People({ sheet }: { sheet: TodaySheet }) {
       meta: `${shortAt(q.at)} · 문서에서 근거를 못 찾은 질문`,
     });
 
+  // 미예약 환자는 숫자 없는 고정 링크 — 세지 않으므로 늘 맨 끝에 둔다
+  const missedLine: Line = {
+    key: "missed",
+    tag: "미예약 환자",
+    tone: "info",
+    href: "/missed",
+    title: MISSED_LINK_TEXT,
+    meta: "미예약 환자 화면에서 연락 결과 남기기",
+  };
+
   return (
     <section aria-label="사람이 볼 일" className="flex flex-col gap-2">
       <h2 className="text-lg font-bold">사람이 볼 일</h2>
-      {lines.length === 0 ? (
+      {lines.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
           오늘 남은 일이 없습니다
         </p>
-      ) : (
-        <ul className="flex flex-col divide-y rounded-xl border bg-card">
-          {lines.map((l) => (
-            <li key={l.key} className="flex items-start gap-3 px-4 py-3">
-              <Tag tone={l.tone}>{l.tag}</Tag>
-              <Link href={l.href} className="min-w-0 flex-1 hover:underline">
-                <div className="font-medium">{l.title}</div>
-                {l.meta && (
-                  <div className="text-xs text-muted-foreground">{l.meta}</div>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
       )}
+      <ul className="flex flex-col divide-y rounded-xl border bg-card">
+        {[...lines, missedLine].map((l) => (
+          <li key={l.key} className="flex items-start gap-3 px-4 py-3">
+            <Tag tone={l.tone}>{l.tag}</Tag>
+            <Link href={l.href} className="min-w-0 flex-1 hover:underline">
+              <div className="font-medium">{l.title}</div>
+              {l.meta && (
+                <div className="text-xs text-muted-foreground">{l.meta}</div>
+              )}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

@@ -26,6 +26,7 @@ from backend import (
     emr,
     judge_queue,
     metrics,
+    missed,
     prep,
     search_summary,
     today,
@@ -585,6 +586,49 @@ def check_call(call_uid: str, body: Part, paths: Paths, clinic: ClinicDep, now: 
             raise HTTPException(404, "확인할 통화가 아닙니다")
         conn.commit()
         return {"ok": True}
+    finally:
+        conn.close()
+
+
+# ── ⑨ 미예약 환자 (설계 docs/superpowers/specs/2026-11-10-missed-patients-design.md) ─────────
+
+
+@app.get("/missed")
+def missed_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    """미예약 환자 목록(backend/missed.py) — 사실은 앱 기준일 아침, 연락 기록 기간은 실제 시계"""
+    conn = _open_rw(paths)
+    try:
+        return missed.sheet(conn, clinic.today, now)
+    finally:
+        conn.close()
+
+
+class MissedContact(BaseModel):
+    result: str
+    channel: str
+    part: str
+
+
+@app.post("/missed/{patient_id}/contacts")
+def missed_contact(
+    patient_id: int, body: MissedContact, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """연락 결과 한 줄 — 모르는 결과·수단이나 미예약 환자가 아니면 400"""
+    conn = _open_rw(paths)
+    try:
+        missed.record_contact(
+            conn,
+            patient_id,
+            body.result,
+            body.channel,
+            by=body.part,
+            at=_stamp(now),
+            day=clinic.today,
+        )
+        conn.commit()
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     finally:
         conn.close()
 
