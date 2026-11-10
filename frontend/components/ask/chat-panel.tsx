@@ -24,6 +24,12 @@ const STEP_LABEL: Record<string, string> = {
   query_charts: "차트 조회 중",
 };
 
+/** 마지막 질문의 상태 — 답을 기다리는 중인지, 받은 답의 저장 번호(실패·끊김이면 null) */
+export interface Latest {
+  busy: boolean;
+  logId: number | null;
+}
+
 interface ChatItem {
   id: number;
   question: string;
@@ -34,18 +40,18 @@ interface ChatItem {
 
 /** 질문하기 — 질문 1개에 한 번 답한다(멀티턴 없음). 이 화면에서 한 질문은 위에서 아래로 쌓인다.
  * 물어보기 화면과 떠 있는 물어보기 창이 같이 쓴다(기능 정의 §4 앱 구성). log가 있으면 저장된 그 질문·답을
- * 다시 묻지 않고 읽어 첫 줄에 놓는다(전체 화면으로), onAnswer는 답의 저장 번호를 알린다 */
+ * 다시 묻지 않고 읽어 첫 줄에 놓는다(전체 화면으로), onLatest는 마지막 질문의 상태를 알린다 */
 export function ChatPanel({
   draft,
   onDraftChange: setDraft,
   log,
-  onAnswer,
+  onLatest,
   className,
 }: {
   draft: string;
   onDraftChange: (v: string) => void;
   log?: number;
-  onAnswer?: (logId: number) => void;
+  onLatest?: (latest: Latest) => void;
   className?: string;
 }) {
   const [items, setItems] = useState<ChatItem[]>([]);
@@ -59,15 +65,19 @@ export function ChatPanel({
     if (log === undefined) return;
     const ac = new AbortController();
     getSavedChat(log, ac.signal).then(
-      ({ question, steps, status, text, sources }) =>
-        setItems([
+      ({ question, steps, status, text, sources }) => {
+        setLogError(null);
+        // 불러오는 사이 새로 물은 질문이 있어도 지우지 않고 그 앞에 놓는다
+        setItems((all) => [
           {
             id: next.current++,
             question,
             steps,
             answer: { status, text, sources },
           },
-        ]),
+          ...all,
+        ]);
+      },
       (e) => {
         if (!ac.signal.aborted)
           setLogError(
@@ -88,6 +98,8 @@ export function ChatPanel({
     setItems((all) => [...all, { id, question, steps: [] }]);
     setDraft("");
     setBusy(true);
+    onLatest?.({ busy: true, logId: null });
+    let logId: number | null = null;
     const ac = new AbortController();
     live.current = ac;
     let ended = false; // answer·error를 받았나 — 못 받고 끝나면 끊긴 것
@@ -100,7 +112,7 @@ export function ChatPanel({
             update(id, (it) => ({ ...it, steps: [...it.steps, e.tool] }));
           else if (e.type === "answer") {
             update(id, (it) => ({ ...it, answer: e }));
-            onAnswer?.(e.log_id);
+            logId = e.log_id;
           } else update(id, (it) => ({ ...it, error: e.message }));
         },
         ac.signal,
@@ -111,6 +123,7 @@ export function ChatPanel({
       if (!ended && !ac.signal.aborted)
         update(id, (it) => ({ ...it, error: CUT }));
       setBusy(false);
+      onLatest?.({ busy: false, logId });
     }
   };
 

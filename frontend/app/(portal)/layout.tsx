@@ -15,7 +15,7 @@ export default function PortalLayout({
         <AppHeader />
       </Suspense>
       {/* 아래 여백 pb-24 — 떠 있는 물어보기 버튼(h-12 + bottom-6)이 마지막 줄·더보기를 가리지 않게 */}
-      <main className="mx-auto w-full max-w-[90rem] px-4 pt-8 pb-24 sm:px-6">
+      <main className="mx-auto w-full max-w-[90rem] px-4 pt-8 pb-24 sm:px-6 print:pb-0">
         {children}
       </main>
       {/* 메뉴를 옮겨도 창이 남게 layout에 둔다. usePathname 때문에 Suspense로 감싼다 */}

@@ -184,3 +184,98 @@ test("창이 열려 있어도 확인 창은 그 위에 뜨고, 닫으면 창이 
   await expect(dialog).toHaveCount(0);
   await expect(panel(page)).toBeVisible();
 });
+
+test("닫았다 열어도, 전체 화면에 갔다 와도 질문·답·초안이 남는다", async ({
+  page,
+}) => {
+  await fakeChat(page);
+  await page.route("**/api/chat/42", (r) =>
+    r.fulfill({
+      json: {
+        log_id: 42,
+        question: QUESTION,
+        steps: [],
+        status: "answered",
+        text: ANSWER,
+        sources: [],
+      },
+    }),
+  );
+  await page.goto("/today");
+  await fab(page).click();
+  const input = panel(page).getByLabel("질문 입력");
+  await expect(input).toBeFocused();
+  await input.fill(QUESTION);
+  await input.press("Enter");
+  await expect(panel(page)).toContainText(ANSWER);
+  await input.fill("쓰다 만 질문");
+  await panel(page).getByRole("button", { name: "닫기" }).click();
+  await expect(fab(page)).toBeFocused();
+  await fab(page).click();
+  await expect(panel(page)).toContainText(ANSWER);
+  await expect(input).toHaveValue("쓰다 만 질문");
+  await panel(page).getByRole("link", { name: "전체 화면으로" }).click();
+  await expect(page).toHaveURL(/\/ask\?tab=chat&log=42$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/today$/);
+  await fab(page).click();
+  await expect(panel(page)).toContainText(ANSWER);
+  await expect(input).toHaveValue("쓰다 만 질문");
+});
+
+test("답을 기다리는 동안 전체 화면으로는 꺼지고, 실패하면 이전 답을 열지 않는다", async ({
+  page,
+}) => {
+  await fakeChat(page);
+  await page.goto("/today");
+  await fab(page).click();
+  const input = panel(page).getByLabel("질문 입력");
+  await input.fill(QUESTION);
+  await input.press("Enter");
+  await expect(panel(page)).toContainText(ANSWER);
+  const full = panel(page).getByRole("link", { name: "전체 화면으로" });
+  await expect(full).toHaveAttribute("href", "/ask?tab=chat&log=42");
+  // 두 번째 질문 — 답을 붙잡아 두었다가 실패로 끝낸다
+  let release = () => {};
+  const held = new Promise<void>((ok) => (release = ok));
+  await page.route("**/api/chat", async (r) => {
+    await held;
+    await r.fulfill({
+      contentType: "text/event-stream",
+      body: `event: error\ndata: ${JSON.stringify({ message: "답을 만들지 못했습니다" })}\n\n`,
+    });
+  });
+  await input.fill("두 번째 질문");
+  await input.press("Enter");
+  await expect(panel(page).getByText("답 쓰는 중…")).toBeVisible();
+  await expect(full).toHaveCount(0);
+  release();
+  await expect(panel(page).getByText("답을 만들지 못했습니다")).toBeVisible();
+  await expect(full).toHaveAttribute("href", "/ask?tab=chat");
+});
+
+test("AI 평가 화면에서 창에 친 숫자·Enter는 판정·투표 단축키로 가지 않는다", async ({
+  page,
+}) => {
+  const posts = await fakeChat(page);
+  await page.goto("/eval", { waitUntil: "networkidle" });
+  await expect(page.getByText("0/9 항목")).toBeVisible();
+  await fab(page).click();
+  const input = panel(page).getByLabel("질문 입력");
+  await input.pressSequentially("01121");
+  await input.press("Enter");
+  await expect(panel(page)).toContainText(ANSWER);
+  expect(posts.n).toBe(1);
+  await expect(page.getByText("0/9 항목")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "다음 건 (Enter)" }),
+  ).toHaveCount(0);
+
+  await page.goto("/eval?tab=blind", { waitUntil: "networkidle" });
+  await expect(page.getByRole("button", { name: /1이 나음/ })).toBeEnabled();
+  await fab(page).click();
+  await panel(page).getByLabel("질문 입력").pressSequentially("3");
+  await expect(page.getByRole("button", { name: "다음 (Enter)" })).toHaveCount(
+    0,
+  );
+});
