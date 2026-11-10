@@ -43,6 +43,8 @@ export interface TodaySheet {
     alert_patients: number;
     todo_left: { items: number; calls: number };
     judge_pending: number;
+    /** 미예약 환자 목록 앞 10명 중 있는 수(backend/missed.py top) — 0이면 줄을 숨긴다 */
+    missed_top: number;
     refused: {
       id: number;
       kind: "chat" | "search_summary";

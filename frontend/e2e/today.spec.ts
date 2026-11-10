@@ -18,6 +18,7 @@ const EMPTY = {
     todo_left: { items: 0, calls: 0 },
     judge_pending: 0,
     refused: [],
+    missed_top: 0,
   },
   ai: {
     autoclose_on: false,
@@ -87,6 +88,7 @@ const FULL = {
     alert_patients: 6,
     todo_left: { items: 34, calls: 16 },
     judge_pending: 3,
+    missed_top: 10,
     refused: [
       {
         id: 7,
@@ -133,6 +135,14 @@ test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await expect(page).toHaveURL(/\/ask\?tab=chat&draft=/);
 });
 
+test("미예약 환자 줄 → /missed", async ({ page }) => {
+  await fakeToday(page, FULL);
+  await page.goto("/today");
+  const people = page.getByRole("region", { name: "사람이 볼 일" });
+  await people.getByRole("link", { name: /미예약 환자 · 상위 10명/ }).click();
+  await expect(page).toHaveURL(/\/missed$/);
+});
+
 test("확인할 통화 문구", async ({ page }) => {
   await fakeToday(page, FULL);
   await page.goto("/today");
@@ -151,10 +161,11 @@ test("확인할 통화 문구", async ({ page }) => {
 test("0건 줄은 숨김", async ({ page }) => {
   await fakeToday(page, {
     ...FULL,
-    people: { ...FULL.people, refused: [], review_calls: [] },
+    people: { ...FULL.people, refused: [], review_calls: [], missed_top: 0 },
   });
   await page.goto("/today");
   await expect(page.getByText("근거 없음")).toHaveCount(0);
+  await expect(page.getByText(/미예약 환자 · 상위/)).toHaveCount(0);
   await expect(page.getByText("확인할 통화")).toHaveCount(0);
   await expect(page.getByText("급한 통화")).toBeVisible();
   await page.unroute("**/api/today");

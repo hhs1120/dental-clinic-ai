@@ -151,6 +151,15 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "급함 먼저 · 끝내면 빠짐",
   );
   count(
+    p.missed_top,
+    "missed",
+    "미예약 환자",
+    "info",
+    "/missed",
+    `미예약 환자 · 상위 ${p.missed_top}명`,
+    "미예약 환자 화면에서 연락 결과 남기기",
+  );
+  count(
     p.judge_pending,
     "judge",
     "판정 대기",
