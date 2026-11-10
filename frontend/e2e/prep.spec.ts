@@ -100,6 +100,9 @@ const ROWS = [
       sex: "F",
       new_patient: false,
     },
+    alerts: [
+      { code: "HTN", label: "고혈압", related: false, action: "혈압 확인" },
+    ],
     chips: ["appointment"],
     suggestion: { action: "none", text: "", used_facts: [] },
   },
@@ -128,10 +131,36 @@ const ROWS = [
   },
 ];
 
-async function fakePrep(page: Page) {
-  await page.route("**/api/prep?**", (r) => {
+const LATER = {
+  ...ROWS[1],
+  appointment_id: 104,
+  patient_id: 3,
+  time: "11:30",
+  chair_no: 1,
+  procedure: "구강검진",
+  alerts: [],
+  patient: {
+    name: "김민수",
+    chart_no: "C-00003",
+    age: 26,
+    sex: "M",
+    new_patient: false,
+  },
+};
+
+async function fakePrep(
+  page: Page,
+  rowsOf: (date: string | null) => unknown[] = (date) =>
+    date === "2026-11-30" ? [] : ROWS,
+) {
+  await page.route("**/api/prep**", (r) => {
     const date = new URL(r.request().url()).searchParams.get("date");
-    const rows = date === "2026-11-30" ? [] : ROWS;
+    if (date === "2026-11-01")
+      return r.fulfill({
+        status: 400,
+        json: { detail: "준비표는 기준일 포함 최근 8일만" },
+      });
+    const rows = rowsOf(date);
     return r.fulfill({
       json: {
         date: date ?? "2026-12-01",
@@ -193,7 +222,10 @@ test("체어 보기 — 주의사항이 큰 칸에 행동과 함께", async ({ p
   const card = page.getByRole("region", { name: "지금 환자" });
   await expect(card).toContainText("항응고제 복용");
   await expect(card).toContainText("복용 여부 확인, 지혈 준비");
-  await expect(card).not.toContainText("구역반사"); // 오늘 시술과 무관
+  // 오늘 시술과 무관한 주의사항은 큰 칸이 아니라 아래 작은 줄에
+  await expect(card).toContainText(
+    "그 밖의 주의사항(오늘 시술과 무관): 구역반사",
+  );
 });
 
 test("체어 보기 — 지금 전에는 첫 환자가 다음", async ({ page }) => {
@@ -201,6 +233,35 @@ test("체어 보기 — 지금 전에는 첫 환자가 다음", async ({ page })
   await fakePrep(page);
   await page.goto("/prep?date=2026-12-01&view=chair&chair=1");
   await expect(page.getByRole("button", { name: /10:00/ })).toContainText(
+    "다음",
+  );
+});
+
+test("날짜 탭 밖 날짜로 들어오면 기준일로 돌아간다", async ({ page }) => {
+  await fakePrep(page);
+  await page.goto("/prep?date=2026-11-01");
+  await expect(page.getByRole("table")).toContainText("김철수");
+  await expect(page).not.toHaveURL(/date=2026-11-01/);
+});
+
+test("체어 보기 — 무관한 주의사항만 있으면 관련 주의사항 없음과 함께 작게", async ({
+  page,
+}) => {
+  await fakePrep(page);
+  await page.goto("/prep?date=2026-12-01&view=chair&chair=2");
+  const card = page.getByRole("region", { name: "지금 환자" });
+  await expect(card).toContainText("오늘 시술 관련 주의사항 없음");
+  await expect(card).toContainText("고혈압");
+});
+
+test("체어 보기 — 지금 환자가 있으면 바로 뒤 환자에 다음", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-12-01T10:10:00"));
+  await fakePrep(page, () => [...ROWS, LATER]);
+  await page.goto("/prep?date=2026-12-01&view=chair&chair=1");
+  await expect(page.getByRole("button", { name: /10:00/ })).toContainText(
+    "지금",
+  );
+  await expect(page.getByRole("button", { name: /11:30/ })).toContainText(
     "다음",
   );
 });

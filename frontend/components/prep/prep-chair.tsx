@@ -63,7 +63,7 @@ export function PrepChair({
     : -1;
   const nextIdx = isToday ? list.findIndex((r) => minutes(r.time) > clock) : -1;
   const label = (i: number) =>
-    i === nowIdx ? "지금" : i === nextIdx && nowIdx === -1 ? "다음" : "";
+    i === nowIdx ? "지금" : i === nextIdx ? "다음" : ""; // 지금 환자가 있어도 바로 뒤 환자는 "다음"
   // 고르지 않았으면 지금 → 다음 → (끝났으면) 마지막, 지난 날짜는 첫 환자
   const auto =
     nowIdx >= 0
@@ -146,6 +146,7 @@ export function PrepChair({
 
 function ChairCard({ row, tag }: { row: PrepRow; tag: string }) {
   const related = row.alerts.filter((a) => a.related);
+  const others = row.alerts.filter((a) => !a.related);
   return (
     <section
       aria-label="지금 환자"
@@ -179,7 +180,13 @@ function ChairCard({ row, tag }: { row: PrepRow; tag: string }) {
           ))
         ) : (
           <p className="rounded-md border border-dashed px-4 py-3 text-muted-foreground">
-            주의사항 없음
+            오늘 시술 관련 주의사항 없음
+          </p>
+        )}
+        {others.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            그 밖의 주의사항(오늘 시술과 무관):{" "}
+            {others.map((a) => a.label).join(", ")}
           </p>
         )}
       </div>

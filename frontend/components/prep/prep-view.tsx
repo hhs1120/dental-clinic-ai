@@ -79,7 +79,12 @@ export function PrepView() {
     return () => clearInterval(timer);
   }, [job]);
 
-  if (sheet && sheet.key === key && "error" in sheet)
+  // 날짜 탭 밖(지난주 북마크 등)이나 틀린 날짜면 기준일로 — 날짜 없이도 실패하면 오류를 보인다
+  const failed = sheet !== null && sheet.key === key && "error" in sheet;
+  useEffect(() => {
+    if (failed && date) go({ date: null, open: null });
+  });
+  if (failed && !date && sheet && "error" in sheet)
     return <ErrorBand text={sheet.error} />;
   const current = sheet && "data" in sheet ? sheet.data : null;
   if (!current)
@@ -90,6 +95,7 @@ export function PrepView() {
     );
 
   const today = clinic && clinic !== "error" ? clinic.today : null;
+  const busy = job?.date === current.date; // 다른 날짜를 만드는 중이면 이 날짜는 누를 수 있다
   const start = () => {
     setJobError(null);
     regenerate(current.date).then(
@@ -141,7 +147,7 @@ export function PrepView() {
         <span className="text-sm text-muted-foreground">
           {dayLabel(current.date)}{" "}
           {current.generated_at
-            ? `${current.generated_at.slice(11, 16)} 기준`
+            ? `· ${dayLabel(current.generated_at.slice(0, 10))} ${current.generated_at.slice(11, 16)}에 만듦`
             : "· 아직 만들지 않음"}
         </span>
         <span className="flex-1" />
@@ -149,10 +155,10 @@ export function PrepView() {
           size="sm"
           variant="outline"
           className="print:hidden"
-          disabled={job !== null}
+          disabled={busy}
           onClick={start}
         >
-          {job ? "만드는 중…" : "다시 만들기"}
+          {busy ? "만드는 중…" : "다시 만들기"}
         </Button>
       </div>
       {jobError && <ErrorBand text={jobError} />}
