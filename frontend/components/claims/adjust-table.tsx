@@ -158,10 +158,10 @@ export function AdjustTable({
                     }
                   }}
                 >
-                  <td className="px-3 py-2 align-top whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                     <Deadline row={r} sheet={sheet} />
                   </td>
-                  <td className="px-3 py-2 align-top">
+                  <td className="px-3 py-2 align-middle">
                     <div className="font-bold">
                       {r.name} · {r.procedure_name}
                     </div>
@@ -174,12 +174,12 @@ export function AdjustTable({
                         .join(" · ")}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right align-top whitespace-nowrap tabular-nums">
+                  <td className="px-3 py-2 text-right align-middle whitespace-nowrap tabular-nums">
                     {won(r.unpaid)}
                     {r.status === "denied" && " (전액)"}
                   </td>
-                  <td className="px-3 py-2 align-top">{r.adjust_note}</td>
-                  <td className="px-3 py-2 align-top whitespace-nowrap">
+                  <td className="px-3 py-2 align-middle">{r.adjust_note}</td>
+                  <td className="px-3 py-2 align-middle whitespace-nowrap">
                     <Todo row={r} />
                   </td>
                 </tr>

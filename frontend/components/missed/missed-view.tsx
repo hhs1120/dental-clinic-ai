@@ -165,10 +165,10 @@ export function MissedView() {
           <tbody>
             {rows.slice(0, shown).map((r) => (
               <tr key={r.patient_id} className="border-t">
-                <td className="px-3 py-2 text-right align-top font-bold tabular-nums">
+                <td className="px-3 py-2 text-right align-middle font-bold tabular-nums">
                   {r.rank}
                 </td>
-                <td className="px-3 py-2 align-top whitespace-nowrap">
+                <td className="px-3 py-2 align-middle whitespace-nowrap">
                   <Link
                     href={`/emr?chart=${encodeURIComponent(r.chart_no)}`}
                     className="font-bold text-primary hover:underline"
@@ -179,7 +179,7 @@ export function MissedView() {
                     {r.chart_no} · {r.age}세 · {r.phone}
                   </div>
                 </td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3 py-2 align-middle">
                   <div className="flex flex-wrap gap-1">
                     {r.chips.map((c) => (
                       <Badge key={c} variant={CHIP_VARIANT[c]}>
@@ -188,16 +188,16 @@ export function MissedView() {
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2 align-top whitespace-nowrap tabular-nums">
+                <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                   {r.last_visit}
                   <div className="text-xs text-muted-foreground">
                     {Math.floor(r.signals.months_since_visit)}개월 전
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right align-top tabular-nums">
+                <td className="px-3 py-2 text-right align-middle tabular-nums">
                   {r.balance ? won(r.balance) : "-"}
                 </td>
-                <td className="px-3 py-2 align-top whitespace-nowrap">
+                <td className="px-3 py-2 align-middle whitespace-nowrap">
                   {r.contact && (
                     <div className="mb-1 flex items-center gap-1.5">
                       <Badge variant={RESULT_VARIANT[r.contact.result]}>
