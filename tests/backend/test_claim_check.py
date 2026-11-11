@@ -364,3 +364,11 @@ def test_batch_then_plain_for_missing(src):
     assert (out["called"], out["failed"]) == (2, 0)
     assert [c["ref"] for c in gw.calls] == [("claim", b)]
     assert len(gw.batches[0]) == 2
+
+
+def test_batch_id_printed(src, capsys):
+    """기다리다 끊기면 같은 배치를 다시 받아 오게 — 제출하자마자 배치 id를 남긴다(다시 제출하면 비용이 두 번)"""
+    a = claim(src, 1)
+    conn = src.app()
+    cc.build(conn, BatchGw({str(a): llm(OK)}), cc.targets(conn, DAY, scope="all"), use_batch=True)
+    assert "batch b1" in capsys.readouterr().err

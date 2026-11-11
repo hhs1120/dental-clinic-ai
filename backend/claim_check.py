@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -263,6 +264,8 @@ def build(conn, gw, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30
             task=TASK,
             prompt_version=PROMPT_VERSION,
         )
+        # 기다리다 끊기면 이 id로 결과를 받아 온다 — 다시 제출하면 비용이 두 번
+        print(f"batch {bid} ({len(todo)}줄)", file=sys.stderr, flush=True)
         while gw.batch_status(bid) != "ended":
             time.sleep(poll_seconds)
         first = gw.batch_results(
