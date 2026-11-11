@@ -62,19 +62,26 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
       href: "/calls",
       value: `${c.todo.items}건`,
       label: "오늘 할 일",
-      sub: `급함 ${c.todo.urgent_items}`,
+      // 급함은 0이 아니면 빨간 배지로 — 숫자 옆 작은 글씨로 두면 놓친다
+      sub:
+        c.todo.urgent_items > 0 ? (
+          <Badge variant="danger">급함 {c.todo.urgent_items}</Badge>
+        ) : (
+          "급함 없음"
+        ),
     },
   ];
+  // 이름 → 숫자 → 세부 순 — 숫자부터 보면 무슨 숫자인지 다시 읽어야 한다
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((k) => (
         <Link key={k.label} href={k.href} className="group rounded-xl">
           <Card className="h-full gap-1 px-4 shadow-card group-hover:ring-primary">
-            <div className="text-2xl font-bold">{k.value}</div>
-            <div className="text-sm text-muted-foreground">
-              {k.label}
-              {k.sub && ` · ${k.sub}`}
-            </div>
+            <div className="text-sm font-semibold">{k.label}</div>
+            <div className="text-3xl font-bold tabular-nums">{k.value}</div>
+            {k.sub && (
+              <div className="text-sm text-muted-foreground">{k.sub}</div>
+            )}
           </Card>
         </Link>
       ))}
