@@ -541,6 +541,15 @@ _INSURED_NAMES = (
     "임플란트 1차",
     "잇몸치료",
 )
+# R03 치주치료 산정 — 치주낭이 이 깊이(mm) 이상인 부위가 있어야 근거(§4.3). 차트 소견 생성과 청구 기준 문서가 함께 읽는다
+PERIO_POCKET_MIN_MM = 4
+# ⑤-2 요건 근거 표현 방식(데이터 재설계 설계 §3) — 키워드 규칙(evaluation/claim_check.py)은 속지만 서술을 읽으면 풀린다. 추정값
+EVIDENCE_PARAPHRASE_SHARE = 0.055  # 근거 있는 줄 중 근거 낱말 대신 바꿔 말하기
+EVIDENCE_NEGATED_SHARE = 0.3  # 근거 없는 줄 중 근거 낱말의 부정·예정("파절 소견 없음")
+PERIO_QUALITATIVE_SHARE = (
+    0.05  # R03 근거 있는 줄 중 치주낭 깊이를 약어 표기로("PD 5mm" — chart.PERIO_PD)
+)
+PERIO_NEAR_MISS_SHARE = 0.33  # R03 근거 없는 줄 중 깊이는 기준 이상인데 출혈이 없는 부분 소견
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
     ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),
@@ -640,6 +649,9 @@ CHART_DECOY_RATIO = 1.5
 # 추가 처치 누락 (§4.3, 5b단계): 오류가 없는 급여 내원 중 이 비율의 차트에 같은 날 다른 치아의 추가 처치를 서술하고
 # 진료 기록·청구에는 넣지 않는다(truth_claim_errors '추가 처치 누락'). 비율은 추정값 — 리포트로 확인
 SAME_DAY_EXTRA_RATE = 0.03
+SAME_DAY_EXTRA_ADD_RATE = (
+    0.03  # 데이터 재설계 — 기존 줄은 그대로 두고 새 자식 난수로 같은 조건의 줄에 더하는 몫. 추정값
+)
 # 추가 처치 시술 — 치아 단위 급여 시술, 발치 제외. 그 시술의 급여 조건(실란트는 소아)은 쓰는 쪽이 본다
 SAME_DAY_EXTRA = frozenset(_CODE_BY_NAME[n] for n in ("아말감/GI", "실란트"))
 # 계획에서 같은 시술이 이어질 때 같은 치아를 유지하는 시술(여러 회차로 한 치아를 치료) — 나머지(실란트·레진·아말감/GI 등)의
@@ -1048,6 +1060,23 @@ RECON_CAUSE_GROUPS = {
     "date_shift": "ambiguous",
     "method_wrong": "ambiguous",
 }
+# ⑧-1 미수 정산 수납 누락(데이터 재설계 — 장부에 행 없음): 장부에 미수가 남은 환자가 평가 달에 실제로 냈는데 장부에 안 적은 돈.
+# 장부는 그대로라 금융에만 돈이 생긴다. 늘 잔액 전부(일부 납부 없음 — 잔액을 보면 풀리게). ORAL_SHARE는 잔액이 구강용품 1~2개 합과
+# 같은 환자의 카드(규칙 9가 진료 외 매출로 틀린다)의 최대 몫 — 그런 환자가 적어 모자라면 일반 꼴로 채운다(dev·test 번갈아). 추정값
+UNRECORDED_SETTLEMENT_COUNT = 30
+UNRECORDED_ORAL_SHARE = (
+    0  # 구강용품 합 잔액 꼴은 끔 — 잔액이 우연히 같은 환자가 하루 4~8명이라 읽어도 안 풀림
+)
+# ⑧-1 정산 수납 장부 실수(데이터 재설계): 정산 행만 바꾼다(진료 행은 문자·통화가 읽음), 그날 뒤로 통화가 없는 환자만.
+# 자릿수 바꿔 적기(연동 카드 — 10배가 아니라 규칙 5가 못 봄)·며칠 늦게 적기(이체 — 이웃 진료일보다 뒤라 규칙 6이 못 봄). 추정값
+SETTLEMENT_ERROR_COUNTS = {"amount_typo": 14, "date_shift": 12}
+SETTLEMENT_LATE_OPEN_DAYS = (2, 4)  # 며칠 늦게 적기 — 실제 날 뒤 몇 번째 진료일에 적나
+# ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
+# 조합해야 풀린다. 1~2개 판매(RECON_MISMATCH_COUNTS)와 비슷한 수 — 더 늘리면 세 개 판매가 더 흔한 부자연스러운 데이터. 추정값
+NON_CLINICAL_MULTI_COUNT = 12
+NON_CLINICAL_MAX_ITEMS = 3
+# 화면 기본 달(평가 달 마지막 달)에 새 모양마다 최소 이만큼(데이터 재설계 설계 §4b)
+RECON_LATEST_MONTH_MIN = 2
 # 데스크 구강용품 가격표 — 진료 외 매출(non_clinical_sale)은 이 금액(여러 개면 합)의 장부 없는 카드 승인.
 # 직원 매뉴얼 '구강용품 판매 안내'(doc_catalog)가 같은 값을 쓴다. 가상 값
 ORAL_CARE_PRICES = {
@@ -1264,8 +1293,36 @@ EXPENSE_ITEMS = {
 }
 # 증빙이 있는 출금 중 출금액이 증빙 합계보다 조금 많은 비율(배송비·이전 미지급분 등), 그 차이(증빙 합계 대비, 100원 단위
 # 내림 — 최소 100원) (§2.7 어긋남)
+# ⑧-2 헷갈리는 모양(데이터 재설계 설계 §2) — 규칙 기준선(evaluation/expense.py)을 속이지만 증빙을 읽으면 풀린다. 추정값
+EXPENSE_DECOY_RATE = 0.15  # 1:1 출금(카드·자동이체) 중 같은 거래처·같은 금액의 취소 주문·견적 증빙이 더 가까이 있는 몫
+EXPENSE_ALIAS_RATE = 0.12  # 출금 적요·가맹점명이 은행·결제대행사 표기로 찍히는 몫
+EXPENSE_ISSUER_ALIAS_RATE = 0.25  # 월말 이체 중 명세서 발행처가 법인 표기("(주)…")인 몫
+EXPENSE_SPLIT_DOC_RATE = (
+    0.12  # 증빙 있는 카드 사용 중 주문 두 건을 한 번에 결제한 몫(증빙 둘 = 출금 하나)
+)
+EXPENSE_MIXED_ORDER_RATE = 0.5  # 쇼핑몰 주문 중 두 과목 품목이 섞인 몫 — 정답은 금액이 큰 과목
+
+
+def vendor_aliases(v: dict) -> dict:
+    """거래처 표기 변형 — 증빙 발행처(법인 표기)·통장 적요(은행 표기 — 끝 글자 잘림)·카드 가맹점명(결제대행사 표기)"""
+    return {
+        "issuer": f"(주){v['name']}",
+        "memo": v["name"][:-1],
+        "card": f"KCP*{v['card_name'] or v['name']}",
+    }
+
+
 EXPENSE_AMOUNT_DIFF_RATE = 0.05
 EXPENSE_AMOUNT_DIFF_RANGE = (0.01, 0.05)
+# 금액 차이의 이유 — 차이 난 출금의 증빙 한 장(이체는 마지막 명세서)에 "{이유} {차이}원 별도 청구" 한 줄(증빙 종류 → 이유).
+# 읽으면 풀리게(데이터 재설계 설계 §2), 증빙 금액·합계에는 넣지 않는다
+EXPENSE_DIFF_REASONS = {
+    "statement": "운송비",
+    "tax_invoice": "운송비",
+    "order_email": "배송비",
+    "receipt": "봉사료",
+    "bill": "연체료",
+}
 # 병원 카드 사용 중 증빙이 없는 비율 — 영수증을 잃기 쉬운 카드 사용에만(이체·자동이체는 증빙이 온다). 전체 출금의 약 5%
 EXPENSE_NO_DOC_RATE = 0.08
 # 기공소 외주 단가(원) — 기공 명세서 줄 = 창 안 인레이·크라운·브릿지 진료 1건 (§2.7). 가상 값

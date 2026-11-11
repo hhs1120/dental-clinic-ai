@@ -506,3 +506,24 @@ def test_expected_args_values_pass(db):
         ),
     )
     assert verify.check_qa_expected_args(db, CTX) == []
+
+
+@pytest.mark.parametrize(
+    "question, ok",
+    [
+        ("김하늘 쪽에서 날짜 옮겨 달라고 했던 게 언제였지?", False),  # 동명이인인데 차트번호 없음
+        ("김하늘 님(C-00002) 쪽에서 날짜 옮겨 달라고 했던 게 언제였지?", True),
+        (
+            "김하늘 님(C-00009) 쪽에서 날짜 옮겨 달라고 했던 게 언제였지?",
+            False,
+        ),  # 다른 동명이인 번호
+    ],
+)
+def test_case_homonym_needs_chart_no(db, question, ok):
+    """사례형은 동명이인이어도 정답 환자의 차트번호를 질문에 함께 주면 된다(동명이인 중 고르기 — 평가 설계 §3.1)"""
+    db.execute(
+        "INSERT INTO emr_patients (id, chart_no, name, birth_date, sex, phone, registered_at)"
+        " VALUES (9, 'C-00009', '김하늘', '1990-01-01', 'F', '010-0000-0009', '2025-01-01')"
+    )
+    _load(db, _edit("c1", question=question))
+    assert (verify.check_qa_patient_names(db, CTX) == []) is ok

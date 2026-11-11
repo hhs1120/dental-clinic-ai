@@ -671,7 +671,8 @@ def check_ledger_errors(conn, ctx):
         conn,
         "SELECT e.*, p.kind AS pay_kind, p.amount_due, p.amount_paid, p.paid_at, p.method, p.approval_no,"
         " a.scheduled_at, a.duration_min FROM truth.truth_ledger_errors e"
-        " JOIN emr_payments p ON p.id = e.payment_id JOIN emr_appointments a ON a.id = p.appointment_id",
+        " JOIN emr_payments p ON p.id = e.payment_id JOIN emr_appointments a ON a.id = p.appointment_id"
+        " WHERE p.kind = 'visit'",  # 정산 행 실수는 check_settlement_errors
     ):
         counts[r["kind"]] += 1
         true_day = _dt(r["true_paid_at"]).date()

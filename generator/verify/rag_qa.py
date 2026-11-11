@@ -11,7 +11,7 @@ from generator.verify.common import _rows
 from generator.verify.documents import _docs
 
 # 유형별 문항 수(평가 설계 §3.1 표 — tests/generator/test_doc_sync.py가 비교). dev·test 반씩
-QA_TYPE_COUNTS = {"manual": 18, "notice": 10, "case": 12, "data": 12, "chart": 10, "refusal": 8}
+QA_TYPE_COUNTS = {"manual": 24, "notice": 10, "case": 16, "data": 14, "chart": 10, "refusal": 8}
 
 
 # 도구 → expected_args에 쓸 수 있는 인자 (앱 설계 §3 시그니처. search_docs의 자유 텍스트 query는 채점하지 않아 뺀다)
@@ -419,9 +419,13 @@ def check_qa_expected_args(conn, ctx):
 
 
 def check_qa_patient_names(conn, ctx):
-    """질문에 든 환자 이름은 동명이인 없음(데이터형 query_patient(name)도 동명이인이면 답할 수 없음)·질문 하나에만, 사례형 질문은
-    정답 환자 이름을 담음, 차트형 질문엔 환자 이름 없음"""
+    """질문에 든 환자 이름은 동명이인 없음 — 동명이인이면 그 이름 환자의 차트번호를 질문에 함께(데이터형 query_patient(name)도
+    번호 없이 동명이인이면 답할 수 없음)·질문 하나에만, 사례형 질문은 정답 환자 이름을 담음(동명이인이면 정답 환자의 차트번호도),
+    차트형 질문엔 환자 이름 없음"""
     names = Counter(r[0] for r in conn.execute("SELECT name FROM emr_patients"))
+    charts = defaultdict(set)
+    for n, cn in conn.execute("SELECT name, chart_no FROM emr_patients"):
+        charts[n].add(cn)
     qa, bad = _qa(conn), []
     used = Counter(n for q in qa for n in names if n in q["question"])
     for q in qa:
@@ -430,7 +434,7 @@ def check_qa_patient_names(conn, ctx):
             "이름이 다른 질문에도"
             if any(used[n] > 1 for n in in_q)
             else "동명이인"
-            if any(names[n] > 1 for n in in_q)
+            if any(names[n] > 1 and not any(cn in q["question"] for cn in charts[n]) for n in in_q)
             else "차트형에 환자 이름"
             if q["type"] == "chart" and in_q
             else None
@@ -438,7 +442,9 @@ def check_qa_patient_names(conn, ctx):
         if q["type"] == "case" and not why:
             pids = {s["patient_id"] for s in q["sources"] if s}
             pn = [
-                conn.execute("SELECT name FROM emr_patients WHERE id = ?", (p,)).fetchone()[0]
+                conn.execute(
+                    "SELECT name, chart_no FROM emr_patients WHERE id = ?", (p,)
+                ).fetchone()
                 for p in pids
                 if p
             ]
@@ -446,9 +452,9 @@ def check_qa_patient_names(conn, ctx):
                 "정답 환자 없음"
                 if not pn
                 else "질문에 환자 이름 없음"
-                if not all(n in q["question"] for n in pn)
+                if not all(n in q["question"] for n, _ in pn)
                 else "동명이인"
-                if any(names[n] > 1 for n in pn)
+                if any(names[n] > 1 and cn not in q["question"] for n, cn in pn)
                 else None
             )
         if why:

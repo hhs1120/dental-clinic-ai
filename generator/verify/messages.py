@@ -190,7 +190,7 @@ def check_paid_replies(conn, ctx):
     errors = dict(
         conn.execute(
             "SELECT p.appointment_id, e.true_method FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
-            " WHERE e.kind IN ('entry_missing', 'amount_typo')"
+            " WHERE e.kind IN ('entry_missing', 'amount_typo') AND p.kind = 'visit'"
         )
     )
     visit_method = dict(

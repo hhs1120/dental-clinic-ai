@@ -144,7 +144,15 @@ def test_unpaid_and_settlement(db):
         ).strftime("%Y-%m-%d %H:%M:%S")
         for r in _rows(conn, "SELECT id, scheduled_at, duration_min FROM emr_appointments")
     }
-    assert all(r["paid_at"] == end[r["appointment_id"]] for r in settlements)
+    late = {  # 정산 수납 장부 실수 며칠 늦게 적기(데이터 재설계)는 장부 날짜가 다르다 — check_settlement_errors가 본다
+        r[0]
+        for r in conn.execute(
+            "SELECT payment_id FROM truth.truth_ledger_errors WHERE kind = 'date_shift'"
+        )
+    }
+    assert all(
+        r["paid_at"] == end[r["appointment_id"]] for r in settlements if r["id"] not in late
+    )
 
 
 def test_visit_paid_at_is_end_of_visit(db):

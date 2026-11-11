@@ -32,7 +32,10 @@ from generator.master import (
     LEDGER_DEBT_CALLS,
     LEDGER_ERROR_KINDS,
     LINK_FAILURE_DAYS,
+    NON_CLINICAL_MULTI_COUNT,
     RECON_MISMATCH_COUNTS,
+    SETTLEMENT_ERROR_COUNTS,
+    UNRECORDED_SETTLEMENT_COUNT,
 )
 from generator.paths import ROOT, output_paths
 from generator.seeding import stage_faker, stage_rng
@@ -75,6 +78,7 @@ STAGES: list = [
     ("call_transcripts", transcripts.stage),
     ("messages", messages.stage),
     ("cancel_replies", cancels.stage),
+    ("settlement_errors", finance.stage_settlement_errors),
     ("fin_income", finance.stage_income),
     ("fin_expenses", finance.stage_expenses),
     ("doc_plan", documents.stage_plan),
@@ -156,6 +160,9 @@ def generate(
                 ),
                 ("recon_mismatches", json.dumps(RECON_MISMATCH_COUNTS)),
                 ("ledger_debt_calls", str(LEDGER_DEBT_CALLS)),
+                ("unrecorded_settlements", str(UNRECORDED_SETTLEMENT_COUNT)),
+                ("non_clinical_multi", str(NON_CLINICAL_MULTI_COUNT)),
+                ("settlement_errors", json.dumps(SETTLEMENT_ERROR_COUNTS)),
             ],
         )
         for name, stage in STAGES:

@@ -155,3 +155,60 @@ def test_test_split_runs_once(tmp_path):
     with pytest.raises(ev.AlreadyRun):
         ev.check_test(tmp_path, "v1")
     ev.check_test(tmp_path, "v1", force=True)
+
+
+def test_keyword_rule_words():
+    """요건 사유별 근거 낱말이 없으면 오류로 본다 — 부정 표현은 가리지 않는다(점검 때 규칙 그대로)"""
+    assert ev.keyword_rule("기존 충전물 파절로 재시행.", ["R01"], 4) is False
+    assert ev.keyword_rule("이력 있음, 재시행.", ["R01"], 4) is True
+    assert ev.keyword_rule("파절 소견 없음.", ["R01"], 4) is False
+    assert ev.keyword_rule("소와열구 깊음.", ["R04"], 4) is False
+    assert ev.keyword_rule("실란트 시행.", ["R04"], 4) is True
+
+
+def test_keyword_rule_r03_depth():
+    assert ev.keyword_rule("치주낭 3mm, 출혈 있음.", ["R03"], 4) is True
+    assert ev.keyword_rule("치주낭 5mm, 출혈 있음.", ["R03"], 4) is False
+    assert ev.keyword_rule("잇몸 깊게 벌어짐.", ["R03"], 4) is True  # 숫자가 없으면 근거를 못 찾음
+
+
+def test_keyword_reasons_by_procedure_and_context():
+    assert ev.keyword_reasons("U0008", "근관 형성.") == []  # 이력 없으면 재시행 요건 아님
+    assert ev.keyword_reasons("U0008", "같은 치아 이력 있음.") == ["R01"]
+    assert ev.keyword_reasons("U0018", "치석제거 14일 전, 재평가 후.") == ["R02"]
+    assert ev.keyword_reasons("U0018", "치주낭 5mm.") == ["R03"]
+    assert ev.keyword_reasons("U0012", "발치.") == ["R05"]
+
+
+def test_score_has_keyword_column(world, all_dev):
+    world.claim(1, error=True, ai="missing", status="paid")
+    s = ev.score(world.open(), DAY, "dev")["requirement"]
+    assert set(s["keyword"]) >= {"precision", "recall", "tp", "fp", "fn"}
+
+
+def test_report_has_keyword_columns():
+    """리포트 표에 키워드 규칙 기준선 열(정밀도·재현율) — AI·서술 줄 전부와 나란히"""
+    from evaluation.eval import _render_claim_check
+
+    pr = {"precision": 0.5, "recall": 0.25}
+    part = {"ai": pr, "narrative_all": pr, "keyword": {"precision": 0.65, "recall": 0.67}}
+    c = {
+        "prompt_version": "v2",
+        "requirement": part
+        | {
+            "n": 1,
+            "checked": 1,
+            "valid": 1,
+            "errors": 1,
+            "answers": {"met": 0, "missing": 1, "na": 0, "failed": 0},
+            "by_period": {"confirmed": part, "filed": part},
+        },
+        "adjust": {
+            "n": 0,
+            "ai": {"accuracy": None, "answered": 0},
+            "all_justified": None,
+            "all_contestable": None,
+        },
+    }
+    text = "\n".join(_render_claim_check(c))
+    assert "키워드 정밀도" in text and "65.0%" in text and "67.0%" in text

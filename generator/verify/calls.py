@@ -722,7 +722,8 @@ def _already_paid(conn, pid: int, t: str) -> dict | None:
     r = conn.execute(
         "SELECT date(e.true_paid_at), e.true_amount - p.amount_paid FROM truth.truth_ledger_errors e"
         " JOIN emr_payments p ON p.id = e.payment_id WHERE p.patient_id = ? AND p.paid_at <= ?"
-        " AND e.kind IN ('entry_missing', 'amount_typo') ORDER BY p.paid_at DESC, p.id DESC LIMIT 1",
+        " AND e.kind IN ('entry_missing', 'amount_typo') AND p.kind = 'visit'"
+        " ORDER BY p.paid_at DESC, p.id DESC LIMIT 1",
         (pid, t),
     ).fetchone()
     return {"date": r[0], "amount": r[1]} if r else None

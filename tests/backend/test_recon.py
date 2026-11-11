@@ -305,3 +305,12 @@ def test_open_all_and_first_month(b):
     assert r["month"] == "2026-11"
     assert r["chips"]["open_items"] == 1 and r["chips"]["open_all"] == 2
     assert recon.open_summary(conn, DAY) == {"count": 2, "month": "2026-10"}
+
+
+def test_three_item_oral_sale_fools_rule(b):
+    """구강용품 3개(칫솔 3,000 + 치간칫솔 4,500 + 치실 5,000 = 12,500) — 규칙 9는 1~2개 합만 알아 입력 누락으로 틀린다"""
+    b.pay("2026-11-03 09:00:00", 10_000, "card", no="A")
+    b.sale("2026-11-03 09:00:00", 10_000, "A")
+    b.sale("2026-11-03 15:20:00", 12_500, "R9")
+    b.settle("2026-11-03")
+    assert only_cause(b) == "entry_missing"

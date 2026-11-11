@@ -9,19 +9,26 @@ stage_expenses)
 """
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from itertools import combinations_with_replacement
 
 from generator.master import (
     BANK_TIMES,
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     DEPOSIT_DELAY_DAYS,
+    EXPENSE_ALIAS_RATE,
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_DECOY_RATE,
+    EXPENSE_DIFF_REASONS,
     EXPENSE_DOC_LEAD_DAYS,
+    EXPENSE_ISSUER_ALIAS_RATE,
     EXPENSE_ITEMS,
+    EXPENSE_MIXED_ORDER_RATE,
     EXPENSE_NO_DOC_RATE,
+    EXPENSE_SPLIT_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
     FULL_MOUTH,
     GUARDIAN_PAYER_SHARE,
@@ -29,11 +36,18 @@ from generator.master import (
     LAB_FEES,
     MAX_SETTLE_DAYS,
     NHIS_MEMO,
+    NON_CLINICAL_MAX_ITEMS,
+    NON_CLINICAL_MULTI_COUNT,
     ORAL_CARE_PRICES,
     PROCEDURES,
+    RECON_LATEST_MONTH_MIN,
     RECON_MISMATCH_COUNTS,
     SATURDAY,
+    SETTLEMENT_ERROR_COUNTS,
+    SETTLEMENT_LATE_OPEN_DAYS,
     SPLIT_MIN_AMOUNT,
+    UNRECORDED_ORAL_SHARE,
+    UNRECORDED_SETTLEMENT_COUNT,
     VENDORS,
     add_bank_days,
     bank_day,
@@ -41,6 +55,7 @@ from generator.master import (
     open_slots,
     recon_months,
     recon_test_months,
+    vendor_aliases,
 )
 
 FMT = "%Y-%m-%d %H:%M:%S"
@@ -89,6 +104,129 @@ def _true_payments(conn) -> list[dict]:
                 }
             )
     return out
+
+
+def _transpose(n: int) -> int | None:
+    """이웃 두 자리를 바꾼 더 작은 수 — 앞자리부터(끝자리 제외), 0이 맨 앞에 오거나 10배 관계가 되면 다음 자리"""
+    s = str(n)
+    for i in range(
+        len(s) - 2
+    ):  # 끝자리는 그대로 — 10원 단위가 아닌 금액은 그것만으로 오입력이 드러남
+        if s[i] > s[i + 1] and not (i == 0 and s[i + 1] == "0"):
+            t = int(s[:i] + s[i + 1] + s[i] + s[i + 2 :])
+            if t * 10 != n:
+                return t
+    return None
+
+
+def stage_settlement_errors(run, rng, fake) -> None:
+    """정산 수납 장부 실수(데이터 재설계 설계 §1) — 8b 앞. 통화·문자가 다 만들어진 뒤라 장부를 바꿔도 번지지 않고, 말이 어긋나지
+    않게 정산 행만(진료 행은 문자·통화가 읽음)·그 환자는 그날 뒤로 통화 없음·앞으로 예약 없음. 자릿수 바꿔 적기는 연동 카드,
+    며칠 늦게 적기는 이체(SETTLEMENT_LATE_OPEN_DAYS번째 진료일). 실제 값은 truth_ledger_errors에 — 8b가 금융 행을 실제
+    값으로 만들고 불일치 정답을 붙인다. 종류마다 평가 달 마지막 달 먼저(RECON_LATEST_MONTH_MIN), 그다음 dev·test 번갈아"""
+    conn, today, holidays = run.conn, run.today, run.holidays
+    calls = defaultdict(list)
+    for pid, at in conn.execute(
+        "SELECT patient_id, started_at FROM ax_calls WHERE patient_id IS NOT NULL"
+    ):
+        calls[pid].append(at)
+    future = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT patient_id FROM emr_appointments WHERE date(scheduled_at) >= ?",
+            (today.isoformat(),),
+        )
+    }
+    erred = {
+        r[0]
+        for r in conn.execute(
+            "SELECT payment_id FROM truth.truth_ledger_errors WHERE payment_id IS NOT NULL"
+        )
+    }
+    months, test, last = recon_months(today), recon_test_months(today), recon_months(today)[-1]
+    rows = [
+        dict(zip(("id", "pid", "paid", "at", "method", "no"), r, strict=True))
+        for r in conn.execute(
+            "SELECT id, patient_id, amount_paid, paid_at, method, approval_no FROM emr_payments"
+            " WHERE kind = 'settlement' AND amount_paid > 0 ORDER BY id"
+        )
+    ]
+
+    def seen(d: date) -> bool:
+        """그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날(8b의 ok와 같은 기준)"""
+        return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays) < today
+
+    rows = [
+        r
+        for r in rows
+        if r["at"][:7] in months
+        and r["id"] not in erred
+        and r["pid"] not in future
+        and not any(t > r["at"] for t in calls[r["pid"]])
+        and seen(date.fromisoformat(r["at"][:10]))
+    ]
+    lo, hi = SETTLEMENT_LATE_OPEN_DAYS
+
+    def late_day(r) -> date | None:
+        d = date.fromisoformat(r["at"][:10])
+        for _ in range(int(rng.integers(lo, hi + 1))):
+            d += timedelta(days=1)
+            while not open_slots(d.weekday()) or d in holidays:
+                d += timedelta(days=1)
+        return d if seen(d) else None
+
+    shapes = {
+        "amount_typo": [
+            r for r in rows if r["method"] == "card" and r["no"] and _transpose(r["paid"])
+        ],
+        "date_shift": [r for r in rows if r["method"] == "transfer"],
+    }
+    taken = set()
+    for kind, n in SETTLEMENT_ERROR_COUNTS.items():
+        order = [shapes[kind][int(i)] for i in rng.permutation(len(shapes[kind]))]
+        order = [r for r in order if r["pid"] not in taken]
+        head = [r for r in order if r["at"][:7] == last][:RECON_LATEST_MONTH_MIN]
+        pools = {
+            s: [r for r in order if r not in head and (r["at"][:7] in test) == s]
+            for s in (False, True)
+        }
+        done = Counter((r["at"][:7] in test) for r in head)
+        ordered = list(head)
+        while any(pools.values()):
+            s = min((x for x in pools if pools[x]), key=lambda x: done[x])
+            ordered.append(pools[s].pop(0))
+            done[s] += 1
+        made = 0
+        for r in ordered:
+            if made == n:
+                break
+            if r["pid"] in taken:
+                continue
+            if kind == "amount_typo":
+                conn.execute(
+                    "UPDATE emr_payments SET amount_paid = ? WHERE id = ?",
+                    (_transpose(r["paid"]), r["id"]),
+                )
+            else:
+                d = late_day(r)
+                if d is None:
+                    continue
+                close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+                open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+                span = (
+                    datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+                ).seconds // 60
+                at = open_ + timedelta(minutes=int(rng.integers(span)))
+                conn.execute(
+                    "UPDATE emr_payments SET paid_at = ? WHERE id = ?", (at.strftime(FMT), r["id"])
+                )
+            conn.execute(
+                "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at,"
+                " true_method) VALUES (?, ?, ?, ?, ?)",
+                (kind, r["id"], r["paid"], r["at"], r["method"]),
+            )
+            taken.add(r["pid"])
+            made += 1
 
 
 def stage_income(run, rng, fake) -> None:
@@ -190,6 +328,40 @@ def stage_income(run, rng, fake) -> None:
         sales.append(s)
         mismatches.append({"on": d, "cause": "non_clinical_sale", "fin": [s], "payments": []})
 
+    # 미수 정산 수납 누락(데이터 재설계) — 장부는 그대로, 금융에만 돈. 새 자식 난수(주 난수 흐름 밖)
+    unrecorded_rng, multi_rng = rng.spawn(2)  # spawn은 앞 자식을 그대로 둔다 — 뒤에 더하기만
+    unrecorded = _unrecorded_settlements(conn, unrecorded_rng, days, failure, used, today)
+    for u in unrecorded:
+        if u["method"] == "card":
+            u["row"] = {
+                "at": u["at"],
+                "issuer": u["issuer"],
+                "amount": u["amount"],
+                "approval_no": u["approval_no"],
+                "cancel_of": None,
+            }
+            sales.append(u["row"])
+            mismatches.append(
+                {
+                    "on": u["at"].date(),
+                    "cause": "entry_missing",
+                    "fin": [u["row"]],
+                    "payments": [],
+                    "unrecorded": u,
+                }
+            )
+
+    # 구강용품 여러 개 판매(데이터 재설계) — 규칙 9가 모르는 금액
+    for s_ in _multi_item_sales(multi_rng, days, today, used):
+        sales.append(s_)
+        mismatches.append(
+            {"on": s_["at"].date(), "cause": "non_clinical_sale", "fin": [s_], "payments": []}
+        )
+
+    # 진짜 진료 외 매출 금액이 그날 어느 환자 잔액과 같으면 겹치지 않는 구강용품 합으로 — 미수 정산 누락(금액 = 잔액)과
+    # 거꾸로 헷갈리지 않게(데이터 재설계 설계 §1). 난수 없이 고른다(뒤 난수 흐름 그대로)
+    _avoid_balances(conn, [m["fin"][0] for m in mismatches if m["cause"] == "non_clinical_sale"])
+
     # 정산 입금
     groups = defaultdict(list)
     for s in sales:
@@ -263,6 +435,20 @@ def stage_income(run, rng, fake) -> None:
             row = {"at": p["at"], "amount": p["paid"], "memo": names[payer]}
             bank.append(row)
             transfer_rows[p["id"]] = row
+    for u in unrecorded:
+        if u["method"] == "transfer":
+            u["row"] = {"at": u["at"], "amount": u["amount"], "memo": names[u["patient_id"]]}
+            bank.append(u["row"])
+        if u["method"] != "card":
+            mismatches.append(
+                {
+                    "on": u["at"].date(),
+                    "cause": "entry_missing",
+                    "fin": [u["row"]],
+                    "payments": [],
+                    "unrecorded": u,
+                }
+            )
     for amount, reviewed in conn.execute(
         "SELECT sum(paid_amount), max(reviewed_at) FROM emr_claims"
         " WHERE status IN ('paid', 'adjusted') GROUP BY claim_month ORDER BY claim_month"
@@ -370,7 +556,15 @@ def stage_income(run, rng, fake) -> None:
         )
         return {"table": table, "id": row["id"]}
 
-    mismatches.sort(key=lambda m: (m["on"], m["cause"], m["payments"]))
+    for m in mismatches:  # 장부에 행이 없는 누락의 정답 행 — 수납 id 없이 환자로
+        if "unrecorded" in m:
+            u = m["unrecorded"]
+            m["ledger"] = conn.execute(
+                "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at,"
+                " true_method, patient_id) VALUES ('entry_missing', NULL, ?, ?, ?, ?)",
+                (u["amount"], u["at"].strftime(FMT), u["method"], u["patient_id"]),
+            ).lastrowid
+    mismatches.sort(key=lambda m: (m["on"], m["cause"], m["payments"], m.get("ledger") or 0))
     conn.executemany(
         "INSERT INTO truth.truth_recon_mismatches (occurred_on, cause, fin_ids, payment_ids, split, ledger_error_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -386,6 +580,162 @@ def stage_income(run, rng, fake) -> None:
             for m in mismatches
         ],
     )
+
+
+def _latest_first(rng, pool: list[date]) -> list[date]:
+    """뽑을 날 순서 — 평가 달 마지막 달(화면 기본 달)에서 RECON_LATEST_MONTH_MIN일을 먼저, 나머지는 섞어서(데이터 재설계 §4b)"""
+    order = [pool[int(i)] for i in rng.permutation(len(pool))]
+    last = max(d.strftime("%Y-%m") for d in pool)
+    head = [d for d in order if d.strftime("%Y-%m") == last][:RECON_LATEST_MONTH_MIN]
+    return head + [d for d in order if d not in head]
+
+
+def _multi_item_sales(rng, days: list[date], today: date, used: set) -> list[dict]:
+    """구강용품 NON_CLINICAL_MAX_ITEMS개 판매 승인 — 1~2개 합과 다른 금액만, 그날 영업시간(진료 외 매출과 같은 꼴)"""
+    prices = list(ORAL_CARE_PRICES.values())
+    small = {a + b for a in prices for b in [0, *prices]}
+    issuers = list(CARD_ISSUERS)
+    w = [CARD_ISSUERS[i]["weight"] for i in issuers]
+    out = []
+    for d in _latest_first(rng, days)[:NON_CLINICAL_MULTI_COUNT]:
+        while (
+            amount := sum(
+                prices[int(rng.integers(len(prices)))] for _ in range(NON_CLINICAL_MAX_ITEMS)
+            )
+        ) in small:
+            pass
+        close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+        open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+        span = (
+            datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+        ).seconds // 60
+        while (no := f"{int(rng.integers(10**7, 10**8))}") in used:
+            pass
+        used.add(no)
+        out.append(
+            {
+                "at": open_ + timedelta(minutes=int(rng.integers(span))),
+                "issuer": issuers[int(rng.choice(len(issuers), p=[x / sum(w) for x in w]))],
+                "amount": amount,
+                "approval_no": no,
+                "cancel_of": None,
+            }
+        )
+    return out
+
+
+def _avoid_balances(conn, sales: list[dict]) -> None:
+    """승인 금액이 그날 어느 환자 장부 잔액(전날까지·그날까지)과 같으면, 같은 묶음(구강용품 1~2개 합 / NON_CLINICAL_MAX_ITEMS개
+    합)에서 잔액과 안 겹치는 가장 작은 금액으로 바꾼다"""
+    pays = conn.execute(
+        "SELECT patient_id, date(paid_at), amount_due - amount_paid FROM emr_payments"
+        " ORDER BY paid_at, id"
+    ).fetchall()
+    prices = list(ORAL_CARE_PRICES.values())
+    small = sorted({a + b for a in prices for b in [0, *prices]})
+    multi = sorted(
+        {sum(c) for c in combinations_with_replacement(prices, NON_CLINICAL_MAX_ITEMS)}
+        - set(small)
+    )
+    for s in sales:
+        day = s["at"].date().isoformat()
+        before, through = defaultdict(int), defaultdict(int)
+        for pid, d, owe in pays:
+            if d > day:
+                break
+            through[pid] += owe
+            if d < day:
+                before[pid] += owe
+        taken = set(before.values()) | set(through.values())
+        if s["amount"] in taken:
+            s["amount"] = next(
+                a for a in (small if s["amount"] in small else multi) if a not in taken
+            )
+
+
+def _unrecorded_settlements(
+    conn, rng, days: list[date], failure: set, used: set, today: date
+) -> list[dict]:
+    """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남고 그날 장부 행이 없는 환자가 그날
+    영업시간에 잔액 전부를 낸 돈(일부 납부 없음 — 잔액을 보면 풀리게). 장부 실수가 있는 환자(장부 잔액 ≠ 실제 잔액)와
+    그날 뒤로 정산 행이 있는 환자(같은 잔액을 또 냄)는 뺀다. UNRECORDED_ORAL_SHARE만큼은 잔액이 구강용품 1~2개 합과
+    같은 환자의 카드(규칙 9가 진료 외 매출로 틀림), 나머지는 이체·카드(현금은 한 입금에 기존 현금 장부 실수와 겹쳐 원인이 둘이
+    될 수 있어 쓰지 않는다). 환자는 서로 다름"""
+    ledger = defaultdict(list)
+    for pid, at, owe in conn.execute(
+        "SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
+    ):
+        ledger[pid].append((at, owe))
+    erred = {
+        r[0]
+        for r in conn.execute(
+            "SELECT p.patient_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+        )
+    }
+    settled = defaultdict(list)
+    for pid, at in conn.execute(
+        "SELECT patient_id, paid_at FROM emr_payments WHERE kind = 'settlement'"
+    ):
+        settled[pid].append(at[:10])
+
+    def balance(pid: int, d: date) -> int:
+        return sum(o for at, o in ledger[pid] if at[:10] <= d.isoformat())
+
+    prices = list(ORAL_CARE_PRICES.values())
+    sums = sorted({a + b for a in prices for b in [0, *prices]})
+    n_oral = round(UNRECORDED_SETTLEMENT_COUNT * UNRECORDED_ORAL_SHARE)
+    out, taken, n_done = [], set(), Counter()  # n_done: 분할별 구강용품 합 꼴 수
+    test = recon_test_months(today)
+    for d in _latest_first(rng, [d for d in days if d not in failure]):
+        if len(out) == UNRECORDED_SETTLEMENT_COUNT:
+            break
+        owing = [
+            p
+            for p in sorted(ledger)
+            if p not in taken
+            and p not in erred
+            and not any(s > d.isoformat() for s in settled[p])
+            and balance(p, d) > 0
+            and all(at[:10] != d.isoformat() for at, _ in ledger[p])
+        ]
+        oral = [p for p in owing if balance(p, d) in sums]
+        # 그날 구강용품 합 꼴이 되면 그것부터(n_oral까지), 안 되면 일반 꼴 — 날을 헛되이 쓰지 않게(작은 데이터는 일반 꼴이 늘어남)
+        # 후보 환자가 적어(장부 잔액이 그대로 남아 같은 환자가 매일 잡힘) dev·test에 번갈아 — 한쪽에 몰리지 않게
+        split = d.strftime("%Y-%m") in test
+        if sum(n_done.values()) < n_oral and oral and n_done[split] <= n_done[not split]:
+            owing, method = oral, "card"
+        elif owing:
+            method = None
+        else:
+            continue
+        pid = owing[int(rng.integers(len(owing)))]
+        amount = balance(pid, d)
+        if method == "card":
+            n_done[split] += 1
+        else:
+            method = ("transfer", "card")[int(rng.integers(2))]
+        close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+        open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+        span = (
+            datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+        ).seconds // 60
+        u = {
+            "patient_id": pid,
+            "at": open_ + timedelta(minutes=int(rng.integers(span))),
+            "amount": amount,
+            "method": method,
+        }
+        if method == "card":
+            issuers = list(CARD_ISSUERS)
+            w = [CARD_ISSUERS[i]["weight"] for i in issuers]
+            u["issuer"] = issuers[int(rng.choice(len(issuers), p=[x / sum(w) for x in w]))]
+            while (no := f"{int(rng.integers(10**7, 10**8))}") in used:
+                pass
+            used.add(no)
+            u["approval_no"] = no
+        taken.add(pid)
+        out.append(u)
+    return out
 
 
 # ── 8c단계 재무 지출 (§2.7 ⑧-2) ─────────────────────────────
@@ -437,7 +787,8 @@ def stage_expenses(run, rng, fake) -> None:
       그달 마지막 은행 영업일에 명세서 합계 이체
     - 병원 카드: 사용마다 1건(가맹점명 = card_name 표기), 증빙 1장 — 쇼핑몰 주문은 한 계정 과목의 품목만(품목으로 과목이 정해짐)
     - 자동이체: 거래처마다 정한 날(은행 영업일로 미룸), 고지서·세금계산서는 EXPENSE_DOC_LEAD_DAYS일 전
-    어긋남: 카드 사용 중 EXPENSE_NO_DOC_RATE는 증빙 없음, 증빙 있는 출금 중 EXPENSE_AMOUNT_DIFF_RATE는 출금액이 조금 많음"""
+    어긋남: 카드 사용 중 EXPENSE_NO_DOC_RATE는 증빙 없음, 증빙 있는 출금 중 EXPENSE_AMOUNT_DIFF_RATE는 출금액이 조금 많음
+    (증빙 한 장에 이유 줄 EXPENSE_DIFF_REASONS)"""
     conn, today, holidays = run.conn, run.today, run.holidays
     names = dict(conn.execute("SELECT id, name FROM emr_patients"))
     lab_treatments = defaultdict(list)  # 'YYYY-MM' → [(진료일, 환자 이름, 치아, 보철)]
@@ -631,7 +982,18 @@ def stage_expenses(run, rng, fake) -> None:
         len(with_docs), size=round(EXPENSE_AMOUNT_DIFF_RATE * len(with_docs)), replace=False
     ).tolist():
         o = with_docs[k]
-        o["amount"] += max(100, int(o["amount"] * rng.uniform(lo, hi)) // 100 * 100)
+        diff = max(100, int(o["amount"] * rng.uniform(lo, hi)) // 100 * 100)
+        o["amount"] += diff
+        o["diff"] = diff
+
+    decoys = _expense_confusers(rng.spawn(1)[0], outflows, doc, today)
+    for o in outflows:  # 금액 차이 이유 줄 — 혼합 주문이 증빙을 다시 만든 뒤, 마지막 명세서·영수증(세금계산서만 있으면 그것)
+        if o.get("diff"):
+            d = ([x for x in o["docs"] if x["kind"] != "tax_invoice"] or o["docs"])[-1]
+            d["body"] += f"\n{EXPENSE_DIFF_REASONS[d['kind']]} {_won(o['diff'])}원 별도 청구"
+    conn.execute(  # 디코이 수 — verify가 어느 출금에도 안 붙은 증빙 수와 맞춘다(단계 안에서 정해져 meta를 여기서)
+        "INSERT INTO truth.truth_gen_meta VALUES ('expense_decoys', ?)", (str(len(decoys)),)
+    )
 
     # 적재 — 통장 출금은 8b 입금 뒤 id, 카드 사용·증빙은 시각순
     start = conn.execute("SELECT coalesce(max(id), 0) FROM fin_bank_transactions").fetchone()[0]
@@ -642,9 +1004,9 @@ def stage_expenses(run, rng, fake) -> None:
         o["id"] = i
     for i, o in enumerate(sorted(cards, key=lambda o: (o["at"], o["label"])), 1):
         o["id"] = i
-    docs = sorted(
-        (d for o in outflows for d in o["docs"]),
-        key=lambda d: (d["on"], d["issuer"], d["kind"], d["amount"]),
+    docs = sorted(  # 같은 날·같은 키면 디코이가 앞 — 가장 가까운 증빙을 고르는 규칙이 디코이를 먼저 만난다
+        [d for o in outflows for d in o["docs"]] + decoys,
+        key=lambda d: (d["on"], d["issuer"], d["kind"], d["amount"], not d.get("decoy")),
     )
     for i, d in enumerate(docs, 1):
         d["id"] = i
@@ -685,6 +1047,95 @@ def stage_expenses(run, rng, fake) -> None:
             for o in outflows
         ],
     )
+
+
+def _expense_confusers(rng, outflows: list[dict], doc, today: date) -> list[dict]:
+    """⑧-2 헷갈리는 모양(데이터 재설계 설계 §2) — 새 자식 난수로 outflows를 고치고 디코이 증빙(어느 출금에도 안 붙음)을 낸다.
+    모양마다 평가 달 마지막 달(화면 기본 달)부터 고른다(RECON_LATEST_MONTH_MIN)"""
+    last = recon_months(today)[-1]
+
+    def pick(items: list, rate: float) -> list:
+        order = [items[int(i)] for i in rng.permutation(len(items))]
+        head = [o for o in order if o["at"].strftime("%Y-%m") == last][:RECON_LATEST_MONTH_MIN]
+        return (head + [o for o in order if o not in head])[: round(rate * len(items))]
+
+    # 쇼핑몰 혼합 주문 — 두 과목 품목, 정답은 금액이 큰 과목
+    shop = [
+        o
+        for o in outflows
+        if o["table"] == "card" and o["docs"] and o["vendor"]["kind"] == "shopping"
+    ]
+    for o in pick(shop, EXPENSE_MIXED_ORDER_RATE):
+        pool = EXPENSE_ITEMS["shopping"]
+        accts = sorted({a for _, a in pool})
+        if len(accts) < 2:
+            break
+        picks = [
+            [n for n, a in pool if a == acct][int(rng.integers(sum(a == acct for _, a in pool)))]
+            for acct in accts[:2]
+        ]
+        total = o["docs"][0]["amount"]
+        big = max(100, int(total * rng.uniform(0.55, 0.8)) // 100 * 100)
+        amounts = [big, total - big] if rng.random() < 0.5 else [total - big, big]
+        o["docs"] = [
+            doc(
+                o["vendor"]["docs"][0],
+                o["vendor"]["name"],
+                o["docs"][0]["on"],
+                total,
+                list(zip(picks, amounts, strict=True)),
+            )
+        ]
+        o["account"] = accts[:2][amounts.index(max(amounts))]
+        o["mixed"] = True
+    # 주문 두 건을 한 번에 결제 — 증빙 둘 = 출금 하나
+    cards = [
+        o
+        for o in outflows
+        if o["table"] == "card"
+        and not o.get("mixed")  # 혼합 주문을 쪼개면 한 증빙에 한 과목만 남아 정답 과목과 어긋난다
+        and len(o["docs"]) == 1
+        and o["docs"][0]["amount"] == o["amount"]
+    ]
+    for o in pick(cards, EXPENSE_SPLIT_DOC_RATE):
+        d0 = o["docs"][0]
+        a = max(100, int(d0["amount"] * rng.uniform(0.3, 0.7)) // 100 * 100)
+        items = [line for line in d0["body"].splitlines() if line.startswith("- ")]
+        name = items[0][2:].rsplit(" ", 1)[0] if items else "주문"
+        o["docs"] = [
+            doc(d0["kind"], d0["issuer"], d0["on"], x, [(name, x)]) for x in (a, d0["amount"] - a)
+        ]
+    # 디코이 — 같은 거래처·같은 금액의 취소 주문·발행 취소 고지서·견적, 진짜 증빙보다 출금에 가깝거나 같은 날
+    one = [
+        o
+        for o in outflows
+        if o["docs"] and o["table"] == "card" or (o["docs"] and o["vendor"]["pay"] == "auto_debit")
+    ]
+    decoys = []
+    for o in pick(one, EXPENSE_DECOY_RATE):
+        d0 = o["docs"][0]
+        on = o["at"].date() if o["table"] == "card" else o["at"].date() - timedelta(days=1)
+        word = (  # 카드 = 취소 주문, 공과금 고지서 = 발행 취소, 세금계산서 = 견적
+            "취소"
+            if o["table"] == "card"
+            else "발행 취소"
+            if d0["kind"] == "bill"
+            else "견적(확정 전)"
+        )
+        d = doc(d0["kind"], d0["issuer"], on, o["amount"], [(word, o["amount"])], summary=word)
+        d["body"] = f"[{word}] " + d["body"]
+        d["decoy"] = True
+        decoys.append(d)
+    # 표기 변형 — 적요·가맹점명(은행·결제대행사), 월말 명세서 발행처(법인)
+    for o in pick([o for o in outflows], EXPENSE_ALIAS_RATE):
+        o["label"] = vendor_aliases(o["vendor"])["card" if o["table"] == "card" else "memo"]
+    month_end = [o for o in outflows if o["vendor"]["pay"] == "month_end_transfer" and o["docs"]]
+    for o in pick(month_end, EXPENSE_ISSUER_ALIAS_RATE):
+        alias = vendor_aliases(o["vendor"])["issuer"]
+        for d in o["docs"]:
+            d["body"] = d["body"].replace(d["issuer"], alias)
+            d["issuer"] = alias
+    return decoys
 
 
 def _hhmm(s: str):

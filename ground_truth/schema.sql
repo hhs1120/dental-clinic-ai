@@ -53,10 +53,11 @@ CREATE TABLE truth_patient_churn (
 CREATE TABLE truth_ledger_errors (
     id             INTEGER PRIMARY KEY,
     kind           TEXT NOT NULL CHECK (kind IN ('entry_missing', 'amount_typo', 'date_shift', 'method_wrong')),
-    payment_id     INTEGER NOT NULL,  -- source.sqlite emr_payments.id
+    payment_id     INTEGER,  -- source.sqlite emr_payments.id — NULL = 장부에 행이 아예 없는 누락(미수 정산 수납, 8b)
     true_amount    INTEGER NOT NULL,
     true_paid_at   TEXT NOT NULL,
-    true_method    TEXT NOT NULL CHECK (true_method IN ('card', 'cash', 'transfer'))
+    true_method    TEXT NOT NULL CHECK (true_method IN ('card', 'cash', 'transfer')),
+    patient_id     INTEGER  -- 장부에 행이 없는 누락만(나머지는 payment_id로 안다)
 );
 
 -- ⑧-1 불일치 정답(§2.7). fin_ids·payment_ids = JSON 배열

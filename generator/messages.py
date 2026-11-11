@@ -129,7 +129,7 @@ def stage(run, rng, fake) -> None:
     ledger_debt = dict(  # 장부 실수 미수 내원 → 실제 결제수단
         conn.execute(
             "SELECT p.appointment_id, e.true_method FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
-            " WHERE e.kind IN ('entry_missing', 'amount_typo')"
+            " WHERE e.kind IN ('entry_missing', 'amount_typo') AND p.kind = 'visit'"
         )
     )
     visit_method = dict(

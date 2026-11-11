@@ -16,30 +16,41 @@ from generator.master import (
     DEPOSIT_DELAY_DAYS,
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_DIFF_REASONS,
     EXPENSE_ITEMS,
     EXPENSE_NO_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
     FULL_MOUTH,
+    HOURS,
     LAB_FEES,
     LEDGER_ERROR_KINDS,
     MAX_SETTLE_DAYS,
     NHIS_MEMO,
+    NON_CLINICAL_MAX_ITEMS,
     ORAL_CARE_PRICES,
     PROCEDURES,
     RECON_MISMATCH_COUNTS,
+    SETTLEMENT_LATE_OPEN_DAYS,
     VENDORS,
     add_bank_days,
     bank_day,
     cash_deposit_day,
     recon_months,
     recon_test_months,
+    vendor_aliases,
 )
 from generator.verify.common import _dt, _rows
+from generator.verify.records import _close, _next_open_day
 
 FIN_TABLES = ("fin_card_sales", "fin_card_deposits", "fin_bank_transactions")
-# 진료 외 매출 금액 — 구강용품 1~2개 합 (§2.7 non_clinical_sale)
+# 진료 외 매출 금액 — 구강용품 1~NON_CLINICAL_MAX_ITEMS개 합 (§2.7 non_clinical_sale, 3개는 데이터 재설계)
+ORAL_CARE_SMALL_SUMS = {
+    a + b for a in ORAL_CARE_PRICES.values() for b in [0, *ORAL_CARE_PRICES.values()]
+}
 ORAL_CARE_SUMS = {
-    sum(c) for r in (1, 2) for c in combinations_with_replacement(ORAL_CARE_PRICES.values(), r)
+    sum(c)
+    for r in range(1, NON_CLINICAL_MAX_ITEMS + 1)
+    for c in combinations_with_replacement(ORAL_CARE_PRICES.values(), r)
 }
 
 
@@ -50,6 +61,13 @@ def _true_payments(conn) -> list[dict]:
         "SELECT p.id, p.patient_id, p.amount_paid AS paid, p.paid_at, p.method, p.approval_no,"
         " e.kind AS error, e.true_amount, e.true_paid_at, e.true_method"
         " FROM emr_payments p LEFT JOIN truth.truth_ledger_errors e ON e.payment_id = p.id ORDER BY p.id",
+    )
+    # 장부에 행 없는 미수 정산 누락 — 금융에만 있는 실제 수납(데이터 재설계 설계 §1)
+    rows += _rows(
+        conn,
+        "SELECT NULL AS id, patient_id, true_amount AS paid, true_paid_at AS paid_at, true_method AS method,"
+        " NULL AS approval_no, kind AS error, true_amount, true_paid_at, true_method"
+        " FROM truth.truth_ledger_errors WHERE payment_id IS NULL ORDER BY id",
     )
     for r in rows:
         if r["error"]:
@@ -266,6 +284,148 @@ def check_bank_inflows(conn, ctx):
     return bad
 
 
+def check_unrecorded_settlements(conn, ctx):
+    """미수 정산 수납 누락(장부에 행 없음 — 데이터 재설계 설계 §1): 환자가 있고, 금액 = 그 시각 장부 잔액(> 0 — 일부 납부
+    없음, 금액이 구강용품 합이어도 잔액으로 풀리게),
+    실제 일시가 평가 달(master.recon_months) 안, 이체·카드, ⑧-1 입력 누락 정답(수납 id 없음)과 하나씩 짝. 건수 =
+    메타 unrecorded_settlements(= master.UNRECORDED_SETTLEMENT_COUNT), 환자는 서로 다르고 그날 장부 행·그날 뒤 정산 행·장부
+    실수가 없음"""
+    rows = conn.execute(
+        "SELECT e.id, e.patient_id, e.true_amount, e.true_paid_at, e.true_method,"
+        " (SELECT count(*) FROM truth.truth_recon_mismatches m WHERE m.ledger_error_id = e.id"
+        "  AND m.cause = 'entry_missing' AND m.payment_ids = '[]') AS paired"
+        " FROM truth.truth_ledger_errors e WHERE e.payment_id IS NULL"
+    ).fetchall()
+    bad = []
+    for eid, pid, amount, at, method, paired in rows:
+        bal = conn.execute(
+            "SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments"
+            " WHERE patient_id = ? AND paid_at <= ?",
+            (pid, at),
+        ).fetchone()[0]
+        if (
+            pid is None
+            or not 0 < amount == bal
+            or at[:7] not in recon_months(ctx.today)
+            or method not in ("transfer", "card")
+            or paired != 1
+        ):
+            bad.append(
+                {"id": eid, "patient_id": pid, "amount": amount, "balance": bal, "paired": paired}
+            )
+    pids = [r[1] for r in rows]
+    if len(set(pids)) != len(pids):
+        bad.append({"problem": "미수 정산 누락 환자가 겹침"})
+    for (
+        eid,
+        pid,
+        _,
+        at,
+        _,
+        _,
+    ) in rows:  # 그날 장부 행 없음·그날 뒤 정산 행 없음·장부 실수 없음(장부 잔액 = 실제 잔액)
+        same_day, later, erred = conn.execute(
+            "SELECT sum(date(paid_at) = date(?)), sum(kind = 'settlement' AND paid_at > ?),"
+            " (SELECT count(*) FROM truth.truth_ledger_errors e JOIN emr_payments q ON q.id = e.payment_id"
+            "  WHERE q.patient_id = ?) FROM emr_payments WHERE patient_id = ?",
+            (at, at, pid, pid),
+        ).fetchone()
+        if same_day or later or erred:
+            bad.append({"id": eid, "problem": "그날 장부 행·뒤 정산 행·장부 실수가 있는 환자"})
+    if len(rows) != ctx.unrecorded_settlements:
+        bad.append({"count": len(rows), "expected": ctx.unrecorded_settlements})
+    return bad
+
+
+def check_non_clinical_sales_avoid_balances(conn, ctx):
+    """진짜 진료 외 매출 승인 금액은 그날 어느 환자의 장부 잔액(전날까지·그날까지)과도 다르다 — 미수 정산 누락(금액 = 잔액)과
+    거꾸로 헷갈리지 않게(데이터 재설계 설계 §1)"""
+    sales = conn.execute(
+        "SELECT m.id, date(s.approved_at), s.amount FROM truth.truth_recon_mismatches m"
+        " JOIN fin_card_sales s ON s.id = json_extract(m.fin_ids, '$[0].id')"
+        " WHERE m.cause = 'non_clinical_sale'"
+    ).fetchall()
+    pays = conn.execute(
+        "SELECT patient_id, date(paid_at), amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
+    ).fetchall()
+    bad = []
+    for mid, day, amount in sales:
+        before, through = defaultdict(int), defaultdict(int)
+        for pid, d, owe in pays:
+            if d > day:
+                break
+            through[pid] += owe
+            if d < day:
+                before[pid] += owe
+        if amount in set(before.values()) | set(through.values()):
+            bad.append({"mismatch_id": mid, "day": day, "amount": amount})
+    return bad
+
+
+def _transposed(true: int, ledger: int) -> bool:
+    """ledger가 true의 이웃 두 자리를 바꾼 더 작은 수(10배 관계 아님, 끝자리 그대로)"""
+    a, b = str(true), str(ledger)
+    if len(a) != len(b) or ledger >= true or ledger * 10 == true or a[-1] != b[-1]:
+        return False
+    diff = [i for i in range(len(a)) if a[i] != b[i]]
+    return len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
+
+
+def _seen(d: date, ctx) -> bool:
+    """그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날"""
+    return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], ctx.holidays) < ctx.today
+
+
+def check_settlement_errors(conn, ctx):
+    """정산 수납 장부 실수(정산 행만 — 데이터 재설계 설계 §1): 실제 일시가 평가 달 안, 정산 행 하나에 실수 하나, 그 환자는 실제
+    일시 뒤로 통화 없고 TODAY부터 예약 없음. 자릿수 바꿔 적기(amount_typo) = 연동 카드(승인번호)·실제 일시 그대로·장부 금액이 실제 금액의 이웃 두
+    자리를 바꾼 더 작은 수 / 며칠 늦게 적기(date_shift) = 이체·금액 같음·장부 날짜가 실제 날 뒤 SETTLEMENT_LATE_OPEN_DAYS
+    범위의 진료일·영업시간. 실제 날과 장부 날 모두 정산·입금이 TODAY 전에 보임. 종류별 수 = 메타 settlement_errors"""
+    rows = _rows(
+        conn,
+        "SELECT e.id, e.kind, e.true_amount, e.true_paid_at, e.true_method, p.id AS pay_id, p.patient_id,"
+        " p.amount_paid, p.paid_at, p.method, p.approval_no FROM truth.truth_ledger_errors e"
+        " JOIN emr_payments p ON p.id = e.payment_id WHERE p.kind = 'settlement' ORDER BY e.id",
+    )
+    bad, counts = [], Counter(r["kind"] for r in rows)
+    lo, hi = SETTLEMENT_LATE_OPEN_DAYS
+    for r in rows:
+        true_day = _dt(r["true_paid_at"]).date()
+        later = conn.execute(
+            "SELECT count(*) FROM ax_calls WHERE patient_id = ? AND started_at > ?",
+            (r["patient_id"], r["true_paid_at"]),
+        ).fetchone()[0]
+        future = conn.execute(
+            "SELECT count(*) FROM emr_appointments WHERE patient_id = ? AND date(scheduled_at) >= ?",
+            (r["patient_id"], ctx.today.isoformat()),
+        ).fetchone()[0]
+        ok = r["true_method"] == r["method"] and not later and not future
+        ok = ok and true_day.strftime("%Y-%m") in recon_months(ctx.today)
+        ok = ok and _seen(true_day, ctx)
+        if r["kind"] == "amount_typo":
+            ok = ok and r["method"] == "card" and bool(r["approval_no"])
+            ok = ok and r["paid_at"] == r["true_paid_at"]
+            ok = ok and _transposed(r["true_amount"], r["amount_paid"])
+        elif r["kind"] == "date_shift":
+            days, d = [], true_day
+            for _ in range(hi):
+                d = _next_open_day(d, ctx.holidays)
+                days.append(d)
+            at = _dt(r["paid_at"])
+            ok = ok and r["method"] == "transfer" and r["amount_paid"] == r["true_amount"]
+            ok = ok and at.date() in days[lo - 1 :] and _seen(at.date(), ctx)
+            ok = ok and HOURS["open"] <= at.strftime("%H:%M") <= _close(at.date())
+        else:
+            ok = False
+        if not ok:
+            bad.append(r)
+    if len({r["pay_id"] for r in rows}) != len(rows):
+        bad.append({"problem": "정산 행 하나에 실수 둘 이상"})
+    if dict(counts) != {k: v for k, v in (ctx.settlement_errors or {}).items() if v}:
+        bad.append({"counts": dict(counts), "expected": ctx.settlement_errors})
+    return bad
+
+
 def check_recon_mismatches(conn, ctx):
     """불일치 정답: 원인별 건수 = 메타 recon_mismatches, 날짜는 평가 달(master.recon_months — split = master.recon_test_months면 test),
     fin·수납 id 존재. 장부 쪽 원인 ⇔ 장부 실수 1:1(같은 종류·수납·실제 날짜). 통장·카드 쪽 모양 — 분할결제 = 같은 시각 승인
@@ -275,9 +435,26 @@ def check_recon_mismatches(conn, ctx):
     ms = _mismatches(conn)
     bad = []
     want = {k: ctx.recon_mismatches.get(k, 0) for k in RECON_MISMATCH_COUNTS}
+    want["entry_missing"] += ctx.unrecorded_settlements  # 장부에 행 없는 누락도 입력 누락 정답
+    for k, v in (ctx.settlement_errors or {}).items():  # 정산 수납 장부 실수도 그 원인의 정답
+        want[k] += v
+    want["non_clinical_sale"] += (
+        ctx.non_clinical_multi
+    )  # 구강용품 여러 개 판매도 진료 외 매출 정답
     got = Counter(m["cause"] for m in ms)
     if {k: got.get(k, 0) for k in want} != want or set(got) - set(want):
         bad.append({"counts": dict(got), "expected": want})
+    multi = sum(  # 구강용품 NON_CLINICAL_MAX_ITEMS개 판매(1~2개 합과 다른 금액) 수 = 메타
+        1
+        for m in ms
+        if m["cause"] == "non_clinical_sale"
+        for t, i in m["fin"][:1]
+        if t == "fin_card_sales"
+        and conn.execute("SELECT amount FROM fin_card_sales WHERE id = ?", (i,)).fetchone()[0]
+        not in ORAL_CARE_SMALL_SUMS
+    )
+    if multi != ctx.non_clinical_multi:
+        bad.append({"non_clinical_multi": multi, "expected": ctx.non_clinical_multi})
     exists = {t: {r[0] for r in conn.execute(f"SELECT id FROM {t}")} for t in FIN_TABLES}
     sales = {s["id"]: s for s in _rows(conn, "SELECT * FROM fin_card_sales")}
     pays = {p["id"]: p for p in _rows(conn, "SELECT * FROM emr_payments")}
@@ -338,10 +515,14 @@ def check_recon_mismatches(conn, ctx):
             if (
                 e is None
                 or e["kind"] != m["cause"]
-                or m["payments"] != [e["payment_id"]]
+                or m["payments"] != ([e["payment_id"]] if e["payment_id"] is not None else [])
                 or m["occurred_on"] != e["true_paid_at"][:10]
             ):
                 why = "장부 실수와 다름"
+            elif (
+                e["payment_id"] is None
+            ):  # 장부에 행 없는 누락 — 모양은 check_unrecorded_settlements가 본다
+                pass
             elif _ledger_fin(e, pays[e["payment_id"]], m, sales, bank, cash_by_day, fixed, ctx):
                 why = "장부 실수 불일치가 가리키는 금융 행이 실제 돈의 행이 아님"
         elif m["ledger_error_id"] is not None:
@@ -411,8 +592,12 @@ def check_recon_mismatches(conn, ctx):
 # ── ⑧-2 지출 (8c단계) ───────────────────────────────────────
 
 _LAB_LINE = re.compile(r"^- (\S+) (?:(\d{2})번 )?(" + "|".join(LAB_FEES) + r") ([\d,]+)원$", re.M)
-_VENDOR = {v["name"]: v for v in VENDORS}
-_CARD_NAMES = {v["card_name"] or v["name"]: v for v in VENDORS if v["pay"] == "card"}
+_VENDOR = {v["name"]: v for v in VENDORS} | {
+    vendor_aliases(v)["memo"]: v for v in VENDORS
+}  # 은행 표기(끝 글자 잘림)도 그 거래처
+_CARD_NAMES = {v["card_name"] or v["name"]: v for v in VENDORS if v["pay"] == "card"} | {
+    vendor_aliases(v)["card"]: v for v in VENDORS if v["pay"] == "card"
+}  # 결제대행사 표기도
 
 
 def _outflows(conn) -> list[dict]:
@@ -455,7 +640,8 @@ def check_expense_matches(conn, ctx):
     """⑧-2 정답: 출금마다 truth_expense_matches 1행, 증빙은 정확히 한 출금에(발행처 = 그 거래처, 발행일 ≤ 출금일,
     본문에 금액), 계정 과목 ∈ master.ACCOUNTS(이체·자동이체 = 거래처 과목, 카드 = 증빙 품목의 과목 — 증빙 없으면 거래처 과목),
     split = 평가 달만(⑧-1과 같은 달 기준). 통장 출금 적요 = 이체·자동이체 거래처, 카드 가맹점명 = 카드 거래처(표기 차이 포함).
-    증빙 합계(명세서 등) = 출금액 — 다른 출금은 증빙 있는 출금의 EXPENSE_AMOUNT_DIFF_RATE건, 차이는 100원 ~ 출금액 × 최대 비율.
+    증빙 합계(명세서 등) = 출금액 — 다른 출금은 증빙 있는 출금의 EXPENSE_AMOUNT_DIFF_RATE건, 차이는 100원 ~ 출금액 × 최대 비율,
+    그 출금의 증빙 한 장에만 이유 줄(EXPENSE_DIFF_REASONS[증빙 종류] 차이 금액 — 데이터 재설계 설계 §2).
     세금계산서 = 그 출금 명세서 합계. 증빙 없음은 카드 사용에만, EXPENSE_NO_DOC_RATE건 (§2.7)"""
     rows = _outflows(conn)
     bad = []
@@ -467,10 +653,17 @@ def check_expense_matches(conn, ctx):
     ]
     used = Counter(d["id"] for r in rows for d in r["docs"])
     bad += [
-        {"document_id": i, "problem": "증빙이 한 출금에 정확히 속하지 않음"}
+        {"document_id": i, "problem": "증빙이 두 출금 이상에 속함"}
         for (i,) in conn.execute("SELECT id FROM fin_expense_documents")
-        if used.get(i, 0) != 1
+        if used.get(i, 0) > 1
     ]
+    # 디코이(어느 출금에도 안 붙은 증빙 — 취소 주문·견적) 수 = 메타 expense_decoys(데이터 재설계 설계 §2)
+    unused = [i for (i,) in conn.execute("SELECT id FROM fin_expense_documents") if i not in used]
+    meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta"))
+    if len(unused) != int(meta.get("expense_decoys", 0)):
+        bad.append(
+            {"unattached_documents": len(unused), "expected": meta.get("expense_decoys", 0)}
+        )
     with_docs = diffs = cards = no_docs = 0
     hi = EXPENSE_AMOUNT_DIFF_RANGE[1]
     for r in rows:
@@ -494,7 +687,7 @@ def check_expense_matches(conn, ctx):
         ):
             why = "split"
         elif any(
-            d["issuer"] != v["name"]
+            d["issuer"] not in (v["name"], vendor_aliases(v)["issuer"])
             or d["issued_on"] > r["at"][:10]
             or f"{d['amount']:,}원" not in d["body"]
             for d in r["docs"]
@@ -512,6 +705,14 @@ def check_expense_matches(conn, ctx):
                 if item in d["body"]
             }
             want = items if r["docs"] else {v["account"]}
+            if len(want) > 1:  # 혼합 주문 — 금액이 큰 품목의 과목(데이터 재설계 설계 §2)
+                spent = Counter()
+                for d in r["docs"]:
+                    for item, acct in EXPENSE_ITEMS[v["kind"]]:
+                        m = re.search(rf"- {re.escape(item)} ([\d,]+)원", d["body"])
+                        if m:
+                            spent[acct] += int(m[1].replace(",", ""))
+                want = {spent.most_common(1)[0][0]}
             if want != {t["account"]}:
                 bad.append(
                     {"outflow": (r["table"], r["id"]), "problem": "카드 계정 과목 ≠ 품목 과목"}
@@ -533,6 +734,23 @@ def check_expense_matches(conn, ctx):
         ):
             bad.append({"outflow": (r["table"], r["id"]), "problem": "세금계산서 ≠ 명세서 합계"})
         diff = abs(total - r["amount"])
+        reasons = [
+            d
+            for d in r["docs"]
+            if any(
+                re.search(rf"{w} [\d,]+원 별도 청구", d["body"])
+                for w in EXPENSE_DIFF_REASONS.values()
+            )
+        ]
+        if (bool(diff) != bool(reasons)) or (
+            diff
+            and (
+                len(reasons) != 1
+                or f"{EXPENSE_DIFF_REASONS[reasons[0]['kind']]} {diff:,}원 별도 청구"
+                not in reasons[0]["body"]
+            )
+        ):
+            bad.append({"outflow": (r["table"], r["id"]), "problem": "금액 차이 이유 줄"})
         if diff:
             diffs += 1
             if not (100 <= diff <= r["amount"] * hi):
@@ -555,7 +773,9 @@ def check_expense_matches(conn, ctx):
 def check_lab_statements(conn, ctx):
     """기공소 명세서 줄 = 창 안·TODAY가 속한 달 전의 completed 인레이·크라운·브릿지 진료 1건(환자 이름·치아 — 브릿지는 치아 없음·보철 종류),
     줄 금액 = master.LAB_FEES, 명세서 금액 = 줄 합계 (§2.7)"""
-    lab = {v["name"] for v in VENDORS if v["kind"] == "lab"}
+    lab = {
+        n for v in VENDORS if v["kind"] == "lab" for n in (v["name"], vendor_aliases(v)["issuer"])
+    }
     codes = {p["code"]: p["name"] for p in PROCEDURES if p["name"] in LAB_FEES}
     want = Counter(
         (name, None if tooth == FULL_MOUTH else tooth, codes[code])

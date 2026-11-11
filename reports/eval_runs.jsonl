@@ -20,3 +20,8 @@
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-09T16:39:10", "report_path": "eval_dev_base_20261109-163910.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-10T10:09:57", "report_path": "eval_dev_base_20261110-100957.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-10T12:11:30", "report_path": "eval_dev_base_20261110-121130.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-11T16:48:48", "report_path": "eval_dev_base_20261111-164848.md"}
+{"split": "dev", "section": "all", "condition": "embedding=text-embedding-3-small", "prompt_version": "all", "started_at": "2026-11-11T16:49:28", "report_path": "eval_dev_embedding-text-embedding-3-small_20261111-164928.md"}
+{"split": "dev", "section": "all", "condition": "reranker=off", "prompt_version": "all", "started_at": "2026-11-11T16:50:38", "report_path": "eval_dev_reranker-off_20261111-165038.md"}
+{"split": "dev", "section": "all", "condition": "embedding=text-embedding-3-small,reranker=off", "prompt_version": "all", "started_at": "2026-11-11T16:51:33", "report_path": "eval_dev_embedding-text-embedding-3-small-reranker-off_20261111-165133.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-11T17:16:19", "report_path": "eval_dev_base_20261111-171619.md"}

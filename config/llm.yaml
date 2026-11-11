@@ -19,6 +19,7 @@ models:
   claude-haiku-5-5: { input: 0.10, output: 0.50 }   # 프롬프트 10만 토큰 이하 단가(넘으면 0.50/2.50 — 분류 입력은 통화 하나라 해당 없음)
   voyage-4: { input: 0.06, output: 0, provider: voyage }   # 검색 질의 임베딩 — docs.voyageai.com/docs/pricing
   rerank-3: { input: 0.05, output: 0, provider: voyage }   # 리랭커(질의 토큰 × 문서 수 + 문서 토큰)
+  text-embedding-3-small: { input: 0.02, output: 0, provider: openai }   # 검색 임베딩 비교 조건 — platform.openai.com/docs/pricing
   solar-mini4: { input: 0.10, output: 0.40, provider: upstage }  # Upstage OpenAI 호환 API(Batch 없음) — 옛 판정기 v1·v2 기록의 단가
   qwen3.5-2b-judge: { provider: mlx, base: mlx-community/Qwen3.5-2B-bf16, adapter: evaluation/finetune/qwen/adapters/full, input: 0, output: 0 }  # 로컬 MLX(Batch 없음) — 어댑터는 커밋하지 않는다
 # 일일 비용 상한($) — 넘으면 즉시 호출을 하지 않는다(배치 제출은 상한 밖). 금액의 원본은 docs/치과 AX - 기능 정의.md §7 (tests/generator/test_doc_sync.py가 비교)
