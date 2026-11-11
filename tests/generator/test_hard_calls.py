@@ -1,18 +1,23 @@
 """① 어려운 통화 평가셋(어려운 통화 설계 docs/superpowers/specs/2026-11-11-hard-calls-design.md) — hc- 통화가 기존 c- 통화
 검사·평가 경로에 섞이지 않는지, hard 분할·truth_hard_calls 표"""
 
+import json
 import sqlite3
 from collections import Counter
 
 import pytest
 
-from generator import build, hard_calls, verify
+from generator import build, hard_calls, llm_jobs, transcripts, verify
 from generator.master import (
     EVAL_RARE_PURPOSES,
     HARD_CALL_TYPES,
     HARD_CALLS_PER_TYPE,
+    HARD_CALM_FORBIDDEN,
+    HARD_NOT_URGENT_CUES,
+    HARD_PAIN_WORDS,
     HARD_RARE_MIN,
     HARD_URGENCY_HALVES,
+    HARD_URGENT_SIGNS,
 )
 from generator.paths import ROOT
 from tests.generator.test_verify_calls import CALL_CHECKS
@@ -187,3 +192,92 @@ def test_existing_rows_unchanged(generated, tmp_path, monkeypatch):
     without = _dump(tmp_path)
     assert with_hard.keys() == without.keys()
     assert [k for k in with_hard if with_hard[k] != without[k]] == []
+
+
+# ── 녹취 작업 hard_transcript (설계 §3.5) ──────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def t4(generated):
+    conn, _ = _open(generated("hard_t4")[0])
+    names = llm_jobs.procedure_names(conn)
+    return conn, names, {r["call_uid"]: r for r in hard_calls.rows(conn)}
+
+
+def _first(rows, **want):
+    return next(r for r in rows.values() if all(r[k] == v for k, v in want.items()))
+
+
+def _found(checks, text) -> list[str]:
+    return llm_jobs.problems(transcripts.SCHEMA, checks, {"scenario": "x", "transcript": text})
+
+
+def test_checks_reversal_cancel_blocks_rebook_only_at_end(t4):
+    conn, names, rows = t4
+    row = _first(rows, hard_type="reversal", primary_purpose="cancel", wants_appt=0)
+    c = hard_calls.checks(row, names)
+    middle = "환자: 날짜를 옮길까 해서요\n직원: 다른 날로 다시 잡아 드릴까요?\n환자: 아니요 그냥 취소할게요\n직원: 네 취소해 드렸어요\n환자: 감사합니다"
+    end = "환자: 취소할게요\n직원: 네 취소해 드렸어요\n직원: 다시 잡아 드릴까요?\n환자: 아니요"
+    assert transcripts.REBOOK_OFFER not in c["forbidden_patterns"]
+    assert not any(hard_calls.REBOOK_TAIL in p for p in _found(c, middle))
+    assert any(hard_calls.REBOOK_TAIL in p for p in _found(c, end))
+
+
+def test_checks_calm_urgent_blocks_pain_words_and_needs_sign(t4):
+    conn, names, rows = t4
+    row = _first(rows, half="calm_urgent")
+    c = hard_calls.checks(row, names)
+    sign = json.loads(row["used_fact"])["hard_sign"]
+    assert list(HARD_URGENT_SIGNS[sign]) in c["must_include"]
+    assert any(HARD_CALM_FORBIDDEN in p for p in _found(c, "환자: 이가 너무 아파요\n직원: 네"))
+
+
+def test_checks_pain_not_urgent_needs_pain_word_and_cue(t4):
+    conn, names, rows = t4
+    row = _first(rows, half="pain_not_urgent")
+    c = hard_calls.checks(row, names)
+    cue = json.loads(row["used_fact"])["hard_cue"]
+    assert list(HARD_PAIN_WORDS) in c["must_include"]
+    assert list(HARD_NOT_URGENT_CUES[cue]) in c["must_include"]
+
+
+def test_checks_doc_req_no_text_promise(t4):
+    conn, names, rows = t4
+    row = _first(rows, primary_purpose="document_req", direction="inbound")
+    c = hard_calls.checks(row, names)
+    found = _found(c, "환자: 서류요\n직원: 준비되면 문자 드릴게요")
+    assert any(hard_calls.DOC_TEXT_PROMISE in p for p in found)
+
+
+def test_payload_calm_urgent_situation_is_sign(t4):
+    conn, names, rows = t4
+    row = _first(rows, half="calm_urgent")
+    p = hard_calls.payload(row)
+    assert p["facts"]["caller_situation"] == json.loads(row["used_fact"])["hard_sign"]
+    assert p["hard"]["type"] == "urgency_inverted" and p["hard"]["half"] == "calm_urgent"
+    assert "existing_visit" in p["facts"] and "hard_sign" not in p["facts"]
+
+
+def test_fake_build_fills_hard_transcripts(t4):
+    conn, _, _ = t4
+    assert (
+        _one(
+            conn, "SELECT count(*) FROM ax_calls WHERE call_uid LIKE 'hc-%' AND has_transcript = 0"
+        )
+        == 0
+    )
+
+
+def test_sample_items_per_type(t4):
+    conn, _, rows = t4
+    items = hard_calls.sample_items(conn)
+    assert len(items) == len(set(items)) == 20
+    by = Counter((rows[u]["hard_type"], rows[u]["half"]) for u in items)
+    assert by == {
+        ("indirect", None): 4,
+        ("reversal", None): 4,
+        ("misleading_noise", None): 4,
+        ("outbound_real", None): 4,
+        ("urgency_inverted", "calm_urgent"): 2,
+        ("urgency_inverted", "pain_not_urgent"): 2,
+    }

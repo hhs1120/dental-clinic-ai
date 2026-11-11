@@ -237,7 +237,7 @@ def check_call_transcripts(conn, ctx):
     """생성 통화는 전사 있음 (7단계)"""
     return _rows(
         conn,
-        f"SELECT id, call_uid FROM ax_calls WHERE source = 'generated' AND {C_ONLY}"
+        "SELECT id, call_uid FROM ax_calls WHERE source = 'generated'"
         " AND (has_transcript != 1 OR transcript IS NULL OR trim(transcript) = '')",
     )
 

@@ -88,10 +88,9 @@ STAGES: list = [
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
     ("master_values", clinic.stage_master_values),
-    (
-        "hard_calls",
-        hard_calls.stage_slots,
-    ),  # 어려운 통화 hc- — 맨 끝(앞 단계 결과·캐시 그대로, 어려운 통화 설계 §3.1)
+    # 어려운 통화 hc- — 맨 끝(앞 단계 결과·캐시 그대로, 어려운 통화 설계 §3.1), 녹취는 LLM gen_hard(§3.5)
+    ("hard_calls", hard_calls.stage_slots),
+    ("hard_transcripts", hard_calls.stage_transcripts),
 ]
 
 

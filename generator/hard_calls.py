@@ -3,10 +3,16 @@
 응급 통화는 그 환자의 통화 뒤 그날·다음 진료일 기존 예약에 붙여 전자차트를 고치지 않는다(§3.3).
 행: ax_calls에 hc- 빈 행(녹취는 다음 단계), truth_call_labels에 생성 라벨(split hard), truth_hard_calls에 종류·절반"""
 
+import argparse
+import hashlib
 import json
 import re
+import sqlite3
+import sys
+from collections import defaultdict
 from datetime import date, timedelta
 
+from generator import llm_jobs, transcripts
 from generator.calls import (
     FMT,
     MAX_DATE_TRIES,
@@ -22,6 +28,7 @@ from generator.calls import (
     quota,
     recall_targets,
 )
+from generator.llm_jobs import Task
 from generator.master import (
     BOOKING_PURPOSES,
     CALL_COUNTERPART_WEIGHTS,
@@ -33,8 +40,10 @@ from generator.master import (
     EVAL_RARE_PURPOSES,
     HARD_CALL_TYPES,
     HARD_CALLS_PER_TYPE,
+    HARD_CALM_FORBIDDEN,
     HARD_HALF_PURPOSES,
     HARD_NOT_URGENT_CUES,
+    HARD_PAIN_WORDS,
     HARD_RARE_MIN,
     HARD_TYPE_PURPOSES,
     HARD_URGENCY_HALVES,
@@ -45,7 +54,7 @@ from generator.master import (
     IMPLIED_FLAG,
     MESSAGE_REPLY_CANCEL,
 )
-from generator.paths import ROOT
+from generator.paths import ROOT, output_paths
 
 PREFIX = "hc-"
 RAG_QA = ROOT / "ground_truth" / "rag_qa.json"
@@ -319,9 +328,11 @@ def _labels(rng, led: Ledger, slots: list[dict]) -> None:
         if s.get("visit"):
             fact["existing_visit"] = {"appointment_id": s["visit"]["id"]} | _appt_fact(s["visit"])
         if s["half"] == "calm_urgent":
-            fact["hard_sign"] = HARD_URGENT_SIGNS[int(rng.integers(len(HARD_URGENT_SIGNS)))]
+            fact["hard_sign"] = list(HARD_URGENT_SIGNS)[int(rng.integers(len(HARD_URGENT_SIGNS)))]
         elif s["half"] == "pain_not_urgent":
-            fact["hard_cue"] = HARD_NOT_URGENT_CUES[int(rng.integers(len(HARD_NOT_URGENT_CUES)))]
+            fact["hard_cue"] = list(HARD_NOT_URGENT_CUES)[
+                int(rng.integers(len(HARD_NOT_URGENT_CUES)))
+            ]
         s["fact"] = fact
 
 
@@ -379,3 +390,120 @@ def _write(run, rng, fake, slots: list[dict]) -> None:
         f"INSERT INTO truth.truth_call_labels VALUES ({', '.join('?' * 13)}, 'hard')", labels
     )
     conn.executemany("INSERT INTO truth.truth_hard_calls VALUES (?, ?, ?, 'generated')", hard)
+
+
+# ── 녹취 (설계 §3.5) — 기존 7단계 입력·검증을 쓰고 종류별 규칙만 바꾼다 ─────────────────
+
+TASK = Task(
+    name="hard_transcript",
+    prompt="gen_hard_transcript",
+    schema=transcripts.SCHEMA,
+    store=("transcript",),
+    alias="gen_hard",
+)
+# reversal 취소의 다시 예약 제안 금지는 마지막 직원 말 근처에만 — 통화 중간에 옮기려던 말은 번복의 일부
+REBOOK_TAIL = (
+    r"직원:[^\n]*(새 ?(일정|날짜|예약)|다시 (잡|예약)|(편하신|원하시는) (날|시간|요일))"
+    r"[^\n]*(\n[^\n]*){0,2}\s*\Z"
+)
+DOC_TEXT_PROMISE = r"문자.{0,8}(드릴|보내|넣어|남겨)"  # hc- 서류 요청은 준비 문자가 없다(§3.3)
+EXISTING_VISIT_NOTE = "통화 전에 이미 잡혀 있던 예약 — 직원은 새 시간을 잡지 않고 이 예약을 짚어 그때(또는 지금 바로) 오시라고 안내한다"
+HARD_RULE_KEYS = ("hard_sign", "hard_cue", "existing_visit")
+SAMPLE_PER_TYPE = 4  # 전체 배치 전 샘플 — 종류마다(urgency_inverted는 절반마다 반씩), 설계 §3.5
+
+
+def rows(conn) -> list[dict]:
+    """hc- 녹취 입력 행 — transcripts.rows와 같은 열 + 종류·절반"""
+    cur = conn.execute(
+        "SELECT c.id, c.call_uid, c.direction, c.caller_name,"
+        " CASE WHEN l.counterpart = 'guardian' THEN (SELECT g.sex FROM emr_patients p"
+        " JOIN emr_patients g ON g.id = p.guardian_patient_id WHERE p.id = c.patient_id)"
+        " ELSE (SELECT p.sex FROM emr_patients p WHERE p.id = c.patient_id AND p.name = c.caller_name)"
+        " END AS caller_sex, 0 AS recent_noshow, h.hard_type, h.half,"
+        " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
+        " JOIN truth.truth_hard_calls h USING (call_uid)"
+        f" WHERE c.call_uid LIKE '{PREFIX}%' ORDER BY c.id"
+    )
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r, strict=True)) for r in cur]
+
+
+def payload(row: dict) -> dict:
+    """transcripts.payload + hard(종류·절반). 급함 뒤집기는 상황 = 신호·근거 문구, 응급은 기존 예약을 안내"""
+    p = transcripts.payload(row)
+    fact = json.loads(row["used_fact"])
+    facts = {k: v for k, v in p["facts"].items() if k not in HARD_RULE_KEYS}
+    if fact.get("hard_sign"):
+        facts["caller_situation"] = fact["hard_sign"]
+    if fact.get("hard_cue"):
+        facts["caller_situation"] = fact["hard_cue"]
+    if visit := fact.get("existing_visit"):
+        facts["existing_visit"] = {k: v for k, v in visit.items() if k != "appointment_id"} | {
+            "before_call": EXISTING_VISIT_NOTE
+        }
+    return p | {"facts": facts, "hard": {"type": row["hard_type"], "half": row["half"]}}
+
+
+def simplify(p: dict) -> dict:
+    out = transcripts.simplify(p)
+    keep = {k: p["facts"][k] for k in ("existing_visit",) if k in p["facts"]}
+    return out | {"facts": out["facts"] | keep}
+
+
+def checks(row: dict, names: dict) -> dict:
+    """transcripts.checks + 종류별 규칙 (설계 §3.5 검증기)"""
+    c = transcripts.checks(row, names)
+    fact = json.loads(row["used_fact"])
+    patterns = list(c["forbidden_patterns"])
+    must = list(c["must_include"])
+    if row["hard_type"] == "reversal" and transcripts.REBOOK_OFFER in patterns:
+        patterns[patterns.index(transcripts.REBOOK_OFFER)] = REBOOK_TAIL
+    if row["half"] == "calm_urgent":
+        patterns.append(HARD_CALM_FORBIDDEN)
+        must.append(list(HARD_URGENT_SIGNS[fact["hard_sign"]]))
+    if row["half"] == "pain_not_urgent":
+        must += [list(HARD_PAIN_WORDS), list(HARD_NOT_URGENT_CUES[fact["hard_cue"]])]
+    if row["primary_purpose"] == "document_req" and row["direction"] == "inbound":
+        patterns.append(DOC_TEXT_PROMISE)
+    if visit := fact.get("existing_visit"):
+        must.append(transcripts.visit_words(fact["call_date"], visit["date"]))
+    return c | {"forbidden_patterns": patterns, "must_include": must}
+
+
+def stage_transcripts(run, rng, fake) -> None:
+    ctx, names = run.state["llm"], llm_jobs.procedure_names(run.conn)
+    for row in rows(run.conn):
+        out = ctx.resolve(TASK, row["call_uid"], payload(row), checks(row, names), simplify)
+        if out is not None:
+            run.conn.execute(
+                "UPDATE ax_calls SET transcript = ?, has_transcript = 1, duration_sec = ? WHERE id = ?",
+                (out["transcript"], transcripts.duration_sec(out["transcript"]), row["id"]),
+            )
+
+
+def sample_items(conn) -> list[str]:
+    """전체 배치 전 샘플 — 종류마다 SAMPLE_PER_TYPE건(urgency_inverted는 절반마다 반씩), call_uid 해시순"""
+    groups = defaultdict(list)
+    for r in conn.execute("SELECT call_uid, hard_type, half FROM truth.truth_hard_calls"):
+        groups[(r[1], r[2])].append(r[0])
+    out = []
+    for (_, half), uids in sorted(groups.items(), key=lambda x: (x[0][0], x[0][1] or "")):
+        n = SAMPLE_PER_TYPE // len(HARD_URGENCY_HALVES) if half else SAMPLE_PER_TYPE
+        out += sorted(uids, key=lambda u: hashlib.sha256(u.encode()).hexdigest())[:n]
+    return out
+
+
+def main(argv=None) -> int:
+    """python -m generator.hard_calls sample-items — 샘플 건(쉼표로 이음, make llm-fill-api ITEMS=)"""
+    args = argparse.ArgumentParser(description=main.__doc__)
+    args.add_argument("cmd", choices=["sample-items"])
+    args.parse_args(argv)
+    paths = output_paths()
+    conn = sqlite3.connect(f"file:{paths['source']}?mode=ro", uri=True)
+    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{paths['truth']}?mode=ro",))
+    print(",".join(sample_items(conn)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
