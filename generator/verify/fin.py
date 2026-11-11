@@ -24,6 +24,7 @@ from generator.master import (
     LEDGER_ERROR_KINDS,
     MAX_SETTLE_DAYS,
     NHIS_MEMO,
+    NON_CLINICAL_MAX_ITEMS,
     ORAL_CARE_PRICES,
     PROCEDURES,
     RECON_MISMATCH_COUNTS,
@@ -37,9 +38,11 @@ from generator.master import (
 from generator.verify.common import _dt, _rows
 
 FIN_TABLES = ("fin_card_sales", "fin_card_deposits", "fin_bank_transactions")
-# 진료 외 매출 금액 — 구강용품 1~2개 합 (§2.7 non_clinical_sale)
+# 진료 외 매출 금액 — 구강용품 1~NON_CLINICAL_MAX_ITEMS개 합 (§2.7 non_clinical_sale, 3개는 데이터 재설계)
 ORAL_CARE_SUMS = {
-    sum(c) for r in (1, 2) for c in combinations_with_replacement(ORAL_CARE_PRICES.values(), r)
+    sum(c)
+    for r in range(1, NON_CLINICAL_MAX_ITEMS + 1)
+    for c in combinations_with_replacement(ORAL_CARE_PRICES.values(), r)
 }
 
 
@@ -315,6 +318,9 @@ def check_recon_mismatches(conn, ctx):
     bad = []
     want = {k: ctx.recon_mismatches.get(k, 0) for k in RECON_MISMATCH_COUNTS}
     want["entry_missing"] += ctx.unrecorded_settlements  # 장부에 행 없는 누락도 입력 누락 정답
+    want["non_clinical_sale"] += (
+        ctx.non_clinical_multi
+    )  # 구강용품 여러 개 판매도 진료 외 매출 정답
     got = Counter(m["cause"] for m in ms)
     if {k: got.get(k, 0) for k in want} != want or set(got) - set(want):
         bad.append({"counts": dict(got), "expected": want})

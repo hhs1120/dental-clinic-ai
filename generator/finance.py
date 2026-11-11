@@ -29,8 +29,11 @@ from generator.master import (
     LAB_FEES,
     MAX_SETTLE_DAYS,
     NHIS_MEMO,
+    NON_CLINICAL_MAX_ITEMS,
+    NON_CLINICAL_MULTI_COUNT,
     ORAL_CARE_PRICES,
     PROCEDURES,
+    RECON_LATEST_MONTH_MIN,
     RECON_MISMATCH_COUNTS,
     SATURDAY,
     SPLIT_MIN_AMOUNT,
@@ -193,7 +196,8 @@ def stage_income(run, rng, fake) -> None:
         mismatches.append({"on": d, "cause": "non_clinical_sale", "fin": [s], "payments": []})
 
     # 미수 정산 수납 누락(데이터 재설계) — 장부는 그대로, 금융에만 돈. 새 자식 난수(주 난수 흐름 밖)
-    unrecorded = _unrecorded_settlements(conn, rng.spawn(1)[0], days, failure, used)
+    unrecorded_rng, multi_rng = rng.spawn(2)  # spawn은 앞 자식을 그대로 둔다 — 뒤에 더하기만
+    unrecorded = _unrecorded_settlements(conn, unrecorded_rng, days, failure, used)
     for u in unrecorded:
         if u["method"] == "card":
             u["row"] = {
@@ -213,6 +217,13 @@ def stage_income(run, rng, fake) -> None:
                     "unrecorded": u,
                 }
             )
+
+    # 구강용품 여러 개 판매(데이터 재설계) — 규칙 9가 모르는 금액
+    for s_ in _multi_item_sales(multi_rng, days, today, used):
+        sales.append(s_)
+        mismatches.append(
+            {"on": s_["at"].date(), "cause": "non_clinical_sale", "fin": [s_], "payments": []}
+        )
 
     # 정산 입금
     groups = defaultdict(list)
@@ -434,6 +445,48 @@ def stage_income(run, rng, fake) -> None:
     )
 
 
+def _latest_first(rng, pool: list[date]) -> list[date]:
+    """뽑을 날 순서 — 평가 달 마지막 달(화면 기본 달)에서 RECON_LATEST_MONTH_MIN일을 먼저, 나머지는 섞어서(데이터 재설계 §4b)"""
+    order = [pool[int(i)] for i in rng.permutation(len(pool))]
+    last = max(d.strftime("%Y-%m") for d in pool)
+    head = [d for d in order if d.strftime("%Y-%m") == last][:RECON_LATEST_MONTH_MIN]
+    return head + [d for d in order if d not in head]
+
+
+def _multi_item_sales(rng, days: list[date], today: date, used: set) -> list[dict]:
+    """구강용품 NON_CLINICAL_MAX_ITEMS개 판매 승인 — 1~2개 합과 다른 금액만, 그날 영업시간(진료 외 매출과 같은 꼴)"""
+    prices = list(ORAL_CARE_PRICES.values())
+    small = {a + b for a in prices for b in [0, *prices]}
+    issuers = list(CARD_ISSUERS)
+    w = [CARD_ISSUERS[i]["weight"] for i in issuers]
+    out = []
+    for d in _latest_first(rng, days)[:NON_CLINICAL_MULTI_COUNT]:
+        while (
+            amount := sum(
+                prices[int(rng.integers(len(prices)))] for _ in range(NON_CLINICAL_MAX_ITEMS)
+            )
+        ) in small:
+            pass
+        close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+        open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+        span = (
+            datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+        ).seconds // 60
+        while (no := f"{int(rng.integers(10**7, 10**8))}") in used:
+            pass
+        used.add(no)
+        out.append(
+            {
+                "at": open_ + timedelta(minutes=int(rng.integers(span))),
+                "issuer": issuers[int(rng.choice(len(issuers), p=[x / sum(w) for x in w]))],
+                "amount": amount,
+                "approval_no": no,
+                "cancel_of": None,
+            }
+        )
+    return out
+
+
 def _unrecorded_settlements(conn, rng, days: list[date], failure: set, used: set) -> list[dict]:
     """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남은 환자가 그날 영업시간에 낸 돈.
     UNRECORDED_ORAL_SHARE만큼은 카드 + 구강용품 1~2개 합(잔액 이하), 나머지는 잔액 전부를 이체·카드로(현금은 한 입금에 기존 현금
@@ -450,9 +503,8 @@ def _unrecorded_settlements(conn, rng, days: list[date], failure: set, used: set
     prices = list(ORAL_CARE_PRICES.values())
     sums = sorted({a + b for a in prices for b in [0, *prices]})
     n_oral = round(UNRECORDED_SETTLEMENT_COUNT * UNRECORDED_ORAL_SHARE)
-    pool = [d for d in days if d not in failure]
     out, taken = [], set()
-    for d in [pool[int(i)] for i in rng.permutation(len(pool))]:
+    for d in _latest_first(rng, [d for d in days if d not in failure]):
         if len(out) == UNRECORDED_SETTLEMENT_COUNT:
             break
         owing = [p for p in sorted(ledger) if p not in taken and balance(p, d) > 0]

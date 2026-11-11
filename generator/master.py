@@ -1052,8 +1052,14 @@ RECON_CAUSE_GROUPS = {
 }
 # ⑧-1 미수 정산 수납 누락(데이터 재설계 — 장부에 행 없음): 장부에 미수가 남은 환자가 평가 달에 실제로 냈는데 장부에 안 적은 돈.
 # 장부는 그대로라 금융에만 돈이 생긴다. ORAL_SHARE만큼은 카드 + 구강용품 1~2개 합 금액(규칙 9가 진료 외 매출로 틀린다). 추정값
-UNRECORDED_SETTLEMENT_COUNT = 16
-UNRECORDED_ORAL_SHARE = 0.5
+UNRECORDED_SETTLEMENT_COUNT = 30
+UNRECORDED_ORAL_SHARE = 0.7
+# ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
+# 조합해야 풀린다. 추정값
+NON_CLINICAL_MULTI_COUNT = 12
+NON_CLINICAL_MAX_ITEMS = 3
+# 화면 기본 달(평가 달 마지막 달)에 새 모양마다 최소 이만큼(데이터 재설계 설계 §4b)
+RECON_LATEST_MONTH_MIN = 2
 # 데스크 구강용품 가격표 — 진료 외 매출(non_clinical_sale)은 이 금액(여러 개면 합)의 장부 없는 카드 승인.
 # 직원 매뉴얼 '구강용품 판매 안내'(doc_catalog)가 같은 값을 쓴다. 가상 값
 ORAL_CARE_PRICES = {

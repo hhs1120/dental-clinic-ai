@@ -47,9 +47,9 @@ class Ctx:
     ledger_errors: dict
     recon_mismatches: dict  # ⑧-1 불일치 원인별 건수 — truth_gen_meta에서
     ledger_debt_calls: int  # 장부 실수 미수 환자에게 거는 수납 문의 발신 수 — truth_gen_meta에서
-    unrecorded_settlements: int = (
-        0  # 장부에 행 없는 미수 정산 누락 수(⑧-1 입력 누락에 더해짐) — truth_gen_meta에서
-    )
+    # 장부에 행 없는 미수 정산 누락 수·구강용품 여러 개 판매 수(⑧-1 입력 누락·진료 외 매출에 더해짐) — truth_gen_meta에서
+    unrecorded_settlements: int = 0
+    non_clinical_multi: int = 0
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -78,6 +78,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         recon_mismatches=json.loads(meta["recon_mismatches"]),
         ledger_debt_calls=int(meta["ledger_debt_calls"]),
         unrecorded_settlements=int(meta.get("unrecorded_settlements", 0)),
+        non_clinical_multi=int(meta.get("non_clinical_multi", 0)),
         rag_qa=rag_qa,
     )
 

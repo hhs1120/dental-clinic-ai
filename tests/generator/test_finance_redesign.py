@@ -74,3 +74,56 @@ def test_verify_unrecorded_settlements(generated):
         " (SELECT min(id) FROM truth.truth_ledger_errors WHERE payment_id IS NULL)"
     )
     assert verify.check_unrecorded_settlements(c, ctx)
+
+
+def _sums(k):
+    from itertools import combinations_with_replacement
+
+    return {
+        sum(c)
+        for r in range(1, k + 1)
+        for c in combinations_with_replacement(ORAL_CARE_PRICES.values(), r)
+    }
+
+
+def test_multi_item_non_clinical_sales(conn):
+    """구강용품 3개 판매 — 규칙 9(1~2개 합)에 안 걸리고 가격표를 조합해야 풀린다"""
+    from generator.master import NON_CLINICAL_MULTI_COUNT
+
+    amounts = [
+        a
+        for (a,) in conn.execute(
+            "select s.amount from truth.truth_recon_mismatches m, json_each(m.fin_ids) f"
+            " join fin_card_sales s on s.id = json_extract(f.value, '$.id')"
+            " where m.cause = 'non_clinical_sale'"
+        )
+    ]
+    multi = [a for a in amounts if a not in _sums(2)]
+    assert len(multi) == NON_CLINICAL_MULTI_COUNT
+    assert all(a in _sums(3) for a in multi)
+
+
+def test_latest_month_has_new_shapes(conn):
+    """화면 기본 달(평가 달 마지막 달)에도 새 모양이 들어간다 — 미수 정산 누락·구강용품 3개 판매"""
+    from generator.master import RECON_LATEST_MONTH_MIN
+
+    month = conn.execute(
+        "select max(substr(occurred_on, 1, 7)) from truth.truth_recon_mismatches"
+    ).fetchone()[0]
+    unrec = conn.execute(
+        "select count(*) from truth.truth_recon_mismatches m join truth.truth_ledger_errors e"
+        " on e.id = m.ledger_error_id where e.payment_id is null and substr(m.occurred_on, 1, 7) = ?",
+        (month,),
+    ).fetchone()[0]
+    assert unrec >= RECON_LATEST_MONTH_MIN
+    multi = [
+        a
+        for (a,) in conn.execute(
+            "select s.amount from truth.truth_recon_mismatches m, json_each(m.fin_ids) f"
+            " join fin_card_sales s on s.id = json_extract(f.value, '$.id')"
+            " where m.cause = 'non_clinical_sale' and substr(m.occurred_on, 1, 7) = ?",
+            (month,),
+        )
+        if a not in _sums(2)
+    ]
+    assert len(multi) >= RECON_LATEST_MONTH_MIN
