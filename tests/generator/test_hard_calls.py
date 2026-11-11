@@ -281,3 +281,74 @@ def test_sample_items_per_type(t4):
         ("urgency_inverted", "calm_urgent"): 2,
         ("urgency_inverted", "pain_not_urgent"): 2,
     }
+
+
+# ── 최종 라벨 적재 (설계 §4 저장) ──────────────────────────────────────────────
+
+
+def _final(uid, **labels):
+    base = {
+        "primary_purpose": "other",
+        "accepted_purposes": ["other"],
+        "counterpart": "other",
+        "urgency": "normal",
+        "emergency": 0,
+        "complaint": 0,
+        "price_inquiry": 0,
+        "wants_appt": 0,
+        "appt_confirmed": 0,
+        "has_todo": 1,
+    }
+    return {"call_uid": uid, "labels": base | labels, "label_source": "human"}
+
+
+def test_final_labels_survive_rebuild(tmp_path):
+    """최종 라벨 JSON이 있으면 빌드마다 생성 라벨을 덮어쓴다 — 다시 생성해도 사람이 정한 값 그대로"""
+    final = tmp_path / "hard_call_labels.json"
+    final.write_text(json.dumps([_final("hc-0001", has_todo=0)]), encoding="utf-8")
+    for _ in range(2):
+        build.generate(
+            tmp_path / "source.sqlite",
+            tmp_path / "truth.sqlite",
+            CONFIG,
+            fake_llm=True,
+            hard_labels_path=final,
+        )
+    conn, _ = _open(tmp_path)
+    row = conn.execute(
+        "SELECT l.primary_purpose, l.has_todo, h.label_source FROM truth.truth_call_labels l"
+        " JOIN truth.truth_hard_calls h USING (call_uid) WHERE call_uid = 'hc-0001'"
+    ).fetchone()
+    assert tuple(row) == ("other", 0, "human")
+    assert (tmp_path / "hard_calls.json").exists()
+
+
+def test_stale_final_labels_fail(tmp_path):
+    final = tmp_path / "hard_call_labels.json"
+    final.write_text(json.dumps([_final("hc-9999")]), encoding="utf-8")
+    with pytest.raises(ValueError, match="hc-9999"):
+        build.generate(
+            tmp_path / "source.sqlite",
+            tmp_path / "truth.sqlite",
+            CONFIG,
+            fake_llm=True,
+            hard_labels_path=final,
+        )
+
+
+def test_label_checks_skip_final_labels(generated):
+    """사람이 정한 최종 라벨(label_source ≠ generated)은 생성 규칙 검사에 걸리지 않는다 — 녹취를 읽고 정한 정답"""
+    conn, ctx = _open(generated("hard_final")[0])
+    uid = _one(
+        conn, "SELECT call_uid FROM truth.truth_hard_calls WHERE half = 'calm_urgent' LIMIT 1"
+    )
+    conn.execute(
+        "UPDATE truth.truth_call_labels SET urgency = 'normal', emergency = 0,"
+        " primary_purpose = 'treatment_q' WHERE call_uid = ?",
+        (uid,),
+    )
+    conn.execute(
+        "UPDATE truth.truth_hard_calls SET label_source = 'human' WHERE call_uid = ?", (uid,)
+    )
+    assert verify.check_hard_urgency_labels(conn, ctx) == []
+    assert verify.check_hard_purposes(conn, ctx) == []

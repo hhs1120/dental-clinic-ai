@@ -45,6 +45,7 @@ def main() -> None:
             fake_llm=args.fake_llm,
             llm_paths=paths,
             rag_qa_path=None if args.fake_llm else paths["rag_qa"],
+            hard_labels_path=None if args.fake_llm else paths["hard_labels"],
         )
     except LLMMissing as e:
         print(f"LLM 캐시에 없는 건: {e} — DB는 그대로입니다.")

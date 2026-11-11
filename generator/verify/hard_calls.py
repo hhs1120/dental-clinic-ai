@@ -25,7 +25,7 @@ def _hard(conn) -> list[dict]:
     rows = _rows(
         conn,
         "SELECT c.*, l.primary_purpose, l.accepted_purposes, l.urgency, l.emergency, l.appt_confirmed,"
-        " l.used_fact, l.split, h.hard_type, h.half FROM ax_calls c"
+        " l.used_fact, l.split, h.hard_type, h.half, h.label_source FROM ax_calls c"
         " JOIN truth.truth_call_labels l USING (call_uid)"
         " LEFT JOIN truth.truth_hard_calls h USING (call_uid)"
         f" WHERE c.call_uid LIKE '{HARD_PREFIX}%' ORDER BY c.id",
@@ -33,6 +33,12 @@ def _hard(conn) -> list[dict]:
     for r in rows:
         r["fact"] = json.loads(r["used_fact"])
     return rows
+
+
+def _generated(conn) -> list[dict]:
+    """생성 라벨 그대로인 hc- — 사람이 녹취를 읽고 정한 최종 라벨(label_source agreed·human)은 생성 규칙 검사에서 뺀다
+    (설계 §4 — 최종 라벨이 정답)"""
+    return [r for r in _hard(conn) if r["label_source"] == "generated"]
 
 
 def check_hard_counts(conn, ctx):
@@ -97,7 +103,7 @@ def check_hard_window(conn, ctx):
 def check_hard_purposes(conn, ctx):
     """(주 목적, 방향)이 종류의 허용 목록(HARD_TYPE_PURPOSES), urgency_inverted는 절반의 목적(HARD_HALF_PURPOSES)"""
     bad = []
-    for r in _hard(conn):
+    for r in _generated(conn):
         ok = (r["primary_purpose"], r["direction"]) in HARD_TYPE_PURPOSES.get(r["hard_type"], ())
         if r["half"] is not None:
             ok = ok and r["primary_purpose"] in HARD_HALF_PURPOSES[r["half"]]
@@ -125,7 +131,7 @@ def check_hard_booking_events(conn, ctx):
     ):
         reminders[m["a"]].append(m["sent_at"])
     bad = []
-    for r in _hard(conn):
+    for r in _generated(conn):
         if r["primary_purpose"] not in BOOKING_PURPOSES:
             continue
         aid = r["fact"].get("appointment_id")
@@ -160,7 +166,7 @@ def check_hard_emergency_appt(conn, ctx):
     새 응급 내원 예약은 만들지 않는다(설계 §3.3)"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
     bad = []
-    for r in _hard(conn):
+    for r in _generated(conn):
         if not r["emergency"]:
             continue
         a = appts.get((r["fact"].get("existing_visit") or {}).get("appointment_id"))
@@ -203,7 +209,7 @@ def check_hard_not_pooled(conn, ctx):
 def check_hard_urgency_labels(conn, ctx):
     """calm_urgent = urgent·emergency 1(허용 목적에 treatment_q), pain_not_urgent = urgent 아님·emergency 0"""
     bad = []
-    for r in _hard(conn):
+    for r in _generated(conn):
         if r["half"] == "calm_urgent":
             ok = (
                 r["urgency"] == "urgent"
