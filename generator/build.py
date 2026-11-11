@@ -20,6 +20,7 @@ from generator import (
     documents,
     emergency,
     finance,
+    hard_calls,
     messages,
     patients,
     pre_window,
@@ -85,6 +86,10 @@ STAGES: list = [
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
     ("master_values", clinic.stage_master_values),
+    (
+        "hard_calls",
+        hard_calls.stage_slots,
+    ),  # 어려운 통화 hc- — 맨 끝(앞 단계 결과·캐시 그대로, 어려운 통화 설계 §3.1)
 ]
 
 
