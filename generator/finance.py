@@ -107,9 +107,11 @@ def _true_payments(conn) -> list[dict]:
 
 
 def _transpose(n: int) -> int | None:
-    """이웃 두 자리를 바꾼 더 작은 수 — 앞자리부터, 0이 맨 앞에 오거나 10배 관계가 되면 다음 자리"""
+    """이웃 두 자리를 바꾼 더 작은 수 — 앞자리부터(끝자리 제외), 0이 맨 앞에 오거나 10배 관계가 되면 다음 자리"""
     s = str(n)
-    for i in range(len(s) - 1):
+    for i in range(
+        len(s) - 2
+    ):  # 끝자리는 그대로 — 10원 단위가 아닌 금액은 그것만으로 오입력이 드러남
         if s[i] > s[i + 1] and not (i == 0 and s[i + 1] == "0"):
             t = int(s[:i] + s[i + 1] + s[i] + s[i + 2 :])
             if t * 10 != n:
@@ -149,6 +151,11 @@ def stage_settlement_errors(run, rng, fake) -> None:
             " WHERE kind = 'settlement' AND amount_paid > 0 ORDER BY id"
         )
     ]
+
+    def seen(d: date) -> bool:
+        """그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날(8b의 ok와 같은 기준)"""
+        return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays) < today
+
     rows = [
         r
         for r in rows
@@ -156,19 +163,9 @@ def stage_settlement_errors(run, rng, fake) -> None:
         and r["id"] not in erred
         and r["pid"] not in future
         and not any(t > r["at"] for t in calls[r["pid"]])
-        and add_bank_days(
-            date.fromisoformat(r["at"][:10]), MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays
-        )
-        < today
+        and seen(date.fromisoformat(r["at"][:10]))
     ]
     lo, hi = SETTLEMENT_LATE_OPEN_DAYS
-
-    def seen(
-        d: date,
-    ) -> (
-        bool
-    ):  # 그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날(8b의 ok와 같은 기준)
-        return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays) < today
 
     def late_day(r) -> date | None:
         d = date.fromisoformat(r["at"][:10])
@@ -660,7 +657,8 @@ def _unrecorded_settlements(
     conn, rng, days: list[date], failure: set, used: set, today: date
 ) -> list[dict]:
     """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남고 그날 장부 행이 없는 환자가 그날
-    영업시간에 잔액 전부를 낸 돈(일부 납부 없음 — 잔액을 보면 풀리게). UNRECORDED_ORAL_SHARE만큼은 잔액이 구강용품 1~2개 합과
+    영업시간에 잔액 전부를 낸 돈(일부 납부 없음 — 잔액을 보면 풀리게). 장부 실수가 있는 환자(장부 잔액 ≠ 실제 잔액)와
+    그날 뒤로 정산 행이 있는 환자(같은 잔액을 또 냄)는 뺀다. UNRECORDED_ORAL_SHARE만큼은 잔액이 구강용품 1~2개 합과
     같은 환자의 카드(규칙 9가 진료 외 매출로 틀림), 나머지는 이체·카드(현금은 한 입금에 기존 현금 장부 실수와 겹쳐 원인이 둘이
     될 수 있어 쓰지 않는다). 환자는 서로 다름"""
     ledger = defaultdict(list)
@@ -668,6 +666,17 @@ def _unrecorded_settlements(
         "SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
     ):
         ledger[pid].append((at, owe))
+    erred = {
+        r[0]
+        for r in conn.execute(
+            "SELECT p.patient_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+        )
+    }
+    settled = defaultdict(list)
+    for pid, at in conn.execute(
+        "SELECT patient_id, paid_at FROM emr_payments WHERE kind = 'settlement'"
+    ):
+        settled[pid].append(at[:10])
 
     def balance(pid: int, d: date) -> int:
         return sum(o for at, o in ledger[pid] if at[:10] <= d.isoformat())
@@ -684,6 +693,8 @@ def _unrecorded_settlements(
             p
             for p in sorted(ledger)
             if p not in taken
+            and p not in erred
+            and not any(s > d.isoformat() for s in settled[p])
             and balance(p, d) > 0
             and all(at[:10] != d.isoformat() for at, _ in ledger[p])
         ]
@@ -1094,7 +1105,7 @@ def _expense_confusers(rng, outflows: list[dict], doc, today: date) -> list[dict
         o["docs"] = [
             doc(d0["kind"], d0["issuer"], d0["on"], x, [(name, x)]) for x in (a, d0["amount"] - a)
         ]
-    # 디코이 — 같은 거래처·같은 금액의 취소 주문·견적, 진짜 증빙보다 출금에 가깝거나 같은 날
+    # 디코이 — 같은 거래처·같은 금액의 취소 주문·발행 취소 고지서·견적, 진짜 증빙보다 출금에 가깝거나 같은 날
     one = [
         o
         for o in outflows
@@ -1104,7 +1115,13 @@ def _expense_confusers(rng, outflows: list[dict], doc, today: date) -> list[dict
     for o in pick(one, EXPENSE_DECOY_RATE):
         d0 = o["docs"][0]
         on = o["at"].date() if o["table"] == "card" else o["at"].date() - timedelta(days=1)
-        word = "취소" if o["table"] == "card" else "견적(확정 전)"
+        word = (  # 카드 = 취소 주문, 공과금 고지서 = 발행 취소, 세금계산서 = 견적
+            "취소"
+            if o["table"] == "card"
+            else "발행 취소"
+            if d0["kind"] == "bill"
+            else "견적(확정 전)"
+        )
         d = doc(d0["kind"], d0["issuer"], on, o["amount"], [(word, o["amount"])], summary=word)
         d["body"] = f"[{word}] " + d["body"]
         d["decoy"] = True

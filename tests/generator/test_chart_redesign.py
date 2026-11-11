@@ -151,3 +151,44 @@ def test_pd_notation_is_readable_but_fools_keyword():
     assert (
         keyword_rule("PD 5mm, 출혈 있음. 잇몸치료 시행함.", ["R03"], PERIO_POCKET_MIN_MM) is True
     )
+
+
+def test_pocket_depth_follows_threshold(monkeypatch):
+    """치주낭 깊이 경계는 master.PERIO_POCKET_MIN_MM 하나 — 기준을 바꾸면 깊은·얕은 치주낭이 함께 움직인다(기준 문장과 같은 상수)"""
+    import numpy as np
+
+    monkeypatch.setattr(chart, "PERIO_POCKET_MIN_MM", 6)
+    rng = np.random.default_rng(0)
+    r = {"code": chart.PERIO_CODE}
+    deep = [chart._findings(rng, r, None, False)["pocket_mm"] for _ in range(50)]
+    shallow = [
+        chart._findings(rng, r, {"key": "R03", "evidence": False}, False)["pocket_mm"]
+        for _ in range(50)
+    ]
+    assert min(deep) >= 6 and max(shallow) < 6
+
+
+def test_verify_near_miss_keeps_no_bleeding(generated):
+    """R03 부분 소견 서술은 '출혈 없음'을 담는다 — 빠지면 근거 있음으로 읽히는 줄이 된다(verify가 잡음)"""
+    from generator import verify
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("verify_near_miss")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    assert verify.check_chart_evidence_words(c, ctx) == []
+    tid = next(
+        t
+        for t, f in c.execute(
+            "SELECT treatment_id, facts FROM truth.truth_chart_notes WHERE requirement = 'R03'"
+        )
+        if (json.loads(f).get("requirement") or {}).get("style") == "near_miss"
+    )
+    c.execute(
+        "UPDATE emr_chart_notes SET note = '치주낭 5mm. 잇몸치료 시행함.' WHERE treatment_id = ?",
+        (tid,),
+    )
+    assert verify.check_chart_evidence_words(c, ctx)

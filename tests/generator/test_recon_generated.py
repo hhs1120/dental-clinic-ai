@@ -34,14 +34,22 @@ def test_every_truth_mismatch_detected(world):
 
 
 def test_no_false_positives(world):
-    """오탐 = 정답 실수와 관련 행(금융 행·수납)이 하나도 없는 탐지 건. 이웃 진료일보다 늦게 적은 정산(데이터 재설계)은 금융 쪽과
-    장부 쪽이 두 건으로 갈라져 하나는 정답과 짝이 안 되지만, 같은 실수의 행이라 오탐이 아니다"""
-    today, _, items, truth = world
-    refs = set().union(
-        *(_refs(json.loads(t["fin_ids"]), json.loads(t["payment_ids"])) for t in truth)
+    """오탐 = 어느 정답과도 짝이 안 된 탐지 건. 예외는 며칠 늦게 적은 정산(정산 행 날짜 밀림 — 데이터 재설계)뿐: 금융 쪽과 장부
+    쪽이 두 건으로 갈라져 한쪽만 정답과 짝이 되고, 남은 쪽은 같은 실수의 행이다"""
+    today, books, items, truth = world
+    matched = {_match(t, items)["key"] for t in truth}
+    settle = {p["id"] for p in books["payments"] if p["kind"] == "settlement"}
+    late = set().union(
+        *(
+            _refs(json.loads(t["fin_ids"]), json.loads(t["payment_ids"]))
+            for t in truth
+            if t["cause"] == "date_shift" and set(json.loads(t["payment_ids"])) & settle
+        )
     )
     extra = [
-        (i["date"], i["channel"]) for i in items if not (_refs(i["fin"], i["payment_ids"]) & refs)
+        (i["date"], i["channel"])
+        for i in items
+        if i["key"] not in matched and not (_refs(i["fin"], i["payment_ids"]) & late)
     ]
     assert extra == []
     months = recon_months(today)

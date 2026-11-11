@@ -339,7 +339,9 @@ def _findings(rng, r, requirement: dict | None, perio_plan: bool) -> dict | None
     perio = r["code"] == PERIO_CODE or perio_plan
     shallow = perio and requirement and requirement["key"] == "R03" and not requirement["evidence"]
     return {
-        "pocket_mm": int(rng.integers(2, 4)) if shallow or not perio else int(rng.integers(4, 7)),
+        "pocket_mm": int(rng.integers(2, PERIO_POCKET_MIN_MM))
+        if shallow or not perio
+        else int(rng.integers(PERIO_POCKET_MIN_MM, PERIO_POCKET_MIN_MM + 3)),
         "bleeding": True if perio and not shallow else bool(rng.random() < 0.4),
         "calculus": _pick(rng, ("적음", "중간", "많음")),
         "mobility": int(rng.integers(0, 2)) if perio else 0,

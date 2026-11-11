@@ -44,6 +44,9 @@ from generator.verify.records import _close, _next_open_day
 
 FIN_TABLES = ("fin_card_sales", "fin_card_deposits", "fin_bank_transactions")
 # 진료 외 매출 금액 — 구강용품 1~NON_CLINICAL_MAX_ITEMS개 합 (§2.7 non_clinical_sale, 3개는 데이터 재설계)
+ORAL_CARE_SMALL_SUMS = {
+    a + b for a in ORAL_CARE_PRICES.values() for b in [0, *ORAL_CARE_PRICES.values()]
+}
 ORAL_CARE_SUMS = {
     sum(c)
     for r in range(1, NON_CLINICAL_MAX_ITEMS + 1)
@@ -285,7 +288,8 @@ def check_unrecorded_settlements(conn, ctx):
     """미수 정산 수납 누락(장부에 행 없음 — 데이터 재설계 설계 §1): 환자가 있고, 금액 = 그 시각 장부 잔액(> 0 — 일부 납부
     없음, 금액이 구강용품 합이어도 잔액으로 풀리게),
     실제 일시가 평가 달(master.recon_months) 안, 이체·카드, ⑧-1 입력 누락 정답(수납 id 없음)과 하나씩 짝. 건수 =
-    메타 unrecorded_settlements(= master.UNRECORDED_SETTLEMENT_COUNT)"""
+    메타 unrecorded_settlements(= master.UNRECORDED_SETTLEMENT_COUNT), 환자는 서로 다르고 그날 장부 행·그날 뒤 정산 행·장부
+    실수가 없음"""
     rows = conn.execute(
         "SELECT e.id, e.patient_id, e.true_amount, e.true_paid_at, e.true_method,"
         " (SELECT count(*) FROM truth.truth_recon_mismatches m WHERE m.ledger_error_id = e.id"
@@ -309,6 +313,25 @@ def check_unrecorded_settlements(conn, ctx):
             bad.append(
                 {"id": eid, "patient_id": pid, "amount": amount, "balance": bal, "paired": paired}
             )
+    pids = [r[1] for r in rows]
+    if len(set(pids)) != len(pids):
+        bad.append({"problem": "미수 정산 누락 환자가 겹침"})
+    for (
+        eid,
+        pid,
+        _,
+        at,
+        _,
+        _,
+    ) in rows:  # 그날 장부 행 없음·그날 뒤 정산 행 없음·장부 실수 없음(장부 잔액 = 실제 잔액)
+        same_day, later, erred = conn.execute(
+            "SELECT sum(date(paid_at) = date(?)), sum(kind = 'settlement' AND paid_at > ?),"
+            " (SELECT count(*) FROM truth.truth_ledger_errors e JOIN emr_payments q ON q.id = e.payment_id"
+            "  WHERE q.patient_id = ?) FROM emr_payments WHERE patient_id = ?",
+            (at, at, pid, pid),
+        ).fetchone()
+        if same_day or later or erred:
+            bad.append({"id": eid, "problem": "그날 장부 행·뒤 정산 행·장부 실수가 있는 환자"})
     if len(rows) != ctx.unrecorded_settlements:
         bad.append({"count": len(rows), "expected": ctx.unrecorded_settlements})
     return bad
@@ -340,9 +363,9 @@ def check_non_clinical_sales_avoid_balances(conn, ctx):
 
 
 def _transposed(true: int, ledger: int) -> bool:
-    """ledger가 true의 이웃 두 자리를 바꾼 더 작은 수(10배 관계 아님)"""
+    """ledger가 true의 이웃 두 자리를 바꾼 더 작은 수(10배 관계 아님, 끝자리 그대로)"""
     a, b = str(true), str(ledger)
-    if len(a) != len(b) or ledger >= true or ledger * 10 == true:
+    if len(a) != len(b) or ledger >= true or ledger * 10 == true or a[-1] != b[-1]:
         return False
     diff = [i for i in range(len(a)) if a[i] != b[i]]
     return len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
@@ -355,7 +378,7 @@ def _seen(d: date, ctx) -> bool:
 
 def check_settlement_errors(conn, ctx):
     """정산 수납 장부 실수(정산 행만 — 데이터 재설계 설계 §1): 실제 일시가 평가 달 안, 정산 행 하나에 실수 하나, 그 환자는 실제
-    일시 뒤로 통화 없음. 자릿수 바꿔 적기(amount_typo) = 연동 카드(승인번호)·실제 일시 그대로·장부 금액이 실제 금액의 이웃 두
+    일시 뒤로 통화 없고 TODAY부터 예약 없음. 자릿수 바꿔 적기(amount_typo) = 연동 카드(승인번호)·실제 일시 그대로·장부 금액이 실제 금액의 이웃 두
     자리를 바꾼 더 작은 수 / 며칠 늦게 적기(date_shift) = 이체·금액 같음·장부 날짜가 실제 날 뒤 SETTLEMENT_LATE_OPEN_DAYS
     범위의 진료일·영업시간. 실제 날과 장부 날 모두 정산·입금이 TODAY 전에 보임. 종류별 수 = 메타 settlement_errors"""
     rows = _rows(
@@ -372,7 +395,11 @@ def check_settlement_errors(conn, ctx):
             "SELECT count(*) FROM ax_calls WHERE patient_id = ? AND started_at > ?",
             (r["patient_id"], r["true_paid_at"]),
         ).fetchone()[0]
-        ok = r["true_method"] == r["method"] and not later
+        future = conn.execute(
+            "SELECT count(*) FROM emr_appointments WHERE patient_id = ? AND date(scheduled_at) >= ?",
+            (r["patient_id"], ctx.today.isoformat()),
+        ).fetchone()[0]
+        ok = r["true_method"] == r["method"] and not later and not future
         ok = ok and true_day.strftime("%Y-%m") in recon_months(ctx.today)
         ok = ok and _seen(true_day, ctx)
         if r["kind"] == "amount_typo":
@@ -417,6 +444,17 @@ def check_recon_mismatches(conn, ctx):
     got = Counter(m["cause"] for m in ms)
     if {k: got.get(k, 0) for k in want} != want or set(got) - set(want):
         bad.append({"counts": dict(got), "expected": want})
+    multi = sum(  # 구강용품 NON_CLINICAL_MAX_ITEMS개 판매(1~2개 합과 다른 금액) 수 = 메타
+        1
+        for m in ms
+        if m["cause"] == "non_clinical_sale"
+        for t, i in m["fin"][:1]
+        if t == "fin_card_sales"
+        and conn.execute("SELECT amount FROM fin_card_sales WHERE id = ?", (i,)).fetchone()[0]
+        not in ORAL_CARE_SMALL_SUMS
+    )
+    if multi != ctx.non_clinical_multi:
+        bad.append({"non_clinical_multi": multi, "expected": ctx.non_clinical_multi})
     exists = {t: {r[0] for r in conn.execute(f"SELECT id FROM {t}")} for t in FIN_TABLES}
     sales = {s["id"]: s for s in _rows(conn, "SELECT * FROM fin_card_sales")}
     pays = {p["id"]: p for p in _rows(conn, "SELECT * FROM emr_payments")}

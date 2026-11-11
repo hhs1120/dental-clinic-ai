@@ -235,16 +235,16 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - `fin_card_deposits`(입금일·카드사·매출일·승인 합계·수수료·입금액) — (카드사, 매출일)마다 1건. 입금일 = 매출일 + 정산 지연 은행 영업일(`master.add_bank_days` — 평일·공휴일 아님), 수수료 = 합계 × 카드사별 율(내림, `master.CARD_ISSUERS` — 가상 값)
 - `fin_bank_transactions`(일시·입출금·금액·적요) — 카드 정산 입금(적요 = 카드사), 현금 입금(`master.cash_deposit_day`마다 그 사이 현금 합계, 적요 `master.CASH_DEPOSIT_MEMO`), 환자 이체(그 수납 시각, 입금자명 = 환자, 보호자가 있으면 `master.GUARDIAN_PAYER_SHARE`만큼 보호자 이름), 대조 대상이 아닌 공단 급여비(확정 월 지급액 합, 통보일 — 은행 영업일로 미룸, 적요 `master.NHIS_MEMO`), ⑧-2 출금. 입금 시각은 `master.BANK_TIMES`
 - **평가 달**: `master.recon_months` — TODAY가 속한 달 직전 `master.RECON_MONTH_COUNT`개월. 장부 실수·연동 실패일·불일치는 이 달의 다음 진료일 < TODAY인 날에만(장부 실수가 ④ 미수 칩·통화·③ 잔액 문항에 퍼지는 범위를 ⑧-1 평가 기간으로 한정). split은 달 기준 — 마지막 `master.RECON_TEST_COUNT`달(`master.recon_test_months` — 가장 최근 기간으로 시험)이 test, 나머지가 dev
-- **불일치 심기**: 평가 달에 원인별 `master.RECON_MISMATCH_COUNTS`건, 정산(지연 포함)이 TODAY 전에 오는 날만. 정답 `truth_recon_mismatches`([[치과 AX - 평가 설계]] §6)
+- **불일치 심기**: 평가 달에 원인별 `master.RECON_MISMATCH_COUNTS`건(아래 구강용품 여러 개 판매·미수 정산 수납 누락·정산 수납 장부 실수는 그 원인에 더해짐), 정산(지연 포함)이 TODAY 전에 오는 날만. 정답 `truth_recon_mismatches`([[치과 AX - 평가 설계]] §6)
   - **분할결제**: 연동 카드 수납 1건을 같은 시각 승인 2건으로, 하나는 장부 승인번호. `master.SPLIT_MIN_AMOUNT` 이상
   - **취소 후 재승인**: 장부 승인 → 취소 → 같은 금액 새 승인. `master.SPLIT_MIN_AMOUNT` 이상
   - **수수료 차이**: 그 정산의 율 + `master.FEE_MISMATCH_RATE_DIFF`. 다른 불일치가 없는 정산에
   - **입금 지연**: `master.DEPOSIT_DELAY_DAYS` 영업일 늦게. 다른 불일치가 없는 정산에
-  - **진료 외 매출**: `master.ORAL_CARE_PRICES` 1~2개 합의 장부 없는 승인, 연동일 영업시간. 그중 `master.NON_CLINICAL_MULTI_COUNT`건은 `master.NON_CLINICAL_MAX_ITEMS`개 합(1~2개 합과 다른 금액 — 규칙 9에 안 걸리고 가격표를 조합하면 풀림). 승인 금액이 그날 어느 환자 장부 잔액과 같으면 겹치지 않는 합으로(난수 없이)
+  - **진료 외 매출**: `master.ORAL_CARE_PRICES` 1~2개 합의 장부 없는 승인, 연동일 영업시간. 그중 `master.NON_CLINICAL_MULTI_COUNT`건은 `master.NON_CLINICAL_MAX_ITEMS`개 합(1~2개 합과 다른 금액 — 규칙 기준선 `backend/recon.py` `rule_cause`의 구강용품 합 규칙에 안 걸리고 가격표를 조합하면 풀림). 승인 금액이 그날 어느 환자 장부 잔액과 같으면 겹치지 않는 합으로(난수 없이)
   - **장부 쪽**: §2.4 장부 실수를 원인으로 연결
-  - **미수 정산 수납 누락**(입력 누락): 장부 잔액이 남고 그날 장부 행이 없는 환자가 잔액 전부를 이체·카드로 낸 돈 `master.UNRECORDED_SETTLEMENT_COUNT`건 — 장부에 행이 없어 `truth_ledger_errors.payment_id`는 비우고 환자를 남긴다. 구강용품 합과 같은 금액은 넣지 않는다(`master.UNRECORDED_ORAL_SHARE` 0 — 잔액이 우연히 같은 환자가 흔해 읽어도 안 풀림)
+  - **미수 정산 수납 누락**(입력 누락): 장부 잔액이 남고 그날 장부 행이 없는 환자가 잔액 전부를 이체·카드로 낸 돈 `master.UNRECORDED_SETTLEMENT_COUNT`건 — 장부에 행이 없어 `truth_ledger_errors.payment_id`는 비우고 환자를 남긴다. 구강용품 1~2개 합과 같은 금액은 넣지 않는다(`master.UNRECORDED_ORAL_SHARE`, 이유는 [[치과 AX - AI 실험 기록]] §24). 장부 실수가 있거나 그날 뒤로 정산 행이 있는 환자는 뺀다
   - **정산 수납 장부 실수**(8b 앞 `settlement_errors` 단계 — 통화·문자가 다 만들어진 뒤라 번지지 않게 정산 행만, 그날 뒤로 통화 없고 앞으로 예약 없는 환자만, 실제 날·장부 날 모두 정산이 TODAY 전에 보이는 날): 자릿수 바꿔 적기(금액 오입력 — 연동 카드, 이웃 두 자리를 바꾼 더 작은 수)·며칠 늦게 적기(날짜 밀림 — 이체, 실제 날 뒤 `master.SETTLEMENT_LATE_OPEN_DAYS`번째 진료일), 건수 `master.SETTLEMENT_ERROR_COUNTS`. 늦게 적은 정산은 금융 쪽·장부 쪽이 두 탐지 건으로 갈라진다
-  - 새 모양은 평가 달 마지막 달(화면 기본 달)부터 `master.RECON_LATEST_MONTH_MIN`건씩
+  - 구강용품 여러 개 판매·미수 정산 수납 누락·정산 수납 장부 실수는 평가 달 마지막 달(화면 기본 달)에서 `master.RECON_LATEST_MONTH_MIN`건씩 먼저 고른다
   - **디코이**(불일치가 아님): 보호자 이름 이체·현금 주 단위 합산 입금 — 이름·날짜가 장부와 다르다는 것만으로 불일치라 답하지 않는지 본다
 
 **⑧-2 지출** — 생성 창 전체(8c단계)
@@ -252,9 +252,9 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 - 출금(TODAY가 속한 달 전까지 달마다): 월말 이체(재료상·기공소 — 그달 마지막 은행 영업일에 그달 명세서 합계, 적요 = 거래처) / 자동이체(거래처마다 정한 날, 은행 영업일로 미룸) — `fin_bank_transactions` / 병원 카드 사용(쇼핑몰·식당·수리 — `fin_card_expenses`, 가맹점명은 `card_name` 표기). 시각은 `master.BANK_TIMES`
 - `fin_expense_documents`(종류·발행처·일자·금액·본문 텍스트) — 코드 템플릿(`finance.DOC_TEMPLATES`, 품목은 `master.EXPENSE_ITEMS`, 줄은 "- 품목 금액원")
   - 월말 이체: 납품마다 명세서(재료상은 + 그달 세금계산서 1장 — 정답 증빙은 둘 다). 기공소 명세서 줄 = 창 안 기공 진료(인레이·크라운·브릿지) 1건(환자 이름·치아·보철 종류, 단가 `master.LAB_FEES` — 명세서 날짜는 이체일까지)
-  - 카드 사용: 1장(그날). 쇼핑몰 주문은 한 계정 과목의 품목만(품목을 읽어야 과목이 정해짐)
+  - 카드 사용: 1장(그날). 쇼핑몰 주문은 품목을 읽어야 과목이 정해짐(혼합 주문은 아래 어긋남)
   - 자동이체: 고지서·세금계산서 1장(`master.EXPENSE_DOC_LEAD_DAYS`일 전)
-- 어긋남: 표기 변형(`master.vendor_aliases` — 통장 적요 끝 글자 잘림·카드 가맹점명 결제대행사 표기 `master.EXPENSE_ALIAS_RATE`, 월말 명세서 발행처 법인 표기 `master.EXPENSE_ISSUER_ALIAS_RATE`), 디코이(같은 거래처·같은 금액의 취소 주문·견적(확정 전) 증빙이 진짜보다 출금에 가깝게 `master.EXPENSE_DECOY_RATE` — 어느 출금에도 안 붙음, 수는 메타), 주문 두 건 한 번에 결제(`master.EXPENSE_SPLIT_DOC_RATE`), 쇼핑몰 혼합 주문(두 과목 품목, 정답은 금액이 큰 과목 `master.EXPENSE_MIXED_ORDER_RATE`), 금액 차이(증빙 있는 출금의 `master.EXPENSE_AMOUNT_DIFF_RATE` — 출금액이 증빙 합계보다 `master.EXPENSE_AMOUNT_DIFF_RANGE`만큼 많고, 그 출금의 증빙 한 장에 이유 줄 `master.EXPENSE_DIFF_REASONS` — "운송비 13,900원 별도 청구"), 증빙 없음(카드 사용의 `master.EXPENSE_NO_DOC_RATE`만 — 계정은 거래처 과목), 1:N 합계, 품목으로만 정해지는 계정 과목. 평가는 평가 달의 출금만 센다(split은 ⑧-1과 같은 달). 정답 `truth_expense_matches`([[치과 AX - 평가 설계]] §6)
+- 어긋남: 표기 변형(`master.vendor_aliases` — 통장 적요 끝 글자 잘림·카드 가맹점명 결제대행사 표기 `master.EXPENSE_ALIAS_RATE`, 월말 명세서 발행처 법인 표기 `master.EXPENSE_ISSUER_ALIAS_RATE`), 디코이(같은 거래처·같은 금액의 취소 주문·발행 취소 고지서·견적(확정 전) 세금계산서가 진짜보다 출금에 가깝게 `master.EXPENSE_DECOY_RATE` — 어느 출금에도 안 붙음, 수는 메타), 주문 두 건 한 번에 결제(`master.EXPENSE_SPLIT_DOC_RATE`), 쇼핑몰 혼합 주문(두 과목 품목, 정답은 금액이 큰 과목 `master.EXPENSE_MIXED_ORDER_RATE`), 금액 차이(증빙 있는 출금의 `master.EXPENSE_AMOUNT_DIFF_RATE` — 출금액이 증빙 합계보다 `master.EXPENSE_AMOUNT_DIFF_RANGE`만큼 많고, 그 출금의 증빙 한 장에 이유 줄 `master.EXPENSE_DIFF_REASONS` — "운송비 13,900원 별도 청구"), 증빙 없음(카드 사용의 `master.EXPENSE_NO_DOC_RATE`만 — 계정은 거래처 과목), 1:N 합계, 품목으로만 정해지는 계정 과목. 평가는 평가 달의 출금만 센다(split은 ⑧-1과 같은 달). 정답 `truth_expense_matches`([[치과 AX - 평가 설계]] §6)
 
 ## 3. 생성기가 적재하는 `ax_*`
 
@@ -438,9 +438,9 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 치아 `NN번`·시술 이름(진료 기록이라 표준 이름만 — 별칭은 녹취록·검색용). 추가 처치 누락 줄은 추가 처치의 치아 `NN번`·시술 이름도
   - 치주낭 `Nmm`
   - 주의사항과 그 내원에서 발견한 주의사항. 발견한 것이 있으면 새로 알게 됐다는 말(`chart.DISCOVERED_WORDS` 중 하나)
-  - 요건 근거(기간 `N일`·`N개월`, 매복 정도, 실란트는 `소와열구`/`충전물`). 근거 말은 표현 방식대로(`chart.EVIDENCE_WORDS` 그대로 / `chart.PARAPHRASE` 바꿔 말하기 / 근거 없는 줄은 낱말 없이 또는 `chart.NEGATION` 부정 / R03은 `chart.PERIO_PD` 깊이 약어 표기(키워드 규칙의 꼴 밖)·깊지만 출혈 없는 부분 소견 — 비율은 `master.EVIDENCE_PARAPHRASE_SHARE` 등). C.C는 근거 유무와 무관하게 시술 공통 풀. 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
+  - 요건 근거(기간 `N일`·`N개월`, 매복 정도, 실란트는 `소와열구`/`충전물`). 근거 말은 표현 방식대로(`chart.EVIDENCE_WORDS` 그대로 / `chart.PARAPHRASE` 바꿔 말하기 / 근거 없는 줄은 낱말 없이 또는 `chart.NEGATION` 부정 / R03은 `chart.PERIO_PD` 깊이 약어 표기(키워드 규칙의 꼴 밖)·깊지만 출혈 없는 부분 소견 — 비율은 `master.EVIDENCE_PARAPHRASE_SHARE`·`master.EVIDENCE_NEGATED_SHARE`·`master.PERIO_QUALITATIVE_SHARE`·`master.PERIO_NEAR_MISS_SHARE`). C.C는 근거 유무와 무관하게 시술 공통 풀. 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
   - 다음 계획: 남은 항목의 치아 `NN번`·시술 이름과 계획이라는 말(`chart.PLAN_WORDS` 중 하나), 또는 정기 검진 `N개월`. 같은 시술·치아가 여러 번이면 초안·꼭 넣을 말 모두 한 번만 `N회`와 함께(`chart.plan_items` — 같은 말을 여러 번 요구하면 모델이 '다음 내원 때' 같은 문장을 덧붙인다)
-- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄의 근거 말·환자 이름·금지 토픽·메모체가 아닌 끝맺음·초안에 없는 시점·치아 없는 진료의 부위 말·시행한 골삭제를 '필요'로 바꾼 말(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
+- **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄(부정 표현 줄 제외)과 바꿔 말하기 줄의 근거 낱말·환자 이름·금지 토픽·메모체가 아닌 끝맺음·초안에 없는 시점·치아 없는 진료의 부위 말·시행한 골삭제를 '필요'로 바꾼 말(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
 - **적용**: `emr_chart_notes.note`를 덮어쓴다
 
 ## 5. 생성·정답·검증
@@ -463,7 +463,8 @@ make data [FAKE_LLM=1]
  7. 통화 녹취록      §4.1                                          (LLM, 캐시)
  8. 문자           §2.5                                          (코드)
  8a. 취소 연락    §2.5 reply(in) 취소·§2.6 (3) 장면                      (코드)
- 8b. 재무 수입    §2.7 ⑧-1 정산 수납 장부 실수(정산 행만) → 장부 파생 + 불일치 (코드)
+ 8b0. 정산 장부 실수 §2.7 정산 수납 장부 실수(정산 행만, 단계 이름 settlement_errors) (코드)
+ 8b. 재무 수입    §2.7 ⑧-1 장부 파생 + 불일치                    (코드)
  8c. 재무 지출    §2.7 ⑧-2 거래처·출금·증빙 템플릿                (코드)
  9. RAG 문서       §4.2 문서 계획(코드) → 본문(새 문서는 뒤에 붙임)  (LLM, 캐시)
  9b. 차트 서술    §4.3 특이 케이스·디코이                         (LLM, 캐시)
@@ -520,7 +521,7 @@ DDL은 `ground_truth/schema.sql`(`shared/`는 앱이 읽는 위치라 두지 않
 | 판정 풀 | (6단계) 판정 풀 크기·순번 1..P·앞 절반 dev·`split`, 블라인드 풀 ⊂ 판정 풀·순번, 층화(희귀 과표집·카테고리별 dev·test 차이 ≤ 1·split당 최소) |
 | 문자 | (8단계) TODAY 전; in ⇔ reply; 예약 확정은 창 안 예약 `created_at` 뒤, 리마인드는 리마인드 대상(보낼 때 취소 전)의 직전 진료일, 노쇼는 노쇼 예약 진료 끝 뒤 — 셋 다 예약당 최대 1건, confirmed 예약엔 리마인드 필수; 미수 안내는 미수가 생긴 내원 수납 뒤; 서류 준비는 같은 환자가 건 서류 요청 통화 뒤; 답장은 같은 환자·같은 예약의 앞선 out 뒤; 예약 확정·리마인드 답장은 예약 상태와 맞음(리마인드 확인 답장은 confirmed 예약에만, 시간 변경은 그 뒤 바뀐 예약에만, confirmed 예약엔 리마인드 답장이나 예약 확인 통화); recall은 그달 첫 진료일 개원 시각에 잡힌 예약이 없는 환자 중 기한이 다음 달(다가옴)·지난달(지남)인 환자에게, 본문은 그 종류의 문구(환자당 월 1회); 이미 냈다는 답장은 balance 답장에만, 장부 실수로 생긴 미수의 balance 답장은 전부 그 문구; (8a단계) 취소 답장은 그 뒤 취소된 예약(변경 쌍의 원래 예약 아님)에만·취소 시각 이전, 개원 전 당일 취소와 예약일 전에 받은 취소(변경 쌍 제외)는 취소 답장 필수(이탈 환자의 이탈일부터는 없음) |
 | 재무 ⑧-1 | (8b단계) 실제 카드 수납 ↔ 승인 1:1(일시·금액·연동이면 승인번호 — 분할결제·취소 후 재승인·진료 외 매출 제외), 정산 입금 = 승인 합계 − 취소 − 수수료(율 내림 — 수수료 차이 제외)·입금일 = 매출일 + 정산 지연(입금 지연 제외)·입금 예정일이 TODAY 이후면 없음, 통장 입금 = 정산 입금·현금 입금(실제 현금 합계)·실제 이체(입금자 = 환자·보호자)·공단 급여비뿐, 원인별 불일치 수 = 메타(미수 정산 누락·구강용품 여러 개·정산 행 실수 포함), 미수 정산 누락은 금액 = 그 시각 잔액, 진짜 진료 외 매출 금액 ≠ 그날 어느 환자 잔액, 장부 실수 ⇔ 장부 쪽 불일치 1:1(가리키는 행 = 실제 돈의 승인·이체·현금 입금), 현금 입금 1건에 장부 쪽 불일치 최대 1건, 통장·카드 쪽은 정산(지연 포함)이 TODAY 전·카드 쪽은 연동일·수수료 차이는 율 + `master.FEE_MISMATCH_RATE_DIFF`, 원인별 모양(§2.7)·관련 id 존재·split = 달 |
-| 재무 ⑧-2 | (8c단계) 출금마다 `truth_expense_matches` 1행·증빙은 정확히 한 출금에(발행처 = 거래처·발행일 ≤ 출금일), 적요·가맹점명 = 거래처, 계정 과목(이체·자동이체 = 거래처 과목, 카드 = 품목 과목), split = 평가 달, 증빙 합계 = 출금액(차이 건수 = 비율)·세금계산서 = 명세서 합계, 증빙 없음은 카드에만(건수 = 비율), 기공 명세서 줄 ↔ 창 안·TODAY가 속한 달 전의 기공 진료 1:1·단가 |
+| 재무 ⑧-2 | (8c단계) 출금마다 `truth_expense_matches` 1행·증빙은 한 출금에만(발행처 = 거래처 또는 법인 표기·발행일 ≤ 출금일), 어느 출금에도 안 붙은 증빙(디코이) 수 = 메타, 적요·가맹점명 = 거래처(표기 변형 포함), 계정 과목(이체·자동이체 = 거래처 과목, 카드 = 품목 과목 — 혼합 주문은 금액이 큰 과목, 증빙 없으면 거래처 과목), split = 평가 달, 증빙 합계 = 출금액(차이 건수 = 비율, 차이 난 출금의 증빙 한 장에만 이유 줄 `master.EXPENSE_DIFF_REASONS`)·세금계산서 = 명세서 합계, 증빙 없음은 카드에만(건수 = 비율), 기공 명세서 줄 ↔ 창 안·TODAY가 속한 달 전의 기공 진료 1:1·단가 |
 | 가상 PII | 환자 전화·통화 상대 번호 `010-0000-xxxx`만 |
 
 **경고**(위반만 보여 주고 실패시키지 않는다. 기능에 직접 영향을 주는 지표만. 분모는 **추첨이 실제로 실현된 모집단** — TODAY 이전·창 안·진료일 등. 숫자는 설계 목표로 여기 두고, 원본은 '값 위치'의 코드 — 어긋나면 `tests/generator/test_doc_sync.py`가 실패)

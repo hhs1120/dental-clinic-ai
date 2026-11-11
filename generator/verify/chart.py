@@ -521,8 +521,12 @@ def check_chart_plan(conn, ctx):
     return bad
 
 
+NO_BLEEDING = re.compile(r"출혈\s*(은|이|도)?\s*(없|\(-\)|-|음성)")  # R03 부분 소견의 출혈 없음
+
+
 def check_chart_evidence_words(conn, ctx):
-    """근거 없는 요건 서술 줄에 근거 말(chart.EVIDENCE_WORDS) 없음 — 9b 건별 검증과 같은 기준"""
+    """근거 없는 요건 서술 줄에 근거 말(chart.EVIDENCE_WORDS) 없음 — 9b 건별 검증과 같은 기준. R03 부분 소견(near_miss)
+    줄은 출혈 없음을 담음(빠지면 근거 있음으로 읽힘)"""
     bad = []
     for r in _rows(
         conn,
@@ -536,6 +540,11 @@ def check_chart_evidence_words(conn, ctx):
         ]
         if hits:
             bad.append({"treatment_id": r["treatment_id"], "words": hits})
+        req = json.loads(r["facts"]).get("requirement") or {}
+        if req.get("style") == "near_miss" and not NO_BLEEDING.search(r["note"]):
+            bad.append(
+                {"treatment_id": r["treatment_id"], "problem": "부분 소견에 출혈 없음 없음"}
+            )
     return bad
 
 

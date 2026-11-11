@@ -258,7 +258,7 @@ tags:
 | `truth_appointment_courses` | 생성기(4단계) | 예약 → 코스(수요 에피소드). 앱은 `plan_item_id`로 계획 항목만 본다 — 코스 연결은 5b R01(다른 코스의 재시행)과 verify가 읽는다 |
 | `truth_claim_errors` | 생성기(정형 5b단계) | 청구 기록에 심은 오류(전 기간)·종류 — 상병 착오·임상 요건형 오류·추가 처치 누락(추가 처치의 시술·치아 포함). 키 `treatment_id`, 진료 1건당 최대 1개. ⑤-2·⑤-3 정답(검사는 가상 데이터 생성 설계 §5.3 '청구 오류'). 컬럼은 `ground_truth/schema.sql` |
 | `truth_patient_churn` | 생성기(4단계 이탈 · 5단계 병행) | 환자 → 종류(이탈 / 병행), 이탈일. ⑨ 다른 치과 추정 정답 |
-| `truth_ledger_errors` | 생성기(5단계) | 장부 실수 → 종류, 실수가 들어간 수납 id(입력 누락은 받은 금액이 0인 visit 행), 실제 값(금액·일시·결제수단). ⑧-1 장부 쪽 원인의 근거 |
+| `truth_ledger_errors` | 생성기(5단계 진료 행 · `settlement_errors` 단계 정산 행 · 8b 미수 정산 누락) | 장부 실수 → 종류, 실수가 들어간 수납 id(입력 누락은 받은 금액이 0인 visit 행, 장부에 행이 없는 미수 정산 누락은 비우고 환자 id), 실제 값(금액·일시·결제수단). ⑧-1 장부 쪽 원인의 근거 |
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |
 | `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune --condition …`(여러 번) |

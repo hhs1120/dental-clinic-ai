@@ -241,8 +241,10 @@ def test_settlements_pay_full_balance_and_sales_avoid_balances(generated):
 def _transposed(true: int, ledger: int) -> bool:
     """ledger가 true의 이웃 두 자리를 바꾼 수(더 작음, 10배 관계 아님)"""
     a, b = str(true), str(ledger)
-    if len(a) != len(b) or ledger >= true or ledger * 10 == true:
-        return False
+    if len(a) != len(b) or ledger >= true or ledger * 10 == true or a[-1] != b[-1]:
+        return (
+            False  # 끝자리는 그대로 — 10원 단위가 아닌 금액이 생기면 그것만으로 오입력이 드러난다
+        )
     diff = [i for i in range(len(a)) if a[i] != b[i]]
     return len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
 
@@ -294,3 +296,112 @@ def test_verify_settlement_errors(generated):
         " WHERE p.kind = 'settlement' AND e.kind = 'amount_typo')"
     )
     assert verify.check_settlement_errors(c, ctx)
+
+
+@pytest.fixture(scope="module")
+def vconn(generated):
+    """verify 구멍 확인용 — 고쳐 보는 테스트마다 새 연결(롤백)"""
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("verify_holes")
+
+    def open_():
+        c = sqlite3.connect(out / "source.sqlite")
+        c.row_factory = sqlite3.Row
+        c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+        return c, load_ctx(ROOT / "config" / "generator.yaml", c)
+
+    return open_
+
+
+def test_verify_settlement_error_patient_has_no_future_appointment(vconn):
+    from generator import verify
+
+    c, ctx = vconn()
+    assert verify.check_settlement_errors(c, ctx) == []
+    pid = c.execute(
+        "SELECT p.patient_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+        " WHERE p.kind = 'settlement' LIMIT 1"
+    ).fetchone()[0]
+    c.execute(
+        "UPDATE emr_appointments SET scheduled_at = '2099-01-05 10:00:00', status = 'scheduled'"
+        " WHERE id = (SELECT max(id) FROM emr_appointments WHERE patient_id = ?)",
+        (pid,),
+    )
+    assert verify.check_settlement_errors(c, ctx)
+    c.rollback()
+
+
+def test_verify_unrecorded_settlement_patients_distinct(vconn):
+    from generator import verify
+
+    c, ctx = vconn()
+    assert verify.check_unrecorded_settlements(c, ctx) == []
+    a, b = [
+        r[0]
+        for r in c.execute(
+            "SELECT id FROM truth.truth_ledger_errors WHERE payment_id IS NULL ORDER BY id LIMIT 2"
+        )
+    ]
+    c.execute(
+        "UPDATE truth.truth_ledger_errors SET patient_id ="
+        " (SELECT patient_id FROM truth.truth_ledger_errors WHERE id = ?) WHERE id = ?",
+        (a, b),
+    )
+    assert verify.check_unrecorded_settlements(c, ctx)
+    c.rollback()
+
+
+def test_verify_multi_item_sale_count(vconn):
+    """구강용품 세 개 판매 수 = 메타 non_clinical_multi — 한두 개 판매가 세 개 합으로 바뀌면 잡는다"""
+    from generator import verify
+
+    c, ctx = vconn()
+    assert verify.check_recon_mismatches(c, ctx) == []
+    c.execute(
+        "UPDATE fin_card_sales SET amount = 10500 WHERE id = (SELECT json_extract(m.fin_ids, '$[0].id')"
+        " FROM truth.truth_recon_mismatches m JOIN fin_card_sales s"
+        " ON s.id = json_extract(m.fin_ids, '$[0].id')"
+        " WHERE m.cause = 'non_clinical_sale' AND s.amount IN (3000, 4500, 5000, 7000, 8500) LIMIT 1)"
+    )
+    assert verify.check_recon_mismatches(c, ctx)
+    c.rollback()
+
+
+def test_verify_settlement_typo_debt_unsettled(vconn):
+    """정산 행 금액 오입력으로 생긴 미수도 정산되지 않음 검사에 든다"""
+    from generator.verify.records import check_ledger_error_unsettled
+
+    c, ctx = vconn()
+    assert check_ledger_error_unsettled(c, ctx) == []
+    pid = c.execute(
+        "SELECT p.patient_id FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+        " WHERE p.kind = 'settlement' AND e.kind = 'amount_typo' LIMIT 1"
+    ).fetchone()[0]
+    c.execute(
+        "INSERT INTO emr_payments (patient_id, appointment_id, kind, amount_due, amount_paid, paid_at,"
+        " method) SELECT patient_id, appointment_id, 'settlement', 0, 99999999, paid_at, 'card'"
+        " FROM emr_payments WHERE patient_id = ? LIMIT 1",
+        (pid,),
+    )
+    assert check_ledger_error_unsettled(c, ctx)
+    c.rollback()
+
+
+def test_unrecorded_settlement_patient_is_clean(conn):
+    """미수 정산 누락 환자는 장부 실수가 없고(장부 잔액 = 실제 잔액) 그날 뒤로 정산 행이 없다 — 나중에 같은 잔액을 또 내거나
+    가짜 미수를 갚는 꼴이 섞이지 않게"""
+    for pid, at in conn.execute(
+        "select patient_id, true_paid_at from truth.truth_ledger_errors where payment_id is null"
+    ):
+        erred = conn.execute(
+            "select count(*) from truth.truth_ledger_errors e join emr_payments p on p.id = e.payment_id"
+            " where p.patient_id = ?",
+            (pid,),
+        ).fetchone()[0]
+        later = conn.execute(
+            "select count(*) from emr_payments where patient_id = ? and kind = 'settlement' and paid_at > ?",
+            (pid, at),
+        ).fetchone()[0]
+        assert erred == 0 and later == 0, (pid, at, erred, later)
