@@ -15,7 +15,7 @@ from evaluation import EvalRefused
 from evaluation.metrics import inverse_weights, macro_accuracy, mcnemar_exact, weighted_accuracy
 from evaluation.splits import silver_split
 from generator.master import CALL_FLAGS
-from shared.call_labels import differing_items
+from shared.call_labels import differing_items, same_value
 
 ITEMS = ("primary_purpose", "counterpart", "urgency") + CALL_FLAGS  # 9항목
 PURPOSE = "primary_purpose"
@@ -59,13 +59,14 @@ def _classifications(conn) -> list[dict]:
 def _score(
     ids, pred: dict, ref: dict, calls: dict, population: Counter, drop: set | None = None
 ) -> dict:
-    """ids의 통화를 pred vs ref로 — 항목별 k/n, 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적).
+    """ids의 통화를 pred vs ref로 — 항목별 k/n(급함은 urgent 여부만 — shared.call_labels.same_value), 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적).
     drop = 모수에서 뺄 (통화, 항목) — 골드 점검의 골드 오류 추정(평가 설계 §2.3, dev만)"""
     ids = sorted(i for i in ids if i in pred and i in ref)
     drop = drop or set()
     keep = {i: [c for c in ids if (c, i) not in drop] for i in ITEMS}
     items = {
-        i: {"k": sum(pred[c][i] == ref[c][i] for c in keep[i]), "n": len(keep[i])} for i in ITEMS
+        i: {"k": sum(same_value(i, pred[c][i], ref[c][i]) for c in keep[i]), "n": len(keep[i])}
+        for i in ITEMS
     }
     rows = [
         (calls[c]["gold"][PURPOSE], pred[c][PURPOSE] == ref[c][PURPOSE]) for c in keep[PURPOSE]
