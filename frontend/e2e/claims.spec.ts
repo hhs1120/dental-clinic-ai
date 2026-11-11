@@ -124,7 +124,7 @@ function sheet(rows: (typeof DOC | typeof DX | typeof REQ | typeof OLD)[]) {
 const PRE = {
   counts: { lines: 2, warning: 1, ai: 0, ai_checked: 0 },
   ai_at: null as string | null,
-  ai_pending: 0,
+  ai_pending: { pre: 0, adjust: 0 },
   rows: [
     {
       claim_id: 21,
@@ -170,7 +170,7 @@ const PRE_AI = {
   ...PRE,
   counts: { lines: 2, warning: 1, ai: 1, ai_checked: 2 },
   ai_at: "2026-11-11T09:30:00",
-  ai_pending: 3,
+  ai_pending: { pre: 3, adjust: 2 },
   rows: [
     {
       ...PRE.rows[0],
@@ -412,14 +412,19 @@ test("AI 점검 갱신 버튼 — 작업이 끝나면 다시 조회", async ({ p
   let posted = false;
   await page.route("**/api/jobs/claim-check", async (r) => {
     posted = true;
-    pre = { ...PRE_AI, ai_pending: 0 };
+    pre = { ...PRE_AI, ai_pending: { pre: 0, adjust: 0 } };
     await r.fulfill({ json: { job_id: 5 } });
   });
   await page.route("**/api/jobs/5", (r) =>
     r.fulfill({ json: { id: 5, status: "done", error: null } }),
   );
   await page.goto("/claims?tab=pre");
-  await page.getByRole("button", { name: "AI 점검 갱신하기 (3줄)" }).click();
+  // 버튼 한 번으로 두 탭이 같이 갱신된다 — 탭별 수를 나눠 적는다
+  await page
+    .getByRole("button", {
+      name: "AI 점검 갱신하기 (청구 전 3줄 · 삭감 대응 2건)",
+    })
+    .click();
   await expect(
     page.getByRole("button", { name: "AI 점검 최신" }),
   ).toBeDisabled();
@@ -456,4 +461,25 @@ test("조정 건 AI 추천 — 사실 문장과 차트 인용", async ({ page })
   await metRow.click();
   const detail = page.getByRole("region", { name: "이두리 청구 상세" });
   await expect(detail).toContainText(`“${AI_Q}”`);
+});
+
+test("AI 점검 갱신 버튼 — 한쪽이 0이면 그쪽은 빼고", async ({ page }) => {
+  await fakeClaims(
+    page,
+    () => sheet(ALL),
+    () => ({ ...PRE_AI, ai_pending: { pre: 0, adjust: 3 } }),
+  );
+  await page.goto("/claims?tab=pre");
+  await expect(
+    page.getByRole("button", { name: "AI 점검 갱신하기 (삭감 대응 3건)" }),
+  ).toBeVisible();
+});
+
+test("점검 결과가 없을 때 AI 칩 주소는 경고 칩으로", async ({ page }) => {
+  await fakeClaims(page, () => sheet(ALL));
+  await page.goto("/claims?tab=pre&chip=ai");
+  await expect(
+    page.getByRole("button", { name: "상병 확인 경고(규칙) 1" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(table(page).locator("tbody > tr")).toHaveCount(1);
 });

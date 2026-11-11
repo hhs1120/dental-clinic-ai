@@ -200,7 +200,13 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
         for x in rows
     )
     return {
-        "counts": {"lines": len(rows), "warning": warned, "ai": flagged, "ai_checked": len(saved)},
+        "counts": {
+            "lines": len(rows),
+            "warning": warned,
+            "ai": flagged,
+            "ai_missing": sum(bool(x["ai"]) and x["ai"]["requirement"] == "missing" for x in rows),
+            "ai_checked": len(saved),
+        },
         "ai_at": max(saved, default=None),
         "ai_pending": claim_check.pending(conn, today),
         "rows": rows,

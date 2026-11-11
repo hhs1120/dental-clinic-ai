@@ -53,6 +53,9 @@ SCHEMA = {
     "required": ["requirement", "omissions", "evidence"],
     "additionalProperties": False,
 }
+MIN_QUOTE = (
+    6  # 인용 최소 글자 수(공백 뺌) — "있음"·"시행함" 같은 조각은 어느 서술에나 있어 근거가 못 된다
+)
 _EDGE = "\"'“”‘’「」『』.,·…:;!? "  # 인용 앞뒤에 붙기 쉬운 따옴표·문장부호
 
 
@@ -90,9 +93,9 @@ def _norm(s: str) -> str:
 
 
 def found(quote: str, text: str) -> bool:
-    """인용이 원문에 글자 그대로 있나 — 공백은 접고 앞뒤 따옴표·문장부호는 떼고 비교, 빈 인용은 거짓"""
+    """인용이 원문에 글자 그대로 있나 — 공백은 접고 앞뒤 따옴표·문장부호는 떼고 비교, MIN_QUOTE자보다 짧으면 거짓"""
     q = _norm(quote).strip(_EDGE)
-    return bool(q) and q in _norm(text)
+    return len(q.replace(" ", "")) >= MIN_QUOTE and q in _norm(text)
 
 
 def check_result(facts: dict, r: dict) -> bool:
@@ -233,10 +236,14 @@ def _plan(conn, rows: list[dict], model: str):
     return todo, skipped, empty
 
 
-def pending(conn: sqlite3.Connection, today: date, model: str | None = None) -> int:
-    """앱 범위에서 다시 불러야 할 줄 수(서술 없는 줄 제외) — 화면 갱신 버튼"""
+def pending(conn: sqlite3.Connection, today: date, model: str | None = None) -> dict[str, int]:
+    """앱 범위에서 다시 불러야 할 줄 수(서술 없는 줄 제외) — 화면 갱신 버튼이 탭별로 적는다
+    {"pre": 청구 전 대기 줄, "adjust": 삭감 대응 요건 사유 건}"""
     model = model or load_config()["aliases"][ALIAS][0]
-    return len(_plan(conn, targets(conn, today, scope="app"), model)[0])
+    rows = targets(conn, today, scope="app")
+    todo = {cid for cid, _, _ in _plan(conn, rows, model)[0]}
+    pre = sum(r["claim_id"] in todo and r["status"] == "pending" for r in rows)
+    return {"pre": pre, "adjust": len(todo) - pre}
 
 
 def build(conn, gw, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30) -> dict:
@@ -280,9 +287,9 @@ def build(conn, gw, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30
 
 
 def results(conn: sqlite3.Connection, claim_ids: list[int] | None = None) -> dict[int, dict]:
-    """저장된 점검 — {claim_id: {requirement, evidence, omissions, valid, at}}, 후검증 실패는 valid False·나머지 None.
+    """저장된 점검 — {claim_id: {requirement, evidence, omissions, valid, at, prompt_version}}, 후검증 실패는 valid False·나머지 None.
     claim_ids가 없으면 저장된 줄 전부(화면이 표마다 한 번 읽는다)"""
-    sql = "SELECT claim_id, result, created_at FROM ax_claim_checks"
+    sql = "SELECT claim_id, result, created_at, prompt_version FROM ax_claim_checks"
     if claim_ids is not None:
         sql += f" WHERE claim_id IN ({', '.join('?' * len(claim_ids))})"
     out = {}
@@ -294,6 +301,7 @@ def results(conn: sqlite3.Connection, claim_ids: list[int] | None = None) -> dic
             "omissions": got["omissions"] if got else None,
             "valid": got is not None,
             "at": r["created_at"],
+            "prompt_version": r["prompt_version"],
         }
     return out
 

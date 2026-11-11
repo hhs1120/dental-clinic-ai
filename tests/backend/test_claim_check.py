@@ -66,6 +66,14 @@ def test_found_whitespace():
     assert not cc.found("6mm", text)
 
 
+def test_found_rejects_short_fragment():
+    """'출혈 있음'처럼 어느 서술에나 있을 조각은 근거가 못 된다 — 공백 뺀 MIN_QUOTE자 미만은 거짓"""
+    text = "치주낭 깊이 5mm 측정, 출혈 있음"
+    assert not cc.found("출혈 있음", text)
+    assert not cc.found("“있음”", text)
+    assert cc.found("깊이 5mm 측정", text)
+
+
 # ── 후검증 ────────────────────────────────────────────────────────
 
 CHART = {"source": "chart", "quote": "골삭제 후 분할 발치함"}
@@ -92,7 +100,7 @@ def test_check_missing_needs_standard_quote():
 
 def test_check_omission_quote_in_chart():
     f = facts()
-    ok = {"procedure": "봉합", "quote": "분할 발치함"}
+    ok = {"procedure": "봉합", "quote": "수평 매복, 골삭제"}
     assert cc.check_result(f, res("met", [CHART], [ok]))
     assert not cc.check_result(f, res("met", [CHART], [{"procedure": "봉합", "quote": "봉합함"}]))
 
@@ -195,7 +203,7 @@ def test_build_retries_once_then_null(src):
     ).fetchone()
     assert row["result"] is None and row["valid"] == 0
     got = cc.results(conn, [cid])[cid]
-    assert got.pop("at")
+    assert got.pop("at") and got.pop("prompt_version") == "v1"
     assert got == {"requirement": None, "evidence": None, "omissions": None, "valid": False}
 
 
@@ -296,7 +304,7 @@ def test_job_api_builds_app_scope(client, src):
     from backend import db
 
     conn = db.connect(src.path.parent / "app.sqlite", src.path)
-    assert cc.pending(conn, DAY) == 0
+    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
 
 
 def test_job_api_reuses_running(client, src):
@@ -316,6 +324,43 @@ def test_pending_count(src):
     claim(src, 1)
     claim(src, 2, note_text="")
     conn = src.app()
-    assert cc.pending(conn, DAY) == 1
+    assert cc.pending(conn, DAY) == {"pre": 1, "adjust": 0}
     build(conn, FakeGw(), scope="app")
-    assert cc.pending(conn, DAY) == 0
+    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+
+
+def test_pending_split_by_tab(src):
+    """갱신 버튼이 탭별로 적는다 — 청구 전 대기 줄과 삭감 대응 요건 사유 건"""
+    claim(src, 1)
+    claim(src, 2, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(10))
+    claim(src, 3, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(20))
+    assert cc.pending(src.app(), DAY) == {"pre": 1, "adjust": 2}
+
+
+class BatchGw(FakeGw):
+    """Batch는 custom_id → 답(None이면 빠진 줄), 일반 호출은 FakeGw 대본"""
+
+    def __init__(self, batch, *turns):
+        super().__init__(*turns)
+        self.batch, self.batches = batch, []
+
+    def submit_batch(self, alias, requests, **kw):
+        self.batches.append(requests)
+        return "b1"
+
+    def batch_status(self, batch_id):
+        return "ended"
+
+    def batch_results(self, batch_id, alias, **kw):
+        return {r["custom_id"]: self.batch.get(r["custom_id"]) for r in self.batches[-1]}
+
+
+def test_batch_then_plain_for_missing(src):
+    """Batch 답은 custom_id(청구 id)로 짝짓고, Batch에서 빠진 줄만 일반 호출"""
+    a, b = claim(src, 1), claim(src, 2)
+    gw = BatchGw({str(a): llm(OK)})
+    conn = src.app()
+    out = cc.build(conn, gw, cc.targets(conn, DAY, scope="all"), use_batch=True)
+    assert (out["called"], out["failed"]) == (2, 0)
+    assert [c["ref"] for c in gw.calls] == [("claim", b)]
+    assert len(gw.batches[0]) == 2

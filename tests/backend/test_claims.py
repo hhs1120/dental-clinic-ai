@@ -264,7 +264,7 @@ def test_pre_claim_warning(src):
     ok = add_claim(src, 1, day="2026-11-10", status="pending", dx="D06")
     bad = add_claim(src, 2, day="2026-11-12", status="pending", dx="D07")
     out = claims.pre_claim(src.app(), DAY)
-    assert out["counts"] == {"lines": 2, "warning": 1, "ai": 0, "ai_checked": 0}
+    assert out["counts"] == {"lines": 2, "warning": 1, "ai": 0, "ai_missing": 0, "ai_checked": 0}
     assert [r["claim_id"] for r in out["rows"]] == [bad, ok]
     first = out["rows"][0]
     assert first["dx_code"] == "D07"
@@ -367,7 +367,11 @@ def test_pre_claim_ai_counts(src):
     save_check(conn, miss, "missing", [STD_Q])
     save_check(conn, met, "met", [CHART_Q])
     out = claims.pre_claim(conn, DAY)
-    assert (out["counts"]["ai"], out["counts"]["ai_checked"]) == (1, 2)
+    assert (out["counts"]["ai"], out["counts"]["ai_missing"], out["counts"]["ai_checked"]) == (
+        1,
+        1,
+        2,
+    )
     assert out["ai_at"] == "2026-11-11T09:30:00"
     got = {r["claim_id"]: r["ai"] for r in out["rows"]}
     assert got[miss]["requirement"] == "missing" and got[miss]["evidence"] == [STD_Q]
@@ -387,7 +391,7 @@ def test_pre_claim_without_checks(src):
     out = claims.pre_claim(src.app(), DAY)
     assert (out["counts"]["ai"], out["counts"]["ai_checked"], out["ai_at"]) == (0, 0, None)
     assert all(r["ai"] is None for r in out["rows"])
-    assert out["ai_pending"] == 0  # 차트 서술이 빈 줄은 부를 것이 아님
+    assert out["ai_pending"] == {"pre": 0, "adjust": 0}  # 차트 서술이 빈 줄은 부를 것이 아님
 
 
 def test_adjusted_requirement_ai_suggestion(src):

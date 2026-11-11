@@ -280,4 +280,16 @@ def test_today_preclaim_ai(tmp_path):
     conn = s.app()
     save_check(conn, cid, "missing", [STD_Q])
     people = _sheet(conn)["people"]
-    assert people["preclaim_ai"] == 1 == claims.pre_claim(conn, TODAY)["counts"]["ai"]
+    assert people["preclaim_ai"] == 1 == claims.pre_claim(conn, TODAY)["counts"]["ai_missing"]
+
+
+def test_today_preclaim_ai_ignores_omission_only(tmp_path):
+    """오늘 화면 문구는 '요건 근거 못 찾음' — 처치 누락만 있는 줄은 세지 않는다(청구 전 AI 칩은 센다)"""
+    from tests.backend.test_claims import CHART_Q, save_check
+
+    s = Source(tmp_path / "source.sqlite")
+    cid = add_claim(s, 1, day="2026-11-12", status="pending", code="U0012")
+    conn = s.app()
+    save_check(conn, cid, "met", [CHART_Q], [{"procedure": "봉합", "quote": "수평 매복, 골삭제"}])
+    assert _sheet(conn)["people"]["preclaim_ai"] == 0
+    assert claims.pre_claim(conn, TODAY)["counts"]["ai"] == 1

@@ -107,8 +107,8 @@ export interface PreSheet {
   /** ai = 근거 못 찾음·누락 줄, ai_checked = 점검 저장 줄(0이면 AI 칩을 숨긴다) */
   counts: { lines: number; warning: number; ai: number; ai_checked: number };
   ai_at: string | null;
-  /** 다시 점검할 줄 수 — 갱신 버튼 */
-  ai_pending: number;
+  /** 다시 점검할 줄 수 — 갱신 버튼이 탭별로 적는다(청구 전 대기 줄 · 삭감 대응 요건 사유 건) */
+  ai_pending: { pre: number; adjust: number };
   rows: PreRow[];
 }
 

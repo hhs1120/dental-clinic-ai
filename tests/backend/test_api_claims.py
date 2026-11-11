@@ -40,7 +40,7 @@ def test_get_claims_shape(client):
 def test_get_pre_shape(client):
     r = client.get("/claims/pre").json()
     assert set(r) == {"counts", "ai_at", "ai_pending", "rows"}
-    assert r["counts"] == {"lines": 1, "warning": 1, "ai": 0, "ai_checked": 0}
+    assert r["counts"] == {"lines": 1, "warning": 1, "ai": 0, "ai_missing": 0, "ai_checked": 0}
     assert r["rows"][0]["ai"] is None
 
 

@@ -130,7 +130,9 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             "refused": _refused(conn, now),
             "appeal_soon": claims.adjusted(conn, today)["chips"]["soon"]["count"],
             "preclaim_warning": pre["warning"],
-            "preclaim_ai": pre["ai"],
+            "preclaim_ai": pre[
+                "ai_missing"
+            ],  # 화면 문구가 '요건 근거 못 찾음' — 누락만 있는 줄은 빼고
         },
         "ai": _auto(conn) | {"prep": _prep_saved(conn, today)} | _failures(conn),
     }

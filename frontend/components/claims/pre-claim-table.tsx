@@ -33,7 +33,7 @@ export function PreClaimTable({
   chip: string | null;
   onChip: (chip: string | null) => void;
 }) {
-  const chip: PreChip =
+  const asked: PreChip =
     chipParam === "lines" || chipParam === "ai" ? chipParam : "warning";
   const [sheet, setSheet] = useState<PreSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +78,9 @@ export function PreClaimTable({
       </p>
     );
 
+  // 점검 결과가 없으면 AI 칩이 없다 — 주소로 들어와도 경고 칩으로
+  const chip: PreChip =
+    asked === "ai" && sheet.counts.ai_checked === 0 ? "warning" : asked;
   const rows =
     chip === "warning"
       ? sheet.rows.filter((r) => r.warning)
@@ -96,6 +99,7 @@ export function PreClaimTable({
         ]
       : []),
   ];
+  const need = sheet.ai_pending.pre + sheet.ai_pending.adjust;
   const start = () => {
     setError(null);
     runClaimCheck().then(
@@ -129,13 +133,13 @@ export function PreClaimTable({
         <Button
           size="sm"
           variant="outline"
-          disabled={job !== null || sheet.ai_pending === 0}
+          disabled={job !== null || need === 0}
           onClick={start}
         >
           {job !== null
             ? "AI 점검 중…"
-            : sheet.ai_pending > 0
-              ? `AI 점검 갱신하기 (${sheet.ai_pending}줄)`
+            : need > 0
+              ? `AI 점검 갱신하기 (${pendingText(sheet.ai_pending)})`
               : "AI 점검 최신"}
         </Button>
       </div>
@@ -214,6 +218,12 @@ export function PreClaimTable({
     </div>
   );
 }
+
+/** 갱신 버튼 줄 수 — 버튼 한 번으로 두 탭이 같이 갱신돼 탭별로 나눠 적는다, 0인 쪽은 뺀다 */
+const pendingText = (p: PreSheet["ai_pending"]) =>
+  [p.pre && `청구 전 ${p.pre}줄`, p.adjust && `삭감 대응 ${p.adjust}건`]
+    .filter(Boolean)
+    .join(" · ");
 
 /** AI 점검 결과 — 사실 문장 딱지와 인용(기준이 요구하는 것·차트에 적힌 다른 처치) */
 function AiFinding({ ai }: { ai: ClaimCheck }) {
