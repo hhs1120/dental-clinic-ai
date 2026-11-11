@@ -57,7 +57,7 @@ class World:
         conn = self.src.app()
         with conn:
             for cid, ai in self.checks.items():
-                req, version = ai if isinstance(ai, tuple) else (ai, "v1")
+                req, version = ai if isinstance(ai, tuple) else (ai, ev.cc.PROMPT_VERSION)
                 result = (
                     None
                     if req == "fail"

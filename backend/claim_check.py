@@ -23,7 +23,7 @@ CUT = (
     "denied",
 )  # 깎인 청구 — backend/claims.py CUT과 같다(그 모듈이 이 모듈을 읽어 import하지 않음)
 
-TASK, ALIAS, PROMPT_VERSION = "claim_check", "chat", "v1"
+TASK, ALIAS, PROMPT_VERSION = "claim_check", "chat", "v2"
 SCHEMA = {
     "type": "object",
     "properties": {

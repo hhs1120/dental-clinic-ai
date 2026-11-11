@@ -203,7 +203,7 @@ def test_build_retries_once_then_null(src):
     ).fetchone()
     assert row["result"] is None and row["valid"] == 0
     got = cc.results(conn, [cid])[cid]
-    assert got.pop("at") and got.pop("prompt_version") == "v1"
+    assert got.pop("at") and got.pop("prompt_version") == cc.PROMPT_VERSION
     assert got == {"requirement": None, "evidence": None, "omissions": None, "valid": False}
 
 
