@@ -21,6 +21,7 @@ from generator.master import (
     EXPENSE_NO_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
     FULL_MOUTH,
+    HOURS,
     LAB_FEES,
     LEDGER_ERROR_KINDS,
     MAX_SETTLE_DAYS,
@@ -29,6 +30,7 @@ from generator.master import (
     ORAL_CARE_PRICES,
     PROCEDURES,
     RECON_MISMATCH_COUNTS,
+    SETTLEMENT_LATE_OPEN_DAYS,
     VENDORS,
     add_bank_days,
     bank_day,
@@ -38,6 +40,7 @@ from generator.master import (
     vendor_aliases,
 )
 from generator.verify.common import _dt, _rows
+from generator.verify.records import _close, _next_open_day
 
 FIN_TABLES = ("fin_card_sales", "fin_card_deposits", "fin_bank_transactions")
 # 진료 외 매출 금액 — 구강용품 1~NON_CLINICAL_MAX_ITEMS개 합 (§2.7 non_clinical_sale, 3개는 데이터 재설계)
@@ -336,6 +339,66 @@ def check_non_clinical_sales_avoid_balances(conn, ctx):
     return bad
 
 
+def _transposed(true: int, ledger: int) -> bool:
+    """ledger가 true의 이웃 두 자리를 바꾼 더 작은 수(10배 관계 아님)"""
+    a, b = str(true), str(ledger)
+    if len(a) != len(b) or ledger >= true or ledger * 10 == true:
+        return False
+    diff = [i for i in range(len(a)) if a[i] != b[i]]
+    return len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
+
+
+def _seen(d: date, ctx) -> bool:
+    """그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날"""
+    return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], ctx.holidays) < ctx.today
+
+
+def check_settlement_errors(conn, ctx):
+    """정산 수납 장부 실수(정산 행만 — 데이터 재설계 설계 §1): 실제 일시가 평가 달 안, 정산 행 하나에 실수 하나, 그 환자는 실제
+    일시 뒤로 통화 없음. 자릿수 바꿔 적기(amount_typo) = 연동 카드(승인번호)·실제 일시 그대로·장부 금액이 실제 금액의 이웃 두
+    자리를 바꾼 더 작은 수 / 며칠 늦게 적기(date_shift) = 이체·금액 같음·장부 날짜가 실제 날 뒤 SETTLEMENT_LATE_OPEN_DAYS
+    범위의 진료일·영업시간. 실제 날과 장부 날 모두 정산·입금이 TODAY 전에 보임. 종류별 수 = 메타 settlement_errors"""
+    rows = _rows(
+        conn,
+        "SELECT e.id, e.kind, e.true_amount, e.true_paid_at, e.true_method, p.id AS pay_id, p.patient_id,"
+        " p.amount_paid, p.paid_at, p.method, p.approval_no FROM truth.truth_ledger_errors e"
+        " JOIN emr_payments p ON p.id = e.payment_id WHERE p.kind = 'settlement' ORDER BY e.id",
+    )
+    bad, counts = [], Counter(r["kind"] for r in rows)
+    lo, hi = SETTLEMENT_LATE_OPEN_DAYS
+    for r in rows:
+        true_day = _dt(r["true_paid_at"]).date()
+        later = conn.execute(
+            "SELECT count(*) FROM ax_calls WHERE patient_id = ? AND started_at > ?",
+            (r["patient_id"], r["true_paid_at"]),
+        ).fetchone()[0]
+        ok = r["true_method"] == r["method"] and not later
+        ok = ok and true_day.strftime("%Y-%m") in recon_months(ctx.today)
+        ok = ok and _seen(true_day, ctx)
+        if r["kind"] == "amount_typo":
+            ok = ok and r["method"] == "card" and bool(r["approval_no"])
+            ok = ok and r["paid_at"] == r["true_paid_at"]
+            ok = ok and _transposed(r["true_amount"], r["amount_paid"])
+        elif r["kind"] == "date_shift":
+            days, d = [], true_day
+            for _ in range(hi):
+                d = _next_open_day(d, ctx.holidays)
+                days.append(d)
+            at = _dt(r["paid_at"])
+            ok = ok and r["method"] == "transfer" and r["amount_paid"] == r["true_amount"]
+            ok = ok and at.date() in days[lo - 1 :] and _seen(at.date(), ctx)
+            ok = ok and HOURS["open"] <= at.strftime("%H:%M") <= _close(at.date())
+        else:
+            ok = False
+        if not ok:
+            bad.append(r)
+    if len({r["pay_id"] for r in rows}) != len(rows):
+        bad.append({"problem": "정산 행 하나에 실수 둘 이상"})
+    if dict(counts) != {k: v for k, v in (ctx.settlement_errors or {}).items() if v}:
+        bad.append({"counts": dict(counts), "expected": ctx.settlement_errors})
+    return bad
+
+
 def check_recon_mismatches(conn, ctx):
     """불일치 정답: 원인별 건수 = 메타 recon_mismatches, 날짜는 평가 달(master.recon_months — split = master.recon_test_months면 test),
     fin·수납 id 존재. 장부 쪽 원인 ⇔ 장부 실수 1:1(같은 종류·수납·실제 날짜). 통장·카드 쪽 모양 — 분할결제 = 같은 시각 승인
@@ -346,6 +409,8 @@ def check_recon_mismatches(conn, ctx):
     bad = []
     want = {k: ctx.recon_mismatches.get(k, 0) for k in RECON_MISMATCH_COUNTS}
     want["entry_missing"] += ctx.unrecorded_settlements  # 장부에 행 없는 누락도 입력 누락 정답
+    for k, v in (ctx.settlement_errors or {}).items():  # 정산 수납 장부 실수도 그 원인의 정답
+        want[k] += v
     want["non_clinical_sale"] += (
         ctx.non_clinical_multi
     )  # 구강용품 여러 개 판매도 진료 외 매출 정답

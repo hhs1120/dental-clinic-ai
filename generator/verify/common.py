@@ -50,6 +50,7 @@ class Ctx:
     # 장부에 행 없는 미수 정산 누락 수·구강용품 여러 개 판매 수(⑧-1 입력 누락·진료 외 매출에 더해짐) — truth_gen_meta에서
     unrecorded_settlements: int = 0
     non_clinical_multi: int = 0
+    settlement_errors: dict | None = None  # 정산 수납 장부 실수 종류별 수 — truth_gen_meta에서
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -79,6 +80,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         ledger_debt_calls=int(meta["ledger_debt_calls"]),
         unrecorded_settlements=int(meta.get("unrecorded_settlements", 0)),
         non_clinical_multi=int(meta.get("non_clinical_multi", 0)),
+        settlement_errors=json.loads(meta.get("settlement_errors", "{}")),
         rag_qa=rag_qa,
     )
 

@@ -2,11 +2,13 @@
 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1). 생성 결과가 이 폴더 픽스처에 있어 backend를 부르는
 테스트지만 여기에 둔다. 정답 건 ↔ 탐지 건 대응 = 관련 행이 가장 많이 겹치는 건(같으면 키 순 첫 건)."""
 
+import json
 from datetime import date
 
 import pytest
 
 from backend import db, recon, recon_match
+from evaluation.recon import _refs
 from evaluation.recon import match as _match
 from generator.master import RECON_CAUSE_GROUPS, recon_months
 
@@ -32,9 +34,15 @@ def test_every_truth_mismatch_detected(world):
 
 
 def test_no_false_positives(world):
+    """오탐 = 정답 실수와 관련 행(금융 행·수납)이 하나도 없는 탐지 건. 이웃 진료일보다 늦게 적은 정산(데이터 재설계)은 금융 쪽과
+    장부 쪽이 두 건으로 갈라져 하나는 정답과 짝이 안 되지만, 같은 실수의 행이라 오탐이 아니다"""
     today, _, items, truth = world
-    matched = {_match(t, items)["key"] for t in truth}
-    extra = [(i["date"], i["channel"]) for i in items if i["key"] not in matched]
+    refs = set().union(
+        *(_refs(json.loads(t["fin_ids"]), json.loads(t["payment_ids"])) for t in truth)
+    )
+    extra = [
+        (i["date"], i["channel"]) for i in items if not (_refs(i["fin"], i["payment_ids"]) & refs)
+    ]
     assert extra == []
     months = recon_months(today)
     assert all(i["date"][:7] in months for i in items)

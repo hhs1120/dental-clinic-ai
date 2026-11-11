@@ -43,6 +43,8 @@ from generator.master import (
     RECON_LATEST_MONTH_MIN,
     RECON_MISMATCH_COUNTS,
     SATURDAY,
+    SETTLEMENT_ERROR_COUNTS,
+    SETTLEMENT_LATE_OPEN_DAYS,
     SPLIT_MIN_AMOUNT,
     UNRECORDED_ORAL_SHARE,
     UNRECORDED_SETTLEMENT_COUNT,
@@ -102,6 +104,132 @@ def _true_payments(conn) -> list[dict]:
                 }
             )
     return out
+
+
+def _transpose(n: int) -> int | None:
+    """이웃 두 자리를 바꾼 더 작은 수 — 앞자리부터, 0이 맨 앞에 오거나 10배 관계가 되면 다음 자리"""
+    s = str(n)
+    for i in range(len(s) - 1):
+        if s[i] > s[i + 1] and not (i == 0 and s[i + 1] == "0"):
+            t = int(s[:i] + s[i + 1] + s[i] + s[i + 2 :])
+            if t * 10 != n:
+                return t
+    return None
+
+
+def stage_settlement_errors(run, rng, fake) -> None:
+    """정산 수납 장부 실수(데이터 재설계 설계 §1) — 8b 앞. 통화·문자가 다 만들어진 뒤라 장부를 바꿔도 번지지 않고, 말이 어긋나지
+    않게 정산 행만(진료 행은 문자·통화가 읽음)·그 환자는 그날 뒤로 통화 없음·앞으로 예약 없음. 자릿수 바꿔 적기는 연동 카드,
+    며칠 늦게 적기는 이체(SETTLEMENT_LATE_OPEN_DAYS번째 진료일). 실제 값은 truth_ledger_errors에 — 8b가 금융 행을 실제
+    값으로 만들고 불일치 정답을 붙인다. 종류마다 평가 달 마지막 달 먼저(RECON_LATEST_MONTH_MIN), 그다음 dev·test 번갈아"""
+    conn, today, holidays = run.conn, run.today, run.holidays
+    calls = defaultdict(list)
+    for pid, at in conn.execute(
+        "SELECT patient_id, started_at FROM ax_calls WHERE patient_id IS NOT NULL"
+    ):
+        calls[pid].append(at)
+    future = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT patient_id FROM emr_appointments WHERE date(scheduled_at) >= ?",
+            (today.isoformat(),),
+        )
+    }
+    erred = {
+        r[0]
+        for r in conn.execute(
+            "SELECT payment_id FROM truth.truth_ledger_errors WHERE payment_id IS NOT NULL"
+        )
+    }
+    months, test, last = recon_months(today), recon_test_months(today), recon_months(today)[-1]
+    rows = [
+        dict(zip(("id", "pid", "paid", "at", "method", "no"), r, strict=True))
+        for r in conn.execute(
+            "SELECT id, patient_id, amount_paid, paid_at, method, approval_no FROM emr_payments"
+            " WHERE kind = 'settlement' AND amount_paid > 0 ORDER BY id"
+        )
+    ]
+    rows = [
+        r
+        for r in rows
+        if r["at"][:7] in months
+        and r["id"] not in erred
+        and r["pid"] not in future
+        and not any(t > r["at"] for t in calls[r["pid"]])
+        and add_bank_days(
+            date.fromisoformat(r["at"][:10]), MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays
+        )
+        < today
+    ]
+    lo, hi = SETTLEMENT_LATE_OPEN_DAYS
+
+    def seen(
+        d: date,
+    ) -> (
+        bool
+    ):  # 그날 카드 정산·입금이 TODAY 전에 보임 — 대조 대기(pending)가 아닌 날(8b의 ok와 같은 기준)
+        return add_bank_days(d, MAX_SETTLE_DAYS + DEPOSIT_DELAY_DAYS[1], holidays) < today
+
+    def late_day(r) -> date | None:
+        d = date.fromisoformat(r["at"][:10])
+        for _ in range(int(rng.integers(lo, hi + 1))):
+            d += timedelta(days=1)
+            while not open_slots(d.weekday()) or d in holidays:
+                d += timedelta(days=1)
+        return d if seen(d) else None
+
+    shapes = {
+        "amount_typo": [
+            r for r in rows if r["method"] == "card" and r["no"] and _transpose(r["paid"])
+        ],
+        "date_shift": [r for r in rows if r["method"] == "transfer"],
+    }
+    taken = set()
+    for kind, n in SETTLEMENT_ERROR_COUNTS.items():
+        order = [shapes[kind][int(i)] for i in rng.permutation(len(shapes[kind]))]
+        order = [r for r in order if r["pid"] not in taken]
+        head = [r for r in order if r["at"][:7] == last][:RECON_LATEST_MONTH_MIN]
+        pools = {
+            s: [r for r in order if r not in head and (r["at"][:7] in test) == s]
+            for s in (False, True)
+        }
+        done = Counter((r["at"][:7] in test) for r in head)
+        ordered = list(head)
+        while any(pools.values()):
+            s = min((x for x in pools if pools[x]), key=lambda x: done[x])
+            ordered.append(pools[s].pop(0))
+            done[s] += 1
+        made = 0
+        for r in ordered:
+            if made == n:
+                break
+            if r["pid"] in taken:
+                continue
+            if kind == "amount_typo":
+                conn.execute(
+                    "UPDATE emr_payments SET amount_paid = ? WHERE id = ?",
+                    (_transpose(r["paid"]), r["id"]),
+                )
+            else:
+                d = late_day(r)
+                if d is None:
+                    continue
+                close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+                open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+                span = (
+                    datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+                ).seconds // 60
+                at = open_ + timedelta(minutes=int(rng.integers(span)))
+                conn.execute(
+                    "UPDATE emr_payments SET paid_at = ? WHERE id = ?", (at.strftime(FMT), r["id"])
+                )
+            conn.execute(
+                "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at,"
+                " true_method) VALUES (?, ?, ?, ?, ?)",
+                (kind, r["id"], r["paid"], r["at"], r["method"]),
+            )
+            taken.add(r["pid"])
+            made += 1
 
 
 def stage_income(run, rng, fake) -> None:

@@ -10,11 +10,20 @@ from generator.master import ORAL_CARE_PRICES, UNRECORDED_SETTLEMENT_COUNT
 
 # 재설계 전 실데이터에서 뜬 값 — 코드 단계라 생성 픽스처(가짜 LLM)와 같다
 BEFORE = {
-    "payments": ("select * from emr_payments order by id", "3cdcba69bb8b7925"),
+    # 정산 수납 장부 실수(데이터 재설계)는 정산 행의 금액·날짜만 바꾼다 — 진료 행 전부와 정산 행의 나머지 칸은 그대로
+    "payments_visit": (
+        "select * from emr_payments where kind='visit' order by id",
+        "02516be914b346ca",
+    ),
+    "payments_settlement": (
+        "select id,patient_id,appointment_id,kind,amount_due,method,approval_no from emr_payments"
+        " where kind='settlement' order by id",
+        "c30ad02d0307e64b",
+    ),
     "claims": ("select * from emr_claims order by id", "28715ace5537b020"),
     "ledger_errors": (
         "select kind,payment_id,true_amount,true_paid_at,true_method from truth.truth_ledger_errors"
-        " where payment_id is not null order by id",
+        " where payment_id in (select id from emr_payments where kind='visit') order by id",
         "7db9d51b09dfd77e",
     ),
     "claim_errors": (  # 추가 처치 누락은 데이터 재설계로 더해진다 — 그 밖의 청구 오류만(test_chart_redesign이 나머지를 본다)
@@ -46,8 +55,6 @@ def test_unrecorded_settlements_exist_with_patient(conn):
     ).fetchall()
     assert len(rows) == UNRECORDED_SETTLEMENT_COUNT
     assert all(pid is not None and amount > 0 for pid, amount, _ in rows)
-    sums = {a + b for a in ORAL_CARE_PRICES.values() for b in [0, *ORAL_CARE_PRICES.values()]}
-    assert any(m == "card" and amount in sums for _, amount, m in rows)  # 규칙 9를 속이는 몫
 
 
 def test_unrecorded_settlements_are_recon_truths(conn):
@@ -210,8 +217,8 @@ def test_amount_diff_reason_line(generated):
 
 
 def test_settlements_pay_full_balance_and_sales_avoid_balances(generated):
-    """미수 정산 누락은 늘 잔액 전부(일부 납부 없음 — 읽으면 풀리게), 그중 구강용품 1~2개 합과 같은 금액이 있다(규칙 9를
-    속임). 진짜 진료 외 매출 금액은 그날 어느 환자 잔액과도 다르다(거꾸로 헷갈리지 않게). verify가 둘 다 잡는다"""
+    """미수 정산 누락은 늘 잔액 전부(일부 납부 없음 — 읽으면 풀리게). 진짜 진료 외 매출 금액은 그날 어느 환자 잔액과도 다르다.
+    verify가 둘 다 잡는다"""
     from generator import verify
     from generator.paths import ROOT
     from generator.verify.common import load_ctx
@@ -224,17 +231,66 @@ def test_settlements_pay_full_balance_and_sales_avoid_balances(generated):
     assert verify.check_unrecorded_settlements(c, ctx) == []
     assert verify.check_non_clinical_sales_avoid_balances(c, ctx) == []
     assert verify.check_non_clinical_sales_avoid_balances in verify.REQUIRED
-    oral = [
-        a
-        for (a,) in c.execute(
-            "select true_amount from truth.truth_ledger_errors where payment_id is null"
-            " and true_method = 'card'"
-        )
-        if a in _sums(2)
-    ]
-    assert oral
     c.execute(  # 일부 납부로 바꾸면 잡는다
         "UPDATE truth.truth_ledger_errors SET true_amount = true_amount - 100 WHERE id ="
         " (SELECT min(id) FROM truth.truth_ledger_errors WHERE payment_id IS NULL)"
     )
     assert verify.check_unrecorded_settlements(c, ctx)
+
+
+def _transposed(true: int, ledger: int) -> bool:
+    """ledger가 true의 이웃 두 자리를 바꾼 수(더 작음, 10배 관계 아님)"""
+    a, b = str(true), str(ledger)
+    if len(a) != len(b) or ledger >= true or ledger * 10 == true:
+        return False
+    diff = [i for i in range(len(a)) if a[i] != b[i]]
+    return len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]]
+
+
+def test_settlement_errors(conn):
+    """정산 수납 장부 실수(데이터 재설계 — 정산 행만) — 자릿수 바꿔 적기는 연동 카드, 며칠 늦게 적기는 이체(이웃 진료일보다 뒤),
+    그날 뒤로 그 환자 통화 없음, 종류별 수 = master.SETTLEMENT_ERROR_COUNTS, 같은 원인의 ⑧-1 불일치 정답과 짝"""
+    from generator.master import SETTLEMENT_ERROR_COUNTS
+
+    rows = conn.execute(
+        "select e.id, e.kind, e.true_amount, e.true_paid_at, e.true_method, p.amount_paid, p.paid_at,"
+        " p.method, p.approval_no, p.patient_id,"
+        " (select count(*) from truth.truth_recon_mismatches m where m.ledger_error_id = e.id"
+        "  and m.cause = e.kind) from truth.truth_ledger_errors e join emr_payments p on p.id = e.payment_id"
+        " where p.kind = 'settlement'"
+    ).fetchall()
+    kinds = {}
+    for _eid, kind, true, t_at, t_method, paid, at, method, no, pid, paired in rows:
+        kinds[kind] = kinds.get(kind, 0) + 1
+        assert paired == 1 and t_method == method
+        later = conn.execute(
+            "select count(*) from ax_calls where patient_id = ? and started_at > ?", (pid, t_at)
+        ).fetchone()[0]
+        assert later == 0
+        if kind == "amount_typo":
+            assert method == "card" and no and at == t_at and _transposed(true, paid)
+        else:
+            assert kind == "date_shift" and method == "transfer" and paid == true
+            assert at[:10] > t_at[:10]
+    assert kinds == SETTLEMENT_ERROR_COUNTS
+
+
+def test_verify_settlement_errors(generated):
+    from generator import verify
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("verify_settlement_errors")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    assert verify.check_settlement_errors in verify.REQUIRED
+    assert verify.check_settlement_errors(c, ctx) == []
+    assert verify.check_ledger_errors(c, ctx) == []
+    c.execute(  # 자릿수가 아니라 아무 금액으로 바꾸면 잡는다
+        "UPDATE emr_payments SET amount_paid = 1 WHERE id = (SELECT min(e.payment_id)"
+        " FROM truth.truth_ledger_errors e JOIN emr_payments p ON p.id = e.payment_id"
+        " WHERE p.kind = 'settlement' AND e.kind = 'amount_typo')"
+    )
+    assert verify.check_settlement_errors(c, ctx)

@@ -1064,7 +1064,13 @@ RECON_CAUSE_GROUPS = {
 # 장부는 그대로라 금융에만 돈이 생긴다. 늘 잔액 전부(일부 납부 없음 — 잔액을 보면 풀리게). ORAL_SHARE는 잔액이 구강용품 1~2개 합과
 # 같은 환자의 카드(규칙 9가 진료 외 매출로 틀린다)의 최대 몫 — 그런 환자가 적어 모자라면 일반 꼴로 채운다(dev·test 번갈아). 추정값
 UNRECORDED_SETTLEMENT_COUNT = 30
-UNRECORDED_ORAL_SHARE = 0.7
+UNRECORDED_ORAL_SHARE = (
+    0  # 구강용품 합 잔액 꼴은 끔 — 잔액이 우연히 같은 환자가 하루 4~8명이라 읽어도 안 풀림
+)
+# ⑧-1 정산 수납 장부 실수(데이터 재설계): 정산 행만 바꾼다(진료 행은 문자·통화가 읽음), 그날 뒤로 통화가 없는 환자만.
+# 자릿수 바꿔 적기(연동 카드 — 10배가 아니라 규칙 5가 못 봄)·며칠 늦게 적기(이체 — 이웃 진료일보다 뒤라 규칙 6이 못 봄). 추정값
+SETTLEMENT_ERROR_COUNTS = {"amount_typo": 14, "date_shift": 12}
+SETTLEMENT_LATE_OPEN_DAYS = (2, 4)  # 며칠 늦게 적기 — 실제 날 뒤 몇 번째 진료일에 적나
 # ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
 # 조합해야 풀린다. 1~2개 판매(RECON_MISMATCH_COUNTS)와 비슷한 수 — 더 늘리면 세 개 판매가 더 흔한 부자연스러운 데이터. 추정값
 NON_CLINICAL_MULTI_COUNT = 12
