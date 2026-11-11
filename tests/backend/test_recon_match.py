@@ -303,3 +303,13 @@ def test_query_count_independent_of_rows(tmp_path):
             bk.sale(at, 10_000, f"N{i}")
         counts.append(_count(bk.app()))
     assert counts[0] == counts[1]
+
+
+def test_cash_period_with_pending_day_not_detected(b):
+    """입금 기간에 대조 전 날이 섞이면(11-27은 카드 정산이 기준일 뒤) 그 입금은 통째로 대조 전"""
+    b.pay("2026-11-25 10:00:00", 10_000, "cash")
+    b.pay("2026-11-27 10:00:00", 20_000, "cash")
+    cash = b.settle()
+    assert cash == {"2026-11-30": 30_000}
+    b.cash_in(cash)
+    assert detect(b) == []

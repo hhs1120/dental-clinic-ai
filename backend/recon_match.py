@@ -247,27 +247,28 @@ def _settlement(books, ok_day) -> list[list[dict]]:
 def _cash(books, ok_day) -> list[dict]:
     """현금 — 입금일별 장부 현금 합계 ↔ 그날 현금 입금. 다르면 노드 하나(차이 = 금융 − 장부)"""
     memo = books["mv"]["cash_deposit"]["memo"]
-    ledger: dict[date, list[dict]] = defaultdict(list)
-    for p in books["payments"]:
-        if p["method"] == "cash" and ok_day(p["at"].date()):
-            ledger[_cash_day(books, p["at"].date())].append(p)
     period: dict[date, list[date]] = defaultdict(list)
     for d in books["open_days"]:
-        if ok_day(d):
-            period[_cash_day(books, d)].append(d)
+        period[_cash_day(books, d)].append(d)
+    # 기간에 대조 전 날이 하나라도 섞인 입금은 통째로 대조 전 — 그날 현금도 그 입금에 들어 있다
+    period = {dep: days for dep, days in period.items() if all(ok_day(d) for d in days)}
+    ledger: dict[date, list[dict]] = defaultdict(list)
+    for p in books["payments"]:
+        if p["method"] == "cash" and _cash_day(books, p["at"].date()) in period:
+            ledger[_cash_day(books, p["at"].date())].append(p)
     bank = {
         b["at"].date(): b
         for b in books["bank_in"]
         if b["memo"] == memo and b["at"].date() < books["today"]
     }
     out = []
-    for dep in sorted(set(ledger) | {d for d in bank if period.get(d)}):
+    for dep in sorted(set(ledger) | {d for d in bank if d in period}):
         rows, b = ledger.get(dep, []), bank.get(dep)
         led = sum(p["amount_paid"] for p in rows)
         fin = b["amount"] if b else 0
         if led == fin:
             continue
-        days = period.get(dep) or sorted({p["at"].date() for p in rows})
+        days = period[dep]
         out.append(
             {
                 "side": "cash",
