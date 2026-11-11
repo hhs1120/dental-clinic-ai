@@ -260,7 +260,9 @@ def make_db(tmp_path) -> sqlite3.Connection:
         "INSERT INTO emr_alert_types VALUES (?, ?, ?)",
         [(code, a["label"], a["category"]) for code, a in ALERT_TYPES.items()],
     )
-    conn.executemany("INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows())
+    conn.executemany(
+        "INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows(CTX.holidays)
+    )
     conn.executescript(SEED)
     conn.executemany(
         "INSERT INTO ax_documents VALUES (?, ?, ?, ?, ?, ?, ?)", [d[:7] for d in DOCS]

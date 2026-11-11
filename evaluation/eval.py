@@ -36,6 +36,7 @@ from evaluation import (
     gold_audit,
     prep,
     rag,
+    recon,
 )
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
@@ -336,6 +337,9 @@ def run(
     if dev and has_checks and conn.execute("SELECT 1 FROM ax_claim_checks LIMIT 1").fetchone():
         # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check run --split test(사람)
         result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
+    if dev and _has_recon(conn):
+        # ⑧-1 규칙 기준선(평가 설계 §5) — 과금 없음. test 묶음은 3단계에서 에이전트와 짝 비교로
+        result["recon"] = recon.score(conn, split, load_clinic().today)
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -436,6 +440,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_prep(r["prep"])
     if r.get("claim_check") is not None:
         out += _render_claim_check(r["claim_check"])
+    if r.get("recon") is not None:
+        out += _render_recon(r["recon"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -642,6 +648,40 @@ def _render_claim_check(c: dict) -> list[str]:
         f" · 모두 정당 {pct(a['all_justified'])} · 모두 다툴 만함 {pct(a['all_contestable'])}",
         "",
     ]
+    return out
+
+
+def _has_recon(conn) -> bool:
+    """⑧-1 채점을 넣을지 — 정답 DB에 불일치 정답이 있을 때(테스트용 작은 DB는 건너뜀)"""
+    try:
+        return bool(conn.execute("SELECT 1 FROM truth.truth_recon_mismatches LIMIT 1").fetchone())
+    except sqlite3.OperationalError:
+        return False
+
+
+_RECON_GROUP = {"rule": "규칙으로 되는 원인", "ambiguous": "애매한 원인"}
+
+
+def _render_recon(r: dict) -> list[str]:
+    out = [
+        "## ⑧-1 규칙 기준선",
+        "",
+        f"불일치 정답 {r['n']}건 · 탐지 {_kn(r['detected'])}",
+        "",
+        "| 묶음 | 원인 정확도(top-1) |",
+        "|---|---|",
+        f"| 전체 | {_kn(r['rule'])} |",
+    ]
+    out += [f"| {_RECON_GROUP.get(g, g)} | {_kn(kn)} |" for g, kn in r["by_group"].items()]
+    out.append("")
+    if r["by_cause"] is not None:
+        out += ["| 원인 | 맞음 |", "|---|---|"]
+        out += [f"| {c} | {_kn(kn)} |" for c, kn in r["by_cause"].items()]
+        out.append("")
+    if r["wrong"]:
+        out += ["틀린 건(dev):", ""]
+        out += [f"- {w['date']} 정답 {w['cause']} · 규칙 {w['rule_cause']}" for w in r["wrong"]]
+        out.append("")
     return out
 
 

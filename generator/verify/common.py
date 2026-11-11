@@ -120,7 +120,7 @@ def check_master_values(conn, ctx):
     have = dict(conn.execute("SELECT name, value FROM ax_master_values").fetchall())
     return [
         {"name": name, "have": have.get(name)}
-        for name, value in master_values_rows()
+        for name, value in master_values_rows(ctx.holidays)
         if name not in have or json.loads(have[name]) != json.loads(value)
     ]
 
