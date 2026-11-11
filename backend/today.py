@@ -2,13 +2,14 @@
 숫자는 전부 쿼리(기능 정의 §3 원칙 2)이고, 숫자마다 그 숫자가 가리키는 화면과 같은 함수로 센다 — 예약·신환·주의·
 내원 확인 전은 준비표(prep.prep_facts), 할 일·급한 통화는 통화 화면 오늘 할 일(calls.today_board), 확인할 통화는
 calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자동 처리는 통화 화면과 같은 유효 조건,
-재심 신청 기한 임박·청구 전 상병 경고는 청구 점검 화면(claims.adjusted `soon` 칩·claims.pre_claim 경고 줄).
+재심 신청 기한 임박·청구 전 상병 경고는 청구 점검 화면(claims.adjusted `soon` 칩·claims.pre_claim 경고 줄),
+일계표 불일치는 재무 대조 화면의 확정 안 된 건(recon.open_count).
 미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. LLM을 부르지 않는다."""
 
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from backend import autoclose, calls, claims, judge_queue, prep
+from backend import autoclose, calls, claims, judge_queue, prep, recon
 
 AUTO_RECENT = 20  # "AI가 한 일" 펼친 자동 처리 목록 — 최근에 닫힌 순, 나머지는 통화 기록에서
 REFUSED_DAYS = 7  # 근거 없는 질문 — 실제 시계 기준 최근 이 날수(확인함 없이 지나면 빠진다)
@@ -129,6 +130,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             "refused": _refused(conn, now),
             "appeal_soon": claims.adjusted(conn, today)["chips"]["soon"]["count"],
             "preclaim_warning": claims.pre_claim(conn, today)["counts"]["warning"],
+            "recon_open": recon.open_count(conn, today),
         },
         "ai": _auto(conn) | {"prep": _prep_saved(conn, today)} | _failures(conn),
     }

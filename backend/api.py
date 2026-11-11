@@ -29,6 +29,7 @@ from backend import (
     metrics,
     missed,
     prep,
+    recon,
     search_summary,
     today,
 )
@@ -711,6 +712,42 @@ def claim_judgment(
         claims.record_judgment(
             conn, claim_id, body.judgment, by=body.part, at=_stamp(now), today=clinic.today
         )
+        conn.commit()
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+# ── ⑧ 재무 대조 (설계 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1) ───────────
+
+
+@app.get("/finance/recon")
+def finance_recon(paths: Paths, clinic: ClinicDep, month: str | None = None) -> dict:
+    """일계표 — 그 달(없으면 가장 최근 달) 날짜별 대조와 불일치 건(backend/recon.py). 대조 경계는 앱 기준일, 모르는 달 400"""
+    conn = _open_rw(paths)
+    try:
+        return recon.ledger(conn, clinic.today, month)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+class ReconConfirm(BaseModel):
+    cause: str
+    part: str
+
+
+@app.post("/finance/recon/{key}/confirm")
+def finance_recon_confirm(
+    key: str, body: ReconConfirm, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """불일치 건 사람 확정(덮어씀) — 기록 시각은 실제 시계. 지금 탐지에 없는 건·모르는 원인은 400"""
+    conn = _open_rw(paths)
+    try:
+        recon.confirm(conn, key, body.cause, by=body.part, at=_stamp(now), today=clinic.today)
         conn.commit()
         return {"ok": True}
     except ValueError as e:
