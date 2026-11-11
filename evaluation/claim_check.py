@@ -236,6 +236,7 @@ def main(argv=None) -> None:
     sub = p.add_subparsers(dest="command", required=True)
     s = sub.add_parser("sample", help="dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출)")
     s.add_argument("--n", type=int, default=60)
+    s.add_argument("--batch", action="store_true", help="Batch로(반값, 결과가 한꺼번에)")
     r = sub.add_parser(
         "run", help="한 분할 전부 점검하고 채점(과금, Batch) — test는 사람만, 버전마다 한 번"
     )
@@ -248,7 +249,7 @@ def main(argv=None) -> None:
     if args.command == "sample":
         ids = dev_sample(conn, today, args.n)
         rows = cc.targets(conn, today, scope="all", claim_ids=ids)
-        print(cc.build(conn, make_gateway(conn), rows, use_batch=False))
+        print(cc.build(conn, make_gateway(conn), rows, use_batch=args.batch))
         _write(score(conn, today, "dev", claim_ids=ids) | {"sample": len(ids)}, "sample")
         return
     if args.split == "test":

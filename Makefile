@@ -80,9 +80,9 @@ prep:
 claim-check:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_check run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
 
-# ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출)
+# ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출 — BATCH=1이면 Batch 반값)
 claim-check-sample:
-	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_check sample $(if $(N),--n $(N))
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_check sample $(if $(N),--n $(N)) $(if $(BATCH),--batch)
 
 # ⑤-2 버전을 정한 뒤 dev 전부(과금, Batch). test는 사람: python -m evaluation.claim_check run --split test
 claim-check-dev:
