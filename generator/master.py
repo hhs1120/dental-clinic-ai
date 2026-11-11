@@ -543,6 +543,11 @@ _INSURED_NAMES = (
 )
 # R03 치주치료 산정 — 치주낭이 이 깊이(mm) 이상인 부위가 있어야 근거(§4.3). 차트 소견 생성과 청구 기준 문서가 함께 읽는다
 PERIO_POCKET_MIN_MM = 4
+# ⑤-2 요건 근거 표현 방식(데이터 재설계 설계 §3) — 키워드 규칙(evaluation/claim_check.py)은 속지만 서술을 읽으면 풀린다. 추정값
+EVIDENCE_PARAPHRASE_SHARE = 0.055  # 근거 있는 줄 중 근거 낱말 대신 바꿔 말하기
+EVIDENCE_NEGATED_SHARE = 0.3  # 근거 없는 줄 중 근거 낱말의 부정·예정("파절 소견 없음")
+PERIO_QUALITATIVE_SHARE = 0.05  # R03 근거 있는 줄 중 치주낭 깊이를 숫자 없이("깊음")
+PERIO_NEAR_MISS_SHARE = 0.33  # R03 근거 없는 줄 중 깊이는 기준 이상인데 출혈이 없는 부분 소견
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
     ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),
@@ -642,6 +647,9 @@ CHART_DECOY_RATIO = 1.5
 # 추가 처치 누락 (§4.3, 5b단계): 오류가 없는 급여 내원 중 이 비율의 차트에 같은 날 다른 치아의 추가 처치를 서술하고
 # 진료 기록·청구에는 넣지 않는다(truth_claim_errors '추가 처치 누락'). 비율은 추정값 — 리포트로 확인
 SAME_DAY_EXTRA_RATE = 0.03
+SAME_DAY_EXTRA_ADD_RATE = (
+    0.03  # 데이터 재설계 — 기존 줄은 그대로 두고 새 자식 난수로 같은 조건의 줄에 더하는 몫. 추정값
+)
 # 추가 처치 시술 — 치아 단위 급여 시술, 발치 제외. 그 시술의 급여 조건(실란트는 소아)은 쓰는 쪽이 본다
 SAME_DAY_EXTRA = frozenset(_CODE_BY_NAME[n] for n in ("아말감/GI", "실란트"))
 # 계획에서 같은 시술이 이어질 때 같은 치아를 유지하는 시술(여러 회차로 한 치아를 치료) — 나머지(실란트·레진·아말감/GI 등)의

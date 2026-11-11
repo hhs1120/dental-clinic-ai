@@ -114,8 +114,13 @@ def test_facts(db):
         for r in req
     )
     r03 = [facts[r["treatment_id"]] for r in req if r["requirement"] == "R03"]
-    assert r03 and all(
-        (f["findings"]["pocket_mm"] >= 4) == f["requirement"]["evidence"] for f in r03
+    assert (
+        r03
+        and all(  # 복합 기준 — 깊이 기준 이상 + 출혈(부분 소견은 깊어도 출혈 없음 = 근거 없음, 데이터 재설계)
+            (f["findings"]["pocket_mm"] >= 4 and f["findings"]["bleeding"])
+            == f["requirement"]["evidence"]
+            for f in r03
+        )
     )
     assert any(f.get("alerts") for f in facts.values()) and any(
         f.get("discovered") for f in facts.values()
@@ -236,17 +241,15 @@ def test_retreatment_is_across_courses(db):
     assert checked
 
 
-def test_no_evidence_lines_get_neutral_cc(db):
-    """근거 없는 요건 줄의 C.C는 근거로 읽히지 않는 문장(chart.CC_NO_EVIDENCE)"""
+def test_no_evidence_lines_use_common_cc(db):
+    """근거 없는 요건 줄도 C.C는 그 시술의 공통 풀에서 — 근거 없는 줄 전용 C.C가 정답을 흘리지 않게(데이터 재설계)"""
     conn, _, _ = db
-    seen = set()
     for key, facts in conn.execute(
         "SELECT requirement, facts FROM truth.truth_chart_notes WHERE evidence_present = 0"
     ):
-        if key in chart.CC_NO_EVIDENCE:
-            assert json.loads(facts)["cc"] in chart.CC_NO_EVIDENCE[key], key
-            seen.add(key)
-    assert {"R01", "R04"} <= seen
+        f = json.loads(facts)
+        assert any(f["cc"] in pool for pool in chart.CC.values()), key
+    assert not hasattr(chart, "CC_NO_EVIDENCE")
 
 
 def test_draft_sentences(db):
@@ -294,9 +297,7 @@ def test_drafts_vary_by_visit():
 def test_drafts_quote_or_shorten_the_patient():
     """환자 말은 진료 번호로 반쯤은 따옴표, 반쯤은 차트식으로 줄인 말(CC_SHORT) — 모든 C.C에 줄인 말이 있고, 줄인 말은
     근거 말을 품지 않는다(근거 없는 줄의 C.C도 줄여 쓰므로)"""
-    every = {c for ccs in chart.CC.values() for c in ccs} | {
-        c for ccs in chart.CC_NO_EVIDENCE.values() for c in ccs
-    }
+    every = {c for ccs in chart.CC.values() for c in ccs}
     assert every <= set(chart.CC_SHORT)
     evidence = [w for ws in chart.EVIDENCE_WORDS.values() for w in ws]
     assert not [s for s in chart.CC_SHORT.values() if any(w in s for w in evidence)]
@@ -431,7 +432,8 @@ def test_narrative_stage_fake_keeps_draft(db, tmp_path):
         "SELECT n.treatment_id, n.note, t.facts FROM emr_chart_notes n"
         " JOIN truth.truth_chart_notes t USING (treatment_id) WHERE t.kind = 'narrative' LIMIT 1"
     ).fetchone()
-    assert row["note"] == chart.draft_note(json.loads(row["facts"]), row["treatment_id"])
+    facts = json.loads(row["facts"])
+    assert row["note"] == chart.style_note(facts, chart.draft_note(facts, row["treatment_id"]))
 
 
 def test_narrative_payload_hides_requirement_key_and_evidence():
@@ -513,7 +515,7 @@ def test_narrative_drafts_pass_their_checks(db):
             problems := llm_jobs.problems(
                 chart.NARRATIVE_SCHEMA,
                 chart.narrative_checks(x["facts"], names[x["id"]]),
-                {"note": chart.draft_note(x["facts"], x["id"])},
+                {"note": chart.style_note(x["facts"], chart.draft_note(x["facts"], x["id"]))},
             )
         )
     }

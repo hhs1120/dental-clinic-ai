@@ -19,6 +19,7 @@ from generator.master import (
     HOURS,
     ORAL_CARE_PRICES,
     PERIO_LINK_DAYS,
+    PERIO_POCKET_MIN_MM,
     PROCEDURES,
     SCALING_MIN_AGE,
 )
@@ -135,8 +136,10 @@ _CLAIM_RULE = {  # 절에 넣을 기준 — 급여 조건은 master 값만 (생�
     ),
     "R03": F(
         "claim.R03",
-        "치주치료는 치주낭 깊이와 출혈 같은 치주 소견을 적는다",
-        "치주낭 깊이",
+        f"치주치료는 치주낭이 {PERIO_POCKET_MIN_MM}mm 이상인 부위가 있고 출혈 같은 염증 소견이 함께 있어야 산정하며,"
+        " 그 소견을 적는다",
+        f"{PERIO_POCKET_MIN_MM}mm",
+        "출혈",
         reason="R03",
     ),
     "R04": F(

@@ -17,7 +17,10 @@ BEFORE = {
         " where payment_id is not null order by id",
         "7db9d51b09dfd77e",
     ),
-    "claim_errors": ("select * from truth.truth_claim_errors order by 1", "87bc21825b3c3b48"),
+    "claim_errors": (  # 추가 처치 누락은 데이터 재설계로 더해진다 — 그 밖의 청구 오류만(test_chart_redesign이 나머지를 본다)
+        "select * from truth.truth_claim_errors where kind != 'omitted_extra' order by 1",
+        "1fa2be086ed75f2f",
+    ),
     "messages": ("select * from emr_messages order by id", "5e035a69b6f18322"),
 }
 

@@ -29,9 +29,14 @@ from generator.master import (
     DIAGNOSIS_ERROR_RATE,
     EMERGENCY_AFTER_VISIT_SCENE,
     EMERGENCY_SCENES,
+    EVIDENCE_NEGATED_SHARE,
+    EVIDENCE_PARAPHRASE_SHARE,
     EXTRACTION_CODES,
     FULL_MOUTH,
     PERIO_LINK_DAYS,
+    PERIO_NEAR_MISS_SHARE,
+    PERIO_POCKET_MIN_MM,
+    PERIO_QUALITATIVE_SHARE,
     PROCEDURE_DIAGNOSES,
     PROCEDURES,
     RECALL_CYCLE_MONTHS,
@@ -39,6 +44,7 @@ from generator.master import (
     REQUIREMENT_ERROR_RATE,
     RETREATMENT_REQUIREMENT,
     SAME_DAY_EXTRA,
+    SAME_DAY_EXTRA_ADD_RATE,
     SAME_DAY_EXTRA_RATE,
     SCALING_CODE,
     SUBMITTED_MONTHS,
@@ -169,13 +175,6 @@ SYMPTOM_CC |= {cc for cc, _ in EMERGENCY_CC.values()}
 EMERGENCY_WORDS = ("응급",)
 EMERGENCY_SENTENCE = "응급 내원."
 
-# 근거 없는 요건 줄의 C.C — 환자 말이 근거로 읽히지 않게('빠진 자리'는 무치악, '까만 점'은 우식, '홈 메우기'는 소와열구 근거)
-CC_NO_EVIDENCE = {
-    "R01": ("예전에 치료한 이가 신경 쓰여요",),
-    "R03": ("잇몸 상태 확인하러 왔어요",),
-    "R04": ("아이 치아 관리 받으러 왔어요",),
-    "R06": ("임플란트 치료 받으러 왔어요",),
-}
 # 요건 근거를 드러내는 말 (§4.3) — 근거가 있으면 그 말을 꼭 넣고(R01은 사유마다 하나), 없으면 모두 금지
 EVIDENCE_WORDS = {
     "R01": ("파절", "2차 우식"),
@@ -185,6 +184,25 @@ EVIDENCE_WORDS = {
     "R06": ("무치악",),
 }
 R01_REASON_WORD = {"기존 충전물 파절": "파절", "2차 우식": "2차 우식"}
+# 근거 표현 방식(데이터 재설계 설계 §3) — 바꿔 말하기는 근거 낱말 자리에, 부정은 근거 없는 줄에 한 문장으로
+PARAPHRASE = {  # 받침이 원래 낱말과 같은 말 — 초안의 조사가 그대로 맞게
+    "파절": "균열",
+    "2차 우식": "충전물 경계 우식",
+    "재평가": "다시 평가",
+    "소와열구": "열구",
+    "부분 매복": "부분 매몰",
+    "완전 매복": "완전 매몰",
+    "골삭제": "뼈 다듬기",
+    "무치악": "치아 결손",
+}
+NEGATION = {
+    "R01": "파절·2차 우식 소견 없음",
+    "R02": "재평가 예정",
+    "R04": "소와열구 얕음",
+    "R05": "매복 없음",
+    "R06": "무치악 기간 확인 안 됨",
+}
+PERIO_QUALITATIVE = "치주낭 깊음"  # R03 숫자 없이 깊이만
 
 
 def _pick(rng, seq):
@@ -370,9 +388,9 @@ def _extra(rng, r, teeth: set, birth: date) -> tuple[str, str] | None:
 def stage_facts(run, rng, fake) -> None:
     """난수를 나눈다 — 확정 월 오류(심사 결과 따라감) / 제출 월·전월 오류(⑤-2 정답) / 상병·사실(진료마다 따로 시드 —
     조건에 따라 뽑는 횟수가 달라도 다른 줄이 밀리지 않게). 심사 결과 가중을 튜닝해도 제출 월·전월 오류와 사실이 그대로"""
-    settled_rng, open_rng, fact_rng, extra_rng = rng.spawn(
-        4
-    )  # 앞 셋은 추가 처치 누락을 넣기 전과 같다
+    settled_rng, open_rng, fact_rng, extra_rng, style_rng, add_rng = rng.spawn(
+        6
+    )  # 앞 셋은 추가 처치 누락을 넣기 전과, 앞 넷은 근거 표현 방식을, 앞 다섯은 추가 처치 누락 더하기를 넣기 전과 같다
     birth = {
         pid: date.fromisoformat(b)
         for pid, b in run.conn.execute("SELECT id, birth_date FROM emr_patients")
@@ -382,6 +400,7 @@ def stage_facts(run, rng, fake) -> None:
     for pid, tooth in run.conn.execute("SELECT patient_id, tooth_no FROM emr_treatments"):
         ledger_teeth[pid].add(tooth)
     fact_seed = int(fact_rng.integers(1 << 62))
+    style_seed = int(style_rng.integers(1 << 62))
     plan_items = run.state["plan_items"]
     for i in plan_items:
         ledger_teeth[i["patient_id"]].add(i["tooth"])
@@ -425,6 +444,17 @@ def stage_facts(run, rng, fake) -> None:
             if extra:
                 error = "omitted_extra"
                 ledger_teeth[r["patient_id"]].add(extra[1])
+        if (  # 데이터 재설계 — 기존 추가 처치 누락은 그대로, 같은 조건의 줄에 새 자식 난수로 더한다
+            error is None
+            and r["window"]
+            and r["claimed"]
+            and r["bucket"] != "settled"
+            and add_rng.random() < SAME_DAY_EXTRA_ADD_RATE
+        ):
+            extra = _extra(add_rng, r, ledger_teeth[r["patient_id"]], birth[r["patient_id"]])
+            if extra:
+                error = "omitted_extra"
+                ledger_teeth[r["patient_id"]].add(extra[1])
         rng = np.random.default_rng([fact_seed, r["id"]])
         allowed = sorted(PROCEDURE_DIAGNOSES[r["code"]])
         dx = (
@@ -446,12 +476,7 @@ def stage_facts(run, rng, fake) -> None:
         facts = {
             "procedure": NAME[r["code"]],
             "tooth": None if r["tooth"] == FULL_MOUTH else r["tooth"],
-            "cc": _pick(
-                rng,
-                CC_NO_EVIDENCE.get(key, CC[r["code"]])
-                if requirement and not requirement["evidence"]
-                else CC[r["code"]],
-            ),
+            "cc": _pick(rng, CC[r["code"]]),  # 근거 없는 줄 전용 C.C는 두지 않는다(데이터 재설계)
             "findings": _findings(
                 rng,
                 r,
@@ -470,6 +495,8 @@ def stage_facts(run, rng, fake) -> None:
             "plan": _plan(r, plan_items),
             "extra": extra and {"procedure": NAME[extra[0]], "tooth": extra[1]},
         }
+        if requirement:  # 근거 표현 방식 — 진료마다 따로 시드(다른 줄을 밀지 않게)
+            _style(np.random.default_rng([style_seed, r["id"]]), facts)
         lines.append(
             {
                 "id": r["id"],
@@ -580,6 +607,45 @@ def _form(key, salt: str, options: tuple):
     return options[int(hashlib.sha256(f"{salt}:{key}".encode()).hexdigest(), 16) % len(options)]
 
 
+def _style(rng, f: dict) -> None:
+    """요건 줄의 근거 표현 방식(데이터 재설계 설계 §3) — 정답(근거 있음·없음)은 그대로, 쓰는 말만 고른다.
+    R03 부분 소견은 치주낭을 기준 이상으로 올리고 출혈을 없앤다(복합 기준 — 깊이 + 염증 소견)"""
+    req = f["requirement"]
+    if req["key"] == "R03":
+        if req["evidence"]:
+            req["style"] = "qualitative" if rng.random() < PERIO_QUALITATIVE_SHARE else "explicit"
+        elif f["findings"] and rng.random() < PERIO_NEAR_MISS_SHARE:
+            req["style"] = "near_miss"
+            f["findings"] |= {
+                "pocket_mm": int(rng.integers(PERIO_POCKET_MIN_MM, PERIO_POCKET_MIN_MM + 2)),
+                "bleeding": False,
+            }
+        else:
+            req["style"] = "plain"
+    elif req["evidence"]:
+        req["style"] = "paraphrase" if rng.random() < EVIDENCE_PARAPHRASE_SHARE else "explicit"
+    else:
+        req["style"] = (
+            "negated"
+            if req["key"] in NEGATION and rng.random() < EVIDENCE_NEGATED_SHARE
+            else "plain"
+        )
+
+
+def style_note(f: dict, note: str) -> str:
+    """초안에 표현 방식을 입힌다 — 바꿔 말하기는 근거 낱말을 바꾸고, 부정은 문장을 더하고, R03 숫자 없는 깊이는 mm를 지운다"""
+    req = f.get("requirement") or {}
+    style = req.get("style")
+    if style == "paraphrase":
+        for w in _plain_requirement_words(req):  # 꼭 넣을 말과 같은 단위로(부분 매복 → 부분 매몰)
+            note = note.replace(w, PARAPHRASE.get(w, w))
+    elif style == "negated":
+        note += f" {NEGATION[req['key']]}."
+    elif style == "qualitative" and f["findings"]:
+        note = note.replace(f"치주낭 {f['findings']['pocket_mm']}mm", PERIO_QUALITATIVE)
+    return note
+
+
 def draft_note(f, key) -> str:
     """서술 초안 — 사실을 그대로 메모로. 환자 말(따옴표 또는 줄인 말)·소견·시행·주의사항·남은 계획의 꼴은 진료 번호(key)로 고른다.
     9b단계가 이 초안을 다시 쓴다(가짜 게이트웨이면 그대로 남는다)"""
@@ -652,7 +718,18 @@ def draft_note(f, key) -> str:
         out.append(f"타 기관에서 발치 후 {req['edentulous_months']}개월 지난 무치악 부위.")
     out.append(f"{_site(f)}{f['procedure']} {_form(key, 'done', ('시행함', '진행함'))}.")
     if f.get("extra"):
-        out.append(f"같은 날 {_site(f['extra'])}{f['extra']['procedure']}도 시행함.")
+        site = f"{_site(f['extra'])}{f['extra']['procedure']}"
+        out.append(  # 표현을 진료 번호로 고른다 — "같은 날" 한 낱말로 갈리지 않게(데이터 재설계)
+            _form(
+                key,
+                "extra",
+                (
+                    f"같은 날 {site}도 시행함.",
+                    f"이어서 {site} 함께 진행함.",
+                    f"{site}도 추가로 시행함.",
+                ),
+            )
+        )
     out += _alert_sentences(f, key)
     plan = f["plan"]
     if plan and "items" in plan:
@@ -712,7 +789,11 @@ def stage_notes(run, rng, fake) -> None:
     notes, truth = [], []
     for x in lines:
         narrative = x["special"] or x["id"] in decoys
-        note = draft_note(x["facts"], x["id"]) if narrative else template_note(rng, x["facts"])
+        note = (
+            style_note(x["facts"], draft_note(x["facts"], x["id"]))
+            if narrative
+            else template_note(rng, x["facts"])
+        )
         notes.append((x["id"], x["dx"], note))
         truth.append(
             (
@@ -762,7 +843,19 @@ MEMO_STYLE_FORBIDDEN = (
 
 
 def _requirement_words(req: dict) -> list[str]:
-    """요건 수치 + 근거가 있으면 근거 말"""
+    """요건 수치 + 근거 말(표현 방식대로 — 바꿔 말하기면 그 말, 부정이면 부정 문장)"""
+    words = _plain_requirement_words(req)
+    style = req.get("style")
+    if style == "paraphrase":
+        words = [PARAPHRASE.get(w, w) for w in words]
+    elif style == "negated":
+        words = [w for w in words if w not in EVIDENCE_WORDS.get(req["key"], ())] + [
+            NEGATION[req["key"]]
+        ]
+    return words
+
+
+def _plain_requirement_words(req: dict) -> list[str]:
     key = req["key"]
     if key == "R01":
         period = (
@@ -783,9 +876,17 @@ def _requirement_words(req: dict) -> list[str]:
 
 
 def evidence_forbidden(f: dict) -> list[str]:
-    """근거 없는 요건 줄에 쓰면 안 되는 근거 말"""
+    """쓰면 안 되는 근거 말 — 근거 없는 줄(부정 표현은 그 낱말을 부정으로 쓰므로 빼고)과 바꿔 말하기 줄은 근거 낱말,
+    R03 숫자 없는 깊이는 그 mm"""
     req = f["requirement"]
-    return list(EVIDENCE_WORDS.get(req["key"], ())) if req and not req["evidence"] else []
+    if not req:
+        return []
+    style = req.get("style")
+    if style == "qualitative" and f["findings"]:
+        return [f"{f['findings']['pocket_mm']}mm"]
+    if (not req["evidence"] and style != "negated") or style == "paraphrase":
+        return list(EVIDENCE_WORDS.get(req["key"], ()))
+    return []
 
 
 def narrative_must_include(f: dict) -> list[list[str]]:
@@ -798,7 +899,8 @@ def narrative_must_include(f: dict) -> list[list[str]]:
     if f.get("extra"):
         out += [[f"{f['extra']['tooth']}번"], [f["extra"]["procedure"]]]
     if f["findings"]:
-        out.append([f"{f['findings']['pocket_mm']}mm"])
+        qualitative = (f["requirement"] or {}).get("style") == "qualitative"
+        out.append([PERIO_QUALITATIVE] if qualitative else [f"{f['findings']['pocket_mm']}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
     if f["discovered"]:
         out.append(list(DISCOVERED_WORDS))
@@ -822,7 +924,9 @@ def narrative_must_include(f: dict) -> list[list[str]]:
 
 def narrative_payload(f: dict, draft: str) -> dict:
     """LLM 입력 — 요건 사유 키·충족 여부(정답)는 빼고 사실 필드만 history로. 근거가 없는 오류 줄은 그 사실이 비어 있다"""
-    history = {k: v for k, v in (f["requirement"] or {}).items() if k not in ("key", "evidence")}
+    history = {
+        k: v for k, v in (f["requirement"] or {}).items() if k not in ("key", "evidence", "style")
+    }
     facts = {k: v for k, v in f.items() if k != "requirement"} | (
         {"history": history} if history else {}
     )
