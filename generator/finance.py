@@ -34,6 +34,8 @@ from generator.master import (
     RECON_MISMATCH_COUNTS,
     SATURDAY,
     SPLIT_MIN_AMOUNT,
+    UNRECORDED_ORAL_SHARE,
+    UNRECORDED_SETTLEMENT_COUNT,
     VENDORS,
     add_bank_days,
     bank_day,
@@ -190,6 +192,28 @@ def stage_income(run, rng, fake) -> None:
         sales.append(s)
         mismatches.append({"on": d, "cause": "non_clinical_sale", "fin": [s], "payments": []})
 
+    # 미수 정산 수납 누락(데이터 재설계) — 장부는 그대로, 금융에만 돈. 새 자식 난수(주 난수 흐름 밖)
+    unrecorded = _unrecorded_settlements(conn, rng.spawn(1)[0], days, failure, used)
+    for u in unrecorded:
+        if u["method"] == "card":
+            u["row"] = {
+                "at": u["at"],
+                "issuer": u["issuer"],
+                "amount": u["amount"],
+                "approval_no": u["approval_no"],
+                "cancel_of": None,
+            }
+            sales.append(u["row"])
+            mismatches.append(
+                {
+                    "on": u["at"].date(),
+                    "cause": "entry_missing",
+                    "fin": [u["row"]],
+                    "payments": [],
+                    "unrecorded": u,
+                }
+            )
+
     # 정산 입금
     groups = defaultdict(list)
     for s in sales:
@@ -263,6 +287,20 @@ def stage_income(run, rng, fake) -> None:
             row = {"at": p["at"], "amount": p["paid"], "memo": names[payer]}
             bank.append(row)
             transfer_rows[p["id"]] = row
+    for u in unrecorded:
+        if u["method"] == "transfer":
+            u["row"] = {"at": u["at"], "amount": u["amount"], "memo": names[u["patient_id"]]}
+            bank.append(u["row"])
+        if u["method"] != "card":
+            mismatches.append(
+                {
+                    "on": u["at"].date(),
+                    "cause": "entry_missing",
+                    "fin": [u["row"]],
+                    "payments": [],
+                    "unrecorded": u,
+                }
+            )
     for amount, reviewed in conn.execute(
         "SELECT sum(paid_amount), max(reviewed_at) FROM emr_claims"
         " WHERE status IN ('paid', 'adjusted') GROUP BY claim_month ORDER BY claim_month"
@@ -370,7 +408,15 @@ def stage_income(run, rng, fake) -> None:
         )
         return {"table": table, "id": row["id"]}
 
-    mismatches.sort(key=lambda m: (m["on"], m["cause"], m["payments"]))
+    for m in mismatches:  # 장부에 행이 없는 누락의 정답 행 — 수납 id 없이 환자로
+        if "unrecorded" in m:
+            u = m["unrecorded"]
+            m["ledger"] = conn.execute(
+                "INSERT INTO truth.truth_ledger_errors (kind, payment_id, true_amount, true_paid_at,"
+                " true_method, patient_id) VALUES ('entry_missing', NULL, ?, ?, ?, ?)",
+                (u["amount"], u["at"].strftime(FMT), u["method"], u["patient_id"]),
+            ).lastrowid
+    mismatches.sort(key=lambda m: (m["on"], m["cause"], m["payments"], m.get("ledger") or 0))
     conn.executemany(
         "INSERT INTO truth.truth_recon_mismatches (occurred_on, cause, fin_ids, payment_ids, split, ledger_error_id)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -386,6 +432,63 @@ def stage_income(run, rng, fake) -> None:
             for m in mismatches
         ],
     )
+
+
+def _unrecorded_settlements(conn, rng, days: list[date], failure: set, used: set) -> list[dict]:
+    """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남은 환자가 그날 영업시간에 낸 돈.
+    UNRECORDED_ORAL_SHARE만큼은 카드 + 구강용품 1~2개 합(잔액 이하), 나머지는 잔액 전부를 이체·카드로(현금은 한 입금에 기존 현금
+    장부 실수와 겹쳐 원인이 둘이 될 수 있어 쓰지 않는다). 환자는 서로 다름"""
+    ledger = defaultdict(list)
+    for pid, at, owe in conn.execute(
+        "SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
+    ):
+        ledger[pid].append((at, owe))
+
+    def balance(pid: int, d: date) -> int:
+        return sum(o for at, o in ledger[pid] if at[:10] <= d.isoformat())
+
+    prices = list(ORAL_CARE_PRICES.values())
+    sums = sorted({a + b for a in prices for b in [0, *prices]})
+    n_oral = round(UNRECORDED_SETTLEMENT_COUNT * UNRECORDED_ORAL_SHARE)
+    pool = [d for d in days if d not in failure]
+    out, taken = [], set()
+    for d in [pool[int(i)] for i in rng.permutation(len(pool))]:
+        if len(out) == UNRECORDED_SETTLEMENT_COUNT:
+            break
+        owing = [p for p in sorted(ledger) if p not in taken and balance(p, d) > 0]
+        if not owing:
+            continue
+        pid = owing[int(rng.integers(len(owing)))]
+        bal = balance(pid, d)
+        if len(out) < n_oral:
+            fit = [x for x in sums if x <= bal]
+            if not fit:
+                continue
+            method, amount = "card", fit[int(rng.integers(len(fit)))]
+        else:
+            method, amount = ("transfer", "card")[int(rng.integers(2))], bal
+        close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
+        open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
+        span = (
+            datetime.combine(d, datetime.strptime(close, "%H:%M").time()) - open_
+        ).seconds // 60
+        u = {
+            "patient_id": pid,
+            "at": open_ + timedelta(minutes=int(rng.integers(span))),
+            "amount": amount,
+            "method": method,
+        }
+        if method == "card":
+            issuers = list(CARD_ISSUERS)
+            w = [CARD_ISSUERS[i]["weight"] for i in issuers]
+            u["issuer"] = issuers[int(rng.choice(len(issuers), p=[x / sum(w) for x in w]))]
+            while (no := f"{int(rng.integers(10**7, 10**8))}") in used:
+                pass
+            used.add(no)
+            u["approval_no"] = no
+        taken.add(pid)
+        out.append(u)
+    return out
 
 
 # ── 8c단계 재무 지출 (§2.7 ⑧-2) ─────────────────────────────

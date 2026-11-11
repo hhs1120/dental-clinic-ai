@@ -51,6 +51,13 @@ def _true_payments(conn) -> list[dict]:
         " e.kind AS error, e.true_amount, e.true_paid_at, e.true_method"
         " FROM emr_payments p LEFT JOIN truth.truth_ledger_errors e ON e.payment_id = p.id ORDER BY p.id",
     )
+    # 장부에 행 없는 미수 정산 누락 — 금융에만 있는 실제 수납(데이터 재설계 설계 §1)
+    rows += _rows(
+        conn,
+        "SELECT NULL AS id, patient_id, true_amount AS paid, true_paid_at AS paid_at, true_method AS method,"
+        " NULL AS approval_no, kind AS error, true_amount, true_paid_at, true_method"
+        " FROM truth.truth_ledger_errors WHERE payment_id IS NULL ORDER BY id",
+    )
     for r in rows:
         if r["error"]:
             r["paid"], r["paid_at"], r["method"] = (
@@ -266,6 +273,38 @@ def check_bank_inflows(conn, ctx):
     return bad
 
 
+def check_unrecorded_settlements(conn, ctx):
+    """미수 정산 수납 누락(장부에 행 없음 — 데이터 재설계 설계 §1): 환자가 있고, 금액 > 0이고 그 시각 장부 잔액 이하,
+    실제 일시가 평가 달(master.recon_months) 안, 이체·카드, ⑧-1 입력 누락 정답(수납 id 없음)과 하나씩 짝. 건수 =
+    메타 unrecorded_settlements(= master.UNRECORDED_SETTLEMENT_COUNT)"""
+    rows = conn.execute(
+        "SELECT e.id, e.patient_id, e.true_amount, e.true_paid_at, e.true_method,"
+        " (SELECT count(*) FROM truth.truth_recon_mismatches m WHERE m.ledger_error_id = e.id"
+        "  AND m.cause = 'entry_missing' AND m.payment_ids = '[]') AS paired"
+        " FROM truth.truth_ledger_errors e WHERE e.payment_id IS NULL"
+    ).fetchall()
+    bad = []
+    for eid, pid, amount, at, method, paired in rows:
+        bal = conn.execute(
+            "SELECT coalesce(sum(amount_due - amount_paid), 0) FROM emr_payments"
+            " WHERE patient_id = ? AND paid_at <= ?",
+            (pid, at),
+        ).fetchone()[0]
+        if (
+            pid is None
+            or not 0 < amount <= bal
+            or at[:7] not in recon_months(ctx.today)
+            or method not in ("transfer", "card")
+            or paired != 1
+        ):
+            bad.append(
+                {"id": eid, "patient_id": pid, "amount": amount, "balance": bal, "paired": paired}
+            )
+    if len(rows) != ctx.unrecorded_settlements:
+        bad.append({"count": len(rows), "expected": ctx.unrecorded_settlements})
+    return bad
+
+
 def check_recon_mismatches(conn, ctx):
     """불일치 정답: 원인별 건수 = 메타 recon_mismatches, 날짜는 평가 달(master.recon_months — split = master.recon_test_months면 test),
     fin·수납 id 존재. 장부 쪽 원인 ⇔ 장부 실수 1:1(같은 종류·수납·실제 날짜). 통장·카드 쪽 모양 — 분할결제 = 같은 시각 승인
@@ -275,6 +314,7 @@ def check_recon_mismatches(conn, ctx):
     ms = _mismatches(conn)
     bad = []
     want = {k: ctx.recon_mismatches.get(k, 0) for k in RECON_MISMATCH_COUNTS}
+    want["entry_missing"] += ctx.unrecorded_settlements  # 장부에 행 없는 누락도 입력 누락 정답
     got = Counter(m["cause"] for m in ms)
     if {k: got.get(k, 0) for k in want} != want or set(got) - set(want):
         bad.append({"counts": dict(got), "expected": want})
@@ -338,10 +378,14 @@ def check_recon_mismatches(conn, ctx):
             if (
                 e is None
                 or e["kind"] != m["cause"]
-                or m["payments"] != [e["payment_id"]]
+                or m["payments"] != ([e["payment_id"]] if e["payment_id"] is not None else [])
                 or m["occurred_on"] != e["true_paid_at"][:10]
             ):
                 why = "장부 실수와 다름"
+            elif (
+                e["payment_id"] is None
+            ):  # 장부에 행 없는 누락 — 모양은 check_unrecorded_settlements가 본다
+                pass
             elif _ledger_fin(e, pays[e["payment_id"]], m, sales, bank, cash_by_day, fixed, ctx):
                 why = "장부 실수 불일치가 가리키는 금융 행이 실제 돈의 행이 아님"
         elif m["ledger_error_id"] is not None:

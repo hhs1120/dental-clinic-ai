@@ -125,6 +125,7 @@ from generator.verify.fin import (
     check_expense_matches,
     check_lab_statements,
     check_recon_mismatches,
+    check_unrecorded_settlements,
 )
 from generator.verify.messages import (
     APPOINTMENT_TRIGGERS,
@@ -371,6 +372,7 @@ __all__ = [
     "check_qa_split_isolation",
     "check_recall_once_a_month",
     "check_recon_mismatches",
+    "check_unrecorded_settlements",
     "check_registration_age",
     "check_appt_reply_state",
     "check_cancel_replies",
@@ -513,6 +515,7 @@ REQUIRED = [
     check_card_deposits,
     check_bank_inflows,
     check_recon_mismatches,
+    check_unrecorded_settlements,
     check_expense_matches,
     check_lab_statements,
     check_document_counts,
