@@ -1,6 +1,6 @@
 """⑧-1 재무 대조 1단계 — 일계표·불일치 건의 규칙 원인·사람 확정 (기능 정의 §5 ⑧, 설계
 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1). 건은 backend/recon_match.py가 찾는다.
-규칙 원인(rule_cause)은 ⑧-1 규칙 기준선이다(평가 설계 §5 ⑧-1) — 건의 모양(금액·날짜·승인번호)만 보고 정한 순서로
+규칙 원인(rule_cause)은 ⑧-1 규칙 기준선이다(평가 설계 §5 ⑧-1) — 환자·내원·미수는 보지 않고 건의 모양(금액·날짜·승인번호)과 정산 기대값·구강용품 가격표·그날 0원 진료 행으로 정한 순서로
 처음 맞는 원인 하나, unknown은 내지 않는다. 이 순서는 test 실행 전에 바꾸지 않는다.
 사람 확정은 ax_recon_confirmations(건 키 단위, 덮어씀). master 값은 source.ax_master_values로만 읽는다.
 오늘 화면(backend/today.py)도 open_count로 센다."""
