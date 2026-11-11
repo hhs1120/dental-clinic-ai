@@ -302,7 +302,7 @@ function Expand({ row }: { row: PrepRow }) {
             .join(", ")
         : "없음",
     ],
-    ["예약 확인", row.confirmed ? "확인함" : "미확인"],
+    ["내원 확인", row.confirmed ? "확인함" : "확인 전"],
   ];
   return (
     <div className="grid gap-6 md:grid-cols-2">

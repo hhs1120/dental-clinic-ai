@@ -223,7 +223,7 @@ function ApptCard({
         )}
         {appt.unconfirmed && (
           <Badge variant="warn" className="h-4 shrink-0 py-0">
-            예약 미확인
+            내원 확인 전
           </Badge>
         )}
       </span>

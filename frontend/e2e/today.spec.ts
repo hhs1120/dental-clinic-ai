@@ -118,17 +118,16 @@ async function fakeToday(page: Page, body: unknown | (() => unknown)) {
 test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await fakeToday(page, FULL);
   await page.goto("/today");
-  // 할 일 카드의 두 숫자는 같은 단위(줄 수)
-  await expect(
-    page.getByRole("link", { name: /^34건\s*오늘 할 일/ }),
-  ).toContainText("급함 4");
-  await page.getByRole("link", { name: /^6명\s*주의 환자/ }).click(); // 카드
+  // 카드는 이름 → 숫자 순. 할 일 카드의 두 숫자는 같은 단위(줄 수), 급함은 빨간 배지
+  const todo = page.getByRole("link", { name: /^오늘 할 일\s*34건/ });
+  await expect(todo.locator('[data-variant="danger"]')).toHaveText("급함 4");
+  await page.getByRole("link", { name: /^주의 환자\s*6명$/ }).click(); // 카드(세부 없음 — 같은 이름의 줄과 구분)
   await expect(page).toHaveURL(/\/prep\?chip=alert$/);
   await page.goto("/today");
   await page.getByRole("link", { name: /이영자/ }).click();
   await expect(page).toHaveURL(/\/calls\?call=c-0450$/);
   await page.goto("/today");
-  await page.getByRole("link", { name: /예약 미확인 1명/ }).click();
+  await page.getByRole("link", { name: /내원 확인 전 1명/ }).click();
   await expect(page).toHaveURL(/\/prep\?chip=unconfirmed$/);
   await page.goto("/today");
   await page.getByRole("link", { name: /유치는 언제 빠져/ }).click();

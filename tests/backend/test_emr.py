@@ -481,7 +481,7 @@ def test_confirm_status_from_reminder(conn):
 
 def test_reply_without_confirmed_is_not_replied(emr_paths):
     # 답장이 있어도 확인 여부(confirmed — 전날 리마인드 응답)가 0이면 확인됨이 아니다.
-    # 예약을 잡을 때 보낸 확정 알림에 대한 답장일 수 있다 — 격자 '예약 미확인'과 어긋나지 않게
+    # 예약을 잡을 때 보낸 확정 알림에 대한 답장일 수 있다 — 격자 '내원 확인 전'과 어긋나지 않게
     rw(
         emr_paths,
         'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'

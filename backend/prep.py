@@ -192,7 +192,7 @@ def chips(row: dict, day: date, today: date) -> list[str]:
 
 
 def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
-    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 예약 미확인 칩 판단에만"""
+    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 내원 확인 전 칩 판단에만"""
     mv, d = master_values(conn), day.isoformat()
     out = []
     for a in conn.execute(
@@ -258,7 +258,7 @@ def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
 
 
 def llm_facts(row: dict) -> dict[str, str | int]:
-    """제안 입력 — 평평한 키. 예약 미확인·화면용 id·환자 이름은 넣지 않는다(기능 정의 §4 ④). 관련 주의사항만 행동 문구를 붙인다"""
+    """제안 입력 — 평평한 키. 내원 확인 전·화면용 id·환자 이름은 넣지 않는다(기능 정의 §4 ④). 관련 주의사항만 행동 문구를 붙인다"""
     f: dict[str, str | int] = {
         "procedure": row["procedure"],
         "type": row["type"],

@@ -167,7 +167,7 @@ export function ScheduleView() {
         <span className="ml-auto text-sm text-muted-foreground">
           총 {c.total}건 · 진료 {c.treatment} · 위생 {c.hygiene} · 상담{" "}
           {c.consult}
-          {current.date === today ? ` · 예약 미확인 ${c.unconfirmed}` : ""}
+          {current.date === today ? ` · 내원 확인 전 ${c.unconfirmed}` : ""}
         </span>
       </div>
 
