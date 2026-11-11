@@ -705,7 +705,7 @@ class ClaimJudgment(BaseModel):
 def claim_judgment(
     claim_id: int, body: ClaimJudgment, paths: Paths, clinic: ClinicDep, now: Now
 ) -> dict:
-    """사람 판단 기록(덮어씀) — 기한은 앱 기준일, 기록 시각은 실제 시계. 모르는 값·기한 지남·상병 착오에 정당 외는 400"""
+    """사람 판단 기록(덮어씀) — 기한은 앱 기준일, 기록 시각은 실제 시계. 모르는 값·기한 지남·상병 착오에 삭감 수용 외는 400"""
     conn = _open_rw(paths)
     try:
         claims.record_judgment(

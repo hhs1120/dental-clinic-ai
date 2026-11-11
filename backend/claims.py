@@ -11,7 +11,7 @@ from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
 CHIPS = ("all", "diagnosis", "soon", "denied", "adjusted", "expired")
-# 판단 값(master.ADJUST_JUDGMENT_TARGET 키와 같은 이름) — 화면 정당·다툴 만함·보완 후 재청구
+# 판단 값(master.ADJUST_JUDGMENT_TARGET 키와 같은 이름) — 화면 삭감 수용·재심 신청·보완 후 재청구
 JUDGMENTS = ("justified", "contestable", "resubmit")
 SOON_DAYS = 30  # 남은 날이 이 이하면 위험 꼬리표·`soon` 칩(상병 착오 제외)
 WATCH_DAYS = 60  # 남은 날이 이 이하면 주의 꼬리표
@@ -27,7 +27,7 @@ SUGGEST_REASON: dict[str, str] = {
     "diagnosis": "상병 착오는 재청구할 수 없습니다 — 다음 청구 때 상병을 확인하세요",
     "external": "다른 기관 이력이라 우리 청구의 잘못이 아닙니다",
     "documentation": "빠진 기재·증빙을 채워 다시 청구할 수 있습니다",
-    "requirement": "차트에 요건 근거가 있으면 다툴 만함, 없으면 정당입니다",
+    "requirement": "차트에 요건 근거가 있으면 재심 신청, 없으면 삭감 수용입니다",
 }
 CUT = ("adjusted", "denied")  # 깎인 청구(일부 조정·전액 불능)
 
@@ -182,8 +182,8 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
 def record_judgment(
     conn: sqlite3.Connection, claim_id: int, judgment: str, by: str, at: str, today: date
 ) -> None:
-    """사람 판단 한 줄(덮어씀) — 모르는 값, 없거나 조정·불능이 아닌 청구, 기준일 뒤 통보·기한 지난 청구, 상병 착오에 정당이 아닌
-    판단이면 ValueError(설계 "하면 실패인 것"). 커밋은 부르는 쪽"""
+    """사람 판단 한 줄(덮어씀) — 모르는 값, 없거나 조정·불능이 아닌 청구, 기준일 뒤 통보·기한 지난 청구, 상병 착오에 삭감 수용
+    (justified)이 아닌 판단이면 ValueError(설계 "하면 실패인 것"). 커밋은 부르는 쪽"""
     if judgment not in JUDGMENTS:
         raise ValueError(f"모르는 판단: {judgment}")
     c = conn.execute(
@@ -197,7 +197,7 @@ def record_judgment(
     if _deadline(c["reviewed_at"], mv["appeal_days"]) < today:
         raise ValueError(f"재심 신청 기한 지남: {claim_id}")
     if mv["adjust_note_types"][c["adjust_note"]] == "diagnosis" and judgment != "justified":
-        raise ValueError("상병 착오는 재청구할 수 없어 정당만 기록한다")
+        raise ValueError("상병 착오는 재청구할 수 없어 삭감 수용만 기록한다")
     conn.execute(
         "INSERT INTO ax_claim_judgments (claim_id, judgment, judged_by, judged_at)"
         " VALUES (?, ?, ?, ?) ON CONFLICT(claim_id) DO UPDATE SET"
