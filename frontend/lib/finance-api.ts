@@ -13,7 +13,7 @@ export type Cause =
   | "date_shift"
   | "method_wrong";
 
-/** 원인 이름 — 키는 backend의 원인 enum(truth_recon_mismatches.cause와 같음), 순서 = 고르기 목록 순서 */
+/** 원인 이름 — 키는 backend 원인 enum(ax_master_values recon_causes), 순서 = 고르기 목록 순서 */
 export const CAUSE_LABEL: Record<Cause, string> = {
   split_payment: "분할결제",
   cancel_reapprove: "취소 후 재승인",
