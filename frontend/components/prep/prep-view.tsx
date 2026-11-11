@@ -18,7 +18,7 @@ import {
 
 const WEEK = "일월화수목금토";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const POLL_MS = 2000;
+export const POLL_MS = 2000;
 
 type Loaded<T> = { key: string; data: T } | { key: string; error: string };
 const message = (e: unknown) =>

@@ -58,6 +58,21 @@ export interface AdjustRow {
   reason: string;
   fill_item: string | null;
   judgment: { value: Judgment; by: string; at: string } | null;
+  /** 추천을 낸 쪽 — 사유 유형 규칙, 요건 사유는 AI 점검(backend/claims.py AI_SUGGEST), 없으면 null */
+  suggest_by: "rule" | "ai" | null;
+  ai_evidence: Evidence[] | null;
+}
+
+export interface Evidence {
+  source: "chart" | "standard";
+  quote: string;
+}
+
+/** ⑤-2 AI 점검 한 줄(backend/claim_check.py SCHEMA) */
+export interface ClaimCheck {
+  requirement: "met" | "missing" | "na";
+  evidence: Evidence[];
+  omissions: { procedure: string; quote: string }[];
 }
 
 export interface AdjustSheet {
@@ -85,10 +100,15 @@ export interface PreRow {
     past_count: number;
     past_amount: number;
   } | null;
+  ai: ClaimCheck | null;
 }
 
 export interface PreSheet {
-  counts: { lines: number; warning: number };
+  /** ai = 근거 못 찾음·누락 줄, ai_checked = 점검 저장 줄(0이면 AI 칩을 숨긴다) */
+  counts: { lines: number; warning: number; ai: number; ai_checked: number };
+  ai_at: string | null;
+  /** 다시 점검할 줄 수 — 갱신 버튼 */
+  ai_pending: number;
   rows: PreRow[];
 }
 
@@ -97,6 +117,15 @@ export const fetchClaims = (signal?: AbortSignal) =>
 
 export const fetchPreClaim = (signal?: AbortSignal) =>
   getJson<PreSheet>("/claims/pre", undefined, signal);
+
+export const runClaimCheck = () =>
+  postJson<{ job_id: number }>("/jobs/claim-check", {});
+
+/** AI 추천 문구 — 판단이 아니라 AI가 본 사실(사용자 결정) */
+export const AI_SUGGEST_TEXT: Partial<Record<Judgment, string>> = {
+  contestable: "AI가 차트에서 근거 찾음 → 재심 신청",
+  justified: "AI가 차트에서 근거 못 찾음 → 삭감 수용",
+};
 
 export const postJudgment = (
   claimId: number,

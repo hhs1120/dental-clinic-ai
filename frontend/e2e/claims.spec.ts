@@ -11,6 +11,8 @@ const base = {
   status: "adjusted",
   expired: false,
   judgment: null as Judgment,
+  suggest_by: null as string | null,
+  ai_evidence: null as { source: string; quote: string }[] | null,
 };
 
 const DOC = {
@@ -31,6 +33,7 @@ const DOC = {
   days_left: 7,
   chips: ["all", "soon", "denied"],
   suggestion: "resubmit",
+  suggest_by: "rule",
   reason: "빠진 기재·증빙을 채워 다시 청구할 수 있습니다",
   fill_item: "내역설명 기재",
 };
@@ -49,6 +52,7 @@ const DX = {
   days_left: 20,
   chips: ["all", "diagnosis", "adjusted"],
   suggestion: "justified",
+  suggest_by: "rule",
   reason: "상병 착오는 재청구할 수 없습니다 — 다음 청구 때 상병을 확인하세요",
   fill_item: null,
 };
@@ -118,7 +122,9 @@ function sheet(rows: (typeof DOC | typeof DX | typeof REQ | typeof OLD)[]) {
 }
 
 const PRE = {
-  counts: { lines: 2, warning: 1 },
+  counts: { lines: 2, warning: 1, ai: 0, ai_checked: 0 },
+  ai_at: null as string | null,
+  ai_pending: 0,
   rows: [
     {
       claim_id: 21,
@@ -131,6 +137,7 @@ const PRE = {
       dx_code: "D05",
       dx_name: "만성 치주염",
       warning: { allowed: ["매복치"], past_count: 2, past_amount: 22000 },
+      ai: null as unknown,
     },
     {
       claim_id: 22,
@@ -143,15 +150,42 @@ const PRE = {
       dx_code: "D06",
       dx_name: "치아 침착물(치석)",
       warning: null,
+      ai: null as unknown,
     },
   ],
 };
 
 // 개발 서버는 화면을 두 번 그려 조회가 두 번 갈 수 있다 — 응답은 요청 순번이 아니라 함수로 정한다
-async function fakeClaims(page: Page, body: () => unknown) {
+async function fakeClaims(
+  page: Page,
+  body: () => unknown,
+  pre: () => unknown = () => PRE,
+) {
   await page.route("**/api/claims", (r) => r.fulfill({ json: body() }));
-  await page.route("**/api/claims/pre", (r) => r.fulfill({ json: PRE }));
+  await page.route("**/api/claims/pre", (r) => r.fulfill({ json: pre() }));
 }
+
+const STD_QUOTE = "매복 정도와 골삭제 여부를 진료기록에 반드시 적는다";
+const PRE_AI = {
+  ...PRE,
+  counts: { lines: 2, warning: 1, ai: 1, ai_checked: 2 },
+  ai_at: "2026-11-11T09:30:00",
+  ai_pending: 3,
+  rows: [
+    {
+      ...PRE.rows[0],
+      ai: {
+        requirement: "missing",
+        evidence: [{ source: "standard", quote: STD_QUOTE }],
+        omissions: [],
+      },
+    },
+    {
+      ...PRE.rows[1],
+      ai: { requirement: "met", evidence: [], omissions: [] },
+    },
+  ],
+};
 
 const ALL = [DOC, DX, REQ, OLD];
 const table = (page: Page) => page.getByRole("table");
@@ -348,4 +382,78 @@ test("청구 전 점검 — 경고 칩 기본, 과거 이력 문구", async ({ p
     "/emr?chart=C-00022",
   );
   await expect(page.getByText("D05", { exact: true })).toHaveCount(0);
+});
+
+test("청구 전 AI 칩 — 점검 결과가 있을 때만", async ({ page }) => {
+  await fakeClaims(page, () => sheet(ALL));
+  await page.goto("/claims?tab=pre");
+  await expect(page.getByRole("button", { name: /\(AI\)/ })).toHaveCount(0);
+  await page.unroute("**/api/claims/pre");
+  await page.route("**/api/claims/pre", (r) => r.fulfill({ json: PRE_AI }));
+  await page.goto("/claims?tab=pre");
+  await page
+    .getByRole("button", { name: "임상 요건·차트 기반 누락(AI) 1" })
+    .click();
+  await expect(page).toHaveURL(/\/claims\?tab=pre&chip=ai$/);
+  const rows = table(page).locator("tbody > tr");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("차트에 요건 근거 못 찾음(AI)");
+  await expect(rows.first()).toContainText(STD_QUOTE);
+  await expect(page.getByText("AI 점검: 11/11 09:30 기준")).toBeVisible();
+});
+
+test("AI 점검 갱신 버튼 — 작업이 끝나면 다시 조회", async ({ page }) => {
+  let pre: unknown = PRE_AI;
+  await fakeClaims(
+    page,
+    () => sheet(ALL),
+    () => pre,
+  );
+  let posted = false;
+  await page.route("**/api/jobs/claim-check", async (r) => {
+    posted = true;
+    pre = { ...PRE_AI, ai_pending: 0 };
+    await r.fulfill({ json: { job_id: 5 } });
+  });
+  await page.route("**/api/jobs/5", (r) =>
+    r.fulfill({ json: { id: 5, status: "done", error: null } }),
+  );
+  await page.goto("/claims?tab=pre");
+  await page.getByRole("button", { name: "AI 점검 갱신하기 (3줄)" }).click();
+  await expect(
+    page.getByRole("button", { name: "AI 점검 최신" }),
+  ).toBeDisabled();
+  expect(posted).toBe(true);
+});
+
+const AI_Q = "38번 수평 매복, 골삭제 후 분할 발치함";
+
+test("조정 건 AI 추천 — 사실 문장과 차트 인용", async ({ page }) => {
+  const met = {
+    ...REQ,
+    suggestion: "contestable",
+    suggest_by: "ai",
+    ai_evidence: [{ source: "chart", quote: AI_Q }],
+  };
+  const miss = {
+    ...REQ,
+    claim_id: 16,
+    name: "오다솜",
+    suggestion: "justified",
+    suggest_by: "ai",
+    ai_evidence: [{ source: "standard", quote: STD_QUOTE }],
+  };
+  await fakeClaims(page, () => sheet([DOC, met, miss]));
+  await page.goto("/claims");
+  const metRow = bodyRows(page).filter({ hasText: "이두리" });
+  await expect(metRow).toContainText("AI가 차트에서 근거 찾음 → 재심 신청");
+  await expect(bodyRows(page).filter({ hasText: "오다솜" })).toContainText(
+    "AI가 차트에서 근거 못 찾음 → 삭감 수용",
+  );
+  await expect(bodyRows(page).filter({ hasText: "김하나" })).toContainText(
+    "추천: 보완 후 재청구",
+  );
+  await metRow.click();
+  const detail = page.getByRole("region", { name: "이두리 청구 상세" });
+  await expect(detail).toContainText(`“${AI_Q}”`);
 });

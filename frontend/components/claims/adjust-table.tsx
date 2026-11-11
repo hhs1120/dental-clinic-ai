@@ -14,6 +14,7 @@ import {
   CHIPS,
   fetchClaims,
   type Judgment,
+  AI_SUGGEST_TEXT,
   JUDGMENT_LABEL,
   JUDGMENTS,
   monthDay,
@@ -253,8 +254,14 @@ function Todo({ row: r }: { row: AdjustRow }) {
   );
 }
 
+/** 규칙 추천은 "추천: …", AI 추천은 AI가 본 사실 문장(요건 사유, 설계 §2), 없으면 차트 확인 후 결정 */
 const suggestText = (r: AdjustRow) =>
-  r.suggestion ? `추천: ${JUDGMENT_LABEL[r.suggestion]}` : "차트 확인 후 결정";
+  !r.suggestion
+    ? "차트 확인 후 결정"
+    : r.suggest_by === "ai"
+      ? (AI_SUGGEST_TEXT[r.suggestion] ??
+        `추천: ${JUDGMENT_LABEL[r.suggestion]}`)
+      : `추천: ${JUDGMENT_LABEL[r.suggestion]}`;
 
 /** 펼친 곳 — ① 왜 깎였나 ② 어떻게 할까(추천·이유·판단 버튼). 상병 착오는 삭감 수용만, 기한 지난 건은 버튼 없이 */
 function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
@@ -298,6 +305,11 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
           {suggestText(r)}
           <span className="text-muted-foreground"> — {r.reason}</span>
         </p>
+        {r.ai_evidence?.map((e) => (
+          <p key={e.quote} className="text-sm text-muted-foreground">
+            {e.source === "chart" ? "차트" : "기준"}: “{e.quote}”
+          </p>
+        ))}
         {r.fill_item && <p>채울 항목: {r.fill_item}</p>}
         {r.judgment && (
           <p>
