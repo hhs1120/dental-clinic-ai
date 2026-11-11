@@ -280,7 +280,9 @@ def test_today_recon_line_matches_screen(tmp_path):
     b.sale("2026-11-03 10:00:00", 35_000, "R1")
     b.settle("2026-11-03")
     conn = b.app()
-    assert _sheet(conn)["people"]["recon_open"] == recon.open_count(conn, TODAY) == 1
+    people = _sheet(conn)["people"]
+    assert people["recon_open"] == recon.open_count(conn, TODAY) == 1
+    assert people["recon_month"] == "2026-11"  # 링크가 가는 달 — 미확정이 있는 가장 이른 달
     key = recon.ledger(conn, TODAY)["days"][0]["items"][0]["key"]
     recon.confirm(conn, key, "amount_typo", "데스크", "2026-12-01 09:00", TODAY)
     conn.commit()
@@ -293,4 +295,5 @@ def test_today_recon_zero(tmp_path):
     b = Books(tmp_path / "source.sqlite")
     clean_day(b)
     b.cash_in(b.settle("2026-11-03"))
-    assert _sheet(b.app())["people"]["recon_open"] == 0
+    people = _sheet(b.app())["people"]
+    assert (people["recon_open"], people["recon_month"]) == (0, None)

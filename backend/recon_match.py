@@ -145,7 +145,7 @@ def _card(books, ok_day) -> list[dict]:
     """카드 — 짝 없는 장부 카드·승인 노드와 취소 쌍"""
     sales = [s for s in books["sales"] if ok_day(s["at"].date())]
     alive = {s["id"]: s for s in sales if not s["cancel_of"]}
-    pairs = []
+    pairs, orphans = [], []  # orphans = 같은 날 원승인이 없는 취소(다음 날 취소 등)
     for c in (s for s in sales if s["cancel_of"]):
         orig = next(
             (
@@ -158,6 +158,8 @@ def _card(books, ok_day) -> list[dict]:
         if orig:
             del alive[orig["id"]]
             pairs.append((orig, c))
+        else:
+            orphans.append(c)
     ledger = [p for p in books["payments"] if p["method"] == "card" and ok_day(p["at"].date())]
     by_day: dict[date, list[dict]] = defaultdict(list)
     for s in alive.values():
@@ -182,6 +184,10 @@ def _card(books, ok_day) -> list[dict]:
         _node("ledger", "card", "emr_payments", p, p["amount_paid"], p["at"].date())
         for p in left_l
     ] + [_node("fin", "card", "fin_card_sales", s, s["amount"], s["at"].date()) for s in left_s]
+    nodes += [
+        _node("fin", "card", "fin_card_sales", c, c["amount"], c["at"].date(), cancel=True)
+        for c in orphans
+    ]
     for orig, c in pairs:
         nodes.append(
             _node(
@@ -198,30 +204,36 @@ def _card(books, ok_day) -> list[dict]:
 
 
 def _settlement(books, ok_day) -> list[list[dict]]:
-    """정산 — (카드사, 매출일)마다 합계·수수료·예상 입금일이 어긋나면 정산 입금 + 그 통장 입금이 한 건"""
+    """정산 — (카드사, 매출일)마다 합계·수수료·예상 입금일이 어긋나거나 통장 입금이 없으면 정산 입금 + 그 통장
+    입금이 한 건. 매출이 있는데 정산 행이 아예 없으면 그 승인들이 한 건(카드사 돈이 안 들어옴)"""
     totals: dict[tuple[str, str], int] = defaultdict(int)
+    sales: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for s in books["sales"]:
-        totals[(s["issuer"], s["approved_at"][:10])] += (
-            -s["amount"] if s["cancel_of"] else s["amount"]
-        )
+        k = (s["issuer"], s["approved_at"][:10])
+        totals[k] += -s["amount"] if s["cancel_of"] else s["amount"]
+        sales[k].append(s)
     issuers = books["mv"]["card_issuers"]
-    bank = {
-        (b["memo"], b["occurred_at"][:10], b["amount"]): b
-        for b in books["bank_in"]
-        if b["memo"] in issuers
-    }
+    bank: dict[tuple[str, str, int], list[dict]] = defaultdict(list)
+    for b in books["bank_in"]:
+        if b["memo"] in issuers:
+            bank[(b["memo"], b["occurred_at"][:10], b["amount"])].append(b)
     out = []
+    seen = set()
     for dep in books["deposits"]:
         d = date.fromisoformat(dep["sales_date"])
+        seen.add((dep["issuer"], dep["sales_date"]))
         if not ok_day(d):
             continue
         cfg = issuers[dep["issuer"]]
         total = totals.get((dep["issuer"], dep["sales_date"]), 0)
         expected = add_bank_days(d, cfg["settle_days"], books["holidays"]).isoformat()
+        rows = bank.get((dep["issuer"], dep["deposited_on"], dep["amount"]))
+        b = rows.pop(0) if rows else None  # 같은 키 통장 행이 여럿이면 하나씩 차지한다
         if (
             dep["sales_total"] == total
             and dep["fee"] == int(total * cfg["fee_rate"])
             and dep["deposited_on"] <= expected
+            and b
         ):
             continue
         nodes = [
@@ -238,12 +250,31 @@ def _settlement(books, ok_day) -> list[list[dict]]:
                 sales_total=dep["sales_total"],
                 computed_total=total,
                 computed_fee=int(total * cfg["fee_rate"]),
+                bank_missing=b is None,
             )
         ]
-        b = bank.get((dep["issuer"], dep["deposited_on"], dep["amount"]))
         if b:
             nodes.append(_node("fin", "settlement", "fin_bank_transactions", b, b["amount"], d))
         out.append(nodes)
+    for (issuer, day), total in sorted(totals.items()):
+        d = date.fromisoformat(day)
+        if (issuer, day) in seen or total <= 0 or not ok_day(d):
+            continue
+        out.append(
+            [
+                _node(
+                    "fin",
+                    "settlement",
+                    "fin_card_sales",
+                    s,
+                    0,  # 승인은 카드 짝짓기가 이미 센다 — 이 건의 금액은 받지 못한 정산
+                    d,
+                    deposit_missing=True,
+                    computed_total=total,
+                )
+                for s in sales[(issuer, day)]
+            ]
+        )
     return out
 
 
@@ -259,16 +290,16 @@ def _cash(books, ok_day) -> list[dict]:
     for p in books["payments"]:
         if p["method"] == "cash" and _cash_day(books, p["at"].date()) in period:
             ledger[_cash_day(books, p["at"].date())].append(p)
-    bank = {
-        b["at"].date(): b
-        for b in books["bank_in"]
-        if b["memo"] == memo and b["at"].date() < books["today"]
-    }
+    bank: dict[date, list[dict]] = defaultdict(list)  # 같은 날 현금 입금이 여러 줄이면 합쳐 본다
+    for b in books["bank_in"]:
+        if b["memo"] == memo and b["at"].date() < books["today"]:
+            bank[b["at"].date()].append(b)
+    order = sorted(period)
     out = []
     for dep in sorted(set(ledger) | {d for d in bank if d in period}):
-        rows, b = ledger.get(dep, []), bank.get(dep)
+        rows, bs = ledger.get(dep, []), bank.get(dep, [])
         led = sum(p["amount_paid"] for p in rows)
-        fin = b["amount"] if b else 0
+        fin = sum(b["amount"] for b in bs)
         if led == fin:
             continue
         days = period[dep]
@@ -277,7 +308,9 @@ def _cash(books, ok_day) -> list[dict]:
                 "side": "cash",
                 "channel": "cash",
                 "table": "fin_bank_transactions",
-                "id": b["id"] if b else None,
+                "id": bs[0]["id"] if bs else None,
+                "ids": [b["id"] for b in bs],
+                "seq": order.index(dep),  # 입금 순번 — 날짜 밀림은 바로 이웃한 두 입금만
                 "amount": fin - led,
                 "date": max(days),
                 "deposit_on": dep,
@@ -318,6 +351,7 @@ class _Groups:
 
     def __init__(self, n: int):
         self.parent = list(range(n))
+        self.size = [1] * n
 
     def find(self, i: int) -> int:
         while self.parent[i] != i:
@@ -326,10 +360,13 @@ class _Groups:
         return i
 
     def union(self, i: int, j: int) -> None:
-        self.parent[self.find(i)] = self.find(j)
+        a, b = self.find(i), self.find(j)
+        if a != b:
+            self.parent[a] = b
+            self.size[b] += self.size[a]
 
     def alone(self, i: int) -> bool:
-        return sum(self.find(k) == self.find(i) for k in range(len(self.parent))) == 1
+        return self.size[self.find(i)] == 1
 
 
 def _group(books, nodes: list[dict]) -> list[list[dict]]:
@@ -400,7 +437,7 @@ def _group(books, nodes: list[dict]) -> list[list[dict]]:
                     g.union(c, i)
     deps = sorted(cash, key=lambda k: nodes[k]["deposit_on"])
     for a, c in zip(deps, deps[1:], strict=False):
-        if nodes[a]["amount"] == -nodes[c]["amount"]:
+        if nodes[c]["seq"] == nodes[a]["seq"] + 1 and nodes[a]["amount"] == -nodes[c]["amount"]:
             g.union(a, c)
     groups: dict[int, list[dict]] = defaultdict(list)
     for i in idx:
@@ -415,8 +452,7 @@ def _item(nodes: list[dict]) -> dict:
     for n in nodes:
         if n["side"] == "cash":
             payment_ids |= {p["id"] for p in n["ledger_rows"]}
-            if n["id"] is not None:
-                fin.add((n["table"], n["id"]))
+            fin |= {(n["table"], i) for i in n["ids"]}
             ledger_total += n["ledger_total"]
             fin_total += n["fin_total"]
         elif n["side"] == "ledger":
@@ -427,7 +463,7 @@ def _item(nodes: list[dict]) -> dict:
         else:
             fin.add((n["table"], n["id"]))
             if n["table"] != "fin_bank_transactions" or n["channel"] != "settlement":
-                fin_total += n["amount"]
+                fin_total += -n["amount"] if n.get("cancel") else n["amount"]
     channels = {n["channel"] for n in nodes}
     channel = next(c for c in ("settlement", "cash", "transfer", "card") if c in channels)
     if channels == {"transfer", "card"}:

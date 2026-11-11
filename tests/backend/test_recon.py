@@ -146,6 +146,7 @@ def test_ledger_day_columns(b):
         "fin": 35_000,
         "diff": 0,
         "deposit": {"on": "2026-11-09", "days": 2},
+        "pending": False,
     }
     assert all(d["status"] == "ok" and d["items"] == [] for d in r["days"])
 
@@ -250,3 +251,57 @@ def test_tenfold_only_same_channel(b):
     b.settle("2026-11-03", "2026-11-05")
     _, books, found = items(b)
     assert sorted(recon.rule_cause(i, books) for i in found) == ["date_shift", "non_clinical_sale"]
+
+
+def test_missing_deposit_rule(b):
+    b.pay("2026-11-03 10:00:00", 100_000, "card", no="X")
+    b.sale("2026-11-03 10:00:00", 100_000, "X")
+    assert only_cause(b) == "deposit_delay"
+
+
+def test_sales_total_mismatch_rule(b):
+    """카드사가 승인 일부를 다른 정산으로 미룸 — 정산 매출 합계 ≠ 승인 합계면 입금 지연(수수료 차이 아님)"""
+    b.pay("2026-11-03 10:00:00", 90_000, "card", no="X")
+    b.sale("2026-11-03 10:00:00", 90_000, "X")
+    b.pay("2026-11-03 11:00:00", 10_000, "card", no="Y")
+    b.sale("2026-11-03 11:00:00", 10_000, "Y")
+    b.deposit("2026-11-03", 90_000, sales_total=90_000)
+    assert only_cause(b) == "deposit_delay"
+
+
+def test_deposit_row_detail(b):
+    fee_mismatch(b)
+    [day] = recon.ledger(b.app(), DAY, "2026-11")["days"]
+    dep = next(r for r in day["items"][0]["fin_rows"] if r["table"] == "fin_card_deposits")
+    assert dep["detail"] == {
+        "sales_date": "2026-11-03",
+        "sales_total": 100_000,
+        "fee": int(100_000 * (RATE + 0.003)),
+        "expected_fee": int(100_000 * RATE),
+        "expected_on": "2026-11-05",
+    }
+
+
+def test_cash_not_compared_flag(b):
+    """11-25 자체는 대조 대상이지만 그날 현금이 든 입금(11-30)에 대조 전 날(11-27)이 섞여 현금은 대조 전"""
+    b.pay("2026-11-25 10:00:00", 10_000, "cash")
+    b.pay("2026-11-27 10:00:00", 20_000, "cash")
+    b.cash_in(b.settle())
+    days = {d["date"]: d for d in recon.ledger(b.app(), DAY, "2026-11")["days"]}
+    assert days["2026-11-25"]["status"] == "ok"
+    assert days["2026-11-25"]["cash"]["pending"] is True
+    assert days["2026-11-25"]["cash"]["fin"] is None
+
+
+def test_open_all_and_first_month(b):
+    """오늘 화면 숫자 = 전체 기간 미확정, 링크는 미확정이 있는 가장 이른 달 — /finance 칩에도 전체 미확정"""
+    b.pay("2026-10-05 10:00:00", 3_500, "card")
+    b.sale("2026-10-05 10:00:00", 35_000, "R1")
+    b.pay("2026-11-03 10:00:00", 2_000, "card")
+    b.sale("2026-11-03 10:00:00", 20_000, "R2")
+    b.settle("2026-10-05", "2026-11-03")
+    conn = b.app()
+    r = recon.ledger(conn, DAY)
+    assert r["month"] == "2026-11"
+    assert r["chips"]["open_items"] == 1 and r["chips"]["open_all"] == 2
+    assert recon.open_summary(conn, DAY) == {"count": 2, "month": "2026-10"}

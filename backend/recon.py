@@ -29,6 +29,7 @@ def rule_cause(item: dict, books: dict) -> str:
     pairs = [p for p in parts if "cancel_pair" in p]
     cash = [p for p in parts if p["side"] == "cash"]
     deps = [p for p in fin if p["table"] == "fin_card_deposits"]
+    settle = [p for p in fin if p["channel"] == "settlement"]
     # 1 분할결제 — 장부 카드 1건 ↔ 같은 시각 승인 둘 이상(하나가 장부 번호), 합 = 장부
     for x in led:
         same = [s for s in sales if s["at"] == x["at"]]
@@ -45,6 +46,14 @@ def rule_cause(item: dict, books: dict) -> str:
             s["amount"] == x["amount"] for s in sales
         ):
             return "cancel_reapprove"
+    # 3 전 — 카드사 돈이 일부·전부 안 들어옴(정산 행 없음, 통장 입금 없음, 정산 매출 합계 ≠ 승인 합계)은 입금 지연
+    if any(
+        p.get("deposit_missing")
+        or p.get("bank_missing")
+        or p.get("sales_total", 0) != p.get("computed_total", 0)
+        for p in settle
+    ):
+        return "deposit_delay"
     # 3·4 정산
     if any(d["fee"] != d["computed_fee"] for d in deps):
         return "fee_mismatch"
@@ -129,7 +138,7 @@ def _rows(books: dict) -> tuple[dict, dict]:
             "table": "fin_card_deposits",
             "at": d["deposited_on"],
             "amount": d["amount"],
-            "label": f"{d['issuer']} 정산 · 매출 {d['sales_date']} · 수수료 {d['fee']}",
+            "label": f"{d['issuer']} 정산",
         }
     for b in books["bank_in"]:
         fin[("fin_bank_transactions", b["id"])] = {
@@ -143,10 +152,28 @@ def _rows(books: dict) -> tuple[dict, dict]:
 
 def _view(item: dict, books: dict, pays: dict, fin: dict, conf: dict) -> dict:
     out = {k: v for k, v in item.items() if k != "parts"}
+    # 정산 행에는 받은 값과 기대값(코드가 계산한 수수료·예상 입금일)을 함께 — 직원이 "얼마여야 했나"를 본다
+    detail = {
+        p["id"]: {
+            "sales_date": p["date"].isoformat(),
+            "sales_total": p["sales_total"],
+            "fee": p["fee"],
+            "expected_fee": p["computed_fee"],
+            "expected_on": p["expected_on"],
+        }
+        for p in item["parts"]
+        if p["table"] == "fin_card_deposits"
+    }
+    rows = []
+    for r in item["fin"]:
+        row = fin[(r["table"], r["id"])]
+        if r["table"] == "fin_card_deposits":
+            row = row | {"detail": detail[r["id"]]}
+        rows.append(row)
     return out | {
         "rule_cause": rule_cause(item, books),
         "ledger_rows": [pays[i] for i in item["payment_ids"]],
-        "fin_rows": [fin[(r["table"], r["id"])] for r in item["fin"]],
+        "fin_rows": rows,
         "confirmation": conf.get(item["key"]),
     }
 
@@ -171,10 +198,10 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
     for s in books["sales"]:
         card[s["approved_at"][:10]] += -s["amount"] if s["cancel_of"] else s["amount"]
     transfer: dict[str, int] = defaultdict(int)
-    cash_in: dict[str, int] = {}
+    cash_in: dict[str, int] = defaultdict(int)
     for b in books["bank_in"]:
         if b["memo"] == mv["cash_deposit"]["memo"]:
-            cash_in[b["occurred_at"][:10]] = b["amount"]
+            cash_in[b["occurred_at"][:10]] += b["amount"]
         elif b["memo"] not in skip:
             transfer[b["occurred_at"][:10]] += b["amount"]
     period: dict[date, list[date]] = defaultdict(list)
@@ -183,6 +210,11 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
             recon_match.cash_deposit_day(d, mv["cash_deposit"]["weekdays"], books["holidays"])
         ].append(d)
     last = {max(days): (dep, days) for dep, days in period.items()}
+    status = {d: recon_match.day_status(books, d) for d in books["open_days"]}
+    # 그날 현금이 든 입금 기간에 대조 전 날이 섞이면 그 현금은 대조 전(recon_match._cash와 같은 경계)
+    cash_pending = {
+        d for days in period.values() if any(status[x] == "pending" for x in days) for d in days
+    }
     by_day: dict[str, list[dict]] = defaultdict(list)
     for i in found:
         by_day[i["date"]].append(i)
@@ -193,11 +225,17 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
     )
     for d in days:
         k = d.isoformat()
-        cash = {"ledger": led[(k, "cash")], "fin": None, "diff": None, "deposit": None}
-        if d in last:
+        cash = {
+            "ledger": led[(k, "cash")],
+            "fin": None,
+            "diff": None,
+            "deposit": None,
+            "pending": d in cash_pending,
+        }
+        if d in last and d not in cash_pending:
             dep, span = last[d]
             got = cash_in.get(dep.isoformat())
-            if got is not None:
+            if got:
                 total = sum(led[(x.isoformat(), "cash")] for x in span)
                 cash |= {
                     "fin": got,
@@ -207,7 +245,7 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
         rows.append(
             {
                 "date": k,
-                "status": recon_match.day_status(books, d),
+                "status": status.get(d) or recon_match.day_status(books, d),
                 "card": {
                     "ledger": led[(k, "card")],
                     "fin": card[k],
@@ -231,6 +269,7 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
             "days": len([d for d in books["open_days"] if d.strftime("%Y-%m") == month]),
             "mismatch_days": len({i["date"] for i in in_month}),
             "open_items": sum(i["key"] not in conf for i in in_month),
+            "open_all": sum(i["key"] not in conf for i in found),
         },
         "days": rows,
     }
@@ -264,7 +303,13 @@ def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, to
     )
 
 
-def open_count(conn: sqlite3.Connection, today: date) -> int:
-    """확정 안 된 불일치 건 수(전 기간) — 오늘 화면 '일계표 불일치' 줄"""
+def open_summary(conn: sqlite3.Connection, today: date) -> dict:
+    """확정 안 된 불일치 건 수(전 기간)와 그런 건이 있는 가장 이른 달 — 오늘 화면 '일계표 불일치' 줄과 링크.
+    수는 /finance 칩 open_all과 같다"""
     conf = _confirmations(conn)
-    return sum(i["key"] not in conf for i in recon_match.detect(recon_match.load(conn, today)))
+    open_ = [i for i in recon_match.detect(recon_match.load(conn, today)) if i["key"] not in conf]
+    return {"count": len(open_), "month": min((i["date"][:7] for i in open_), default=None)}
+
+
+def open_count(conn: sqlite3.Connection, today: date) -> int:
+    return open_summary(conn, today)["count"]

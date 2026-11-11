@@ -2,12 +2,12 @@
 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1). 생성 결과가 이 폴더 픽스처에 있어 backend를 부르는
 테스트지만 여기에 둔다. 정답 건 ↔ 탐지 건 대응 = 관련 행이 가장 많이 겹치는 건(같으면 키 순 첫 건)."""
 
-import json
 from datetime import date
 
 import pytest
 
 from backend import db, recon, recon_match
+from evaluation.recon import match as _match
 from generator.master import RECON_CAUSE_GROUPS, recon_months
 
 
@@ -23,17 +23,6 @@ def world(generated):
     books = recon_match.load(conn, today)
     truth = [dict(r) for r in conn.execute("SELECT * FROM truth.truth_recon_mismatches")]
     return today, books, recon_match.detect(books), truth
-
-
-def _refs(fin, payment_ids) -> set:
-    return {(f["table"], f["id"]) for f in fin} | {("emr_payments", p) for p in payment_ids}
-
-
-def _match(truth_row, items):
-    t = _refs(json.loads(truth_row["fin_ids"]), json.loads(truth_row["payment_ids"]))
-    hits = [(len(_refs(i["fin"], i["payment_ids"]) & t), i["key"], i) for i in items]
-    hits = [h for h in hits if h[0]]
-    return min(hits, key=lambda h: (-h[0], h[1]))[2] if hits else None
 
 
 def test_every_truth_mismatch_detected(world):

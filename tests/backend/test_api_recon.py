@@ -27,7 +27,7 @@ def test_get_recon_shape(client):
     r = client.get("/finance/recon").json()
     assert set(r) == {"months", "month", "causes", "chips", "days"}
     assert r["month"] == "2026-11"
-    assert r["chips"] == {"days": 1, "mismatch_days": 1, "open_items": 1}
+    assert r["chips"] == {"days": 1, "mismatch_days": 1, "open_items": 1, "open_all": 1}
     assert client.get("/finance/recon?month=2026-11").json() == r
 
 

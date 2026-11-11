@@ -48,16 +48,26 @@ class Books(Source):
             (at, amount, memo),
         ).lastrowid
 
-    def deposit(self, sales_date, total, *, fee=None, on=None, issuer=ISSUER) -> int:
+    def deposit(
+        self, sales_date, total, *, fee=None, on=None, issuer=ISSUER, bank=True, sales_total=None
+    ) -> int:
         d = date.fromisoformat(sales_date)
         cfg = master.CARD_ISSUERS[issuer]
         on = on or master.add_bank_days(d, cfg["settle_days"], set()).isoformat()
         fee = int(total * cfg["fee_rate"]) if fee is None else fee
-        self.bank(f"{on} 08:00:00", total - fee, issuer)
+        if bank:
+            self.bank(f"{on} 08:00:00", total - fee, issuer)
         return self.conn.execute(
             "INSERT INTO fin_card_deposits (deposited_on, issuer, sales_date, sales_total, fee,"
             " amount) VALUES (?, ?, ?, ?, ?, ?)",
-            (on, issuer, sales_date, total, fee, total - fee),
+            (
+                on,
+                issuer,
+                sales_date,
+                total if sales_total is None else sales_total,
+                fee,
+                total - fee,
+            ),
         ).lastrowid
 
     def settle(self, *days, skip=()):
@@ -172,10 +182,14 @@ def test_deposit_delay_item(b):
 
 
 def test_fee_rounding_matches_generator(b):
-    total = 25_000  # 25,000 × 0.012 = 300.0000…(float) — int()가 생성기와 같아야 오탐이 없다
+    """라온카드 23,000 × 0.011 = 252.999…(float) — int()는 252, round()는 253. 생성기와 같은 int()여야 오탐이 없다"""
+    total, raon = 23_000, "라온카드"
+    assert int(total * master.CARD_ISSUERS[raon]["fee_rate"]) != round(
+        total * master.CARD_ISSUERS[raon]["fee_rate"]
+    )
     b.pay("2026-11-03 10:00:00", total, "card", no="X")
-    b.sale("2026-11-03 10:00:00", total, "X")
-    b.deposit("2026-11-03", total, fee=int(total * RATE))
+    b.sale("2026-11-03 10:00:00", total, "X", issuer=raon)
+    b.deposit("2026-11-03", total, issuer=raon)
     assert detect(b) == []
 
 
@@ -312,4 +326,53 @@ def test_cash_period_with_pending_day_not_detected(b):
     cash = b.settle()
     assert cash == {"2026-11-30": 30_000}
     b.cash_in(cash)
+    assert detect(b) == []
+
+
+def test_missing_deposit_item(b):
+    """카드 매출은 있는데 정산 입금이 아예 안 옴(예상일이 기준일 전) — 승인 행으로 정산 건"""
+    b.pay("2026-11-03 10:00:00", 100_000, "card", no="X")
+    s = b.sale("2026-11-03 10:00:00", 100_000, "X")
+    [item] = detect(b)
+    assert item["channel"] == "settlement"
+    assert item["fin"] == [{"table": "fin_card_sales", "id": s}]
+    assert item["date"] == "2026-11-03"
+
+
+def test_deposit_without_bank_row_item(b):
+    """정산 행은 맞는데 통장에 그 입금이 없음"""
+    b.pay("2026-11-03 10:00:00", 100_000, "card", no="X")
+    b.sale("2026-11-03 10:00:00", 100_000, "X")
+    b.deposit("2026-11-03", 100_000, bank=False)
+    [item] = detect(b)
+    assert item["channel"] == "settlement"
+    assert refs(item) == {"fin_card_deposits"}
+
+
+def test_orphan_cancel_is_kept(b):
+    """다음 날 취소(같은 날 원승인 없음) — 버리지 않고 금융 행으로 남는다"""
+    b.pay("2026-11-03 10:00:00", 30_000, "card", no="X")
+    b.sale("2026-11-03 10:00:00", 30_000, "X")
+    c = b.sale("2026-11-04 10:00:00", 30_000, "X", cancel_of="X")
+    b.settle("2026-11-03", "2026-11-04")
+    found = detect(b)
+    assert any({"table": "fin_card_sales", "id": c} in i["fin"] for i in found)
+
+
+def test_distant_cash_deposits_not_shift(b):
+    """+5,000 입금과 −5,000 입금 사이에 정상 입금이 끼면 날짜 밀림 한 건으로 묶지 않는다"""
+    b.pay("2026-10-06 10:00:00", 10_000, "cash")
+    b.pay("2026-10-13 10:00:00", 10_000, "cash")
+    b.pay("2026-10-20 10:00:00", 10_000, "cash")
+    cash = b.settle()
+    assert list(cash) == ["2026-10-12", "2026-10-19", "2026-10-26"]
+    b.cash_in(cash, **{"2026-10-12": 15_000, "2026-10-26": 5_000})
+    assert len(detect(b)) == 2
+
+
+def test_two_cash_deposits_same_day(b):
+    """같은 날 현금 입금 두 줄은 합쳐서 본다(하나를 덮어쓰지 않는다)"""
+    b.pay("2026-11-03 10:00:00", 30_000, "cash")
+    b.bank("2026-11-09 13:10:00", 10_000, master.CASH_DEPOSIT_MEMO)
+    b.bank("2026-11-09 15:00:00", 20_000, master.CASH_DEPOSIT_MEMO)
     assert detect(b) == []
