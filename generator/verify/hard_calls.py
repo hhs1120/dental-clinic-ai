@@ -121,7 +121,7 @@ def check_hard_purposes(conn, ctx):
 
 def check_hard_booking_events(conn, ctx):
     """예약류 hc-는 기존 예약 이벤트에 붙고 c-와 같은 시각 규칙(verify/calls.py _booking_problem). 예외는 reversal의
-    "예약하려다 미룸"(book·appt_confirmed 0 — 이벤트 없음). 이벤트 하나에 통화 최대 1건 — c-와 hc-를 합쳐 센다"""
+    예약(날짜를 정했다가 미룸 — book·appt_confirmed 0, 이벤트 없음). 이벤트 하나에 통화 최대 1건 — c-와 hc-를 합쳐 센다"""
     appts = {a["id"]: a for a in _rows(conn, "SELECT * FROM emr_appointments")}
     origins = {a["rescheduled_from_id"] for a in appts.values() if a["rescheduled_from_id"]}
     reminders = defaultdict(list)

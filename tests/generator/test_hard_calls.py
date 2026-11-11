@@ -16,6 +16,7 @@ from generator.master import (
     HARD_NOT_URGENT_CUES,
     HARD_PAIN_WORDS,
     HARD_RARE_MIN,
+    HARD_TYPE_PURPOSES,
     HARD_URGENCY_HALVES,
     HARD_URGENT_SIGNS,
 )
@@ -212,15 +213,20 @@ def _found(checks, text) -> list[str]:
     return llm_jobs.problems(transcripts.SCHEMA, checks, {"scenario": "x", "transcript": text})
 
 
-def test_checks_reversal_cancel_blocks_rebook_only_at_end(t4):
+def test_reversal_keeps_first_purpose_and_flips_a_flag(t4):
+    """번복(설계 §3.2, 사람 결정 A) — 목적은 처음 꺼낸 것 그대로라 예약 이벤트 없음, 뒤집는 표시 항목은 예약이면
+    예약 확정(끝은 미확정), 그 밖은 할 일. 입력의 hard.flip이 그 항목"""
     conn, names, rows = t4
-    row = _first(rows, hard_type="reversal", primary_purpose="cancel", wants_appt=0)
-    c = hard_calls.checks(row, names)
-    middle = "환자: 날짜를 옮길까 해서요\n직원: 다른 날로 다시 잡아 드릴까요?\n환자: 아니요 그냥 취소할게요\n직원: 네 취소해 드렸어요\n환자: 감사합니다"
-    end = "환자: 취소할게요\n직원: 네 취소해 드렸어요\n직원: 다시 잡아 드릴까요?\n환자: 아니요"
-    assert transcripts.REBOOK_OFFER not in c["forbidden_patterns"]
-    assert not any(hard_calls.REBOOK_TAIL in p for p in _found(c, middle))
-    assert any(hard_calls.REBOOK_TAIL in p for p in _found(c, end))
+    rev = [r for r in rows.values() if r["hard_type"] == "reversal"]
+    assert {r["primary_purpose"] for r in rev} <= {p for p, _ in HARD_TYPE_PURPOSES["reversal"]}
+    assert not {"cancel", "reschedule", "confirm"} & {r["primary_purpose"] for r in rev}
+    for r in rev:
+        fact = json.loads(r["used_fact"])
+        assert "appointment_id" not in fact
+        flip = "appt_confirmed" if r["primary_purpose"] == "book" else "has_todo"
+        assert fact["hard_flip"] == flip and hard_calls.payload(r)["hard"]["flip"] == flip
+        if r["primary_purpose"] == "book":
+            assert r["appt_confirmed"] == 0
 
 
 def test_checks_calm_urgent_blocks_pain_words_and_needs_sign(t4):

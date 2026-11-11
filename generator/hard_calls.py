@@ -45,6 +45,7 @@ from generator.master import (
     HARD_NOT_URGENT_CUES,
     HARD_PAIN_WORDS,
     HARD_RARE_MIN,
+    HARD_REVERSAL_FLIP,
     HARD_TYPE_PURPOSES,
     HARD_URGENCY_HALVES,
     HARD_URGENT_SIGNS,
@@ -260,11 +261,13 @@ def stage_slots(run, rng, fake) -> None:
     slots = []
     for hard_type, half, purpose, direction in allocation():
         s = {"hard_type": hard_type, "half": half, "direction": direction, "appointment": None}
-        postponed = hard_type == "reversal" and purpose == "book"
+        postponed = (
+            hard_type == "reversal" and purpose == "book"
+        )  # 날짜를 정했다가 미룸 — 이벤트 없음
         event = pick.take_event(purpose) if purpose in BOOKING_PURPOSES and not postponed else None
         if purpose in BOOKING_PURPOSES and not postponed and event is None:
             # 붙일 이벤트가 모자라면(변경은 창 안 빈 이벤트가 적다) 같은 종류·방향의 다른 예약류(취소 → 예약)로,
-            # 그래도 없으면 이벤트 없는 목적으로 (§3.3) — reversal은 "예약하려다 미룸"
+            # 그래도 없으면 이벤트 없는 목적으로 (§3.3)
             for alt in _alternates(hard_type, half, purpose, direction):
                 if (event := pick.take_event(alt)) is not None:
                     purpose = alt
@@ -286,8 +289,7 @@ def stage_slots(run, rng, fake) -> None:
 
 
 def _alternates(hard_type: str, half: str | None, purpose: str, direction: str) -> list[str]:
-    """이벤트가 모자란 예약류 대신 붙일 예약류 — 빈 이벤트가 많은 순(취소 → 예약), 종류의 허용 목록·같은 방향 안.
-    reversal의 예약은 이벤트에 붙으면 "다른 날 하려다 결국 그날로 잡음"(예약 확정)"""
+    """이벤트가 모자란 예약류 대신 붙일 예약류 — 빈 이벤트가 많은 순(취소 → 예약), 종류의 허용 목록·같은 방향 안"""
     allowed = (
         {(p, "inbound") for p in HARD_HALF_PURPOSES[half]}
         if half
@@ -297,8 +299,6 @@ def _alternates(hard_type: str, half: str | None, purpose: str, direction: str) 
 
 
 def _fallback(hard_type: str, half: str | None) -> tuple[str, bool]:
-    if hard_type == "reversal":
-        return "book", True
     pairs = (
         [(p, "inbound") for p in HARD_HALF_PURPOSES[half]]
         if half
@@ -329,7 +329,9 @@ def _labels(rng, led: Ledger, slots: list[dict]) -> None:
             fact["existing_visit"] = {"appointment_id": s["visit"]["id"]} | _appt_fact(s["visit"])
         if s["half"] == "calm_urgent":
             fact["hard_sign"] = list(HARD_URGENT_SIGNS)[int(rng.integers(len(HARD_URGENT_SIGNS)))]
-        elif s["half"] == "pain_not_urgent":
+        elif s["hard_type"] == "reversal":
+            fact["hard_flip"] = HARD_REVERSAL_FLIP.get(purpose, "has_todo")
+        if s["half"] == "pain_not_urgent":
             fact["hard_cue"] = list(HARD_NOT_URGENT_CUES)[
                 int(rng.integers(len(HARD_NOT_URGENT_CUES)))
             ]
@@ -401,14 +403,9 @@ TASK = Task(
     store=("transcript",),
     alias="gen_hard",
 )
-# reversal 취소의 다시 예약 제안 금지는 마지막 직원 말 근처에만 — 통화 중간에 옮기려던 말은 번복의 일부
-REBOOK_TAIL = (
-    r"직원:[^\n]*(새 ?(일정|날짜|예약)|다시 (잡|예약)|(편하신|원하시는) (날|시간|요일))"
-    r"[^\n]*(\n[^\n]*){0,2}\s*\Z"
-)
 DOC_TEXT_PROMISE = r"문자.{0,8}(드릴|보내|넣어|남겨)"  # hc- 서류 요청은 준비 문자가 없다(§3.3)
 EXISTING_VISIT_NOTE = "통화 전에 이미 잡혀 있던 예약 — 직원은 새 시간을 잡지 않고 이 예약을 짚어 그때(또는 지금 바로) 오시라고 안내한다"
-HARD_RULE_KEYS = ("hard_sign", "hard_cue", "existing_visit")
+HARD_RULE_KEYS = ("hard_sign", "hard_cue", "hard_flip", "existing_visit")
 SAMPLE_PER_TYPE = 4  # 전체 배치 전 샘플 — 종류마다(urgency_inverted는 절반마다 반씩), 설계 §3.5
 
 
@@ -441,7 +438,10 @@ def payload(row: dict) -> dict:
         facts["existing_visit"] = {k: v for k, v in visit.items() if k != "appointment_id"} | {
             "before_call": EXISTING_VISIT_NOTE
         }
-    return p | {"facts": facts, "hard": {"type": row["hard_type"], "half": row["half"]}}
+    hard = {"type": row["hard_type"], "half": row["half"]}
+    if fact.get("hard_flip"):
+        hard["flip"] = fact["hard_flip"]  # 통화 중 반대로 갔다가 끝에 라벨 값이 되는 표시 항목
+    return p | {"facts": facts, "hard": hard}
 
 
 def simplify(p: dict) -> dict:
@@ -456,8 +456,6 @@ def checks(row: dict, names: dict) -> dict:
     fact = json.loads(row["used_fact"])
     patterns = list(c["forbidden_patterns"])
     must = list(c["must_include"])
-    if row["hard_type"] == "reversal" and transcripts.REBOOK_OFFER in patterns:
-        patterns[patterns.index(transcripts.REBOOK_OFFER)] = REBOOK_TAIL
     if row["half"] == "calm_urgent":
         patterns.append(HARD_CALM_FORBIDDEN)
         must.append(list(HARD_URGENT_SIGNS[fact["hard_sign"]]))
