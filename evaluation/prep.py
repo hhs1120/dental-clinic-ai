@@ -30,8 +30,37 @@ def _chips_on(facts: dict, rel: set[str]) -> bool:
     )
 
 
+def _blank() -> dict:
+    return {m: {"k": 0, "n": 0} for m in ("valid", "reflect", "over_mention", "over_suggest")}
+
+
+def _template(facts: dict) -> dict:
+    """켜진 칩 키를 모두 근거로 제안, 다 꺼지면 none — 주의 칩은 앱이 저장한 related로 고른다(LLM 없음)"""
+    keys = [f"alert.{a['code']}" for a in facts["alerts"] if a["related"]]
+    keys += [k for k in ("balance", "scaling_unused", "family_recall", "open_plan") if facts[k]]
+    if not keys:
+        return {"action": "none", "text": "", "used_facts": []}
+    return {"action": "suggest", "text": "", "used_facts": [{"key": k, "value": ""} for k in keys]}
+
+
+def _tally(out: dict, facts: dict, s: dict | None, valid: bool) -> None:
+    """한 행을 네 지표에 더한다"""
+    keys = {u["key"] for u in s["used_facts"]} if s else set()
+    rel, unrel = _related(facts)
+    out["valid"]["n"] += 1
+    out["valid"]["k"] += valid
+    if rel:  # 관련 주의사항이 있는 행 — 그 키가 모두 근거에 있어야(제안이 없으면 빠뜨린 것)
+        out["reflect"]["n"] += 1
+        out["reflect"]["k"] += all(f"alert.{c}" in keys for c in rel)
+    out["over_mention"]["n"] += 1
+    out["over_mention"]["k"] += any(f"alert.{c}" in keys for c in unrel)
+    if s and not _chips_on(facts, rel):  # 제안이 없는 행(후검증 실패)은 과잉 제안을 판단할 수 없다
+        out["over_suggest"]["n"] += 1
+        out["over_suggest"]["k"] += s["action"] == "suggest"
+
+
 def score(conn, days: list[date]) -> dict:
-    """{valid, reflect, over_mention, over_suggest: {k, n}, not_generated, by_prompt_version}"""
+    """{valid, reflect, over_mention, over_suggest: {k, n}, template: 같은 네 지표, not_generated, by_prompt_version}"""
     ds = [d.isoformat() for d in days]
     marks = ", ".join("?" * len(ds))
     rows = conn.execute(
@@ -39,24 +68,13 @@ def score(conn, days: list[date]) -> dict:
         f" WHERE sheet_date IN ({marks})",
         ds,
     ).fetchall()
-    out = {m: {"k": 0, "n": 0} for m in ("valid", "reflect", "over_mention", "over_suggest")}
+    out = _blank()
+    template = _blank()  # 템플릿 기준선 — 같은 행 사실만으로(LLM 없이) 만든 제안을 같은 지표로
     for facts_json, sug_json, valid, _ in rows:
         facts = json.loads(facts_json)
         s = json.loads(sug_json) if sug_json else None
-        keys = {u["key"] for u in s["used_facts"]} if s else set()
-        rel, unrel = _related(facts)
-        out["valid"]["n"] += 1
-        out["valid"]["k"] += bool(valid)
-        if rel:  # 관련 주의사항이 있는 행 — 그 키가 모두 근거에 있어야(제안이 없으면 빠뜨린 것)
-            out["reflect"]["n"] += 1
-            out["reflect"]["k"] += all(f"alert.{c}" in keys for c in rel)
-        out["over_mention"]["n"] += 1
-        out["over_mention"]["k"] += any(f"alert.{c}" in keys for c in unrel)
-        if s and not _chips_on(
-            facts, rel
-        ):  # 제안이 없는 행(후검증 실패)은 과잉 제안을 판단할 수 없다
-            out["over_suggest"]["n"] += 1
-            out["over_suggest"]["k"] += bool(s and s["action"] == "suggest")
+        _tally(out, facts, s, bool(valid))
+        _tally(template, facts, _template(facts), True)
     missing = conn.execute(  # 저장 행이 없는 예약 — 취소된 예약의 남은 행은 세지 않는다
         f"SELECT COUNT(*) FROM source.emr_appointments a WHERE a.status != 'cancelled'"
         f" AND date(a.scheduled_at) IN ({marks}) AND NOT EXISTS (SELECT 1 FROM ax_prep_sheets s"
@@ -64,6 +82,7 @@ def score(conn, days: list[date]) -> dict:
         ds,
     ).fetchone()[0]
     return out | {
+        "template": template,
         "not_generated": missing,
         "by_prompt_version": dict(Counter(r[3] for r in rows)),
     }

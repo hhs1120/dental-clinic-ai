@@ -103,3 +103,25 @@ def test_not_generated_ignores_rows_of_cancelled_appointments(conn):
     # 만든 뒤 취소된 예약(104)의 남은 행은 "만들지 않은 예약" 계산에 섞이지 않는다
     put(conn, row(104, "U0001"), NONE)
     assert prep_eval.score(conn, [DAY])["not_generated"] == 3
+
+
+def test_template_baseline_same_rows(conn):
+    """템플릿 기준선(평가 설계 §4) — 같은 행의 사실만으로 "켜진 칩 키 전부로 제안, 다 꺼지면 none".
+    앱이 저장한 related로 주의 칩을 고르고, 채점은 LLM 제안과 같은 네 지표"""
+    put(conn, row(101, "U0011", [("ANTICOAG", True)], balance=30000), NONE)
+    put(conn, row(102, "U0001", [("GAG", True), ("HTN", False)]), NONE)
+    put(conn, row(103, "U0019"), NONE)
+    t = prep_eval.score(conn, [DAY])["template"]
+    assert t["valid"] == {"k": 3, "n": 3}
+    assert t["reflect"] == {"k": 2, "n": 2}
+    assert t["over_mention"] == {"k": 0, "n": 3}
+    assert t["over_suggest"] == {"k": 0, "n": 1}
+
+
+def test_report_shows_template_column(conn):
+    from evaluation import eval as ev
+
+    put(conn, row(101, "U0011", [("ANTICOAG", True)]), NONE)
+    p = {"days": ["2026-12-01", "2026-12-01"]} | prep_eval.score(conn, [DAY])
+    text = "\\n".join(ev._render_prep(p))
+    assert "| 지표 | 제안(LLM) | 템플릿 기준선 |" in text
