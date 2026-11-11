@@ -19,7 +19,7 @@ CONFIRM_SQL = (
 
 def _confirm(r: sqlite3.Row) -> str:
     """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드 자체가 없음 — 전날 잡은 응급 등).
-    격자의 '예약 미확인'(confirmed = 0)과 항상 맞는다"""
+    격자의 '내원 확인 전'(confirmed = 0)과 항상 맞는다"""
     if r["confirmed"]:
         return "replied"
     return "no_reply" if r["reminders"] else "no_message"
@@ -355,7 +355,7 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
 
 def tour_patient(conn: sqlite3.Connection, today: date) -> dict | None:
     """따라 보기 기준 환자 — 기준일 예약 환자 중 미수·주의사항·남은 치료(오늘 예약이 이행하는 항목 제외)를
-    가장 많이 가진 사람. 같으면 예약 미확인, 시각, 차트 번호 순(설계안 '백엔드')"""
+    가장 많이 가진 사람. 같으면 내원 확인 전, 시각, 차트 번호 순(설계안 '백엔드')"""
     rows = conn.execute(
         "SELECT a.id, a.patient_id, a.scheduled_at, a.confirmed, a.plan_item_id, p.chart_no, p.name"
         " FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"

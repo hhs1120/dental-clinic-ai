@@ -129,11 +129,11 @@ function People({ sheet }: { sheet: TodaySheet }) {
   count(
     p.unconfirmed,
     "unconfirmed",
-    "예약 미확인",
-    "danger",
+    "내원 확인 전",
+    "warn",
     "/prep?chip=unconfirmed",
-    `예약 미확인 ${p.unconfirmed}명`,
-    "준비표에서 예약 미확인 칩으로 보기",
+    `내원 확인 전 ${p.unconfirmed}명 — 확인 전화`,
+    "준비표에서 내원 확인 전 칩으로 보기",
   );
   count(
     p.alert_patients,

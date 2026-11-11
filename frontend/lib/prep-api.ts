@@ -17,7 +17,7 @@ export const CHIP_LABEL: Record<Chip, string> = {
   family_recall: "가족 리콜 지남",
   alert: "주의",
   open_plan: "남은 치료계획",
-  unconfirmed: "예약 미확인",
+  unconfirmed: "내원 확인 전",
 };
 export const CHIPS = Object.keys(CHIP_LABEL) as Chip[];
 

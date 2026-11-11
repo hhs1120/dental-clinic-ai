@@ -79,7 +79,7 @@ export function PatientSummary({
               <Badge variant="warn">예약 확인 문자 무응답</Badge>
             )}
             {appt.unconfirmed && appt.confirm === "no_message" && (
-              <Badge variant="warn">예약 미확인 · 확인 문자 없음</Badge>
+              <Badge variant="warn">내원 확인 전 · 확인 문자 없음</Badge>
             )}
             {appt.new_patient && <Badge variant="info">신환</Badge>}
           </div>

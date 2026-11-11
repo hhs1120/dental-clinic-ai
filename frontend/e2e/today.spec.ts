@@ -128,7 +128,7 @@ test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await page.getByRole("link", { name: /이영자/ }).click();
   await expect(page).toHaveURL(/\/calls\?call=c-0450$/);
   await page.goto("/today");
-  await page.getByRole("link", { name: /예약 미확인 1명/ }).click();
+  await page.getByRole("link", { name: /내원 확인 전 1명/ }).click();
   await expect(page).toHaveURL(/\/prep\?chip=unconfirmed$/);
   await page.goto("/today");
   await page.getByRole("link", { name: /유치는 언제 빠져/ }).click();
