@@ -11,6 +11,7 @@
   "staff": "강태현",
   "status": "scheduled",
   "confirmed": false,
+  "confirm": "no_reply",
   "patient": {
    "name": "김철수",
    "chart_no": "C-00001",
@@ -76,6 +77,7 @@
   "staff": "임재윤",
   "status": "scheduled",
   "confirmed": true,
+  "confirm": "replied",
   "patient": {
    "name": "박영희",
    "chart_no": "C-00002",
@@ -120,6 +122,7 @@
   "staff": "강태현",
   "status": "scheduled",
   "confirmed": false,
+  "confirm": "no_message",
   "patient": {
    "name": "정다은",
    "chart_no": "C-00004",

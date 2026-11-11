@@ -262,6 +262,15 @@ function SuggestionText({
   return <>{s.text}</>;
 }
 
+// 내원 확인 값 — 누가 무엇을 확인했는지 드러나게 사실로 쓴다. 문자 없음은 기준일이면 발송 시각 뒤 잡힌 예약,
+// 앞날이면 아직 보내기 전(backend/prep.py _confirm)
+const CONFIRM_TEXT: Record<NonNullable<PrepRow["confirm"]>, string> = {
+  replied: "환자가 온다고 답함",
+  no_reply: "문자에 답 없음 — 확인 필요",
+  no_message: "문자 발송 시각이 지난 뒤 잡힌 예약 — 확인 필요",
+  not_sent: "확인 문자 보내기 전",
+};
+
 function Expand({ row }: { row: PrepRow }) {
   const s = row.suggestion;
   const facts: [string, string][] = [
@@ -302,7 +311,7 @@ function Expand({ row }: { row: PrepRow }) {
             .join(", ")
         : "없음",
     ],
-    ["내원 확인", row.confirmed ? "확인함" : "확인 전"],
+    ["내원 확인", row.confirm ? CONFIRM_TEXT[row.confirm] : "—"],
   ];
   return (
     <div className="grid gap-6 md:grid-cols-2">

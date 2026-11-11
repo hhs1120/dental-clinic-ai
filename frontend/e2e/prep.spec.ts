@@ -16,6 +16,7 @@ const base = {
   duration_min: 30,
   status: "scheduled",
   confirmed: true,
+  confirm: "replied",
   last_visit: "2026-11-20",
   balance: 0,
   alerts: [],
@@ -42,6 +43,7 @@ const ROWS = [
     procedure_code: "U0011",
     staff: "강태현",
     confirmed: false,
+    confirm: "no_reply",
     patient: {
       name: "김철수",
       chart_no: "C-00001",
@@ -120,6 +122,7 @@ const ROWS = [
     procedure_code: "U0019",
     staff: "강태현",
     confirmed: false,
+    confirm: "no_message",
     last_visit: null,
     patient: {
       name: "정다은",
@@ -195,6 +198,22 @@ test("행을 펼치면 근거와 후검증이 보인다", async ({ page }) => {
   await expect(page.getByText("alert.ANTICOAG")).toHaveCount(0);
   await expect(page.getByText("후검증 통과")).toBeVisible();
   await expect(page.getByText(/^신환$/)).toBeVisible(); // 정다은 행의 딱지
+  // 내원 확인은 누가 무엇을 했는지 사실로
+  await expect(page.getByText("문자에 답 없음 — 확인 필요")).toBeVisible();
+  await page.getByRole("row", { name: /정다은/ }).click();
+  await expect(
+    page.getByText("문자 발송 시각이 지난 뒤 잡힌 예약 — 확인 필요"),
+  ).toBeVisible();
+});
+
+test("지난 날의 내원 확인은 비운다", async ({ page }) => {
+  await fakePrep(page, (date) =>
+    date === "2026-11-29" ? [{ ...ROWS[1], confirm: null }] : ROWS,
+  );
+  await page.goto("/prep?date=2026-11-29");
+  await page.getByRole("row", { name: /박영희/ }).click();
+  const fact = page.getByText("내원 확인", { exact: true }).locator("..");
+  await expect(fact).toContainText("—");
 });
 
 test("그대로 진행·제안 없음 표시", async ({ page }) => {

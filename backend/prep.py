@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from backend import db, prompts
+from backend.emr import CONFIRM_SQL, confirm_state
 from shared.llm import load_config
 
 # 칩 순서 = 화면 순서(기능 정의 §4 ④)
@@ -186,19 +187,30 @@ def chips(row: dict, day: date, today: date) -> list[str]:
         "family_recall": bool(row["family_recall"]),
         "alert": any(a["related"] for a in row["alerts"]),
         "open_plan": bool(row["open_plan"]),
-        "unconfirmed": day >= today and not row["confirmed"],  # 지난 날짜는 확인 여부가 의미 없다
+        # 기준일만 — 앞날은 확인 문자 전이고 지난 날은 확인 여부가 의미 없다(일별 예약표 배지와 같다)
+        "unconfirmed": day == today and not row["confirmed"],
     }
     return [c for c in CHIPS if on[c]]
 
 
+def _confirm(a: sqlite3.Row, day: date, today: date) -> str | None:
+    """예약 확인 상태(backend/emr.py confirm_state) — 지난 날은 없음. 앞날의 문자 없음은 not_sent(확인 문자가 그 전
+    진료일 개원 때 나가서 아직 보내기 전), 기준일의 문자 없음은 발송 시각이 지난 뒤 잡힌 예약. 준비표 탭은 앞날을
+    열지 않아 not_sent는 직접 호출(make prep DATE=)에서만 나온다"""
+    if day < today:
+        return None
+    state = confirm_state(a)
+    return "not_sent" if day > today and state == "no_message" else state
+
+
 def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
-    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 내원 확인 전 칩 판단에만"""
+    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 내원 확인 전 칩·예약 확인 상태 판단에만"""
     mv, d = master_values(conn), day.isoformat()
     out = []
     for a in conn.execute(
         "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, a.chair_no, a.type,"
         " a.planned_procedure_code AS code, r.name AS procedure, s.name AS staff, a.status,"
-        " a.confirmed, a.plan_item_id FROM source.emr_appointments a"
+        " a.confirmed, a.plan_item_id," + CONFIRM_SQL + " FROM source.emr_appointments a"
         " JOIN source.emr_procedures r ON r.code = a.planned_procedure_code"
         " JOIN source.emr_staff s ON s.id = a.staff_id"
         " WHERE date(a.scheduled_at) = ? AND a.status != 'cancelled' ORDER BY a.scheduled_at, a.id",
@@ -235,6 +247,7 @@ def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
             "staff": a["staff"],
             "status": a["status"],
             "confirmed": bool(a["confirmed"]),
+            "confirm": _confirm(a, day, today),
             "patient": {
                 "name": p["name"],
                 "chart_no": p["chart_no"],

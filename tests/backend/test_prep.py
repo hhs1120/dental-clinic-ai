@@ -68,8 +68,16 @@ def make_source(path: Path) -> sqlite3.Connection:
             (102, 2, 2, "2026-12-01 11:00:00", "hygiene", "U0001", "scheduled", 1, 2, None),
             (103, 4, 1, "2026-12-01 14:00:00", "consult", "U0019", "scheduled", 0, None, None),
             (104, 3, 2, "2026-12-01 15:00:00", "hygiene", "U0001", "cancelled", 0, 2, None),
+            # 앞날 예약 — 확인 문자는 그 전 진료일 개원 때 나가므로 아직 없다
+            (106, 4, 1, "2026-12-03 10:00:00", "consult", "U0019", "scheduled", 0, None, None),
         ],
     )
+    # 확인 문자 — 101은 받고 답이 없다. 103은 문자 발송 시각이 지난 뒤 잡혀 문자가 없다
+    conn.execute(
+        'INSERT INTO emr_messages (patient_id, direction, sent_at, body, "trigger",'
+        " related_appointment_id) VALUES (1, 'out', '2026-11-30 09:30:00', '', 'reminder', 101)"
+    )
+    conn.execute("UPDATE emr_appointments SET created_at = '2026-11-30 18:00:00' WHERE id = 103")
     # 취소 예약에는 취소 시각이 있다(가상 데이터 생성 설계 검사 "예약")
     conn.execute("UPDATE emr_appointments SET cancelled_at = '2026-11-28 10:00:00' WHERE id = 104")
     conn.executemany(
@@ -265,9 +273,19 @@ def test_balance_and_last_visit_before_day(src):
     assert past["last_visit"] == "2026-11-10" and past["balance"] == 30000
 
 
-def test_unconfirmed_only_from_today(src):
+def test_unconfirmed_only_today(src):
+    """내원 확인 전 칩은 기준일 예약만 — 앞날은 확인 문자 전, 지난 날은 확인 여부가 의미 없다"""
     assert "unconfirmed" in rows(src)[101]["chips"]
+    assert "unconfirmed" not in rows(src, date(2026, 12, 3))[106]["chips"]
     assert "unconfirmed" not in rows(src, date(2026, 11, 15))[80]["chips"]
+
+
+def test_confirm_state(src):
+    """예약 확인 상태 — 답함 / 문자에 답 없음 / 문자 발송 시각 뒤 잡힘(기준일) / 문자 보내기 전(앞날) / 지난 날 없음"""
+    today = rows(src)
+    assert [today[i]["confirm"] for i in (101, 102, 103)] == ["no_reply", "replied", "no_message"]
+    assert rows(src, date(2026, 12, 3))[106]["confirm"] == "not_sent"
+    assert rows(src, date(2026, 11, 15))[80]["confirm"] is None
 
 
 def test_cancelled_excluded_and_time_order(src):
