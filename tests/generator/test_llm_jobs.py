@@ -2,6 +2,7 @@
 통화 전사·차트 서술 작업은 tests/generator/test_transcripts.py·test_chart.py."""
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -257,8 +258,8 @@ class StubBatchGateway:
         self.submitted = (alias, task, prompt_version, requests)
         return "batch_1"
 
-    def batch_status(self, batch_id):
-        self.polls += 1
+    def batch_status(self, batch_id, alias=None):
+        self.polls, self.status_alias = self.polls + 1, alias
         return "in_progress" if self.polls == 1 else "ended"
 
     def batch_results(self, batch_id, alias, *, task, prompt_version=None, schema=None):
@@ -592,3 +593,42 @@ def test_prune_keeps_only_entries_this_run_used(paths):
     assert ctx.resolve(TOY, "b", {"item": "b"}, CHECKS) == {"text": "능금"}
     assert ctx.prune() == {"toy": 1}  # a 줄만 지움
     assert [(e["item"], e["attempt"]) for e in _cache_lines(paths)] == [("b", 1), ("b", 2)]
+
+
+# ── 작업별 별칭·건 지정 바로 채우기 (어려운 통화 설계 §3.5 — GPT 녹취, 샘플 확인) ─────────
+
+
+def _export_task(paths, task, items):
+    ctx = LLMContext(paths, fake=False)
+    for i in items:
+        ctx.resolve(task, i, {"item": i}, CHECKS)
+    return ctx.finish()
+
+
+def test_fill_api_uses_task_alias(paths):
+    _export_task(paths, replace(TOY, alias="gen_hard"), ("a", "b"))
+    assert {j["alias"] for j in _jobs(paths)} == {"gen_hard"}
+    gateway = StubBatchGateway(lambda reqs: {})
+    llm_jobs.fill_api(paths, "toy", gateway, sleep=lambda s: None)
+    assert gateway.submitted[0] == "gen_hard" and gateway.status_alias == "gen_hard"
+
+
+class StubCompleteGateway:
+    def __init__(self):
+        self.calls = []
+
+    def complete(self, alias, *, task, messages, system=None, schema=None, prompt_version=None):
+        self.calls.append((alias, messages[0]["content"]))
+        return _llm_result(True, {"text": "사과"})
+
+
+def test_fill_api_items_without_batch(paths):
+    """건 지정 + 바로 부르기 — 고른 건만 complete로 채우고 같은 결과 파일 모양으로 쓴다(배치 상태 파일 없음)"""
+    _export_task(paths, replace(TOY, alias="gen_hard"), ("a", "b", "c"))
+    gateway = StubCompleteGateway()
+    out = llm_jobs.fill_api(paths, "toy", gateway, items=["a", "c"], use_batch=False)
+    assert [a for a, _ in gateway.calls] == ["gen_hard", "gen_hard"]
+    assert len(gateway.calls) == 2 and not (paths["llm_jobs"] / "toy.batch.json").exists()
+    assert out.exists()  # 들여오면 결과 파일은 옮겨진다
+    assert llm_jobs.import_results(paths)["toy"]["ok"] == 2
+    assert [j["item"] for j in llm_jobs.pending(paths, "toy")] == ["b"]

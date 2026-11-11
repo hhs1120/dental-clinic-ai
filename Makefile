@@ -14,8 +14,8 @@ llm-prune:
 	PYTHONHASHSEED=0 uv run python -m generator --prune-llm-cache
 
 llm-fill-api:
-	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
-	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT))
+	$(if $(TASK),,$(error TASK=transcript·document·chart·hard_transcript 중 하나))
+	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT)) $(if $(ITEMS),--items $(ITEMS)) $(if $(NO_BATCH),--no-batch)
 
 verify:
 	uv run python -m generator.verify
