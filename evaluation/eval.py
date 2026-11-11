@@ -30,6 +30,7 @@ from evaluation import (
     EvalRefused,
     autoclose,
     call_actions,
+    claim_check,
     classification,
     followup,
     gold_audit,
@@ -222,6 +223,7 @@ def run(
         "autoclose": None,
         "followup": None,
         "prep": None,
+        "claim_check": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -328,6 +330,12 @@ def run(
         result["prep"] = {"days": [days[0].isoformat(), days[-1].isoformat()]} | prep.score(
             conn, days
         )
+    has_checks = conn.execute(
+        "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_claim_checks'"
+    ).fetchone()
+    if dev and has_checks and conn.execute("SELECT 1 FROM ax_claim_checks LIMIT 1").fetchone():
+        # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check score --split test(사람)
+        result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -426,6 +434,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_followup(r["followup"])
     if r.get("prep") is not None:
         out += _render_prep(r["prep"])
+    if r.get("claim_check") is not None:
+        out += _render_claim_check(r["claim_check"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -597,6 +607,36 @@ def _render_prep(p: dict) -> list[str]:
         f"| 과잉 제안률(칩이 다 꺼진 행의 suggest) | {_kn(p['over_suggest'])} |",
         "",
     ]
+
+
+def _render_claim_check(c: dict) -> list[str]:
+    def pct(v):
+        return "—" if v is None else f"{v:.1%}"
+
+    q, a = c["requirement"], c["adjust"]
+    out = [
+        "## ⑤-2 청구 AI 점검",
+        "",
+        f"요건 대상 {q['n']}줄 · 점검 {q['checked']} · 후검증 통과 {q['valid']} · 요건 오류 {q['errors']}"
+        f" · 프롬프트 {', '.join(c['prompt_versions']) or '없음'}",
+        "",
+        "| 요건 오류 | 정밀도 | 재현율 |",
+        "|---|---|---|",
+    ]
+    for label, part in (
+        ("AI(전체)", q),
+        ("서술 있는 줄 전부(기준선)", {"ai": q["narrative_all"]}),
+        ("AI(확정 월)", q["by_period"]["confirmed"]),
+        ("AI(제출·대기)", q["by_period"]["filed"]),
+    ):
+        out.append(f"| {label} | {pct(part['ai']['precision'])} | {pct(part['ai']['recall'])} |")
+    out += [
+        "",
+        f"조정 건 판단 {a['n']}건 — AI {pct(a['ai']['accuracy'])}(답 {a['ai']['answered']})"
+        f" · 모두 정당 {pct(a['all_justified'])} · 모두 다툴 만함 {pct(a['all_contestable'])}",
+        "",
+    ]
+    return out
 
 
 def _render_followup(f: dict) -> list[str]:
