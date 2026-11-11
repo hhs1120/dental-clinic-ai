@@ -11,7 +11,7 @@ from generator.verify.common import _rows
 from generator.verify.documents import _docs
 
 # 유형별 문항 수(평가 설계 §3.1 표 — tests/generator/test_doc_sync.py가 비교). dev·test 반씩
-QA_TYPE_COUNTS = {"manual": 18, "notice": 10, "case": 12, "data": 12, "chart": 10, "refusal": 8}
+QA_TYPE_COUNTS = {"manual": 24, "notice": 10, "case": 14, "data": 14, "chart": 10, "refusal": 8}
 
 
 # 도구 → expected_args에 쓸 수 있는 인자 (앱 설계 §3 시그니처. search_docs의 자유 텍스트 query는 채점하지 않아 뺀다)
