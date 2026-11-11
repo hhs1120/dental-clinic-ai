@@ -1059,12 +1059,13 @@ RECON_CAUSE_GROUPS = {
     "method_wrong": "ambiguous",
 }
 # ⑧-1 미수 정산 수납 누락(데이터 재설계 — 장부에 행 없음): 장부에 미수가 남은 환자가 평가 달에 실제로 냈는데 장부에 안 적은 돈.
-# 장부는 그대로라 금융에만 돈이 생긴다. ORAL_SHARE만큼은 카드 + 구강용품 1~2개 합 금액(규칙 9가 진료 외 매출로 틀린다). 추정값
+# 장부는 그대로라 금융에만 돈이 생긴다. 늘 잔액 전부(일부 납부 없음 — 잔액을 보면 풀리게). ORAL_SHARE는 잔액이 구강용품 1~2개 합과
+# 같은 환자의 카드(규칙 9가 진료 외 매출로 틀린다)의 최대 몫 — 그런 환자가 적어 모자라면 일반 꼴로 채운다(dev·test 번갈아). 추정값
 UNRECORDED_SETTLEMENT_COUNT = 30
 UNRECORDED_ORAL_SHARE = 0.7
 # ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
 # 조합해야 풀린다. 추정값
-NON_CLINICAL_MULTI_COUNT = 12
+NON_CLINICAL_MULTI_COUNT = 30
 NON_CLINICAL_MAX_ITEMS = 3
 # 화면 기본 달(평가 달 마지막 달)에 새 모양마다 최소 이만큼(데이터 재설계 설계 §4b)
 RECON_LATEST_MONTH_MIN = 2
@@ -1305,6 +1306,15 @@ def vendor_aliases(v: dict) -> dict:
 
 EXPENSE_AMOUNT_DIFF_RATE = 0.05
 EXPENSE_AMOUNT_DIFF_RANGE = (0.01, 0.05)
+# 금액 차이의 이유 — 차이 난 출금의 증빙 한 장(이체는 마지막 명세서)에 "{이유} {차이}원 별도 청구" 한 줄(증빙 종류 → 이유).
+# 읽으면 풀리게(데이터 재설계 설계 §2), 증빙 금액·합계에는 넣지 않는다
+EXPENSE_DIFF_REASONS = {
+    "statement": "운송비",
+    "tax_invoice": "운송비",
+    "order_email": "배송비",
+    "receipt": "봉사료",
+    "bill": "연체료",
+}
 # 병원 카드 사용 중 증빙이 없는 비율 — 영수증을 잃기 쉬운 카드 사용에만(이체·자동이체는 증빙이 온다). 전체 출금의 약 5%
 EXPENSE_NO_DOC_RATE = 0.08
 # 기공소 외주 단가(원) — 기공 명세서 줄 = 창 안 인레이·크라운·브릿지 진료 1건 (§2.7). 가상 값

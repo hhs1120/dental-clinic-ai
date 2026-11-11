@@ -16,6 +16,7 @@ from generator.master import (
     DEPOSIT_DELAY_DAYS,
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_DIFF_REASONS,
     EXPENSE_ITEMS,
     EXPENSE_NO_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
@@ -278,7 +279,8 @@ def check_bank_inflows(conn, ctx):
 
 
 def check_unrecorded_settlements(conn, ctx):
-    """미수 정산 수납 누락(장부에 행 없음 — 데이터 재설계 설계 §1): 환자가 있고, 금액 > 0이고 그 시각 장부 잔액 이하,
+    """미수 정산 수납 누락(장부에 행 없음 — 데이터 재설계 설계 §1): 환자가 있고, 금액 = 그 시각 장부 잔액(> 0 — 일부 납부
+    없음, 금액이 구강용품 합이어도 잔액으로 풀리게),
     실제 일시가 평가 달(master.recon_months) 안, 이체·카드, ⑧-1 입력 누락 정답(수납 id 없음)과 하나씩 짝. 건수 =
     메타 unrecorded_settlements(= master.UNRECORDED_SETTLEMENT_COUNT)"""
     rows = conn.execute(
@@ -296,7 +298,7 @@ def check_unrecorded_settlements(conn, ctx):
         ).fetchone()[0]
         if (
             pid is None
-            or not 0 < amount <= bal
+            or not 0 < amount == bal
             or at[:7] not in recon_months(ctx.today)
             or method not in ("transfer", "card")
             or paired != 1
@@ -306,6 +308,31 @@ def check_unrecorded_settlements(conn, ctx):
             )
     if len(rows) != ctx.unrecorded_settlements:
         bad.append({"count": len(rows), "expected": ctx.unrecorded_settlements})
+    return bad
+
+
+def check_non_clinical_sales_avoid_balances(conn, ctx):
+    """진짜 진료 외 매출 승인 금액은 그날 어느 환자의 장부 잔액(전날까지·그날까지)과도 다르다 — 미수 정산 누락(금액 = 잔액)과
+    거꾸로 헷갈리지 않게(데이터 재설계 설계 §1)"""
+    sales = conn.execute(
+        "SELECT m.id, date(s.approved_at), s.amount FROM truth.truth_recon_mismatches m"
+        " JOIN fin_card_sales s ON s.id = json_extract(m.fin_ids, '$[0].id')"
+        " WHERE m.cause = 'non_clinical_sale'"
+    ).fetchall()
+    pays = conn.execute(
+        "SELECT patient_id, date(paid_at), amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
+    ).fetchall()
+    bad = []
+    for mid, day, amount in sales:
+        before, through = defaultdict(int), defaultdict(int)
+        for pid, d, owe in pays:
+            if d > day:
+                break
+            through[pid] += owe
+            if d < day:
+                before[pid] += owe
+        if amount in set(before.values()) | set(through.values()):
+            bad.append({"mismatch_id": mid, "day": day, "amount": amount})
     return bad
 
 
@@ -510,7 +537,8 @@ def check_expense_matches(conn, ctx):
     """⑧-2 정답: 출금마다 truth_expense_matches 1행, 증빙은 정확히 한 출금에(발행처 = 그 거래처, 발행일 ≤ 출금일,
     본문에 금액), 계정 과목 ∈ master.ACCOUNTS(이체·자동이체 = 거래처 과목, 카드 = 증빙 품목의 과목 — 증빙 없으면 거래처 과목),
     split = 평가 달만(⑧-1과 같은 달 기준). 통장 출금 적요 = 이체·자동이체 거래처, 카드 가맹점명 = 카드 거래처(표기 차이 포함).
-    증빙 합계(명세서 등) = 출금액 — 다른 출금은 증빙 있는 출금의 EXPENSE_AMOUNT_DIFF_RATE건, 차이는 100원 ~ 출금액 × 최대 비율.
+    증빙 합계(명세서 등) = 출금액 — 다른 출금은 증빙 있는 출금의 EXPENSE_AMOUNT_DIFF_RATE건, 차이는 100원 ~ 출금액 × 최대 비율,
+    그 출금의 증빙 한 장에만 이유 줄(EXPENSE_DIFF_REASONS[증빙 종류] 차이 금액 — 데이터 재설계 설계 §2).
     세금계산서 = 그 출금 명세서 합계. 증빙 없음은 카드 사용에만, EXPENSE_NO_DOC_RATE건 (§2.7)"""
     rows = _outflows(conn)
     bad = []
@@ -603,6 +631,23 @@ def check_expense_matches(conn, ctx):
         ):
             bad.append({"outflow": (r["table"], r["id"]), "problem": "세금계산서 ≠ 명세서 합계"})
         diff = abs(total - r["amount"])
+        reasons = [
+            d
+            for d in r["docs"]
+            if any(
+                re.search(rf"{w} [\d,]+원 별도 청구", d["body"])
+                for w in EXPENSE_DIFF_REASONS.values()
+            )
+        ]
+        if (bool(diff) != bool(reasons)) or (
+            diff
+            and (
+                len(reasons) != 1
+                or f"{EXPENSE_DIFF_REASONS[reasons[0]['kind']]} {diff:,}원 별도 청구"
+                not in reasons[0]["body"]
+            )
+        ):
+            bad.append({"outflow": (r["table"], r["id"]), "problem": "금액 차이 이유 줄"})
         if diff:
             diffs += 1
             if not (100 <= diff <= r["amount"] * hi):

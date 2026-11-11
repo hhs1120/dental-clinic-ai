@@ -251,7 +251,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 월말 이체: 납품마다 명세서(재료상은 + 그달 세금계산서 1장 — 정답 증빙은 둘 다). 기공소 명세서 줄 = 창 안 기공 진료(인레이·크라운·브릿지) 1건(환자 이름·치아·보철 종류, 단가 `master.LAB_FEES` — 명세서 날짜는 이체일까지)
   - 카드 사용: 1장(그날). 쇼핑몰 주문은 한 계정 과목의 품목만(품목을 읽어야 과목이 정해짐)
   - 자동이체: 고지서·세금계산서 1장(`master.EXPENSE_DOC_LEAD_DAYS`일 전)
-- 어긋남: 가맹점명 표기 차이(결제대행사), 금액 차이(증빙 있는 출금의 `master.EXPENSE_AMOUNT_DIFF_RATE` — 출금액이 증빙 합계보다 `master.EXPENSE_AMOUNT_DIFF_RANGE`만큼 많음), 증빙 없음(카드 사용의 `master.EXPENSE_NO_DOC_RATE`만 — 계정은 거래처 과목), 1:N 합계, 품목으로만 정해지는 계정 과목. 평가는 평가 달의 출금만 센다(split은 ⑧-1과 같은 달). 정답 `truth_expense_matches`([[치과 AX - 평가 설계]] §6)
+- 어긋남: 가맹점명 표기 차이(결제대행사), 금액 차이(증빙 있는 출금의 `master.EXPENSE_AMOUNT_DIFF_RATE` — 출금액이 증빙 합계보다 `master.EXPENSE_AMOUNT_DIFF_RANGE`만큼 많고, 그 출금의 증빙 한 장에 이유 줄 `master.EXPENSE_DIFF_REASONS` — "운송비 13,900원 별도 청구"), 증빙 없음(카드 사용의 `master.EXPENSE_NO_DOC_RATE`만 — 계정은 거래처 과목), 1:N 합계, 품목으로만 정해지는 계정 과목. 평가는 평가 달의 출금만 센다(split은 ⑧-1과 같은 달). 정답 `truth_expense_matches`([[치과 AX - 평가 설계]] §6)
 
 ## 3. 생성기가 적재하는 `ax_*`
 

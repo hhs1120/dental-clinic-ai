@@ -179,3 +179,62 @@ def test_mixed_orders_take_larger_account(conn):
 def test_expense_meta_words_absent(conn):
     bodies = " ".join(b for (b,) in conn.execute("select body from fin_expense_documents"))
     assert "디코이" not in bodies and "decoy" not in bodies.lower()
+
+
+def test_amount_diff_reason_line(generated):
+    """출금이 증빙보다 많은 건은 증빙 한 장에 이유 한 줄(master.EXPENSE_DIFF_REASONS, 차이 금액), 그 밖의 증빙에는 없다.
+    verify가 줄이 빠진 건을 잡는다"""
+    from generator import verify
+    from generator.master import EXPENSE_DIFF_REASONS
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("expense_diff_reason")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    assert verify.check_expense_matches(c, ctx) == []
+    lines = [
+        (i, b)
+        for i, b in c.execute("select id, body from fin_expense_documents")
+        if "별도 청구" in b
+    ]
+    assert lines and all(any(w in b for w in EXPENSE_DIFF_REASONS.values()) for _, b in lines)
+    i, b = lines[0]
+    c.execute(
+        "UPDATE fin_expense_documents SET body = ? WHERE id = ?",
+        ("\n".join(x for x in b.splitlines() if "별도 청구" not in x), i),
+    )
+    assert any(r["problem"] == "금액 차이 이유 줄" for r in verify.check_expense_matches(c, ctx))
+
+
+def test_settlements_pay_full_balance_and_sales_avoid_balances(generated):
+    """미수 정산 누락은 늘 잔액 전부(일부 납부 없음 — 읽으면 풀리게), 그중 구강용품 1~2개 합과 같은 금액이 있다(규칙 9를
+    속임). 진짜 진료 외 매출 금액은 그날 어느 환자 잔액과도 다르다(거꾸로 헷갈리지 않게). verify가 둘 다 잡는다"""
+    from generator import verify
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("settlement_full_balance")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    assert verify.check_unrecorded_settlements(c, ctx) == []
+    assert verify.check_non_clinical_sales_avoid_balances(c, ctx) == []
+    assert verify.check_non_clinical_sales_avoid_balances in verify.REQUIRED
+    oral = [
+        a
+        for (a,) in c.execute(
+            "select true_amount from truth.truth_ledger_errors where payment_id is null"
+            " and true_method = 'card'"
+        )
+        if a in _sums(2)
+    ]
+    assert oral
+    c.execute(  # 일부 납부로 바꾸면 잡는다
+        "UPDATE truth.truth_ledger_errors SET true_amount = true_amount - 100 WHERE id ="
+        " (SELECT min(id) FROM truth.truth_ledger_errors WHERE payment_id IS NULL)"
+    )
+    assert verify.check_unrecorded_settlements(c, ctx)

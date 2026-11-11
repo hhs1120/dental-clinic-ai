@@ -124,6 +124,7 @@ from generator.verify.fin import (
     check_card_sales,
     check_expense_matches,
     check_lab_statements,
+    check_non_clinical_sales_avoid_balances,
     check_recon_mismatches,
     check_unrecorded_settlements,
 )
@@ -373,6 +374,7 @@ __all__ = [
     "check_recall_once_a_month",
     "check_recon_mismatches",
     "check_unrecorded_settlements",
+    "check_non_clinical_sales_avoid_balances",
     "check_registration_age",
     "check_appt_reply_state",
     "check_cancel_replies",
@@ -516,6 +518,7 @@ REQUIRED = [
     check_bank_inflows,
     check_recon_mismatches,
     check_unrecorded_settlements,
+    check_non_clinical_sales_avoid_balances,
     check_expense_matches,
     check_lab_statements,
     check_document_counts,

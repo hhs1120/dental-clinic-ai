@@ -9,8 +9,9 @@ stage_expenses)
 """
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from itertools import combinations_with_replacement
 
 from generator.master import (
     BANK_TIMES,
@@ -21,6 +22,7 @@ from generator.master import (
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
     EXPENSE_DECOY_RATE,
+    EXPENSE_DIFF_REASONS,
     EXPENSE_DOC_LEAD_DAYS,
     EXPENSE_ISSUER_ALIAS_RATE,
     EXPENSE_ITEMS,
@@ -203,7 +205,7 @@ def stage_income(run, rng, fake) -> None:
 
     # 미수 정산 수납 누락(데이터 재설계) — 장부는 그대로, 금융에만 돈. 새 자식 난수(주 난수 흐름 밖)
     unrecorded_rng, multi_rng = rng.spawn(2)  # spawn은 앞 자식을 그대로 둔다 — 뒤에 더하기만
-    unrecorded = _unrecorded_settlements(conn, unrecorded_rng, days, failure, used)
+    unrecorded = _unrecorded_settlements(conn, unrecorded_rng, days, failure, used, today)
     for u in unrecorded:
         if u["method"] == "card":
             u["row"] = {
@@ -230,6 +232,10 @@ def stage_income(run, rng, fake) -> None:
         mismatches.append(
             {"on": s_["at"].date(), "cause": "non_clinical_sale", "fin": [s_], "payments": []}
         )
+
+    # 진짜 진료 외 매출 금액이 그날 어느 환자 잔액과 같으면 겹치지 않는 구강용품 합으로 — 미수 정산 누락(금액 = 잔액)과
+    # 거꾸로 헷갈리지 않게(데이터 재설계 설계 §1). 난수 없이 고른다(뒤 난수 흐름 그대로)
+    _avoid_balances(conn, [m["fin"][0] for m in mismatches if m["cause"] == "non_clinical_sale"])
 
     # 정산 입금
     groups = defaultdict(list)
@@ -493,10 +499,42 @@ def _multi_item_sales(rng, days: list[date], today: date, used: set) -> list[dic
     return out
 
 
-def _unrecorded_settlements(conn, rng, days: list[date], failure: set, used: set) -> list[dict]:
-    """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남은 환자가 그날 영업시간에 낸 돈.
-    UNRECORDED_ORAL_SHARE만큼은 카드 + 구강용품 1~2개 합(잔액 이하), 나머지는 잔액 전부를 이체·카드로(현금은 한 입금에 기존 현금
-    장부 실수와 겹쳐 원인이 둘이 될 수 있어 쓰지 않는다). 환자는 서로 다름"""
+def _avoid_balances(conn, sales: list[dict]) -> None:
+    """승인 금액이 그날 어느 환자 장부 잔액(전날까지·그날까지)과 같으면, 같은 묶음(구강용품 1~2개 합 / NON_CLINICAL_MAX_ITEMS개
+    합)에서 잔액과 안 겹치는 가장 작은 금액으로 바꾼다"""
+    pays = conn.execute(
+        "SELECT patient_id, date(paid_at), amount_due - amount_paid FROM emr_payments"
+        " ORDER BY paid_at, id"
+    ).fetchall()
+    prices = list(ORAL_CARE_PRICES.values())
+    small = sorted({a + b for a in prices for b in [0, *prices]})
+    multi = sorted(
+        {sum(c) for c in combinations_with_replacement(prices, NON_CLINICAL_MAX_ITEMS)}
+        - set(small)
+    )
+    for s in sales:
+        day = s["at"].date().isoformat()
+        before, through = defaultdict(int), defaultdict(int)
+        for pid, d, owe in pays:
+            if d > day:
+                break
+            through[pid] += owe
+            if d < day:
+                before[pid] += owe
+        taken = set(before.values()) | set(through.values())
+        if s["amount"] in taken:
+            s["amount"] = next(
+                a for a in (small if s["amount"] in small else multi) if a not in taken
+            )
+
+
+def _unrecorded_settlements(
+    conn, rng, days: list[date], failure: set, used: set, today: date
+) -> list[dict]:
+    """미수 정산 수납 누락 후보(데이터 재설계 설계 §1) — 평가 달 진료일 중 장부 잔액이 남고 그날 장부 행이 없는 환자가 그날
+    영업시간에 잔액 전부를 낸 돈(일부 납부 없음 — 잔액을 보면 풀리게). UNRECORDED_ORAL_SHARE만큼은 잔액이 구강용품 1~2개 합과
+    같은 환자의 카드(규칙 9가 진료 외 매출로 틀림), 나머지는 이체·카드(현금은 한 입금에 기존 현금 장부 실수와 겹쳐 원인이 둘이
+    될 수 있어 쓰지 않는다). 환자는 서로 다름"""
     ledger = defaultdict(list)
     for pid, at, owe in conn.execute(
         "SELECT patient_id, paid_at, amount_due - amount_paid FROM emr_payments ORDER BY paid_at, id"
@@ -509,22 +547,34 @@ def _unrecorded_settlements(conn, rng, days: list[date], failure: set, used: set
     prices = list(ORAL_CARE_PRICES.values())
     sums = sorted({a + b for a in prices for b in [0, *prices]})
     n_oral = round(UNRECORDED_SETTLEMENT_COUNT * UNRECORDED_ORAL_SHARE)
-    out, taken = [], set()
+    out, taken, n_done = [], set(), Counter()  # n_done: 분할별 구강용품 합 꼴 수
+    test = recon_test_months(today)
     for d in _latest_first(rng, [d for d in days if d not in failure]):
         if len(out) == UNRECORDED_SETTLEMENT_COUNT:
             break
-        owing = [p for p in sorted(ledger) if p not in taken and balance(p, d) > 0]
-        if not owing:
+        owing = [
+            p
+            for p in sorted(ledger)
+            if p not in taken
+            and balance(p, d) > 0
+            and all(at[:10] != d.isoformat() for at, _ in ledger[p])
+        ]
+        oral = [p for p in owing if balance(p, d) in sums]
+        # 그날 구강용품 합 꼴이 되면 그것부터(n_oral까지), 안 되면 일반 꼴 — 날을 헛되이 쓰지 않게(작은 데이터는 일반 꼴이 늘어남)
+        # 후보 환자가 적어(장부 잔액이 그대로 남아 같은 환자가 매일 잡힘) dev·test에 번갈아 — 한쪽에 몰리지 않게
+        split = d.strftime("%Y-%m") in test
+        if sum(n_done.values()) < n_oral and oral and n_done[split] <= n_done[not split]:
+            owing, method = oral, "card"
+        elif owing:
+            method = None
+        else:
             continue
         pid = owing[int(rng.integers(len(owing)))]
-        bal = balance(pid, d)
-        if len(out) < n_oral:
-            fit = [x for x in sums if x <= bal]
-            if not fit:
-                continue
-            method, amount = "card", fit[int(rng.integers(len(fit)))]
+        amount = balance(pid, d)
+        if method == "card":
+            n_done[split] += 1
         else:
-            method, amount = ("transfer", "card")[int(rng.integers(2))], bal
+            method = ("transfer", "card")[int(rng.integers(2))]
         close = HOURS["saturday_close" if d.weekday() == SATURDAY else "weekday_close"]
         open_ = datetime.combine(d, datetime.strptime(HOURS["open"], "%H:%M").time())
         span = (
@@ -598,7 +648,8 @@ def stage_expenses(run, rng, fake) -> None:
       그달 마지막 은행 영업일에 명세서 합계 이체
     - 병원 카드: 사용마다 1건(가맹점명 = card_name 표기), 증빙 1장 — 쇼핑몰 주문은 한 계정 과목의 품목만(품목으로 과목이 정해짐)
     - 자동이체: 거래처마다 정한 날(은행 영업일로 미룸), 고지서·세금계산서는 EXPENSE_DOC_LEAD_DAYS일 전
-    어긋남: 카드 사용 중 EXPENSE_NO_DOC_RATE는 증빙 없음, 증빙 있는 출금 중 EXPENSE_AMOUNT_DIFF_RATE는 출금액이 조금 많음"""
+    어긋남: 카드 사용 중 EXPENSE_NO_DOC_RATE는 증빙 없음, 증빙 있는 출금 중 EXPENSE_AMOUNT_DIFF_RATE는 출금액이 조금 많음
+    (증빙 한 장에 이유 줄 EXPENSE_DIFF_REASONS)"""
     conn, today, holidays = run.conn, run.today, run.holidays
     names = dict(conn.execute("SELECT id, name FROM emr_patients"))
     lab_treatments = defaultdict(list)  # 'YYYY-MM' → [(진료일, 환자 이름, 치아, 보철)]
@@ -792,9 +843,15 @@ def stage_expenses(run, rng, fake) -> None:
         len(with_docs), size=round(EXPENSE_AMOUNT_DIFF_RATE * len(with_docs)), replace=False
     ).tolist():
         o = with_docs[k]
-        o["amount"] += max(100, int(o["amount"] * rng.uniform(lo, hi)) // 100 * 100)
+        diff = max(100, int(o["amount"] * rng.uniform(lo, hi)) // 100 * 100)
+        o["amount"] += diff
+        o["diff"] = diff
 
     decoys = _expense_confusers(rng.spawn(1)[0], outflows, doc, today)
+    for o in outflows:  # 금액 차이 이유 줄 — 혼합 주문이 증빙을 다시 만든 뒤, 마지막 명세서·영수증(세금계산서만 있으면 그것)
+        if o.get("diff"):
+            d = ([x for x in o["docs"] if x["kind"] != "tax_invoice"] or o["docs"])[-1]
+            d["body"] += f"\n{EXPENSE_DIFF_REASONS[d['kind']]} {_won(o['diff'])}원 별도 청구"
     conn.execute(  # 디코이 수 — verify가 어느 출금에도 안 붙은 증빙 수와 맞춘다(단계 안에서 정해져 meta를 여기서)
         "INSERT INTO truth.truth_gen_meta VALUES ('expense_decoys', ?)", (str(len(decoys)),)
     )
