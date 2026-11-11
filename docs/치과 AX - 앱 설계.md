@@ -125,7 +125,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 5. 슬롯 테이블
 
-**⑤ 청구 점검**(코드명 `claim_review`, `backend/claims.py`): 심사결과는 이미 `emr_claims`(결과·사유·통보일)에 있다. 조정 목록·칩·규칙 판단 제안과 청구 전 상병 확인 경고는 표마다 한 번 훑는 집합 쿼리라 청구 수와 무관하게 쿼리 수가 같다. 사유는 `adjust_note` 문구로 가리고 유형·기준 절·재심 기한 일수·허용 상병은 `source.ax_master_values`에서 읽는다. 앱 테이블은 사람 판단 `ax_claim_judgments`(청구 id·판단·파트·실제 시각, 다시 누르면 덮어씀). API `GET /claims`(조정·불능 청구 전부와 칩 집계 — 기한 지난 건 포함, 화면이 행의 `chips`로 거른다), `GET /claims/pre`(대기 청구 줄과 경고), `POST /claims/{claim_id}/judgment`(`{judgment, part}`, 모르는 값·조정/불능이 아닌 청구·기한 지남·상병 착오에 정당 외는 400). 2~4단계 앱 테이블(⑤-2 점검 결과, ⑤-4 초안·추측 목록·검토 확인)은 `ax_`로 그 단계 때 추가. ⑤-3 근거 찾기는 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
+**⑤ 청구 점검**(코드명 `claim_review`, `backend/claims.py`): 심사결과는 이미 `emr_claims`(결과·사유·통보일)에 있다. 조정 목록·칩·규칙 판단 제안과 청구 전 상병 확인 경고는 표마다 한 번 훑는 집합 쿼리라 청구 수와 무관하게 쿼리 수가 같다. 사유는 `adjust_note` 문구로 가리고 유형·기준 절·재심 기한 일수·허용 상병은 `source.ax_master_values`에서 읽는다. 앱 테이블은 사람 판단 `ax_claim_judgments`(청구 id·판단·파트·실제 시각, 다시 누르면 덮어씀). API `GET /claims`(조정·불능 청구 전부와 칩 집계 — 기한 지난 건 포함, 화면이 행의 `chips`로 거른다), `GET /claims/pre`(대기 청구 줄과 경고), `POST /claims/{claim_id}/judgment`(`{judgment, part}`, 모르는 값·조정/불능이 아닌 청구·기한 지남·상병 착오에 정당 외는 400). ⑤-2 AI 점검 결과는 `ax_claim_checks`(청구 id 하나에 한 행 — 입력·해시·결과·통과 여부·프롬프트 버전·모델, `backend/claim_check.py`), `make claim-check`(화면 범위, `SCOPE=all`이면 전 기간)와 `POST /jobs/claim-check`(`ax_jobs` `kind='claim_check'`, 준비표 갱신과 같은 꼴)로 만든다. `GET /claims/pre`는 행마다 `ai`와 `counts.ai`·`ai_checked`·`ai_at`·`ai_pending`을, `GET /claims` 요건 사유 행은 `suggest_by`·`ai_evidence`를 더한다. 3~4단계 앱 테이블(⑤-4 초안·추측 목록·검토 확인)은 `ax_`로 그 단계 때 추가. ⑤-3 근거 찾기는 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
 
 **⑧ 재무 대조**: 입력은 `fin_*`와 `emr_payments`(읽기 전용). 앱 테이블은 사람 확정 2개 — `ax_recon_confirmations`(⑧-1: 관련 `fin_` 거래 id, 고른 원인, 맞음/아님, 사람·시각), `ax_expense_confirmations`(⑧-2: 출금 id, 증빙 id들, 계정 과목, 사람·시각). "확정한 거래처는 다음부터 기본값"은 이 테이블에서 읽는다. 자동 처리는 §3b `ax_auto_actions`에 결과값과 함께 남기고 사람 확정 테이블에는 쓰지 않는다. ⑥ 재료비와 거래처 기본값은 두 테이블을 합쳐 읽되 되돌린 건은 뺀다.
 
@@ -198,7 +198,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **그대로 둠**: 실수 후보(승인 상태 포함, 실행 id는 끊겨도 된다)·`ax_rule_counts`·게시한 문서 초안·`ax_settings`(`auto_policy` 제외)
 - **강제로 끔**: 앱 기동과 `make nightly` 시작 때 `source.sqlite` 지문을 `source_fingerprint`와 비교해, 다르면 `auto_policy`를 전부 끄고 지문을 갱신한다. 다시 측정한 뒤 사람이 켠다
-- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록(`ax_claim_judgments` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`
+- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록·AI 점검(`ax_claim_judgments`·`ax_claim_checks` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`
 
 ## 8. 미결
 
