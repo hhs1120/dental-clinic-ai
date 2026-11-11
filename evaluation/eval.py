@@ -494,6 +494,8 @@ def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
             for i in classification.ITEMS
         ]
         out.append("")
+    if c.get("hard") and c["hard"]["n"]:
+        out += _render_hard(c["hard"])
     for cmp in c["compare"]:
         out += [
             f"### 버전 비교 {cmp['a']} → {cmp['b']} — 모델 vs 골드 (교집합 {cmp['n']}건)",
@@ -537,6 +539,31 @@ def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
         ]
         out.append("")
     return out
+
+
+def _render_hard(h: dict) -> list[str]:
+    """어려운 통화(hc-) 표 — 칸마다 'n-gram → 버전' 맞힌 수, 줄은 전체·종류별·급함 뒤집기 절반별(어려운 통화 설계 §6)"""
+    vs = list(h["versions"])
+    out = [
+        f"### 어려운 통화 hard {h['n']}통화 — 규칙·글자 n-gram(재료 {h['trained_on']}통화)·분류기",
+        "",
+        "종류마다 같은 건수로 고르게 나눈 셋(현실 비율 아님). 칸 = n-gram → "
+        + " / ".join(vs)
+        + ". 급함은 urgent 여부만",
+        "",
+        "| 묶음 | n | 할 일 규칙 | " + " | ".join(classification.ITEMS) + " |",
+        "|---|---|---|" + "---|" * len(classification.ITEMS),
+    ]
+    rows = [("전체", h)] + list(h.get("by_type", {}).items()) + list(h.get("by_half", {}).items())
+    for name, g in rows:
+        cells = [
+            " → ".join([_kn(g["ngram"][i])] + [_kn(g["versions"][v][i]) for v in vs])
+            for i in classification.ITEMS
+        ]
+        out.append(
+            f"| {name} | {g['n']} | {_kn(g['rule']['has_todo'])} | " + " | ".join(cells) + " |"
+        )
+    return out + [""]
 
 
 def _render_judge(j: dict, audit_jv: str | None = None) -> list[str]:

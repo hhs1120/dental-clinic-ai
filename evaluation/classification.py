@@ -26,13 +26,16 @@ def version_key(v: str) -> list:
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", v)]
 
 
-def _calls(conn) -> dict[str, dict]:
-    """생성 통화 + 골드(붙여넣기 통화는 골드가 없어 빠진다)"""
+def _calls(conn, hard: bool = False) -> dict[str, dict]:
+    """생성 통화 + 골드(붙여넣기 통화는 골드가 없어 빠진다). 어려운 통화(split hard)는 기본으로 뺀다 — dev·test 채점·가중
+    모집단·골드 점검에 섞이지 않게(어려운 통화 설계 §2). hard=True면 어려운 통화만(종류·절반 포함)"""
     rows = conn.execute(
-        "SELECT c.call_uid, c.in_eval_pool, c.in_blind_pool, c.transcript, l.split, "
+        "SELECT c.call_uid, c.in_eval_pool, c.in_blind_pool, c.transcript, l.split, h.hard_type, h.half, "
         + ", ".join(f"l.{i}" for i in ITEMS)
         + " FROM source.ax_calls c JOIN truth.truth_call_labels l ON l.call_uid = c.call_uid"
+        " LEFT JOIN truth.truth_hard_calls h ON h.call_uid = c.call_uid"
         " WHERE c.source = 'generated'"  # source. — app DB에 같은 이름 표가 있으면 SQLite는 main을 먼저 고른다
+         + (" AND l.split = 'hard'" if hard else " AND l.split != 'hard'")
     ).fetchall()
     return {
         r["call_uid"]: {
@@ -42,6 +45,8 @@ def _calls(conn) -> dict[str, dict]:
             "split": r["split"],
             "transcript": r["transcript"],
             "gold": {i: r[i] for i in ITEMS},
+            "hard_type": r["hard_type"],
+            "half": r["half"],
         }
         for r in rows
     }
@@ -150,6 +155,24 @@ def evaluate(
     out["compare"] = [_compare(a, b, usable, gold_ids, gold) for a, b in combinations(versions, 2)]
     # 강한 기준선(규칙·글자 n-gram)과 같은 통화에서 나란히 — 생성 녹취의 천장을 드러낸다(§2.2)
     out["baselines"] = call_baselines.evaluate(calls, split, usable)
+    # 어려운 통화(hc-) — 같은 기준선·버전을 hard에서만(설계 §6). test 실행에는 넣지 않는다
+    hard = _calls(conn, hard=True)
+    if hard and split == "dev":
+        hard_ok = {
+            v: {
+                r["call_uid"]: r["labels"]
+                for r in rows
+                if r["prompt_version"] == v
+                and r["call_uid"] in hard
+                and r["status"] == "ok"
+                and not r["fallback"]
+            }
+            for v in versions
+        }
+        hard_ok = {
+            v: ok for v, ok in hard_ok.items() if ok
+        }  # hc-를 아직 분류하지 않은 버전은 뺀다
+        out["hard"] = call_baselines.evaluate(calls, "hard", hard_ok, hard)
     out["blind"] = _blind(conn, rows, calls, split, versions)
     if dump:  # dev 판정 풀만 — 비풀(재료·검증)은 사람이 건별로 보지 않는다(평가 설계 §2.7)
         out["dump"] = [
