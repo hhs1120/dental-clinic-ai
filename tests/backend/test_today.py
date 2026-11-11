@@ -268,4 +268,16 @@ def test_today_claim_lines_match_screen(tmp_path):
 
 def test_today_claim_lines_zero(pconn):
     people = _sheet(pconn)["people"]
-    assert (people["appeal_soon"], people["preclaim_warning"]) == (0, 0)
+    assert (people["appeal_soon"], people["preclaim_warning"], people["preclaim_ai"]) == (0, 0, 0)
+
+
+def test_today_preclaim_ai(tmp_path):
+    """청구 전 AI 줄 = 청구 전 점검 AI 칩 수"""
+    from tests.backend.test_claims import STD_Q, save_check
+
+    s = Source(tmp_path / "source.sqlite")
+    cid = add_claim(s, 1, day="2026-11-12", status="pending", code="U0012")
+    conn = s.app()
+    save_check(conn, cid, "missing", [STD_Q])
+    people = _sheet(conn)["people"]
+    assert people["preclaim_ai"] == 1 == claims.pre_claim(conn, TODAY)["counts"]["ai"]
