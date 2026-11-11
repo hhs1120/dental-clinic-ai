@@ -164,7 +164,7 @@ def evaluate(
             for v, pred in usable.items()
             for c in sorted(pool_ids & pred.keys())
             for i in ITEMS
-            if pred[c][i] != gold[c][i]
+            if not same_value(i, pred[c][i], gold[c][i])
         ]
     return out
 
@@ -322,8 +322,8 @@ def _compare(a: str, b: str, usable: dict, ref_ids: set, ref: dict) -> dict:
     ids = sorted(ref_ids & usable[a].keys() & usable[b].keys())
     items = {}
     for i in ITEMS:
-        ra = [usable[a][c][i] == ref[c][i] for c in ids]
-        rb = [usable[b][c][i] == ref[c][i] for c in ids]
+        ra = [same_value(i, usable[a][c][i], ref[c][i]) for c in ids]
+        rb = [same_value(i, usable[b][c][i], ref[c][i]) for c in ids]
         only_a = sum(x and not y for x, y in zip(ra, rb, strict=True))
         only_b = sum(y and not x for x, y in zip(ra, rb, strict=True))
         items[i] = {"a": sum(ra), "b": sum(rb), "p": mcnemar_exact(only_a, only_b)}

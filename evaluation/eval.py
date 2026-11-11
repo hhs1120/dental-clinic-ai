@@ -448,7 +448,12 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
 
 
 def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
-    out = ["## ① 분류", ""]
+    out = [
+        "## ① 분류",
+        "",
+        "급함은 urgent 여부만 센다(골드 normal/low가 녹취와 무관한 추첨 — 평가 설계 §2.2). 이 정의 전 리포트와 급함 숫자를 직접 비교하지 않는다",
+        "",
+    ]
     if not c["versions"]:
         out += ["분류 기록 없음", ""]
     for v, x in c["versions"].items():
@@ -476,6 +481,8 @@ def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
         vs = list(b["versions"])
         out += [
             f"### 강한 기준선과 나란히 — silver 재료 밖 골드 {b['n']}통화(n-gram은 재료 {b['trained_on']}통화로 학습)",
+            "",
+            "모든 열이 같은 통화(모든 버전이 쓸 수 있는 통화)를 센다. 급함은 urgent 여부만(평가 설계 §2.2)",
             "",
             "| 항목 | 규칙(학습 없음) | 글자 n-gram | " + " | ".join(vs) + " |",
             "|---|---|---|" + "---|" * len(vs),

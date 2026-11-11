@@ -16,7 +16,7 @@ from shared.call_labels import ITEMS, same_value
 
 NGRAM = (2, 4)  # 글자 n-gram 길이 범위(양 끝 포함)
 STAFF = re.compile(r"^직원:(.*)$", re.M)
-# 할 일 약속 — 분류 프롬프트 has_todo 정의("회신·확인 후 연락을 약속")의 말
+# 할 일 약속 — 분류 프롬프트 has_todo 정의(prompts/classify/v2 "회신·전달·서류 준비 등")의 요지 중 말로 드러나는 것만
 TODO = re.compile(
     r"(연락|전화)\s*(드릴|드리겠|드리도록|줄게|할게)|회신|전달(해|드리|하겠)|알려\s*드릴"
 )
@@ -51,29 +51,41 @@ def predict(model, text: str):
 
 def evaluate(calls: dict, split: str, usable: dict) -> dict:
     """calls = classification._calls 모양, usable = {버전: {call_uid: 라벨}}(분류기 채점과 같은 폴백·실패 제외).
-    → {trained_on, n, rule: {has_todo}, ngram: {항목: k/n}, versions: {버전: {항목: k/n}}}"""
+    채점 통화는 재료 밖 골드 중 모든 버전이 쓸 수 있는 것 — 표의 열이 모두 같은 통화를 센다.
+    → {trained_on, n, ids, rule: {has_todo}, ngram: {항목: k/n}, versions: {버전: {항목: k/n}}}. 재료가 없으면 n 0"""
     silver = [
         {"call_uid": u, **{k: c["gold"][k] for k in ("primary_purpose", "emergency", "complaint")}}
         for u, c in calls.items()
         if c["split"] == "silver"
     ]
-    material = {u for u, part in silver_split(silver).items() if part == "material"}
+    material = sorted(u for u, part in silver_split(silver).items() if part == "material")
     ids = sorted(
         u
         for u, c in calls.items()
         if u not in material
         and (c["split"] in ("silver", "dev") if split == "dev" else c["split"] == "test")
+        and all(u in ok for ok in usable.values())
     )
+    if not material or not ids:
+        return {
+            "trained_on": len(material),
+            "n": 0,
+            "ids": [],
+            "rule": {},
+            "ngram": {},
+            "versions": {},
+        }
     models = {
         i: train([(calls[u]["transcript"], calls[u]["gold"][i]) for u in material]) for i in ITEMS
     }
 
-    def kn(pred) -> dict:
-        return {"k": sum(pred(u) for u in ids), "n": len(ids)}
+    def kn(ok) -> dict:
+        return {"k": sum(ok(u) for u in ids), "n": len(ids)}
 
     return {
         "trained_on": len(material),
         "n": len(ids),
+        "ids": ids,
         "rule": {
             "has_todo": kn(
                 lambda u: rule_has_todo(calls[u]["transcript"]) == calls[u]["gold"]["has_todo"]
@@ -89,10 +101,7 @@ def evaluate(calls: dict, split: str, usable: dict) -> dict:
         },
         "versions": {
             v: {
-                i: {
-                    "k": sum(same_value(i, ok[u][i], calls[u]["gold"][i]) for u in ids if u in ok),
-                    "n": sum(u in ok for u in ids),
-                }
+                i: kn(lambda u, i=i, ok=ok: same_value(i, ok[u][i], calls[u]["gold"][i]))
                 for i in ITEMS
             }
             for v, ok in usable.items()

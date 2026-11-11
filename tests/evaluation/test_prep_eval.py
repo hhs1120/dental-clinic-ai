@@ -16,6 +16,9 @@ def row(appt, procedure_code, alerts=(), chips=("appointment",), **facts):
     return {
         "appointment_id": appt,
         "procedure_code": procedure_code,
+        "procedure": procedure_code,
+        "type": "treatment",
+        "last_visit": None,
         "alerts": [{"code": c, "label": c, "related": rel, "action": "x"} for c, rel in alerts],
         "balance": facts.get("balance", 0),
         "scaling_unused": facts.get("scaling_unused", False),
@@ -123,5 +126,24 @@ def test_report_shows_template_column(conn):
 
     put(conn, row(101, "U0011", [("ANTICOAG", True)]), NONE)
     p = {"days": ["2026-12-01", "2026-12-01"]} | prep_eval.score(conn, [DAY])
-    text = "\\n".join(ev._render_prep(p))
+    text = "\n".join(ev._render_prep(p))
     assert "| 지표 | 제안(LLM) | 템플릿 기준선 |" in text
+
+
+def test_template_is_a_real_suggestion():
+    """템플릿은 실제 LLM 입력(backend.prep.llm_facts)의 키·값으로 만들고 실제 후검증을 통과한다 — 후검증 칸은 잰 값"""
+    from backend.prep import check_suggestion, llm_facts
+
+    r = row(
+        101,
+        "U0011",
+        [("ANTICOAG", True), ("HTN", False)],
+        balance=30000,
+        family_recall=[{"chart_no": "C-00002", "name": "가족", "last_hygiene": "2026-01-02"}],
+        open_plan=[{"procedure": "레진", "tooth": "16", "est_fee": 80000}],
+    )
+    s = prep_eval._template(r)
+    keys = [u["key"] for u in s["used_facts"]]
+    assert keys == ["balance", "alert.ANTICOAG", "plan.1", "family.C-00002"]
+    assert check_suggestion(llm_facts(r), s)
+    assert prep_eval._template(row(103, "U0019")) == NONE

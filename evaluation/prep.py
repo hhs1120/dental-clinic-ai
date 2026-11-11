@@ -6,6 +6,7 @@ import json
 from collections import Counter
 from datetime import date
 
+from backend.prep import check_suggestion, llm_facts
 from generator.master import ALERT_TYPES
 
 
@@ -35,12 +36,19 @@ def _blank() -> dict:
 
 
 def _template(facts: dict) -> dict:
-    """켜진 칩 키를 모두 근거로 제안, 다 꺼지면 none — 주의 칩은 앱이 저장한 related로 고른다(LLM 없음)"""
-    keys = [f"alert.{a['code']}" for a in facts["alerts"] if a["related"]]
-    keys += [k for k in ("balance", "scaling_unused", "family_recall", "open_plan") if facts[k]]
+    """템플릿 기준선 — 실제 LLM 입력(backend.prep.llm_facts)에서 켜진 칩의 키·값을 모두 근거로, 본문은 그 값을 이어
+    붙인 글(LLM 없음). 주의 칩은 앱이 저장한 related로 고른다. 칩이 다 꺼지면 none"""
+    f = llm_facts(facts)
+    related = {f"alert.{a['code']}" for a in facts["alerts"] if a["related"]}
+    keys = [
+        k
+        for k in f
+        if k in related or k in ("balance", "scaling_unused") or k.startswith(("plan.", "family."))
+    ]
     if not keys:
         return {"action": "none", "text": "", "used_facts": []}
-    return {"action": "suggest", "text": "", "used_facts": [{"key": k, "value": ""} for k in keys]}
+    used = [{"key": k, "value": str(f[k])} for k in keys]
+    return {"action": "suggest", "text": " · ".join(u["value"] for u in used), "used_facts": used}
 
 
 def _tally(out: dict, facts: dict, s: dict | None, valid: bool) -> None:
@@ -74,7 +82,8 @@ def score(conn, days: list[date]) -> dict:
         facts = json.loads(facts_json)
         s = json.loads(sug_json) if sug_json else None
         _tally(out, facts, s, bool(valid))
-        _tally(template, facts, _template(facts), True)
+        t = _template(facts)
+        _tally(template, facts, t, check_suggestion(llm_facts(facts), t))  # 후검증도 실제로 잰다
     missing = conn.execute(  # 저장 행이 없는 예약 — 취소된 예약의 남은 행은 세지 않는다
         f"SELECT COUNT(*) FROM source.emr_appointments a WHERE a.status != 'cancelled'"
         f" AND date(a.scheduled_at) IN ({marks}) AND NOT EXISTS (SELECT 1 FROM ax_prep_sheets s"

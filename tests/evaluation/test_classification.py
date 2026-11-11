@@ -350,3 +350,14 @@ def test_model_vs_gold_urgency_urgent_or_not(conn):
         "urgency"
     ]
     assert worse["k"] == base["k"] - 1
+
+
+def test_compare_and_dump_urgency_urgent_or_not(conn):
+    """버전 비교·dev 오답 목록도 정확도와 같은 기준 — 골드 low vs 모델 normal은 오답이 아니다"""
+    before = classification.evaluate(conn, "dev")
+    conn.execute("UPDATE truth.truth_call_labels SET urgency = 'low' WHERE call_uid = 'c-0001'")
+    r = classification.evaluate(conn, "dev", dump=True)
+    assert [c["items"]["urgency"] for c in r["compare"]] == [
+        c["items"]["urgency"] for c in before["compare"]
+    ]
+    assert not any(d["item"] == "urgency" and d["call_uid"] == "c-0001" for d in r["dump"])

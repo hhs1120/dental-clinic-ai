@@ -51,17 +51,51 @@ def test_evaluate_trains_on_material_and_scores_outside():
 
 
 def test_urgency_compared_urgent_or_not():
-    """기준선 급함도 urgent 여부만(분류기 채점과 같은 기준 — shared.call_labels.same_value)"""
-    calls = {
-        f"c-{k:04d}": _call("silver", "book", 0, f"직원: 예약 {k}")
-        | {"gold": labels("book", urgency="low")}
-        for k in range(20)
-    }
-    calls["c-dev1"] = _call("dev", "book", 0, "직원: 예약") | {
+    """기준선 급함도 urgent 여부만 — 학습 모델이 low를 내고 골드가 normal이면 맞음(shared.call_labels.same_value)"""
+    calls = {}
+    for k in range(20):
+        urgent = k % 2 == 0
+        text = f"직원: 지금 바로 오세요 응급 {k}" if urgent else f"직원: 다음 주 예약 {k}"
+        gold = labels("book", urgency="urgent" if urgent else "low")
+        calls[f"c-{k:04d}"] = _call("silver", "book", 0, text) | {"gold": gold}
+    calls["c-dev1"] = _call("dev", "book", 0, "직원: 다음 주 예약") | {
         "gold": labels("book", urgency="normal")
     }
     r = cb.evaluate(calls, "dev", {})
+    assert (
+        cb.predict(
+            cb.train(
+                [
+                    (calls[u]["transcript"], calls[u]["gold"]["urgency"])
+                    for u in calls
+                    if u != "c-dev1"
+                ]
+            ),
+            "직원: 다음 주 예약",
+        )
+        == "low"
+    )
     assert r["ngram"]["urgency"]["k"] == r["ngram"]["urgency"]["n"]
+
+
+def test_same_calls_for_baseline_and_versions():
+    """한 버전이라도 쓸 수 없는 통화(폴백·실패)는 기준선 모수에서도 빠져 표의 n이 같다"""
+    calls = {
+        f"c-{k:04d}": _call("silver", "book" if k % 2 else "cancel", k % 2, f"직원: 글 {k}")
+        for k in range(30)
+    }
+    calls["c-dev1"] = _call("dev", "book", 1, "직원: 연락드릴게요")
+    calls["c-dev2"] = _call("dev", "book", 1, "직원: 연락드릴게요")
+    usable = {"v1": {u: c["gold"] for u, c in calls.items() if u != "c-dev2"}}
+    r = cb.evaluate(calls, "dev", usable)
+    assert "c-dev2" not in r["ids"]
+    assert r["rule"]["has_todo"]["n"] == r["versions"]["v1"]["has_todo"]["n"] == r["n"]
+
+
+def test_no_material_skips():
+    """silver가 없는 DB(작은 픽스처·시나리오)에서는 기준선을 건너뛴다 — 분류 채점이 죽지 않게"""
+    calls = {"c-dev1": _call("dev", "book", 1, "직원: 연락드릴게요")}
+    assert cb.evaluate(calls, "dev", {})["n"] == 0
 
 
 def test_report_has_baseline_table(tmp_path):
@@ -73,3 +107,4 @@ def test_report_has_baseline_table(tmp_path):
     assert "baselines" in c
     text = "\n".join(ev._render_classification(c))
     assert "강한 기준선과 나란히" in text
+    assert "급함은 urgent 여부만 센다" in text  # 정의가 바뀐 리포트임을 본문에 적는다
