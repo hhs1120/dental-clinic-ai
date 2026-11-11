@@ -164,7 +164,7 @@ def rows(conn) -> list[dict]:
         f" AND a.scheduled_at < c.started_at AND a.scheduled_at >= datetime(c.started_at, '-{MISSED_WINDOW_DAYS} days'))"
         " AS recent_noshow,"
         " l.* FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
-        " WHERE c.source = 'generated' ORDER BY c.id"
+        " WHERE c.source = 'generated' AND c.call_uid NOT LIKE 'hc-%' ORDER BY c.id"  # hc-는 hard_calls
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r, strict=True)) for r in cur]

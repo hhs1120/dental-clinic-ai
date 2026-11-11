@@ -12,6 +12,8 @@ import yaml
 from generator import build, llm_jobs, verify
 from generator.build import generate
 from generator.master import (
+    HARD_CALL_TYPES,
+    HARD_CALLS_PER_TYPE,
     LEDGER_DEBT_CALLS,
     LEDGER_ERROR_KINDS,
     LINK_FAILURE_DAYS,
@@ -74,6 +76,7 @@ def test_gen_meta_records_seed_range_and_call_sizes(tmp_path, no_stages):
         "call_slots": str(CFG["calls_with_transcript"]),
         "eval_pool": str(CFG["eval_pool_size"]),
         "blind_pool": str(CFG["blind_pool_size"]),
+        "hard_calls": str(len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE),
         "documents_core": str(CFG["documents"]["core"]),
         "documents_distractor": str(CFG["documents"]["distractor"]),
         "link_failure_days": str(LINK_FAILURE_DAYS),

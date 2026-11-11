@@ -57,6 +57,9 @@ class Ctx:
     unrecorded_settlements: int = 0
     non_clinical_multi: int = 0
     settlement_errors: dict | None = None  # 정산 수납 장부 실수 종류별 수 — truth_gen_meta에서
+    hard_calls: int = (
+        0  # 어려운 통화 hc- 건수 — truth_gen_meta(없으면 0 = hc- 없음, verify 테스트 DB)
+    )
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -78,6 +81,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         call_slots=int(meta["call_slots"]),
         eval_pool=int(meta["eval_pool"]),
         blind_pool=int(meta["blind_pool"]),
+        hard_calls=int(meta.get("hard_calls", 0)),
         documents_core=int(meta["documents_core"]),
         documents_distractor=int(meta["documents_distractor"]),
         link_failure_days=int(meta["link_failure_days"]),

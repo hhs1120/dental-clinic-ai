@@ -51,7 +51,6 @@ from generator.verify.common import (
     C_ONLY,
     CHILD_MAX_AGE,
     EXAMPLES,
-    HARD_PREFIX,
     PROCEDURE,
     _dt,
     _emergency_appts,
@@ -238,7 +237,7 @@ def check_call_transcripts(conn, ctx):
     """생성 통화는 전사 있음 (7단계)"""
     return _rows(
         conn,
-        "SELECT id, call_uid FROM ax_calls WHERE source = 'generated'"
+        f"SELECT id, call_uid FROM ax_calls WHERE source = 'generated' AND {C_ONLY}"
         " AND (has_transcript != 1 OR transcript IS NULL OR trim(transcript) = '')",
     )
 
@@ -346,8 +345,6 @@ def check_transcript_rules(conn, ctx):
     )
     bad = []
     for row in transcripts.rows(conn):
-        if row["call_uid"].startswith(HARD_PREFIX):
-            continue  # hc-는 종류별 규칙(generator/hard_calls.py checks)
         t = text.get(row["call_uid"])
         if t is None:
             continue

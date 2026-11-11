@@ -72,7 +72,8 @@ def emergency_calls(conn) -> list[dict]:
     cur = conn.execute(
         "SELECT c.id, c.call_uid, c.patient_id, c.started_at, c.in_eval_pool, c.in_blind_pool,"
         " l.primary_purpose, l.used_fact FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
-        " WHERE l.emergency = 1 AND c.patient_id IS NOT NULL ORDER BY c.started_at, c.id"
+        " WHERE l.emergency = 1 AND c.patient_id IS NOT NULL AND c.call_uid NOT LIKE 'hc-%'"
+        " ORDER BY c.started_at, c.id"  # hc- 응급은 기존 예약에 붙는다(hard_calls)
     )
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r, strict=True)) for r in cur]

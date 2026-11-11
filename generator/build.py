@@ -30,6 +30,8 @@ from generator import (
 )
 from generator.llm_jobs import LLMContext
 from generator.master import (
+    HARD_CALL_TYPES,
+    HARD_CALLS_PER_TYPE,
     LEDGER_DEBT_CALLS,
     LEDGER_ERROR_KINDS,
     LINK_FAILURE_DAYS,
@@ -156,6 +158,7 @@ def generate(
                 ("call_slots", str(cfg["calls_with_transcript"])),
                 ("eval_pool", str(cfg["eval_pool_size"])),
                 ("blind_pool", str(cfg["blind_pool_size"])),
+                ("hard_calls", str(len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE)),
                 ("documents_core", str(cfg["documents"]["core"])),
                 ("documents_distractor", str(cfg["documents"]["distractor"])),
                 ("link_failure_days", str(LINK_FAILURE_DAYS)),

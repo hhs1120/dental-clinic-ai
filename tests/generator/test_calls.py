@@ -69,7 +69,7 @@ def _labels(conn):
         dict(r)
         for r in conn.execute(
             "SELECT c.direction, c.in_eval_pool, c.eval_sort_order, l.* FROM ax_calls c"
-            " JOIN truth.truth_call_labels l USING (call_uid)"
+            " JOIN truth.truth_call_labels l USING (call_uid) WHERE c.call_uid LIKE 'c-%'"
         )
     ]
 
@@ -203,6 +203,7 @@ def test_call_rows_independent_of_noise_shares(db, tmp_path, monkeypatch):
             tuple(r)
             for r in conn.execute(
                 "SELECT call_uid, patient_id, started_at, duration_sec, in_eval_pool FROM ax_calls"
+                " WHERE call_uid LIKE 'c-%'"
             )
         )
 

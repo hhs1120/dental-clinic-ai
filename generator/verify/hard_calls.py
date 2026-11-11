@@ -37,8 +37,12 @@ def _hard(conn) -> list[dict]:
 
 def check_hard_counts(conn, ctx):
     """hc-는 종류(master.HARD_CALL_TYPES)마다 HARD_CALLS_PER_TYPE건, urgency_inverted는 절반(HARD_URGENCY_HALVES)마다 반씩,
-    그 밖 종류는 절반 없음. 모든 hc-가 truth_hard_calls에 있고 split = hard"""
+    그 밖 종류는 절반 없음. 모든 hc-가 truth_hard_calls에 있고 split = hard. 메타 hard_calls가 0이면 hc- 없음"""
     rows = _hard(conn)
+    if not ctx.hard_calls:
+        return [
+            {"call_uid": r["call_uid"], "problem": "메타 hard_calls 0인데 hc- 있음"} for r in rows
+        ]
     bad = [
         {"call_uid": r["call_uid"], "problem": "truth_hard_calls 없음 또는 split ≠ hard"}
         for r in rows
@@ -64,8 +68,10 @@ def check_hard_counts(conn, ctx):
 
 
 def check_hard_uids(conn, ctx):
-    """hc- 번호는 hc-0001부터 빈틈없이(종류 수 × HARD_CALLS_PER_TYPE개), truth_hard_calls는 hc-만"""
-    n = len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE
+    """hc- 번호는 hc-0001부터 빈틈없이(메타 hard_calls개 = 종류 수 × HARD_CALLS_PER_TYPE), truth_hard_calls는 hc-만"""
+    n = ctx.hard_calls
+    if n and n != len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE:
+        return [{"hard_calls": n, "expected": len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE}]
     have = {r["call_uid"] for r in _hard(conn)}
     want = {f"{HARD_PREFIX}{i:04d}" for i in range(1, n + 1)}
     stray = {
