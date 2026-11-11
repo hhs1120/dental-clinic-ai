@@ -120,12 +120,12 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 **`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행 — 칸은 `shared/app_schema.sql`. `facts`는 `backend/prep.py` `prep_facts` 행 그대로, `facts_hash`는 제안 입력(`llm_facts`)의 해시 — 해시·`prompt_version`·`model`이 같고 `suggestion_valid`면 다시 부르지 않는다. 예약당 1행이라 새 버전으로 만들면 덮어쓴다. 준비표·체어 보기가 같은 행을 쓴다
 
-**오늘 화면**(`GET /today`, `backend/today.py` `sheet`): 쿼리로 모으고 LLM을 부르지 않는다. 숫자마다 그 화면과 같은 함수로 센다 — 예약·신환·주의·내원 확인 전은 `backend/prep.py` `prep_facts` 칩, 할 일·급한 통화는 `backend/calls.py` `today_board`, 확인할 통화는 같은 모듈 `review_calls`, 판정 대기는 `backend/judge_queue.py` `pending_count`(다음 건과 같은 대상), 재심 신청 기한 임박·청구 전 상병 경고는 `backend/claims.py` `adjusted`(`soon` 칩)·`pre_claim`(경고 줄). 미예약 환자 줄은 숫자 없는 고정 링크라 세지 않는다. 기준은 앱 기준일, 근거 없는 질문(`ax_search_logs`)만 실제 시계. 자동 처리·환자 묶음은 §3b 테이블을 읽는다(항목은 [[치과 AX - 기능 정의]] §4 앱 구성). **⑦ 브리핑**은 `ax_briefings`(날짜, 문장, 쓴 숫자, 후검증 통과 여부 — ④와 같은 틀), 슬롯 착수 시 추가.
+**오늘 화면**(`GET /today`, `backend/today.py` `sheet`): 쿼리로 모으고 LLM을 부르지 않는다. 숫자마다 그 화면과 같은 함수로 센다 — 예약·신환·주의·내원 확인 전은 `backend/prep.py` `prep_facts` 칩, 할 일·급한 통화는 `backend/calls.py` `today_board`, 확인할 통화는 같은 모듈 `review_calls`, 판정 대기는 `backend/judge_queue.py` `pending_count`(다음 건과 같은 대상), 재심 신청 기한 임박·청구 전 상병 경고·청구 전 AI 줄은 `backend/claims.py` `adjusted`(`soon` 칩)·`pre_claim`(경고 줄·`counts.ai_missing`). 미예약 환자 줄은 숫자 없는 고정 링크라 세지 않는다. 기준은 앱 기준일, 근거 없는 질문(`ax_search_logs`)만 실제 시계. 자동 처리·환자 묶음은 §3b 테이블을 읽는다(항목은 [[치과 AX - 기능 정의]] §4 앱 구성). **⑦ 브리핑**은 `ax_briefings`(날짜, 문장, 쓴 숫자, 후검증 통과 여부 — ④와 같은 틀), 슬롯 착수 시 추가.
 **⑥ 리포트**: 숫자는 쿼리로 모으고 `metrics`로 저장한다. 앱 테이블 `ax_reports`(기간 종류·기간, `metrics`, 문장, 후검증 통과 여부 — ④와 같은 틀)는 슬롯 착수 시 추가. 튄 숫자 조사 결과는 근거 쿼리·실행 id와 함께 저장한다. 인건비가 들어간 값은 `metrics`에서 추정 항목으로 구분해 화면이 `[추정]`을 붙인다. 항목은 [[치과 AX - 기능 정의]] §5 ⑥.
 
 ## 5. 슬롯 테이블
 
-**⑤ 청구 점검**(코드명 `claim_review`, `backend/claims.py`): 심사결과는 이미 `emr_claims`(결과·사유·통보일)에 있다. 조정 목록·칩·규칙 판단 제안과 청구 전 상병 확인 경고는 표마다 한 번 훑는 집합 쿼리라 청구 수와 무관하게 쿼리 수가 같다. 사유는 `adjust_note` 문구로 가리고 유형·기준 절·재심 기한 일수·허용 상병은 `source.ax_master_values`에서 읽는다. 앱 테이블은 사람 판단 `ax_claim_judgments`(청구 id·판단·파트·실제 시각, 다시 누르면 덮어씀). API `GET /claims`(조정·불능 청구 전부와 칩 집계 — 기한 지난 건 포함, 화면이 행의 `chips`로 거른다), `GET /claims/pre`(대기 청구 줄과 경고), `POST /claims/{claim_id}/judgment`(`{judgment, part}`, 모르는 값·조정/불능이 아닌 청구·기한 지남·상병 착오에 정당 외는 400). ⑤-2 AI 점검 결과는 `ax_claim_checks`(청구 id 하나에 한 행 — 입력·해시·결과·통과 여부·프롬프트 버전·모델, `backend/claim_check.py`), `make claim-check`(화면 범위, `SCOPE=all`이면 전 기간)와 `POST /jobs/claim-check`(`ax_jobs` `kind='claim_check'`, 준비표 갱신과 같은 꼴)로 만든다. `GET /claims/pre`는 행마다 `ai`와 `counts.ai`·`ai_missing`·`ai_checked`·`ai_at`·`ai_pending`(탭별 `pre`·`adjust`)을, `GET /claims` 요건 사유 행은 `suggest_by`·`ai_evidence`를 더한다. 3~4단계 앱 테이블(⑤-4 초안·추측 목록·검토 확인)은 `ax_`로 그 단계 때 추가. ⑤-3 근거 찾기는 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
+**⑤ 청구 점검**(코드명 `claim_review`, `backend/claims.py`): 심사결과는 이미 `emr_claims`(결과·사유·통보일)에 있다. 조정 목록·칩·규칙 판단 제안과 청구 전 상병 확인 경고는 표마다 한 번 훑는 집합 쿼리라 청구 수와 무관하게 쿼리 수가 같다. 사유는 `adjust_note` 문구로 가리고 유형·기준 절·재심 기한 일수·허용 상병은 `source.ax_master_values`에서 읽는다. 앱 테이블은 사람 판단 `ax_claim_judgments`(청구 id·판단·파트·실제 시각, 다시 누르면 덮어씀). API `GET /claims`(조정·불능 청구 전부와 칩 집계 — 기한 지난 건 포함, 화면이 행의 `chips`로 거른다), `GET /claims/pre`(대기 청구 줄과 경고), `POST /claims/{claim_id}/judgment`(`{judgment, part}`, 모르는 값·조정/불능이 아닌 청구·기한 지남·상병 착오에 정당 외는 400). ⑤-2 AI 점검 결과는 `ax_claim_checks`(청구 id 하나에 한 행 — 입력·해시·결과·통과 여부·프롬프트 버전·모델, `backend/claim_check.py`), `make claim-check`(화면 범위, `SCOPE=all`이면 전 기간)와 `POST /jobs/claim-check`(`ax_jobs` `kind='claim_check'`, 준비표 갱신과 같은 꼴)로 만든다. `GET /claims/pre`는 행마다 `ai`와 `counts.ai`·`counts.ai_missing`·`counts.ai_checked`, `ai_at`·`ai_pending`(탭별 `pre`·`adjust`)을, `GET /claims` 요건 사유 행은 `suggest_by`·`ai_evidence`를 더한다. 3~4단계 앱 테이블(⑤-4 초안·추측 목록·검토 확인)은 `ax_`로 그 단계 때 추가. ⑤-3 근거 찾기는 §3 검색 구조를 재활용한다. 단계는 [[치과 AX - 기능 정의]] §5 ⑤.
 
 **⑧ 재무 대조**: 입력은 `fin_*`와 `emr_payments`(읽기 전용). 앱 테이블은 사람 확정 2개 — `ax_recon_confirmations`(⑧-1: 관련 `fin_` 거래 id, 고른 원인, 맞음/아님, 사람·시각), `ax_expense_confirmations`(⑧-2: 출금 id, 증빙 id들, 계정 과목, 사람·시각). "확정한 거래처는 다음부터 기본값"은 이 테이블에서 읽는다. 자동 처리는 §3b `ax_auto_actions`에 결과값과 함께 남기고 사람 확정 테이블에는 쓰지 않는다. ⑥ 재료비와 거래처 기본값은 두 테이블을 합쳐 읽되 되돌린 건은 뺀다.
 
@@ -136,7 +136,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 **`ax_settings(key, value)`**: `active_prompt_version`, `pending_prompt_version`(관문을 넘고 재분류를 기다리는 classify 버전 — `make improve`가 쓰고 전환 때 비움, 자동 개선 착수 때), `source_fingerprint`(§7.3), `prompt_versions`(classify 밖 task → 활성 버전), `auto_policy`(작업 종류 → 켬/끔, 기본 끔), `active_models`(쓰는 모델의 model_actual), `blind_versions`(블라인드 비교할 두 `prompt_version` — 평가 설계 §2.4), `daily_usd_limit`, `missed_weights`(⑨ 점수 값 중 바꾼 것만 — 기본값과 값마다 이유는 `backend/missed.py` `WEIGHTS`·`REASONS`), `labor_cost_assumed`(⑥ 역할별 월 인건비 가정값 — 위생사·데스크·상담실장, 대표 원장 없음. 실제 급여가 아니며 값은 슬롯 착수 때 넣는다)
 **기준일 TODAY** (원본은 여기): `config` `today` 고정, 앱은 `shared/clinic.py`로 읽는다. 앱에서 바꾸는 기능은 두지 않는다 — 데이터가 그날 개원 전 스냅샷이라 앱에서만 옮기면 예약 상태·기록·청구 구간이 어긋난다. 바꾸려면 config를 고치고 재생성
 **동시 쓰기**: 앱 연결은 WAL + `busy_timeout`(`backend/db.py`) — 챗 SSE가 쓰는 동안 다른 쓰기가 막히지 않게. 그래서 `app.sqlite`를 복사하는 곳(`save-demo`, `make e2e` — `frontend/playwright.config.ts`)은 `-wal` 파일까지 함께 복사한다(또는 체크포인트 뒤 복사)
-**`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 AI 제안 갱신·야간 실행)의 상태·진행률 — 칸은 `shared/app_schema.sql`, 지금 쓰는 것은 준비표 AI 제안 갱신(`kind` `prep`). 같은 작업이 `running`이면 새로 만들지 않고, `backend/api.py` `JOB_STALE`보다 오래 `running`인 행은 죽은 것으로 본다. 프론트는 폴링
+**`ax_jobs`**: 30초 넘는 작업(배치 분류·준비표 AI 제안 갱신·야간 실행)의 상태·진행률 — 칸은 `shared/app_schema.sql`, 지금 쓰는 것은 준비표 AI 제안 갱신(`kind` `prep`)·⑤-2 AI 점검(`claim_check`). 같은 작업이 `running`이면 새로 만들지 않고, `backend/api.py` `JOB_STALE`보다 오래 `running`인 행은 죽은 것으로 본다. 프론트는 폴링
 
 **판정 큐 "다음 건"**: 대상 = `ax_judge_state` pending/skipped인 판정 풀 밖 통화·새로 추가한 통화 중 엇갈림 또는 무작위 표본이고 활성 버전 분류 `ok`. 순서 = 건너뛴 건 뒤로 → 새로 추가한 통화 먼저 → 핵심 엇갈림 → 나머지 엇갈림 → 표본. 표본은 엇갈림 없는 대상 중 `call_uid` 해시로(비율 `backend/judge_queue.py` `SAMPLE_SHARE`). 엇갈림을 계산하거나 새 통화를 분류하면 큐를 채우고, 활성 쌍의 엇갈림을 다시 계산하면 대상이 아니게 된 pending 건을 지운다(`backend/judge_queue.py` `prune` — skipped·done·사람 판정은 그대로). 저장 뒤 두 모델 라벨이 보인다
 **dev 판정 풀**: `in_eval_pool`이고 `eval_sort_order ≤ ⌈config eval_pool_size ÷ 2⌉`(순번 앞 절반이 dev — [[치과 AX - 평가 설계]] §2.1). 앱 화면의 판정 풀 수치와 LLM 쌍 비교는 이것만 쓴다(최종 비교의 예외는 [[치과 AX - 평가 설계]] §2.4)
@@ -185,7 +185,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 ### 7.3 사람 데이터 보존
 
 재생성해도 `app.sqlite`는 덮어쓰지 않는다. 다만 앱 테이블이 가리키는 생성 데이터의 키(`call_uid`·환자·예약·`fin_` id)가 다른 실체를 가리킬 수 있어 테이블마다 처리를 정한다.
-- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·LLM 쌍 비교·엇갈림·준비표·⑦ 브리핑·⑥ 리포트·⑤ 결과·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
+- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·LLM 쌍 비교·엇갈림·준비표·⑦ 브리핑·⑥ 리포트·⑤ AI 점검(`ax_claim_checks`)·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
 - **해시로 다시 붙임**: 판정(메모 포함)·투표 — `hash(transcript)`로만(`export-human/import-human`), 미스 시 버리고 "복원 실패 N건" 리포트. 투표는 `(hash, left_model, left_version, right_model, right_version, choice)`. 판정 상태는 판정 유무에서 파생한다
 - **자연키로 보존**: 되돌린 자동 처리 — 아래 키로 다시 붙이고, 못 붙이면 리포트한다. 되돌린 건은 같은 키로 다시 자동 처리하지 않는다
 
@@ -198,7 +198,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **그대로 둠**: 실수 후보(승인 상태 포함, 실행 id는 끊겨도 된다)·`ax_rule_counts`·게시한 문서 초안·`ax_settings`(`auto_policy` 제외)
 - **강제로 끔**: 앱 기동과 `make nightly` 시작 때 `source.sqlite` 지문을 `source_fingerprint`와 비교해, 다르면 `auto_policy`를 전부 끄고 지문을 갱신한다. 다시 측정한 뒤 사람이 켠다
-- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록·AI 점검(`ax_claim_judgments`·`ax_claim_checks` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`
+- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록(`ax_claim_judgments` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`
 
 ## 8. 미결
 
@@ -222,7 +222,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/ask` | 메뉴에 없음([[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창"). 질문하기(`?tab=chat&log=<id>`는 저장된 그 질문·답·출처를 다시 묻지 않고 첫 줄에 보인다, `?draft=`는 입력칸만 채운다), 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③, 여기: `GET /chat/{log_id}`(저장된 질문 1개를 답 이벤트 모양으로 — 평가·요약·아직 도는 질문은 404, `backend/api.py` `get_chat`) |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |
-| `/claims` | 삭감 대응(조정 목록 5칸·칩·행 펼침·판단 기록), 청구 전 점검(상병 확인 경고), 주소 `?tab=pre&chip=…` | §5 ⑤ — `GET /claims`·`GET /claims/pre`·`POST /claims/{claim_id}/judgment`(`backend/claims.py`) |
+| `/claims` | 삭감 대응(조정 목록 5칸·칩·행 펼침·판단 기록), 청구 전 점검(상병 확인 경고·AI 점검), 주소 `?tab=pre&chip=…` | §5 ⑤ — `GET /claims`·`GET /claims/pre`·`POST /claims/{claim_id}/judgment`·`POST /jobs/claim-check`·`GET /jobs/{id}`(`backend/claims.py`·`backend/claim_check.py`) |
 | `/report` | 경영 리포트 | [[치과 AX - 기능 정의]] §5 ⑥, 착수 때 |
 | `/finance` | 수입 일계표, 지출 증빙 | [[치과 AX - 기능 정의]] §5 ⑧, 착수 때 |
 
@@ -234,7 +234,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 **이름 표시**: 통화·문자 화면은 환자 이름과 차트 번호를 함께 보인다. 차트 서술 화면은 차트 번호만 보이고 이름을 붙이지 않는다(§3 prefix). 환자에는 차트 번호로 닿는다.
 
-**데이터 가져오기**: 화면 진입 때 조회한다. 배치(①·④)와 야간 실행은 작업을 시작한 뒤 `ax_jobs`를 폴링하고, ③ 챗은 SSE 진행 이벤트를 받는다.
+**데이터 가져오기**: 화면 진입 때 조회한다. 배치(①·④·⑤-2)와 야간 실행은 작업을 시작한 뒤 `ax_jobs`를 폴링하고, ③ 챗은 SSE 진행 이벤트를 받는다.
 
 **공통 컴포넌트**: `AiBadge`(AI가 만듦), `Confirmed`(사람이 정함), `Estimated`(`[추정]`), `AgentTrace`(조사 과정), `AutoAction`(자동 처리 이유·되돌리기). 코드 값에는 표시를 붙이지 않는다.
 
