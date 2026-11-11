@@ -48,8 +48,10 @@ from generator.master import (
     recall_due_year,
 )
 from generator.verify.common import (
+    C_ONLY,
     CHILD_MAX_AGE,
     EXAMPLES,
+    HARD_PREFIX,
     PROCEDURE,
     _dt,
     _emergency_appts,
@@ -83,7 +85,7 @@ AX_CALLS_COLUMNS = {
 }
 
 
-CALL_UID = re.compile(r"c-\d{4,}")
+CALL_UID = re.compile(r"(c|hc)-\d{4,}")
 
 
 def check_ax_calls_columns(conn, ctx):
@@ -96,7 +98,7 @@ def check_ax_calls_columns(conn, ctx):
 
 
 def check_call_uid_format(conn, ctx):
-    """call_uid는 'c-' + 순번 숫자만 (목적 enum 등 의미 있는 문자열 누출 방지)"""
+    """call_uid는 'c-'(어려운 통화는 'hc-') + 순번 숫자만 (목적 enum 등 의미 있는 문자열 누출 방지)"""
     return [
         r
         for r in _rows(conn, "SELECT id, call_uid FROM ax_calls")
@@ -129,7 +131,7 @@ def _calls(conn) -> list[dict]:
         "SELECT c.*, l.primary_purpose, l.accepted_purposes, l.counterpart, l.urgency,"
         f" {', '.join('l.' + f for f in CALL_FLAGS)}, l.noise_type, l.used_fact, l.split"
         " FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid) WHERE c.source = 'generated'"
-        " ORDER BY c.id",
+        f" AND c.{C_ONLY} ORDER BY c.id",
     )
     for r in rows:
         r["accepted"], r["fact"] = json.loads(r["accepted_purposes"]), json.loads(r["used_fact"])
@@ -199,7 +201,9 @@ def check_call_label_values(conn, ctx):
 
 def check_call_slot_count(conn, ctx):
     """생성 통화 수 = calls_with_transcript"""
-    n = conn.execute("SELECT count(*) FROM ax_calls WHERE source = 'generated'").fetchone()[0]
+    n = conn.execute(
+        f"SELECT count(*) FROM ax_calls WHERE source = 'generated' AND {C_ONLY}"
+    ).fetchone()[0]
     return [] if n == ctx.call_slots else [{"calls": n, "expected": ctx.call_slots}]
 
 
@@ -342,6 +346,8 @@ def check_transcript_rules(conn, ctx):
     )
     bad = []
     for row in transcripts.rows(conn):
+        if row["call_uid"].startswith(HARD_PREFIX):
+            continue  # hc-는 종류별 규칙(generator/hard_calls.py checks)
         t = text.get(row["call_uid"])
         if t is None:
             continue
@@ -419,7 +425,8 @@ def check_label_tokens(conn, ctx):
 def check_call_row_order(conn, ctx):
     """행 순서(id) = 통화 시각순 — 생성 순서(목적별)가 id에 드러나지 않게"""
     rows = _rows(
-        conn, "SELECT id, started_at FROM ax_calls WHERE source = 'generated' ORDER BY id"
+        conn,
+        f"SELECT id, started_at FROM ax_calls WHERE source = 'generated' AND {C_ONLY} ORDER BY id",
     )
     return [b for a, b in zip(rows, rows[1:], strict=False) if b["started_at"] < a["started_at"]]
 

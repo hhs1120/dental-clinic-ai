@@ -15,7 +15,7 @@ from generator.master import (
     RECALL_TEMPLATES,
     open_slots,
 )
-from generator.verify.common import _dt, _rows
+from generator.verify.common import C_ONLY, _dt, _rows
 from generator.verify.schedule import _prev_open_day
 
 # ── 문자 (8단계, §2.5) ────────────────────────────────────────
@@ -124,7 +124,8 @@ def check_message_triggers(conn, ctx):
     for r in _rows(
         conn,
         "SELECT c.patient_id, c.started_at FROM ax_calls c JOIN truth.truth_call_labels l USING (call_uid)"
-        " WHERE l.primary_purpose = 'document_req' AND c.direction = 'inbound' AND c.patient_id IS NOT NULL",
+        " WHERE l.primary_purpose = 'document_req' AND c.direction = 'inbound' AND c.patient_id IS NOT NULL"
+        f" AND c.{C_ONLY}",  # hc- 서류 요청은 준비 문자를 약속하지 않는다(어려운 통화 설계 §3.3)
     ):
         doc_calls[r["patient_id"]].append(r["started_at"])
     return [

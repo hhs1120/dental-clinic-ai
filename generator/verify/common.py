@@ -14,6 +14,12 @@ from generator.master import (
     PROCEDURES,
 )
 
+# 어려운 통화(hc-, 어려운 통화 설계 §3.1) — c- 통화 규칙(슬롯 수·행 순서·판정 풀·전사 규칙)은 hc-를 세지 않고
+# hc-는 verify/hard_calls.py가 본다. 시각·길이·화자·누출처럼 모든 통화에 같은 규칙은 둘 다 본다
+HARD_PREFIX = "hc-"
+C_ONLY = f"call_uid NOT LIKE '{HARD_PREFIX}%'"
+
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
