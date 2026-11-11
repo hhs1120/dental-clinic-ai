@@ -184,3 +184,31 @@ def test_score_has_keyword_column(world, all_dev):
     world.claim(1, error=True, ai="missing", status="paid")
     s = ev.score(world.open(), DAY, "dev")["requirement"]
     assert set(s["keyword"]) >= {"precision", "recall", "tp", "fp", "fn"}
+
+
+def test_report_has_keyword_columns():
+    """리포트 표에 키워드 규칙 기준선 열(정밀도·재현율) — AI·서술 줄 전부와 나란히"""
+    from evaluation.eval import _render_claim_check
+
+    pr = {"precision": 0.5, "recall": 0.25}
+    part = {"ai": pr, "narrative_all": pr, "keyword": {"precision": 0.65, "recall": 0.67}}
+    c = {
+        "prompt_version": "v2",
+        "requirement": part
+        | {
+            "n": 1,
+            "checked": 1,
+            "valid": 1,
+            "errors": 1,
+            "answers": {"met": 0, "missing": 1, "na": 0, "failed": 0},
+            "by_period": {"confirmed": part, "filed": part},
+        },
+        "adjust": {
+            "n": 0,
+            "ai": {"accuracy": None, "answered": 0},
+            "all_justified": None,
+            "all_contestable": None,
+        },
+    }
+    text = "\n".join(_render_claim_check(c))
+    assert "키워드 정밀도" in text and "65.0%" in text and "67.0%" in text

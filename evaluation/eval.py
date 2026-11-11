@@ -659,18 +659,19 @@ def _render_claim_check(c: dict) -> list[str]:
         f"답: 근거 있음 {ans['met']} · 근거 없음 {ans['missing']} · 판단 불가 {ans['na']}"
         f" · 후검증 실패 {ans['failed']}(판단 불가·실패는 음성)",
         "",
-        "| 요건 오류 | AI 정밀도 | AI 재현율 | 서술 있는 줄 전부 정밀도 | 재현율 |",
-        "|---|---|---|---|---|",
+        "| 요건 오류 | AI 정밀도 | AI 재현율 | 서술 있는 줄 전부 정밀도 | 재현율 | 키워드 정밀도 | 재현율 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for label, part in (
         ("전체", q),
         ("확정 월", q["by_period"]["confirmed"]),
         ("제출·대기", q["by_period"]["filed"]),
     ):
-        ai, base = part["ai"], part["narrative_all"]
+        ai, base, kw = part["ai"], part["narrative_all"], part["keyword"]
         out.append(
             f"| {label} | {pct(ai['precision'])} | {pct(ai['recall'])}"
-            f" | {pct(base['precision'])} | {pct(base['recall'])} |"
+            f" | {pct(base['precision'])} | {pct(base['recall'])}"
+            f" | {pct(kw['precision'])} | {pct(kw['recall'])} |"
         )
     out += [
         "",
