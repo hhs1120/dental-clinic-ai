@@ -8,11 +8,17 @@ from generator.master import (
     ADJUST_REASONS,
     ALERT_TYPES,
     APPEAL_DAYS,
+    CARD_ISSUERS,
+    CASH_DEPOSIT_MEMO,
+    CASH_DEPOSIT_WEEKDAYS,
     CLINIC_NAME,
     DIAGNOSES,
     HOURS,
+    NHIS_MEMO,
+    ORAL_CARE_PRICES,
     PROCEDURE_DIAGNOSES,
     PROCEDURES,
+    RECON_CAUSE_GROUPS,
     SCALING_CODE,
     SCALING_MIN_AGE,
     STAFF,
@@ -40,9 +46,10 @@ def stage(run, rng, fake) -> None:
     run.conn.executemany("INSERT INTO emr_diagnoses VALUES (?, ?)", sorted(DIAGNOSES.items()))
 
 
-def master_values_rows() -> list[tuple[str, str]]:
+def master_values_rows(holidays: frozenset = frozenset()) -> list[tuple[str, str]]:
     """(이름, JSON) — ④ 주의 칩 기준표(관련 시술·행동)와 보험 잔여 칩 기준, ⑨ 외부 이력 사유,
-    ⑤ 재심 기한·허용 상병·사유 유형·기준 절·요건 사유. verify도 이것과 비교한다"""
+    ⑤ 재심 기한·허용 상병·사유 유형·기준 절·요건 사유, ⑧-1 원인 묶음·정산·현금 입금·구강용품·은행 공휴일
+    (holidays = config 공휴일). verify도 이것과 비교한다"""
     requirement_notes: dict[str, list[str]] = {}
     for r in ADJUST_REASONS.values():
         if r["type"] == "requirement":
@@ -69,9 +76,26 @@ def master_values_rows() -> list[tuple[str, str]]:
         "adjust_note_headings": {r["note"]: CLAIM_HEADINGS[k] for k, r in ADJUST_REASONS.items()},
         # ⑤ 시술 → 요건 사유 문구(조건부 요건 포함, §4.3) — 2단계 요건 점검 대상
         "requirement_notes": {p: sorted(n) for p, n in sorted(requirement_notes.items())},
+        # ⑧-1 원인 → 묶음(rule·ambiguous) — 규칙 기준선·채점(§2.7, 평가 설계 §5)
+        "recon_causes": RECON_CAUSE_GROUPS,
+        # ⑧-1 카드사 수수료율·정산 지연 은행 영업일(§2.7) — 생성 비중(weight)은 병원이 모르므로 뺀다
+        "card_issuers": {
+            k: {"fee_rate": v["fee_rate"], "settle_days": v["settle_days"]}
+            for k, v in CARD_ISSUERS.items()
+        },
+        # ⑧-1 현금 입금 요일(월=0)·통장 적요(§2.7)
+        "cash_deposit": {"weekdays": list(CASH_DEPOSIT_WEEKDAYS), "memo": CASH_DEPOSIT_MEMO},
+        # ⑧-1 공단 급여비 입금 적요 — 대조 대상 밖(§2.7)
+        "nhis_memo": NHIS_MEMO,
+        # ⑧-1 구강용품 가격표 — 진료 외 매출 규칙(§2.7)
+        "oral_care_prices": ORAL_CARE_PRICES,
+        # ⑧-1 은행 공휴일 — 정산 예상일·현금 입금일·대조 경계(§2.7)
+        "bank_holidays": sorted(d.isoformat() for d in holidays),
     }
     return [(name, json.dumps(v, ensure_ascii=False)) for name, v in values.items()]
 
 
 def stage_master_values(run, rng, fake) -> None:
-    run.conn.executemany("INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows())
+    run.conn.executemany(
+        "INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows(run.holidays)
+    )

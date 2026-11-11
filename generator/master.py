@@ -1035,6 +1035,19 @@ RECON_MISMATCH_COUNTS = {
     "date_shift": 8,
     "method_wrong": 6,
 }
+# ⑧-1 원인 묶음(평가 설계 §5 ⑧-1) — rule: 금액·날짜·승인번호 규칙으로 되는 원인, ambiguous: 애매한 원인.
+# 키 = truth_recon_mismatches.cause, 화면 이름은 frontend/lib/finance-api.ts
+RECON_CAUSE_GROUPS = {
+    "split_payment": "rule",
+    "cancel_reapprove": "rule",
+    "fee_mismatch": "rule",
+    "deposit_delay": "rule",
+    "non_clinical_sale": "ambiguous",
+    "entry_missing": "ambiguous",
+    "amount_typo": "ambiguous",
+    "date_shift": "ambiguous",
+    "method_wrong": "ambiguous",
+}
 # 데스크 구강용품 가격표 — 진료 외 매출(non_clinical_sale)은 이 금액(여러 개면 합)의 장부 없는 카드 승인.
 # 직원 매뉴얼 '구강용품 판매 안내'(doc_catalog)가 같은 값을 쓴다. 가상 값
 ORAL_CARE_PRICES = {

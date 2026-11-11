@@ -1,6 +1,7 @@
 """backend가 읽는 master 값 테이블 ax_master_values(④ 준비표 설계 "기준표 적재") — 생성 값과 verify 검사."""
 
 import json
+from datetime import date
 
 from generator.clinic import master_values_rows
 from generator.doc_catalog import CLAIM_HEADINGS
@@ -8,8 +9,15 @@ from generator.master import (
     ADJUST_REASONS,
     ALERT_TYPES,
     APPEAL_DAYS,
+    CARD_ISSUERS,
+    CASH_DEPOSIT_MEMO,
+    CASH_DEPOSIT_WEEKDAYS,
     CHART_REQUIREMENT,
+    NHIS_MEMO,
+    ORAL_CARE_PRICES,
     PROCEDURE_DIAGNOSES,
+    RECON_CAUSE_GROUPS,
+    RECON_MISMATCH_COUNTS,
     RETREATMENT_REQUIREMENT,
     SCALING_CODE,
     SCALING_MIN_AGE,
@@ -37,6 +45,32 @@ def test_master_values_rows_match_master():
     assert got["adjust_note_headings"] == {
         r["note"]: CLAIM_HEADINGS[k] for k, r in ADJUST_REASONS.items()
     }
+    # ⑧-1 재무 대조(설계 2026-11-11 재무 대조 §1)
+    assert got["recon_causes"] == RECON_CAUSE_GROUPS
+    assert set(RECON_CAUSE_GROUPS) == set(RECON_MISMATCH_COUNTS)
+    assert set(RECON_CAUSE_GROUPS.values()) == {"rule", "ambiguous"}
+    assert got["card_issuers"] == {
+        k: {"fee_rate": v["fee_rate"], "settle_days": v["settle_days"]}
+        for k, v in CARD_ISSUERS.items()
+    }
+    assert got["cash_deposit"] == {
+        "weekdays": list(CASH_DEPOSIT_WEEKDAYS),
+        "memo": CASH_DEPOSIT_MEMO,
+    }
+    assert got["nhis_memo"] == NHIS_MEMO
+    assert got["oral_care_prices"] == ORAL_CARE_PRICES
+
+
+def test_bank_holidays_from_argument():
+    got = json.loads(dict(master_values_rows(frozenset({date(2026, 10, 3)})))["bank_holidays"])
+    assert got == ["2026-10-03"]
+    assert json.loads(dict(master_values_rows())["bank_holidays"]) == []
+
+
+def test_no_generation_meta():
+    got = {name: json.loads(value) for name, value in master_values_rows()}
+    assert not any("link_failure" in n or "mismatch_counts" in n for n in got)
+    assert all("weight" not in v for v in got["card_issuers"].values())
 
 
 def test_requirement_notes_cover_chart_requirement():
@@ -59,4 +93,4 @@ def test_check_master_values_flags_missing_and_wrong(tmp_path):
     conn.execute("UPDATE ax_master_values SET value = '20' WHERE name = 'scaling_min_age'")
     assert [r["name"] for r in check_master_values(conn, CTX)] == ["scaling_min_age"]
     conn.execute("DELETE FROM ax_master_values")
-    assert len(check_master_values(conn, CTX)) == 9
+    assert len(check_master_values(conn, CTX)) == 15
