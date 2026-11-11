@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -80,9 +80,13 @@ prep:
 claim-check:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_check run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
 
-# ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 dev 채점(과금, 일반 호출). test 채점은 사람: python -m evaluation.claim_check score --split test
+# ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출)
 claim-check-sample:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_check sample $(if $(N),--n $(N))
+
+# ⑤-2 버전을 정한 뒤 dev 전부(과금, Batch). test는 사람: python -m evaluation.claim_check run --split test
+claim-check-dev:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_check run --split dev $(if $(NO_BATCH),--no-batch)
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:

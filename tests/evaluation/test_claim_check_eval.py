@@ -56,15 +56,16 @@ class World:
         truth.close()
         conn = self.src.app()
         with conn:
-            for cid, req in self.checks.items():
+            for cid, ai in self.checks.items():
+                req, version = ai if isinstance(ai, tuple) else (ai, "v1")
                 result = (
                     None
                     if req == "fail"
                     else json.dumps({"requirement": req, "evidence": [], "omissions": []})
                 )
                 conn.execute(
-                    "INSERT INTO ax_claim_checks VALUES (?, '{}', 'h', ?, ?, 'v1', 'm', 'now')",
-                    (cid, result, int(result is not None)),
+                    "INSERT INTO ax_claim_checks VALUES (?, '{}', 'h', ?, ?, ?, 'm', 'now')",
+                    (cid, result, int(result is not None), version),
                 )
         conn.execute("ATTACH DATABASE ? AS truth", (str(self.tmp / "truth.sqlite"),))
         return conn
@@ -87,14 +88,20 @@ def test_split_stable_half():
 
 
 def test_sample_fixed_and_dev_only(world):
+    rev = reviewed_for(10)
     for pid in range(1, 41):
         world.claim(pid, error=pid % 2 == 0, status="paid")
+    for pid in range(41, 61):  # 요건 사유로 깎였지만 오류 없는 줄 — 다툴 만함 정답
+        world.claim(pid, error=False, status="adjusted", note=REQ_NOTE, reviewed=rev)
     conn = world.open()
-    got = ev.dev_sample(conn, DAY, n=6)
-    assert got == ev.dev_sample(conn, DAY, n=6) and len(got) == 6
+    got = ev.dev_sample(conn, DAY, n=12)
+    assert got == ev.dev_sample(conn, DAY, n=12) and len(got) == 12
     assert all(ev.claim_split(c) == "dev" for c in got)
     errors = ev.error_claims(conn)
-    assert sum(c in errors for c in got) == 3
+    assert sum(c in errors for c in got) == 6
+    contest = [c for c in got if c > 40 and c not in errors]
+    # 판단이 어려운 음성(요건 사유로 깎였지만 오류 없음)을 적어도 이만큼 고정해 넣는다
+    assert len(contest) >= round(12 / 2 * ev.SAMPLE_CONTEST_SHARE)
 
 
 def test_score_requirement(world, all_dev):
@@ -102,15 +109,29 @@ def test_score_requirement(world, all_dev):
     world.claim(2, error=False, ai="missing", status="paid")  # FP
     world.claim(3, error=True, ai="met", status="pending")  # FN
     world.claim(4, error=False, narrative=False, ai="met", status="pending")  # TN
-    world.claim(5, error=False, status="paid")  # 점검 안 함
-    world.claim(6, error=True, ai="fail", status="paid")  # 후검증 실패
+    world.claim(5, error=False, status="paid")  # 점검 안 함 — 모집단 밖
+    world.claim(6, error=True, ai="fail", status="paid")  # 후검증 실패 — 표시 없음 = 음성(FN)
+    world.claim(7, error=True, ai="na", status="paid")  # 판단 불가 — 음성(FN)
     s = ev.score(world.open(), DAY, "dev")["requirement"]
-    assert (s["n"], s["checked"], s["valid"]) == (6, 5, 4)
-    assert s["ai"] == {"tp": 1, "fp": 1, "fn": 1, "precision": 0.5, "recall": 0.5}
-    assert s["narrative_all"]["recall"] == 1.0  # 기준선 — 같은 4줄에서 서술 줄 전부
-    assert s["narrative_all"]["precision"] == pytest.approx(2 / 3)
-    assert s["by_period"]["confirmed"]["ai"]["tp"] == 1
+    assert (s["n"], s["checked"], s["valid"]) == (7, 6, 5)
+    assert s["answers"] == {"met": 2, "missing": 2, "na": 1, "failed": 1}
+    assert s["ai"] == {"tp": 1, "fp": 1, "fn": 3, "precision": 0.5, "recall": 0.25}
+    assert s["narrative_all"]["recall"] == 1.0  # 기준선 — 같은 6줄에서 서술 줄 전부
+    assert s["narrative_all"]["precision"] == pytest.approx(4 / 5)
+    confirmed = s["by_period"]["confirmed"]
+    assert (confirmed["ai"]["tp"], confirmed["ai"]["fn"]) == (1, 2)
+    assert confirmed["narrative_all"]["recall"] == 1.0
     assert s["by_period"]["filed"]["ai"]["fn"] == 1
+
+
+def test_score_only_current_version_and_ids(world, all_dev):
+    """표본 반복 — 다른 프롬프트 버전 결과(앱 범위 실행 등)와 표본 밖 줄은 섞지 않는다"""
+    a = world.claim(1, error=True, ai="missing", status="paid")
+    world.claim(2, error=True, ai=("met", "v0"), status="paid")  # 옛 버전
+    world.claim(3, error=False, ai="missing", status="paid")  # 표본 밖
+    s = ev.score(world.open(), DAY, "dev", claim_ids=[a, 2])["requirement"]
+    assert s["checked"] == 1
+    assert s["ai"]["tp"] == 1 and s["ai"]["fp"] == 0
 
 
 def test_score_adjust_baselines(world, all_dev):
@@ -119,16 +140,18 @@ def test_score_adjust_baselines(world, all_dev):
         world.claim(pid, error=True, ai="met", status="adjusted", note=REQ_NOTE, reviewed=rev)
     world.claim(4, error=False, ai="met", status="adjusted", note=REQ_NOTE, reviewed=rev)
     world.claim(5, error=False, ai="na", status="adjusted", note=REQ_NOTE, reviewed=rev)
+    world.claim(6, error=False, status="adjusted", note=REQ_NOTE, reviewed=rev)  # 점검 안 함
     s = ev.score(world.open(), DAY, "dev")["adjust"]
-    assert s["n"] == 5
+    assert s["n"] == 5  # 점검한 조정 건만 — 기준선도 같은 5건에서
     assert s["ai"] == {"correct": 1, "answered": 4, "accuracy": 0.2}
     assert s["all_justified"] == pytest.approx(0.6)
     assert s["all_contestable"] == pytest.approx(0.4)
 
 
 def test_test_split_runs_once(tmp_path):
+    assert not ev.test_done(tmp_path, "v1")
     ev.record_test(tmp_path, "v1")
+    assert ev.test_done(tmp_path, "v1") and not ev.test_done(tmp_path, "v2")
     with pytest.raises(ev.AlreadyRun):
-        ev.record_test(tmp_path, "v1")
-    ev.record_test(tmp_path, "v1", force=True)
-    ev.record_test(tmp_path, "v2")
+        ev.check_test(tmp_path, "v1")
+    ev.check_test(tmp_path, "v1", force=True)

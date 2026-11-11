@@ -614,22 +614,28 @@ def _render_claim_check(c: dict) -> list[str]:
         return "—" if v is None else f"{v:.1%}"
 
     q, a = c["requirement"], c["adjust"]
+    ans = q["answers"]
     out = [
         "## ⑤-2 청구 AI 점검",
         "",
-        f"요건 대상 {q['n']}줄 · 점검 {q['checked']} · 후검증 통과 {q['valid']} · 요건 오류 {q['errors']}"
-        f" · 프롬프트 {', '.join(c['prompt_versions']) or '없음'}",
+        f"요건 대상 {q['n']}줄 · 점검({c['prompt_version']}) {q['checked']} · 후검증 통과 {q['valid']}"
+        f" · 요건 오류 {q['errors']}",
+        f"답: 근거 있음 {ans['met']} · 근거 없음 {ans['missing']} · 판단 불가 {ans['na']}"
+        f" · 후검증 실패 {ans['failed']}(판단 불가·실패는 음성)",
         "",
-        "| 요건 오류 | 정밀도 | 재현율 |",
-        "|---|---|---|",
+        "| 요건 오류 | AI 정밀도 | AI 재현율 | 서술 있는 줄 전부 정밀도 | 재현율 |",
+        "|---|---|---|---|---|",
     ]
     for label, part in (
-        ("AI(전체)", q),
-        ("서술 있는 줄 전부(기준선)", {"ai": q["narrative_all"]}),
-        ("AI(확정 월)", q["by_period"]["confirmed"]),
-        ("AI(제출·대기)", q["by_period"]["filed"]),
+        ("전체", q),
+        ("확정 월", q["by_period"]["confirmed"]),
+        ("제출·대기", q["by_period"]["filed"]),
     ):
-        out.append(f"| {label} | {pct(part['ai']['precision'])} | {pct(part['ai']['recall'])} |")
+        ai, base = part["ai"], part["narrative_all"]
+        out.append(
+            f"| {label} | {pct(ai['precision'])} | {pct(ai['recall'])}"
+            f" | {pct(base['precision'])} | {pct(base['recall'])} |"
+        )
     out += [
         "",
         f"조정 건 판단 {a['n']}건 — AI {pct(a['ai']['accuracy'])}(답 {a['ai']['answered']})"
