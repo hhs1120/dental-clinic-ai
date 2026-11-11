@@ -67,7 +67,7 @@ const REQ = {
   days_left: 38,
   chips: ["all", "adjusted"],
   suggestion: null,
-  reason: "차트에 요건 근거가 있으면 다툴 만함, 없으면 정당입니다",
+  reason: "차트에 요건 근거가 있으면 재심 신청, 없으면 삭감 수용입니다",
   fill_item: null,
 };
 const OLD = {
@@ -76,6 +76,7 @@ const OLD = {
   name: "최네오",
   tooth_no: "46",
   procedure_name: "아말감/GI",
+  service_date: "2025-11-20",
   claim_amount: 25000,
   paid_amount: 15000,
   unpaid: 10000,
@@ -87,7 +88,7 @@ const OLD = {
   expired: true,
   chips: ["expired"],
   suggestion: null,
-  reason: "차트에 요건 근거가 있으면 다툴 만함, 없으면 정당입니다",
+  reason: "차트에 요건 근거가 있으면 재심 신청, 없으면 삭감 수용입니다",
   fill_item: null,
   judgment: { value: "contestable", by: "원장", at: "2026-08-01 10:00:00" },
 };
@@ -176,7 +177,7 @@ test("5칸과 기한 표시", async ({ page }) => {
   await fakeClaims(page, () => sheet(ALL));
   await page.goto("/claims");
   await expect(table(page).getByRole("columnheader")).toHaveText([
-    "재심 신청 기한",
+    "재심 신청 기한 ↓",
     "환자 · 시술",
     "못 받은 돈",
     "왜 깎였나",
@@ -187,14 +188,17 @@ test("5칸과 기한 표시", async ({ page }) => {
   await expect(doc).toContainText("30일 이내");
   await expect(doc).toContainText("12,340원 (전액)");
   await expect(doc).toContainText("내역설명 미기재로 인정 근거 없음");
-  await expect(doc).toContainText("보완 후 재청구(제안)");
+  await expect(doc).toContainText("진료일 08/01 · 36번");
+  await expect(doc).toContainText("판단 필요");
+  await expect(doc).toContainText("추천: 보완 후 재청구");
   const req = bodyRows(page).filter({ hasText: "이두리" });
+  await expect(req).toContainText("01/08 · 38일 남음"); // 다음 해 기한도 월/일
   await expect(req).toContainText("60일 이내");
-  await expect(req).toContainText("차트 확인 필요");
+  await expect(req).toContainText("차트 확인 후 결정");
   const dx = bodyRows(page).filter({ hasText: "박세나" });
+  await expect(dx).toContainText("12/21 · 20일 남음");
   await expect(dx).toContainText("재청구 불가");
-  await expect(dx).toContainText("정당(제안)");
-  await expect(bodyRows(page).first()).toContainText("김하나"); // 서버 순서(기한 이른 순) 그대로
+  await expect(dx).toContainText("추천: 삭감 수용");
   for (const code of ["C", "justified", "U0001", "documentation", "denied"])
     await expect(page.getByText(code, { exact: true })).toHaveCount(0);
 });
@@ -210,31 +214,88 @@ test("칩 건수와 합계", async ({ page }) => {
   await page.getByRole("button", { name: "기한 지남 1" }).click();
   await expect(page).toHaveURL(/chip=expired/);
   const old = bodyRows(page).filter({ hasText: "최네오" });
-  await expect(old).toContainText("08/09 · 기한 지남");
-  await expect(old).toContainText("다툴 만함 · 원장 08/01");
+  await expect(old).toContainText("08/09");
+  await expect(old.getByText("기한 지남", { exact: true })).toBeVisible();
+  await expect(old).toContainText("진료일 2025/11/20 · 46번");
+  await expect(old).toContainText("재심 신청 · 원장 08/01");
   await old.click();
   const detail = page.getByRole("region", { name: "최네오 청구 상세" });
   await expect(detail).toBeVisible();
-  for (const name of ["정당", "다툴 만함", "보완 후 재청구"])
+  for (const name of ["삭감 수용", "재심 신청", "보완 후 재청구"])
     await expect(detail.getByRole("button", { name, exact: true })).toHaveCount(
       0,
     );
 });
 
-test("상병 착오는 정당만", async ({ page }) => {
+test("상병 착오는 삭감 수용만", async ({ page }) => {
   await fakeClaims(page, () => sheet(ALL));
   await page.goto("/claims");
   await bodyRows(page).filter({ hasText: "박세나" }).click();
   const detail = page.getByRole("region", { name: "박세나 청구 상세" });
   await expect(
-    detail.getByRole("button", { name: "정당", exact: true }),
+    detail.getByRole("button", { name: "삭감 수용", exact: true }),
   ).toHaveCount(1);
   await expect(
-    detail.getByRole("button", { name: "다툴 만함", exact: true }),
+    detail.getByRole("button", { name: "재심 신청", exact: true }),
   ).toHaveCount(0);
   await expect(
     detail.getByRole("button", { name: "보완 후 재청구", exact: true }),
   ).toHaveCount(0);
+});
+
+const names = (page: Page) =>
+  bodyRows(page).locator("td:nth-child(2) .font-bold");
+
+test("정렬 — 기한 가까운 순 기본, 못 받은 돈 큰 순", async ({ page }) => {
+  await fakeClaims(page, () => sheet(ALL));
+  await page.goto("/claims");
+  await expect(page.getByText("기한 가까운 순", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "재심 신청 기한" }),
+  ).toHaveAttribute("aria-sort", "ascending");
+  await expect(names(page)).toHaveText([/김하나/, /박세나/, /이두리/]);
+  await page.getByRole("button", { name: "못 받은 돈" }).click();
+  await expect(
+    page.getByText("못 받은 돈 큰 순", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "못 받은 돈" }),
+  ).toHaveAttribute("aria-sort", "descending");
+  await expect(names(page)).toHaveText([/박세나/, /이두리/, /김하나/]);
+  await page.getByRole("button", { name: "재심 신청 기한" }).click();
+  await expect(names(page).first()).toHaveText(/김하나/);
+});
+
+test("기한 지남 칩은 최근에 지난 순(서버 순서)", async ({ page }) => {
+  const OLDER = { ...OLD, claim_id: 15, name: "정오래", unpaid: 50000 };
+  await fakeClaims(page, () => sheet([OLD, OLDER]));
+  await page.goto("/claims?chip=expired");
+  await expect(page.getByText("최근에 지난 순", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "재심 신청 기한" }),
+  ).toHaveAttribute("aria-sort", "descending");
+  await expect(names(page)).toHaveText([/최네오/, /정오래/]);
+  await page.getByRole("button", { name: "못 받은 돈" }).click();
+  await expect(names(page)).toHaveText([/정오래/, /최네오/]);
+});
+
+test("기한 지난 상병 착오는 두 딱지 다", async ({ page }) => {
+  await fakeClaims(page, () =>
+    sheet([
+      {
+        ...DX,
+        deadline: "2026-10-02",
+        days_left: -60,
+        expired: true,
+        chips: ["expired"],
+      },
+    ]),
+  );
+  await page.goto("/claims?chip=expired");
+  const dx = bodyRows(page).filter({ hasText: "박세나" });
+  await expect(dx).toContainText("10/02");
+  await expect(dx.getByText("기한 지남", { exact: true })).toBeVisible();
+  await expect(dx).toContainText("재청구 불가");
 });
 
 test("판단을 누르면 기록되고 할 일 칸이 바뀜", async ({ page }) => {
@@ -252,12 +313,12 @@ test("판단을 누르면 기록되고 할 일 칸이 바뀜", async ({ page }) 
   const req = bodyRows(page).filter({ hasText: "이두리" });
   await req.click();
   const detail = page.getByRole("region", { name: "이두리 청구 상세" });
-  await detail.getByRole("button", { name: "다툴 만함", exact: true }).click();
-  await expect(req).toContainText("다툴 만함 · 데스크 11/09");
+  await detail.getByRole("button", { name: "재심 신청", exact: true }).click();
+  await expect(req).toContainText("재심 신청 · 데스크 11/09");
   expect(posted).toEqual({ judgment: "contestable", part: "데스크" });
 });
 
-test("보완 후 재청구 제안은 채울 항목", async ({ page }) => {
+test("보완 후 재청구 추천은 채울 항목", async ({ page }) => {
   await fakeClaims(page, () => sheet(ALL));
   await page.goto("/claims");
   await bodyRows(page).filter({ hasText: "김하나" }).click();

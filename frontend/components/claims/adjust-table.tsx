@@ -18,12 +18,28 @@ import {
   JUDGMENTS,
   monthDay,
   postJudgment,
+  shortDate,
   toothText,
 } from "@/lib/claims-api";
 import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
 
-/** 삭감 대응 — 조정·불능 청구 5칸 목록(설계 §1). 칩은 서버가 행마다 붙인 chips로 거르고, 순서는 서버 그대로(기한 순) */
+type Sort = "deadline" | "amount";
+/** 지금 정렬 문구 — 기한 지난 건은 기한 지남 칩에만 있고 서버가 최근에 지난 순으로 준다 */
+const sortText = (sort: Sort, chip: Chip) =>
+  sort === "amount"
+    ? "못 받은 돈 큰 순"
+    : chip === "expired"
+      ? "최근에 지난 순"
+      : "기한 가까운 순";
+
+/** 기한순은 서버 순서 그대로, 금액순은 못 받은 돈 큰 순 */
+const sortRows = (rows: AdjustRow[], sort: Sort) =>
+  sort === "deadline"
+    ? rows
+    : [...rows].sort((a, b) => b.unpaid - a.unpaid || a.claim_id - b.claim_id);
+
+/** 삭감 대응 — 조정·불능 청구 5칸 목록(설계 §1). 칩은 서버가 행마다 붙인 chips로 거르고, 정렬은 기한순(서버 순서)·금액순 */
 export function AdjustTable({
   chip: chipParam,
   onChip,
@@ -38,6 +54,7 @@ export function AdjustTable({
   const [sheet, setSheet] = useState<AdjustSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [sort, setSort] = useState<Sort>("deadline");
   useEffect(() => {
     const ac = new AbortController();
     fetchClaims(ac.signal).then(
@@ -59,7 +76,31 @@ export function AdjustTable({
       </p>
     );
 
-  const rows = sheet.rows.filter((r) => r.chips.includes(chip));
+  const rows = sortRows(
+    sheet.rows.filter((r) => r.chips.includes(chip)),
+    sort,
+  );
+  const sortHead = (s: Sort, label: string, className = "") => (
+    <th
+      className={`px-3 py-2 ${className}`}
+      aria-sort={
+        sort !== s
+          ? undefined
+          : s === "deadline" && chip !== "expired"
+            ? "ascending"
+            : "descending"
+      }
+    >
+      <button
+        type="button"
+        className={sort === s ? "font-bold text-foreground" : "hover:underline"}
+        onClick={() => setSort(s)}
+      >
+        {label}
+      </button>
+      {sort === s && <span aria-hidden> ↓</span>}
+    </th>
+  );
   return (
     <div className="flex flex-col gap-3">
       {error && <ErrorBand text={error} />}
@@ -81,6 +122,9 @@ export function AdjustTable({
           ))}
         </div>
         <span className="flex-1" />
+        <span className="text-sm text-muted-foreground">
+          {sortText(sort, chip)}
+        </span>
         <span className="text-sm font-bold tabular-nums">
           못 받은 돈 합계 {won(sheet.chips[chip].amount)}
         </span>
@@ -89,9 +133,9 @@ export function AdjustTable({
         <table className="w-full text-sm">
           <thead className="bg-muted text-left text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">재심 신청 기한</th>
+              {sortHead("deadline", "재심 신청 기한")}
               <th className="px-3 py-2">환자 · 시술</th>
-              <th className="px-3 py-2 text-right">못 받은 돈</th>
+              {sortHead("amount", "못 받은 돈", "text-right")}
               <th className="px-3 py-2">왜 깎였나</th>
               <th className="px-3 py-2">할 일</th>
             </tr>
@@ -121,8 +165,11 @@ export function AdjustTable({
                     <div className="font-bold">
                       {r.name} · {r.procedure_name}
                     </div>
-                    <div className="text-xs text-muted-foreground tabular-nums">
-                      {[r.service_date, toothText(r.tooth_no)]
+                    <div className="text-sm tabular-nums">
+                      {[
+                        `진료일 ${shortDate(r.service_date, sheet.date)}`,
+                        toothText(r.tooth_no),
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                     </div>
@@ -165,17 +212,24 @@ export function AdjustTable({
   );
 }
 
-/** 기한 칸 — 기한 지남, 상병 착오는 날짜 대신 재청구 불가, 그 밖은 남은 날과 위험·주의 꼬리표(경계는 서버 값) */
+/** 기한 칸 — 날짜와 남은 날(지났으면 기한 지남 딱지), 상병 착오는 재청구 불가 딱지, 그 밖은 위험·주의 꼬리표(경계는 서버 값) */
 function Deadline({ row: r, sheet }: { row: AdjustRow; sheet: AdjustSheet }) {
-  const day = monthDay(r.deadline);
-  if (r.expired) return <>{day} · 기한 지남</>;
-  if (r.type === "diagnosis") return <Badge variant="muted">재청구 불가</Badge>;
+  const day = shortDate(r.deadline, sheet.date);
   return (
     <div className="flex flex-col items-start gap-1">
-      <span>
-        {day} · {r.days_left === 0 ? "오늘까지" : `${r.days_left}일 남음`}
-      </span>
-      {r.days_left <= sheet.soon_days ? (
+      {r.expired ? (
+        <span className="flex items-center gap-1">
+          {day}
+          <Badge variant="muted">기한 지남</Badge>
+        </span>
+      ) : (
+        <span>
+          {day} · {r.days_left === 0 ? "오늘까지" : `${r.days_left}일 남음`}
+        </span>
+      )}
+      {r.type === "diagnosis" ? (
+        <Badge variant="muted">재청구 불가</Badge>
+      ) : r.expired ? null : r.days_left <= sheet.soon_days ? (
         <Badge variant="danger">{sheet.soon_days}일 이내</Badge>
       ) : r.days_left <= sheet.watch_days ? (
         <Badge variant="warn">{sheet.watch_days}일 이내</Badge>
@@ -187,20 +241,22 @@ function Deadline({ row: r, sheet }: { row: AdjustRow; sheet: AdjustSheet }) {
 const judgedText = (j: NonNullable<AdjustRow["judgment"]>) =>
   `${JUDGMENT_LABEL[j.value]} · ${j.by} ${monthDay(j.at)}`;
 
-/** 할 일 칸 — 사람이 정한 판단, 없으면 규칙 제안(요건 사유는 차트 확인 필요), 기한 지난 건은 남긴 판단만 */
+/** 할 일 칸 — 사람이 정한 판단, 없으면 판단 필요와 규칙 추천(요건 사유는 차트 확인 후 결정), 기한 지난 건은 남긴 판단만 */
 function Todo({ row: r }: { row: AdjustRow }) {
   if (r.judgment) return <Badge variant="ok">{judgedText(r.judgment)}</Badge>;
   if (r.expired) return <span className="text-muted-foreground">—</span>;
-  if (r.suggestion)
-    return (
-      <span className="text-muted-foreground">
-        {JUDGMENT_LABEL[r.suggestion]}(제안)
-      </span>
-    );
-  return <span className="text-muted-foreground">차트 확인 필요</span>;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Badge variant="warn">판단 필요</Badge>
+      <span className="text-muted-foreground">{suggestText(r)}</span>
+    </div>
+  );
 }
 
-/** 펼친 곳 — ① 왜 깎였나 ② 어떻게 할까(제안·이유·판단 버튼). 상병 착오는 정당만, 기한 지난 건은 버튼 없이 */
+const suggestText = (r: AdjustRow) =>
+  r.suggestion ? `추천: ${JUDGMENT_LABEL[r.suggestion]}` : "차트 확인 후 결정";
+
+/** 펼친 곳 — ① 왜 깎였나 ② 어떻게 할까(추천·이유·판단 버튼). 상병 착오는 삭감 수용만, 기한 지난 건은 버튼 없이 */
 function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -239,9 +295,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
       <div className="flex flex-col gap-1.5">
         <h3 className="font-bold">어떻게 할까</h3>
         <p>
-          {r.suggestion
-            ? `제안: ${JUDGMENT_LABEL[r.suggestion]}`
-            : "차트 확인 필요"}
+          {suggestText(r)}
           <span className="text-muted-foreground"> — {r.reason}</span>
         </p>
         {r.fill_item && <p>채울 항목: {r.fill_item}</p>}

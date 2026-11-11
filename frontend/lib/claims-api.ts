@@ -30,8 +30,8 @@ export type Judgment = "justified" | "contestable" | "resubmit";
 
 /** 판단 이름 — backend/claims.py JUDGMENTS */
 export const JUDGMENT_LABEL: Record<Judgment, string> = {
-  justified: "정당",
-  contestable: "다툴 만함",
+  justified: "삭감 수용",
+  contestable: "재심 신청",
   resubmit: "보완 후 재청구",
 };
 export const JUDGMENTS = Object.keys(JUDGMENT_LABEL) as Judgment[];
@@ -106,6 +106,12 @@ export const postJudgment = (
 
 /** 2026-12-08(또는 시각) → 12/08 */
 export const monthDay = (d: string) => `${d.slice(5, 7)}/${d.slice(8, 10)}`;
+
+/** 기준일과 같은 해 이후면 12/08, 지난 해면 2025/12/08 — 기한 지난 건·진료일은 해가 넘어간다 */
+export const shortDate = (d: string, today: string) =>
+  d.slice(0, 4) < today.slice(0, 4)
+    ? `${d.slice(0, 4)}/${monthDay(d)}`
+    : monthDay(d);
 
 /** 치아 단위가 아닌 시술('00')은 치아를 쓰지 않는다 */
 export const toothText = (t: string) => (t === "00" ? "" : `${t}번`);
