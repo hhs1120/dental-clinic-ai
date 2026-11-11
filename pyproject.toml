@@ -29,6 +29,7 @@ dev = [
     "pytest",
     "pytest-xdist>=3.8.0",
     "ruff==0.16.10",
+    "scikit-learn>=1.9.1",
 ]
 finetune = [
     "mlx-lm>=0.32.2",
