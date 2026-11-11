@@ -233,6 +233,9 @@ def _settlement(books, ok_day) -> list[list[dict]]:
                 dep["amount"],
                 d,
                 expected_on=expected,
+                deposited_on=dep["deposited_on"],
+                fee=dep["fee"],
+                sales_total=dep["sales_total"],
                 computed_total=total,
                 computed_fee=int(total * cfg["fee_rate"]),
             )
@@ -346,7 +349,7 @@ def _group(books, nodes: list[dict]) -> list[list[dict]]:
             ):
                 g.union(i, j)
                 break
-    # 같은 날 — 승인번호 같음, 같은 금액(카드끼리 또는 결제수단이 다름), 둘의 합, 10배
+    # 같은 날 — 승인번호 같음, 같은 금액(카드끼리 또는 결제수단이 다름), 둘의 합, 10배(같은 결제수단)
     for j in led:
         lj = nodes[j]
         same_day = [i for i in fin if nodes[i]["date"] == lj["date"]]
@@ -358,7 +361,9 @@ def _group(books, nodes: list[dict]) -> list[list[dict]]:
                 fi["channel"] != lj["channel"] or lj["channel"] == "card"
             ):
                 g.union(i, j)
-            elif lj["amount"] * 10 == fi["amount"] or fi["amount"] * 10 == lj["amount"]:
+            elif fi["channel"] == lj["channel"] and (
+                lj["amount"] * 10 == fi["amount"] or fi["amount"] * 10 == lj["amount"]
+            ):
                 g.union(i, j)
         for a in same_day:
             for c in same_day:
