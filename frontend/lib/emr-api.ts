@@ -3,7 +3,7 @@ import { getJson } from "@/lib/api";
 
 export type ApptType = "treatment" | "hygiene" | "consult";
 export type ApptStatus = "scheduled" | "completed" | "cancelled" | "noshow";
-/** 전날 리마인드에 대한 응답 — 답함 / 답 없음 / 리마인드 자체가 없음(전날 잡은 응급 등) */
+/** 직전 진료일 리마인드에 대한 응답 — 답함 / 답 없음 / 리마인드가 없음(발송 시각이 지난 뒤 잡힌 예약) */
 export type Confirm = "replied" | "no_reply" | "no_message";
 
 export interface Appt {

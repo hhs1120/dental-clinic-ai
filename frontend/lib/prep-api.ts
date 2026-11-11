@@ -39,6 +39,8 @@ export interface PrepRow {
   staff: string;
   status: "scheduled" | "completed" | "noshow";
   confirmed: boolean;
+  /** 예약 확인 상태 — 지난 날은 null(backend/prep.py _confirm) */
+  confirm: "replied" | "no_reply" | "no_message" | "not_sent" | null;
   patient: {
     name: string;
     chart_no: string;
