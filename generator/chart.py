@@ -202,7 +202,9 @@ NEGATION = {
     "R05": "매복 없음",
     "R06": "무치악 기간 확인 안 됨",
 }
-PERIO_QUALITATIVE = "치주낭 깊음"  # R03 숫자 없이 깊이만
+PERIO_PD = (
+    "PD {}mm"  # R03 깊이 약어 표기(qualitative) — 사람·AI는 읽고, 키워드 규칙의 "치주낭 Nmm" 꼴 밖
+)
 
 
 def _pick(rng, seq):
@@ -633,7 +635,7 @@ def _style(rng, f: dict) -> None:
 
 
 def style_note(f: dict, note: str) -> str:
-    """초안에 표현 방식을 입힌다 — 바꿔 말하기는 근거 낱말을 바꾸고, 부정은 문장을 더하고, R03 숫자 없는 깊이는 mm를 지운다"""
+    """초안에 표현 방식을 입힌다 — 바꿔 말하기는 근거 낱말을 바꾸고, 부정은 문장을 더하고, R03 약어 표기는 "치주낭 Nmm"을 PERIO_PD로"""
     req = f.get("requirement") or {}
     style = req.get("style")
     if style == "paraphrase":
@@ -642,7 +644,8 @@ def style_note(f: dict, note: str) -> str:
     elif style == "negated":
         note += f" {NEGATION[req['key']]}."
     elif style == "qualitative" and f["findings"]:
-        note = note.replace(f"치주낭 {f['findings']['pocket_mm']}mm", PERIO_QUALITATIVE)
+        mm = f["findings"]["pocket_mm"]
+        note = note.replace(f"치주낭 {mm}mm", PERIO_PD.format(mm))
     return note
 
 
@@ -877,13 +880,14 @@ def _plain_requirement_words(req: dict) -> list[str]:
 
 def evidence_forbidden(f: dict) -> list[str]:
     """쓰면 안 되는 근거 말 — 근거 없는 줄(부정 표현은 그 낱말을 부정으로 쓰므로 빼고)과 바꿔 말하기 줄은 근거 낱말,
-    R03 숫자 없는 깊이는 그 mm"""
+    R03 약어 표기는 "치주낭 Nmm" 꼴"""
     req = f["requirement"]
     if not req:
         return []
     style = req.get("style")
     if style == "qualitative" and f["findings"]:
-        return [f"{f['findings']['pocket_mm']}mm"]
+        mm = f["findings"]["pocket_mm"]
+        return [f"치주낭 {mm}mm", f"치주낭{mm}mm"]
     if (not req["evidence"] and style != "negated") or style == "paraphrase":
         return list(EVIDENCE_WORDS.get(req["key"], ()))
     return []
@@ -900,7 +904,8 @@ def narrative_must_include(f: dict) -> list[list[str]]:
         out += [[f"{f['extra']['tooth']}번"], [f["extra"]["procedure"]]]
     if f["findings"]:
         qualitative = (f["requirement"] or {}).get("style") == "qualitative"
-        out.append([PERIO_QUALITATIVE] if qualitative else [f"{f['findings']['pocket_mm']}mm"])
+        mm = f["findings"]["pocket_mm"]
+        out.append([PERIO_PD.format(mm)] if qualitative else [f"{mm}mm"])
     out += [[a["label"]] for a in f["alerts"]] + [[label] for label in f["discovered"]]
     if f["discovered"]:
         out.append(list(DISCOVERED_WORDS))

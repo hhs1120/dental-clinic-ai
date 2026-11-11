@@ -829,6 +829,40 @@
   "answer_sql": null
  },
  {
+  "id": "case-15",
+  "type": "case",
+  "split": "dev",
+  "question": "정지현 님(C-00606) 이 뽑으려고 날짜 잡으셨던 거 언제로 됐고 주의할 거 있었어?",
+  "answer_text": "2025년 7월 21일 통화 — 8월 1일 오전 11시 단순발치로 정함. 고혈압 약 복용 중이라 원장께 미리 전달",
+  "answer_doc_ids": [
+   "call:c-0512"
+  ],
+  "answer_chunk_hint": "고혈압 약을",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
+  "id": "case-16",
+  "type": "case",
+  "split": "test",
+  "question": "윤영수 님(C-01444) 임플란트 진료 잡아 달라고 했던 거 확정됐어? 알레르기 얘기도 하셨던데",
+  "answer_text": "2025년 9월 9일 통화 — 9월 20일 오전 10시 30분 후보, 원장 일정 확인 뒤 다시 연락하기로(미확정). 라텍스 알레르기 기록 확인하고 원장께 전달",
+  "answer_doc_ids": [
+   "call:c-0507"
+  ],
+  "answer_chunk_hint": "라텍스 알레르기",
+  "expected_tools": [
+   "search_docs"
+  ],
+  "expected_args": {},
+  "expect_refusal": false,
+  "answer_sql": null
+ },
+ {
   "id": "data-01",
   "type": "data",
   "split": "dev",

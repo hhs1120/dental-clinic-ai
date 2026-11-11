@@ -546,7 +546,9 @@ PERIO_POCKET_MIN_MM = 4
 # ⑤-2 요건 근거 표현 방식(데이터 재설계 설계 §3) — 키워드 규칙(evaluation/claim_check.py)은 속지만 서술을 읽으면 풀린다. 추정값
 EVIDENCE_PARAPHRASE_SHARE = 0.055  # 근거 있는 줄 중 근거 낱말 대신 바꿔 말하기
 EVIDENCE_NEGATED_SHARE = 0.3  # 근거 없는 줄 중 근거 낱말의 부정·예정("파절 소견 없음")
-PERIO_QUALITATIVE_SHARE = 0.05  # R03 근거 있는 줄 중 치주낭 깊이를 숫자 없이("깊음")
+PERIO_QUALITATIVE_SHARE = (
+    0.05  # R03 근거 있는 줄 중 치주낭 깊이를 약어 표기로("PD 5mm" — chart.PERIO_PD)
+)
 PERIO_NEAR_MISS_SHARE = 0.33  # R03 근거 없는 줄 중 깊이는 기준 이상인데 출혈이 없는 부분 소견
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
@@ -1064,8 +1066,8 @@ RECON_CAUSE_GROUPS = {
 UNRECORDED_SETTLEMENT_COUNT = 30
 UNRECORDED_ORAL_SHARE = 0.7
 # ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
-# 조합해야 풀린다. 추정값
-NON_CLINICAL_MULTI_COUNT = 30
+# 조합해야 풀린다. 1~2개 판매(RECON_MISMATCH_COUNTS)와 비슷한 수 — 더 늘리면 세 개 판매가 더 흔한 부자연스러운 데이터. 추정값
+NON_CLINICAL_MULTI_COUNT = 12
 NON_CLINICAL_MAX_ITEMS = 3
 # 화면 기본 달(평가 달 마지막 달)에 새 모양마다 최소 이만큼(데이터 재설계 설계 §4b)
 RECON_LATEST_MONTH_MIN = 2

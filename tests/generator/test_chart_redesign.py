@@ -1,5 +1,5 @@
 """데이터 재설계 ⑤-2 차트 서술(설계 docs/superpowers/specs/2026-11-11-data-redesign-design.md §3) — 근거 표현 방식
-(그대로·바꿔 말하기·부정·R03 숫자 없는 깊이·R03 부분 소견)과 R03 복합 기준. 청구 오류 정답은 그대로."""
+(그대로·바꿔 말하기·부정·R03 깊이 약어 표기·R03 부분 소견)과 R03 복합 기준. 청구 오류 정답은 그대로."""
 
 import hashlib
 import json
@@ -128,3 +128,26 @@ def test_style_not_in_llm_payload():
 def test_perio_threshold_single_source():
     text = str(doc_catalog._CLAIM_RULE["R03"])
     assert f"{PERIO_POCKET_MIN_MM}mm" in text and "출혈" in text
+
+
+def test_pd_notation_is_readable_but_fools_keyword():
+    """R03 약어 표기(qualitative) — 'PD Nmm'을 꼭 넣고 '치주낭 Nmm'은 금지. 키워드 규칙은 못 찾아 오류로 본다(정답은 근거 있음)"""
+    from evaluation.claim_check import keyword_rule
+
+    req = {"key": "R03", "evidence": True, "style": "qualitative"}
+    f = {
+        "tooth": None,
+        "procedure": "잇몸치료",
+        "findings": {"pocket_mm": 5, "bleeding": True, "calculus": "중간", "mobility": 0},
+        "alerts": [],
+        "discovered": [],
+        "requirement": req,
+        "plan": None,
+    }
+    checks = chart.narrative_checks(f, "환자")
+    assert ["PD 5mm"] in checks["must_include"]
+    assert {"치주낭 5mm", "치주낭5mm"} <= set(checks["forbidden_words"])
+    assert "PD 5mm" not in checks["forbidden_words"]
+    assert (
+        keyword_rule("PD 5mm, 출혈 있음. 잇몸치료 시행함.", ["R03"], PERIO_POCKET_MIN_MM) is True
+    )
