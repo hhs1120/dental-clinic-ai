@@ -76,6 +76,22 @@ def test_commit_blocked_when_lint_fails(monkeypatch):
     assert guard.check_bash("git commit -m x", ROOT) is None
 
 
+def test_commit_lints_the_worktree_it_runs_in(monkeypatch, tmp_path):
+    """worktree에서 커밋하면 그 worktree를 lint한다 — 원래 폴더(다른 세션의 작업 중 파일)가 아니라"""
+    import subprocess
+
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "init", "-q", str(wt)], check=True)
+    (wt / "sub").mkdir()
+    seen = []
+    monkeypatch.setattr(guard, "lint_failure", lambda root: seen.append(root))
+    guard.check_bash("git commit -m x", wt / "sub")
+    assert seen == [wt.resolve()]
+    seen.clear()
+    guard.check_bash("git commit -m x", tmp_path)  # 저장소 밖이면 훅이 놓인 저장소
+    assert seen == [ROOT]
+
+
 @pytest.mark.parametrize(
     "path",
     [

@@ -179,6 +179,15 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "청구 점검에서 허용 상병 밖 줄 보기",
   );
   count(
+    p.preclaim_ai,
+    "preclaim-ai",
+    "청구 전 AI",
+    "warn",
+    "/claims?tab=pre&chip=ai",
+    `청구 전 차트에 요건 근거 못 찾음 ${p.preclaim_ai}건(AI)`,
+    "청구 점검에서 AI 근거 문장 보기",
+  );
+  count(
     p.recon_open,
     "recon",
     "일계표",

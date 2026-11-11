@@ -264,7 +264,7 @@ def test_pre_claim_warning(src):
     ok = add_claim(src, 1, day="2026-11-10", status="pending", dx="D06")
     bad = add_claim(src, 2, day="2026-11-12", status="pending", dx="D07")
     out = claims.pre_claim(src.app(), DAY)
-    assert out["counts"] == {"lines": 2, "warning": 1}
+    assert out["counts"] == {"lines": 2, "warning": 1, "ai": 0, "ai_missing": 0, "ai_checked": 0}
     assert [r["claim_id"] for r in out["rows"]] == [bad, ok]
     first = out["rows"][0]
     assert first["dx_code"] == "D07"
@@ -332,3 +332,93 @@ def test_query_count_independent_of_claims(tmp_path):
         counts.append((_count(conn, claims.adjusted), _count(conn, claims.pre_claim)))
         conn.close()
     assert counts[0] == counts[1]
+
+
+# ── ⑤-2 AI 점검 결과 (설계 §2 "앱 화면") ─────────────────────────────
+
+EXTRACT = "U0012"  # 사랑니 발치 — 요건 사유 R05
+CHART_Q = {"source": "chart", "quote": "골삭제 후 분할 발치함"}
+STD_Q = {"source": "standard", "quote": "매복 정도와 골삭제 여부를 적는다"}
+
+
+def save_check(conn, cid: int, requirement: str | None, evidence=(), omissions=()) -> None:
+    """ax_claim_checks 한 줄 — requirement None이면 후검증 실패(result NULL)"""
+    import json
+
+    result = (
+        None
+        if requirement is None
+        else json.dumps(
+            {"requirement": requirement, "evidence": list(evidence), "omissions": list(omissions)}
+        )
+    )
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_claim_checks VALUES (?, '{}', 'h', ?, ?, 'v1', 'm', ?)",
+            (cid, result, int(result is not None), "2026-11-11T09:30:00"),
+        )
+
+
+def test_pre_claim_ai_counts(src):
+    miss = add_claim(src, 1, code=EXTRACT, status="pending", day="2026-11-12")
+    met = add_claim(src, 2, code=EXTRACT, status="pending", day="2026-11-12")
+    add_claim(src, 3, code=EXTRACT, status="pending", day="2026-11-12")
+    conn = src.app()
+    save_check(conn, miss, "missing", [STD_Q])
+    save_check(conn, met, "met", [CHART_Q])
+    out = claims.pre_claim(conn, DAY)
+    assert (out["counts"]["ai"], out["counts"]["ai_missing"], out["counts"]["ai_checked"]) == (
+        1,
+        1,
+        2,
+    )
+    assert out["ai_at"] == "2026-11-11T09:30:00"
+    got = {r["claim_id"]: r["ai"] for r in out["rows"]}
+    assert got[miss]["requirement"] == "missing" and got[miss]["evidence"] == [STD_Q]
+    assert got[met]["requirement"] == "met"
+    assert len([v for v in got.values() if v is None]) == 1
+
+
+def test_pre_claim_ai_omission_counts(src):
+    cid = add_claim(src, 1, code=EXTRACT, status="pending", day="2026-11-12")
+    conn = src.app()
+    save_check(conn, cid, "met", [CHART_Q], [{"procedure": "봉합", "quote": "분할 발치함"}])
+    assert claims.pre_claim(conn, DAY)["counts"]["ai"] == 1
+
+
+def test_pre_claim_without_checks(src):
+    add_claim(src, 1, code=EXTRACT, status="pending", day="2026-11-12")
+    out = claims.pre_claim(src.app(), DAY)
+    assert (out["counts"]["ai"], out["counts"]["ai_checked"], out["ai_at"]) == (0, 0, None)
+    assert all(r["ai"] is None for r in out["rows"])
+    assert out["ai_pending"] == {"pre": 0, "adjust": 0}  # 차트 서술이 빈 줄은 부를 것이 아님
+
+
+def test_adjusted_requirement_ai_suggestion(src):
+    note = ADJUST_REASONS["R05"]["note"]
+    met = add_claim(src, 1, code=EXTRACT, note=note, reviewed=reviewed_for(10))
+    miss = add_claim(src, 2, code=EXTRACT, note=note, reviewed=reviewed_for(10))
+    doc = add_claim(src, 3, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    conn = src.app()
+    save_check(conn, met, "met", [CHART_Q])
+    save_check(conn, miss, "missing", [STD_Q])
+    got = rows(conn)
+    assert (got[met]["suggestion"], got[met]["suggest_by"]) == ("contestable", "ai")
+    assert got[met]["ai_evidence"] == [CHART_Q]
+    assert (got[miss]["suggestion"], got[miss]["suggest_by"]) == ("justified", "ai")
+    assert (got[doc]["suggestion"], got[doc]["suggest_by"]) == ("resubmit", "rule")
+    assert got[doc]["ai_evidence"] is None
+
+
+def test_adjusted_invalid_or_na_check_keeps_none(src):
+    note = ADJUST_REASONS["R05"]["note"]
+    bad = add_claim(src, 1, code=EXTRACT, note=note, reviewed=reviewed_for(10))
+    na = add_claim(src, 2, code=EXTRACT, note=note, reviewed=reviewed_for(10))
+    none = add_claim(src, 3, code=EXTRACT, note=note, reviewed=reviewed_for(10))
+    conn = src.app()
+    save_check(conn, bad, None)
+    save_check(conn, na, "na")
+    got = rows(conn)
+    for cid in (bad, na, none):
+        assert (got[cid]["suggestion"], got[cid]["suggest_by"]) == (None, None)
+        assert got[cid]["ai_evidence"] is None

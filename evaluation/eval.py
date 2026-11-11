@@ -30,6 +30,7 @@ from evaluation import (
     EvalRefused,
     autoclose,
     call_actions,
+    claim_check,
     classification,
     followup,
     gold_audit,
@@ -223,6 +224,7 @@ def run(
         "autoclose": None,
         "followup": None,
         "prep": None,
+        "claim_check": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -329,6 +331,12 @@ def run(
         result["prep"] = {"days": [days[0].isoformat(), days[-1].isoformat()]} | prep.score(
             conn, days
         )
+    has_checks = conn.execute(
+        "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_claim_checks'"
+    ).fetchone()
+    if dev and has_checks and conn.execute("SELECT 1 FROM ax_claim_checks LIMIT 1").fetchone():
+        # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check run --split test(사람)
+        result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선(평가 설계 §5) — 과금 없음. test 묶음은 3단계에서 에이전트와 짝 비교로
         result["recon"] = recon.score(conn, split, load_clinic().today)
@@ -430,6 +438,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_followup(r["followup"])
     if r.get("prep") is not None:
         out += _render_prep(r["prep"])
+    if r.get("claim_check") is not None:
+        out += _render_claim_check(r["claim_check"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
     if r["rag"] is not None or app_missing:
@@ -603,6 +613,42 @@ def _render_prep(p: dict) -> list[str]:
         f"| 과잉 제안률(칩이 다 꺼진 행의 suggest) | {_kn(p['over_suggest'])} |",
         "",
     ]
+
+
+def _render_claim_check(c: dict) -> list[str]:
+    def pct(v):
+        return "—" if v is None else f"{v:.1%}"
+
+    q, a = c["requirement"], c["adjust"]
+    ans = q["answers"]
+    out = [
+        "## ⑤-2 청구 AI 점검",
+        "",
+        f"요건 대상 {q['n']}줄 · 점검({c['prompt_version']}) {q['checked']} · 후검증 통과 {q['valid']}"
+        f" · 요건 오류 {q['errors']}",
+        f"답: 근거 있음 {ans['met']} · 근거 없음 {ans['missing']} · 판단 불가 {ans['na']}"
+        f" · 후검증 실패 {ans['failed']}(판단 불가·실패는 음성)",
+        "",
+        "| 요건 오류 | AI 정밀도 | AI 재현율 | 서술 있는 줄 전부 정밀도 | 재현율 |",
+        "|---|---|---|---|---|",
+    ]
+    for label, part in (
+        ("전체", q),
+        ("확정 월", q["by_period"]["confirmed"]),
+        ("제출·대기", q["by_period"]["filed"]),
+    ):
+        ai, base = part["ai"], part["narrative_all"]
+        out.append(
+            f"| {label} | {pct(ai['precision'])} | {pct(ai['recall'])}"
+            f" | {pct(base['precision'])} | {pct(base['recall'])} |"
+        )
+    out += [
+        "",
+        f"조정 건 판단 {a['n']}건 — AI {pct(a['ai']['accuracy'])}(답 {a['ai']['answered']})"
+        f" · 모두 정당 {pct(a['all_justified'])} · 모두 다툴 만함 {pct(a['all_contestable'])}",
+        "",
+    ]
+    return out
 
 
 def _has_recon(conn) -> bool:

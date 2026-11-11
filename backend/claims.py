@@ -1,12 +1,14 @@
 """⑤ 청구 점검 1단계 (기능 정의 §5 ⑤, 설계 docs/superpowers/specs/2026-11-10-claim-review-design.md §1).
 삭감 대응: 확정 월 조정·불능 청구의 재심 신청 기한·칩·사유 유형 규칙 제안(가상 데이터 생성 설계 §2.4)과 사람 판단
 기록(ax_claim_judgments). 청구 전 점검: 대기 청구 줄의 시술 × 차트 상병이 허용 상병 밖이면 경고(§4.3).
+2단계 AI 점검(backend/claim_check.py, 설계 §2)의 저장 결과를 청구 전 AI 칩과 요건 사유 조정 건의 판단 추천에 붙인다.
 청구 건마다 DB를 부르지 않고 표마다 한 번 훑는 집합 쿼리로 센다 — 청구 수와 무관하게 쿼리 수가 같다.
 master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(backend/today.py)도 이 함수로 센다."""
 
 import sqlite3
 from datetime import date, timedelta
 
+from backend import claim_check
 from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
@@ -30,6 +32,8 @@ SUGGEST_REASON: dict[str, str] = {
     "requirement": "차트에 요건 근거가 있으면 재심 신청, 없으면 삭감 수용입니다",
 }
 CUT = ("adjusted", "denied")  # 깎인 청구(일부 조정·전액 불능)
+# AI 요건 판단 → 판단 추천(설계 §2 "조정 건 판단(b)"): 근거 있음 → 재심 신청, 근거 없음 → 삭감 수용. na는 추천 없음
+AI_SUGGEST = {"met": "contestable", "missing": "justified"}
 
 
 def _deadline(reviewed_at: str, appeal_days: int) -> date:
@@ -55,6 +59,7 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     mv = master_values(conn)
     days, types, headings = mv["appeal_days"], mv["adjust_note_types"], mv["adjust_note_headings"]
     rows = []
+    ai = claim_check.results(conn)
     for r in conn.execute(
         "SELECT c.id, c.chart_no, p.name, c.service_date, c.tooth_no, pr.name AS procedure_name,"
         " c.status, c.claim_amount, COALESCE(c.paid_amount, 0) AS paid_amount, c.adjust_note,"
@@ -69,7 +74,10 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
         type_ = types[r["adjust_note"]]
         deadline = _deadline(r["reviewed_at"], days)
         days_left = (deadline - today).days
-        suggestion = SUGGEST[type_]
+        suggestion, by, evidence = SUGGEST[type_], "rule" if SUGGEST[type_] else None, None
+        check = ai.get(r["id"])
+        if type_ == "requirement" and check and check["requirement"] in AI_SUGGEST:  # 실패는 None
+            suggestion, by, evidence = AI_SUGGEST[check["requirement"]], "ai", check["evidence"]
         rows.append(
             {
                 "claim_id": r["id"],
@@ -90,6 +98,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
                 "expired": days_left < 0,
                 "chips": _chips(r["status"], type_, days_left),
                 "suggestion": suggestion,
+                "suggest_by": by,
+                "ai_evidence": evidence,
                 "reason": SUGGEST_REASON[type_],
                 "fill_item": headings[r["adjust_note"]] if suggestion == "resubmit" else None,
                 "judgment": (
@@ -174,9 +184,33 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
                 "warning": warning,
             }
         )
+    ai = claim_check.results(conn)
+    saved = [ai[x["claim_id"]]["at"] for x in rows if x["claim_id"] in ai]
+    for x in rows:
+        check = ai.get(x["claim_id"])
+        x["ai"] = (
+            {k: check[k] for k in ("requirement", "evidence", "omissions")}
+            if check and check["valid"]
+            else None
+        )
     rows.sort(key=lambda x: (x["warning"] is None, x["service_date"], x["claim_id"]))
     warned = sum(x["warning"] is not None for x in rows)
-    return {"counts": {"lines": len(rows), "warning": warned}, "rows": rows}
+    flagged = sum(
+        bool(x["ai"]) and (x["ai"]["requirement"] == "missing" or bool(x["ai"]["omissions"]))
+        for x in rows
+    )
+    return {
+        "counts": {
+            "lines": len(rows),
+            "warning": warned,
+            "ai": flagged,
+            "ai_missing": sum(bool(x["ai"]) and x["ai"]["requirement"] == "missing" for x in rows),
+            "ai_checked": len(saved),
+        },
+        "ai_at": max(saved, default=None),
+        "ai_pending": claim_check.pending(conn, today),
+        "rows": rows,
+    }
 
 
 def record_judgment(

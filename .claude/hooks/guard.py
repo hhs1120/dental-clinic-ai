@@ -2,7 +2,7 @@
 
 PreToolUse
 - Bash 막기: `git add`는 파일 이름으로만(-A·--all·-u·`.`·폴더·글롭 금지 — 글롭 문자가 든 실제 파일 이름은 허용), `git commit -a` 금지 — CLAUDE.md '깃'.
-  `git commit` 전에 `make lint`가 통과해야 한다 — CLAUDE.md '코드 컨벤션'
+  `git commit` 전에 `make lint`가 통과해야 한다 — CLAUDE.md '코드 컨벤션'. lint는 명령이 도는 저장소(worktree면 그 worktree)에서
 - Bash 확인 창: 과금·되돌리기 어려운 명령(push·PR 머지·LLM API 채우기·test 평가)은 사용자 승인
 - Edit·Write 막기: 생성물(LLM 캐시·DB·생성기가 쓰는 정답 JSON)은 손으로 고치지 않는다 — make data·make llm-import가 쓴다.
   backend/가 ground_truth·generator를 import하는 편집, 자동 개선 코드(evaluation/improve*)가 test 분할을 읽는 편집도 막는다
@@ -121,6 +121,15 @@ def _bulk_add(args: list[str], cwd: Path) -> str | None:
     return None
 
 
+def _repo_root(cwd: Path) -> Path:
+    """명령이 도는 저장소 — worktree에서 커밋하면 그 worktree(원래 폴더의 다른 세션 작업 중 파일이 막지 않게),
+    저장소 밖이면 훅이 놓인 저장소"""
+    r = subprocess.run(
+        ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
+    return Path(r.stdout.strip()).resolve() if r.returncode == 0 else ROOT
+
+
 def lint_failure(root: Path) -> str | None:
     """make lint가 실패하면 출력 끝부분, 통과면 None"""
     r = subprocess.run(["make", "-s", "lint"], cwd=root, capture_output=True, text=True)
@@ -147,7 +156,7 @@ def check_bash(command: str, cwd: Path) -> str | None:
             if any(a == "--all" or re.fullmatch(r"-[a-zA-Z]*a[a-zA-Z]*", a) for a in args):
                 return "`git commit -a`는 막혀 있다 — 파일 이름으로 git add 한 뒤 커밋하라(CLAUDE.md '깃')"
             commit = True
-    if commit and (out := lint_failure(ROOT)):
+    if commit and (out := lint_failure(_repo_root(cwd))):
         return (
             "커밋 전 `make lint` 실패(스테이징한 파일만이 아니라 작업 트리 전체 — CI와 같은 범위) — "
             f"`make fmt`로 정리하고 남은 것을 고친 뒤 커밋하라:\n{out}"

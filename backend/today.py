@@ -123,6 +123,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
     rows = prep.prep_facts(conn, today, today)
     cards = _cards(rows)
     todo, urgent = _todo(calls.today_board(conn, today))
+    pre = claims.pre_claim(conn, today)["counts"]
     return {
         "date": today.isoformat(),
         "cards": cards | {"todo": todo},
@@ -135,7 +136,10 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             "judge_pending": judge_queue.pending_count(conn),
             "refused": _refused(conn, now),
             "appeal_soon": claims.adjusted(conn, today)["chips"]["soon"]["count"],
-            "preclaim_warning": claims.pre_claim(conn, today)["counts"]["warning"],
+            "preclaim_warning": pre["warning"],
+            "preclaim_ai": pre[
+                "ai_missing"
+            ],  # 화면 문구가 '요건 근거 못 찾음' — 누락만 있는 줄은 빼고
             **_recon(conn, today),
         },
         "ai": _auto(conn) | {"prep": _prep_saved(conn, today)} | _failures(conn),

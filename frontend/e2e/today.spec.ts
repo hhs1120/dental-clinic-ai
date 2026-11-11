@@ -20,6 +20,7 @@ const EMPTY = {
     refused: [],
     appeal_soon: 0,
     preclaim_warning: 0,
+    preclaim_ai: 0,
     recon_open: 0,
     recon_month: null,
   },
@@ -289,6 +290,19 @@ test("재심 기한 임박·청구 전 상병 경고 줄 → /claims", async ({ 
   await expect(page.getByText("오늘 남은 일이 없습니다")).toBeVisible();
   await expect(page.getByText(/재심 신청 기한 임박/)).toHaveCount(0);
   await expect(page.getByText(/청구 전 상병 경고/)).toHaveCount(0);
+});
+
+test("청구 전 AI 줄 → 청구 전 점검 AI 칩", async ({ page }) => {
+  await fakeToday(page, {
+    ...EMPTY,
+    people: { ...EMPTY.people, preclaim_ai: 2 },
+  });
+  await page.goto("/today");
+  await page
+    .getByRole("region", { name: "사람이 볼 일" })
+    .getByRole("link", { name: /청구 전 차트에 요건 근거 못 찾음 2건\(AI\)/ })
+    .click();
+  await expect(page).toHaveURL(/\/claims\?tab=pre&chip=ai$/);
 });
 
 test("일계표 불일치 줄 → 미확정이 있는 가장 이른 달", async ({ page }) => {

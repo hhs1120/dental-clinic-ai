@@ -48,6 +48,7 @@
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
 - ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
 - ④ `make prep [DATE=] [NO_BATCH=1]`(과금, 이어 돎, `backend/prep.py`)
+- ⑤ `make claim-check [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, `backend/claim_check.py`) · `make claim-check-sample [N=] [BATCH=1]`(과금, 이어 돎, dev 고정 표본 — 프롬프트 고칠 때) / `claim-check-dev [NO_BATCH=1]`(과금, 이어 돎, dev 전부 — 버전을 정한 뒤, `evaluation/claim_check.py`)
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)

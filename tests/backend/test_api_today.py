@@ -56,6 +56,7 @@ def test_get_today_shape(client):
         "refused",
         "appeal_soon",
         "preclaim_warning",
+        "preclaim_ai",
         "recon_open",
         "recon_month",
     }

@@ -5,7 +5,7 @@ aliases:
   classify: [claude-haiku-5-5, claude-sonnet-5-5]  # ① 분류기 라벨
   summarize: [claude-haiku-5-5, claude-sonnet-5-5] # ① 분류기 요약·할 일
   judge: [qwen3.5-2b-judge]                        # ① 판정기 라벨 — 로컬 Qwen(--group finetune), 폴백 없음. 옛 판정기 버전(v1·v2 Solar)은 다시 돌리지 않는다(Qwen 판정기 설계 "비교 규칙")
-  chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안
+  chat: [claude-sonnet-5-5, claude-sonnet-5]       # ③ 챗·④ 제안·⑤-2 점검
   followup: [claude-sonnet-5-5]                    # ① 후속 에이전트(backend/followup.py) — 앱 설계 §7 그 밖의 에이전트
   blind_judge: [claude-haiku-5-5]                  # ② 블라인드 LLM 쌍 비교(평가 설계 §2.4) — 요약을 쓴 모델과 같아 자기 글 쏠림은 사람 투표 일치율로 본다
   rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
