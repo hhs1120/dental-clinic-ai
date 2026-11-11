@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 
 /** 담당 파트 — 화면은 바뀌지 않는다(기능 정의 §4). 저장소가 막힌 브라우저에서도 동작한다 */
 function PartSelect() {
-  const [part, setPart] = useState<string | undefined>(undefined);
+  // 빈 문자열로 시작 — undefined면 비제어로 시작했다가 값이 들어가며 제어로 바뀌어 React 경고가 난다
+  const [part, setPart] = useState("");
   useEffect(() => {
     let saved: string | null = null;
     try {
@@ -57,7 +58,7 @@ function PartSelect() {
 
 /** 화면 테마 — 시스템·라이트·다크(lib/theme) */
 function ThemeSelect() {
-  const [theme, setTheme] = useState<Theme | undefined>(undefined);
+  const [theme, setTheme] = useState<Theme | "">(""); // 빈 문자열 — PartSelect와 같은 이유
   useEffect(() => {
     // 첫 렌더는 서버 HTML과 같게 비워 두고 여기서 읽는다(하이드레이션 불일치 방지)
     // eslint-disable-next-line react-hooks/set-state-in-effect
