@@ -53,6 +53,8 @@ export interface TodaySheet {
     appeal_soon: number;
     /** 청구 전 상병 확인 경고 줄 — /claims?tab=pre와 같은 함수 */
     preclaim_warning: number;
+    /** 확정 안 된 일계표 불일치 건 — /finance와 같은 함수(backend/recon.py open_count) */
+    recon_open: number;
   };
   ai: {
     autoclose_on: boolean;

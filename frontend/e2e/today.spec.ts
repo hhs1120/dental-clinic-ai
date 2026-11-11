@@ -20,6 +20,7 @@ const EMPTY = {
     refused: [],
     appeal_soon: 0,
     preclaim_warning: 0,
+    recon_open: 0,
   },
   ai: {
     autoclose_on: false,
@@ -287,4 +288,21 @@ test("재심 기한 임박·청구 전 상병 경고 줄 → /claims", async ({ 
   await expect(page.getByText("오늘 남은 일이 없습니다")).toBeVisible();
   await expect(page.getByText(/재심 신청 기한 임박/)).toHaveCount(0);
   await expect(page.getByText(/청구 전 상병 경고/)).toHaveCount(0);
+});
+
+test("일계표 불일치 줄 → /finance", async ({ page }) => {
+  await fakeToday(page, {
+    ...EMPTY,
+    people: { ...EMPTY.people, recon_open: 3 },
+  });
+  await page.goto("/today");
+  await page
+    .getByRole("region", { name: "사람이 볼 일" })
+    .getByRole("link", { name: /일계표 불일치 3건/ })
+    .click();
+  await expect(page).toHaveURL(/\/finance$/);
+  await page.unroute("**/api/today");
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByText(/일계표 불일치/)).toHaveCount(0);
 });
