@@ -20,7 +20,7 @@ def _related(facts: dict) -> tuple[set[str], set[str]]:
 
 
 def _chips_on(facts: dict, rel: set[str]) -> bool:
-    """예약(항상)·예약 미확인(제안 사실이 아님) 밖 칩이 하나라도 켜짐 — 사실로 다시 센다"""
+    """예약(항상)·내원 확인 전(제안 사실이 아님) 밖 칩이 하나라도 켜짐 — 사실로 다시 센다"""
     return bool(
         facts["scaling_unused"]
         or facts["balance"] > 0

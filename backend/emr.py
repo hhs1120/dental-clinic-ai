@@ -9,16 +9,18 @@ from datetime import date
 
 ROLE = {"doctor": "원장", "hygienist": "위생사", "consultant": "상담실장"}
 LIVE = ("scheduled", "completed")  # 건수에 넣는 상태 — 취소·노쇼는 뺀다
-# 예약 확인 = 전날 리마인드에 대한 응답. confirmed가 그 응답이고(appt_confirm은 예약을 잡을 때의 확정 알림 —
-# 그 알림에 대한 답장은 확인이 아니다), 리마인드가 왔는지는 emr_messages로 본다
+# 예약 확인 = 직전 진료일 리마인드에 대한 응답. confirmed가 그 응답이고(appt_confirm은 예약을 잡을 때의 확정 알림 —
+# 그 알림에 대한 답장은 확인이 아니다), 리마인드가 왔는지는 emr_messages로 본다. 접두어 없이 읽으므로 main(app)에
+# emr_ 테이블이 없다는 전제 — backend/prep.py도 source를 붙인 연결에서 이 식을 쓴다
 CONFIRM_SQL = (
     " (SELECT COUNT(*) FROM emr_messages m WHERE m.related_appointment_id = a.id"
     "  AND m.\"trigger\" = 'reminder') AS reminders"
 )
 
 
-def _confirm(r: sqlite3.Row) -> str:
-    """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드 자체가 없음 — 전날 잡은 응급 등).
+def confirm_state(r: sqlite3.Row) -> str:
+    """replied(확인됨) / no_reply(리마인드에 답 없음) / no_message(리마인드가 없음 — 발송 시각이 지난 뒤
+    잡힌 예약).
     격자의 '내원 확인 전'(confirmed = 0)과 항상 맞는다"""
     if r["confirmed"]:
         return "replied"
@@ -89,7 +91,7 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 "tooth": r["tooth_no"] if r["tooth_no"] not in (None, "00") else None,
                 "status": r["status"],
                 "unconfirmed": is_today and r["status"] == "scheduled" and not r["confirmed"],
-                "confirm": _confirm(r),
+                "confirm": confirm_state(r),
                 "chart_no": r["chart_no"],
                 "name": r["name"],
                 "new_patient": r["registered_at"] >= range_start.isoformat()
@@ -266,7 +268,7 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
                 "staff": a["staff"],
                 "chair": a["chair_no"],
                 "confirmed": bool(a["confirmed"]),
-                "confirm": _confirm(a),
+                "confirm": confirm_state(a),
                 "plan_item_id": a["plan_item_id"],
             }
             for a in q(
