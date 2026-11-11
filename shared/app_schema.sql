@@ -284,6 +284,20 @@ CREATE TABLE ax_prep_sheets (
     UNIQUE (sheet_date, patient_id, appointment_id)
 );
 
+-- ⑤-2 AI 점검(backend/claim_check.py) — 청구 줄 하나에 한 행. facts = LLM 입력(시술·치아·상병·나이·차트 서술·요건 절,
+-- 청구 상태·조정 사유는 없음), facts_hash·prompt_version·model이 같고 통과한 줄은 다시 부르지 않는다.
+-- result = {requirement: met|missing|na, omissions[{procedure,quote}], evidence[{source,quote}]}, 후검증 실패면 NULL·valid 0
+CREATE TABLE ax_claim_checks (
+    claim_id       INTEGER PRIMARY KEY,
+    facts          TEXT NOT NULL,
+    facts_hash     TEXT NOT NULL,
+    result         TEXT,
+    valid          INTEGER NOT NULL DEFAULT 0,
+    prompt_version TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
 -- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜). 화면이 GET /jobs/{id}로 폴링
 CREATE TABLE ax_jobs (
     id          INTEGER PRIMARY KEY,

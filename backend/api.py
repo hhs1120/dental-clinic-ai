@@ -21,6 +21,7 @@ from backend import (
     blind,
     calls,
     chat,
+    claim_check,
     claims,
     db,
     documents,
@@ -888,16 +889,19 @@ def _run_prep_job(paths, gw_factory, job_id: int, day: dt.date, today: dt.date) 
     finally:
         if conn is not None:
             conn.close()
-        end = db.connect(*paths)  # 작업 연결이 깨졌어도 끝 표시는 새 연결로
-        try:
-            with end:
-                end.execute(
-                    "UPDATE ax_jobs SET status = ?, error = ?, done = ?, finished_at = ?"
-                    " WHERE id = ?",
-                    (status, error, done, dt.datetime.now().isoformat(timespec="seconds"), job_id),
-                )
-        finally:
-            end.close()
+        _end_job(paths, job_id, status, error, done)
+
+
+def _end_job(paths, job_id: int, status: str, error: str | None, done: int) -> None:
+    end = db.connect(*paths)  # 작업 연결이 깨졌어도 끝 표시는 새 연결로
+    try:
+        with end:
+            end.execute(
+                "UPDATE ax_jobs SET status = ?, error = ?, done = ?, finished_at = ? WHERE id = ?",
+                (status, error, done, dt.datetime.now().isoformat(timespec="seconds"), job_id),
+            )
+    finally:
+        end.close()
 
 
 @app.post("/jobs/prep-regenerate")
@@ -928,6 +932,56 @@ def prep_regenerate(paths: Paths, clinic: ClinicDep, gw: GatewayFactory, date: s
         conn.close()
     threading.Thread(
         target=_run_prep_job, args=(paths, gw, job_id, day, clinic.today), daemon=True
+    ).start()
+    return {"job_id": job_id}
+
+
+# ── ⑤-2 청구 AI 점검 (기능 정의 §5 ⑤) ───────────────────────────────
+
+
+def _run_claim_check_job(paths, gw_factory, job_id: int, today: dt.date) -> None:
+    """작업 스레드 — 앱 범위 줄을 일반 호출로 점검(사람이 기다린다). 어디서 실패해도 작업 행을 끝낸다"""
+    status, error, done = "failed", None, 0
+    conn = None
+    try:
+        conn = db.connect(*paths)
+        rows = claim_check.targets(conn, today, scope="app")
+        out = claim_check.build(conn, gw_factory(conn), rows, use_batch=False)
+        status, done = "done", out["rows"]
+    except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
+        error = f"{type(e).__name__}: {e}"
+    finally:
+        if conn is not None:
+            conn.close()
+        _end_job(paths, job_id, status, error, done)
+
+
+@app.post("/jobs/claim-check")
+def claim_check_run(paths: Paths, clinic: ClinicDep, gw: GatewayFactory) -> dict:
+    """청구 전 점검의 "AI 점검 갱신하기" — 이미 도는 작업이 있으면 그 id(prep-regenerate와 같은 꼴)"""
+    conn = _open_rw(paths)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        since = (dt.datetime.now() - JOB_STALE).isoformat(timespec="seconds")
+        running = conn.execute(
+            "SELECT id FROM ax_jobs WHERE kind = 'claim_check' AND status = 'running'"
+            " AND replace(started_at, ' ', 'T') >= ? ORDER BY id DESC",
+            (since,),
+        ).fetchone()
+        if running:
+            conn.commit()
+            return {"job_id": running[0]}
+        total = len(claim_check.targets(conn, clinic.today, scope="app"))
+        job_id = conn.execute(
+            "INSERT INTO ax_jobs (kind, arg, status, total, started_at)"
+            " VALUES ('claim_check', '', 'running', ?, ?)",
+            (total, dt.datetime.now().isoformat(timespec="seconds")),
+        ).lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    threading.Thread(
+        target=_run_claim_check_job, args=(paths, gw, job_id, clinic.today), daemon=True
     ).start()
     return {"job_id": job_id}
 

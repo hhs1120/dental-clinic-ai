@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -75,6 +75,10 @@ followup-eval:
 # ④ 진료 준비표(backend/prep.py) — 기준일 포함 최근 8일(과금), Batch(NO_BATCH=1이면 일반 호출). 사실·버전·모델이 같고 통과한 행은 건너뜀
 prep:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.prep run $(if $(DATE),--date $(DATE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑤-2 청구 AI 점검(기능 정의 §5 ⑤, 과금·이어 돎) — SCOPE=all이면 전 기간(평가), 기본은 화면 범위
+claim-check:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_check run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
 
 # ① 자동 종결(기능 정의 §4 ①) — 활성 버전 쌍으로 다시 계산. auto_policy가 꺼져 있으면 아무것도 하지 않는다
 autoclose:
