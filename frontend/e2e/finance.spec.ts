@@ -10,7 +10,13 @@ type Confirmation = {
 } | null;
 
 const zero = { ledger: 0, fin: 0, diff: 0 };
-const noCash = { ledger: 0, fin: null, diff: null, deposit: null };
+const noCash = {
+  ledger: 0,
+  fin: null,
+  diff: null,
+  deposit: null,
+  pending: false,
+};
 
 const cancelItem = (confirmation: Confirmation) => ({
   key: "aaaaaaaaaaaa",
@@ -109,17 +115,53 @@ const CAUSES = {
   method_wrong: "ambiguous",
 };
 
+const MONTHS = ["2025-12", "2026-10", "2026-11"];
+
+const feeItem = {
+  key: "cccccccccccc",
+  date: "2026-11-05",
+  dates: ["2026-11-05"],
+  channel: "settlement",
+  payment_ids: [],
+  fin: [{ table: "fin_card_deposits", id: 4 }],
+  ledger_total: 0,
+  fin_total: 98500,
+  rule_cause: "fee_mismatch",
+  ledger_rows: [],
+  fin_rows: [
+    {
+      table: "fin_card_deposits",
+      at: "2026-11-09",
+      amount: 98500,
+      label: "가온카드 정산",
+      detail: {
+        sales_date: "2026-11-05",
+        sales_total: 100000,
+        fee: 1500,
+        expected_fee: 1200,
+        expected_on: "2026-11-09",
+      },
+    },
+  ],
+  confirmation: null,
+};
+
 const NOV = (confirmation: Confirmation = null) => ({
-  months: ["2026-10", "2026-11"],
+  months: MONTHS,
   month: "2026-11",
   causes: CAUSES,
-  chips: { days: 4, mismatch_days: 2, open_items: confirmation ? 0 : 1 },
+  chips: {
+    days: 6,
+    mismatch_days: 3,
+    open_items: confirmation ? 1 : 2,
+    open_all: confirmation ? 4 : 5,
+  },
   days: [
     {
       date: "2026-11-02",
       status: "ok",
       card: { ledger: 50000, fin: 50000, diff: 0 },
-      cash: { ledger: 30000, fin: null, diff: null, deposit: null },
+      cash: { ...noCash, ledger: 30000 },
       transfer: zero,
       items: [],
     },
@@ -140,9 +182,26 @@ const NOV = (confirmation: Confirmation = null) => ({
         fin: 48000,
         diff: -16200,
         deposit: { on: "2026-11-09", days: 5 },
+        pending: false,
       },
       transfer: zero,
       items: [typoItem],
+    },
+    {
+      date: "2026-11-05",
+      status: "ok",
+      card: { ledger: 100000, fin: 100000, diff: 0 },
+      cash: noCash,
+      transfer: zero,
+      items: [feeItem],
+    },
+    {
+      date: "2026-11-25",
+      status: "ok",
+      card: zero,
+      cash: { ...noCash, ledger: 10000, pending: true },
+      transfer: zero,
+      items: [],
     },
     {
       date: "2026-11-28",
@@ -156,10 +215,10 @@ const NOV = (confirmation: Confirmation = null) => ({
 });
 
 const OCT = {
-  months: ["2026-10", "2026-11"],
+  months: MONTHS,
   month: "2026-10",
   causes: CAUSES,
-  chips: { days: 1, mismatch_days: 0, open_items: 0 },
+  chips: { days: 1, mismatch_days: 0, open_items: 0, open_all: 5 },
   days: [
     {
       date: "2026-10-05",
@@ -194,7 +253,7 @@ test("메뉴에서 재무 대조가 열림", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "재무 대조" })).toBeVisible();
   await expect(page.getByText("준비 중")).toHaveCount(0);
   await expect(page.getByRole("tablist")).toHaveCount(0);
-  await expect(page.getByText("불일치 있는 날 2")).toBeVisible();
+  await expect(page.getByText("불일치 있는 날 3")).toBeVisible();
 });
 
 test("차이 0인 날도 불일치 배지", async ({ page }) => {
@@ -287,8 +346,39 @@ test("장부 쪽 원인으로 확정된 건은 전자차트에서 고친다는 �
 test("달을 바꾸면 URL과 표가 바뀜", async ({ page }) => {
   await fakeRecon(page, () => NOV());
   await page.goto("/finance");
-  await page.getByRole("button", { name: "10월" }).click();
+  await page.getByRole("button", { name: "2026년 10월" }).click();
   await expect(page).toHaveURL(/month=2026-10/);
   await expect(row(page, "2026-10-05")).toBeVisible();
   await expect(row(page, "2026-11-03")).toHaveCount(0);
+});
+
+test("달 버튼은 연도가 바뀌는 곳에 연도", async ({ page }) => {
+  await fakeRecon(page, () => NOV());
+  await page.goto("/finance");
+  const months = page.getByRole("group", { name: "달" }).getByRole("button");
+  await expect(months).toHaveText(["2025년 12월", "2026년 10월", "11월"]);
+});
+
+test("전체 기간 확정 안 된 건 수", async ({ page }) => {
+  await fakeRecon(page, () => NOV());
+  await page.goto("/finance");
+  await expect(page.getByText("전체 확정 안 된 건 5")).toBeVisible();
+  await expect(page.getByText("이 달 확정 안 된 건 2")).toBeVisible();
+});
+
+test("정산 건은 기대 수수료·예상 입금일을 함께", async ({ page }) => {
+  await fakeRecon(page, () => NOV());
+  await page.goto("/finance?day=2026-11-05");
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await expect(item).toContainText("수수료 1,500원");
+  await expect(item).toContainText("기대 1,200원");
+  await expect(item).toContainText("예상 입금 11/09");
+  await expect(item).toContainText("매출 100,000원");
+});
+
+test("현금이 대조 전인 날은 현금 입금 칸에 대조 전", async ({ page }) => {
+  await fakeRecon(page, () => NOV());
+  await page.goto("/finance");
+  await expect(row(page, "2026-11-25")).toContainText("대조 전");
+  await expect(row(page, "2026-11-25")).toContainText("차이 없음");
 });

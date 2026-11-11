@@ -121,7 +121,10 @@ export function LedgerTable({
                     {won(d.cash.ledger)}
                   </td>
                   <td className="px-2 py-2 text-right whitespace-nowrap">
-                    {d.cash.fin === null || !d.cash.deposit ? (
+                    {d.cash.pending ? (
+                      // 그날 현금이 든 입금 기간에 정산 대기 날이 섞여 아직 맞춰 보지 않음
+                      <span className="text-muted-foreground">대조 전</span>
+                    ) : d.cash.fin === null || !d.cash.deposit ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       <>

@@ -63,6 +63,14 @@ export interface FinRow {
   amount: number;
   /** 카드사·적요(취소면 "카드사 취소") */
   label: string;
+  /** 정산 행만 — 받은 값과 코드가 계산한 기대값 */
+  detail?: {
+    sales_date: string;
+    sales_total: number;
+    fee: number;
+    expected_fee: number;
+    expected_on: string;
+  };
 }
 
 export interface Confirmation {
@@ -97,6 +105,8 @@ export interface ReconDay {
     fin: number | null;
     diff: number | null;
     deposit: { on: string; days: number } | null;
+    /** 그날 현금이 든 입금 기간에 대조 전 날이 섞여 현금은 아직 대조 전 */
+    pending: boolean;
   };
   items: ReconItem[];
 }
@@ -105,7 +115,13 @@ export interface ReconSheet {
   months: string[];
   month: string | null;
   causes: Record<Cause, "rule" | "ambiguous">;
-  chips: { days: number; mismatch_days: number; open_items: number };
+  /** open_items = 이 달, open_all = 전체 기간(오늘 화면 숫자와 같음) */
+  chips: {
+    days: number;
+    mismatch_days: number;
+    open_items: number;
+    open_all: number;
+  };
   days: ReconDay[];
 }
 

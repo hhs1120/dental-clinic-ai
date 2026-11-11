@@ -90,6 +90,14 @@ export function ReconItemView({
               {item.fin_rows.map((r, k) => (
                 <li key={k}>
                   {at(r.at)} · {r.label} · {won(r.amount)}
+                  {r.detail && (
+                    <div className="text-muted-foreground">
+                      매출 {won(r.detail.sales_total)} (
+                      {at(r.detail.sales_date)}) · 수수료 {won(r.detail.fee)}{" "}
+                      (기대 {won(r.detail.expected_fee)}) · 예상 입금{" "}
+                      {at(r.detail.expected_on)}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

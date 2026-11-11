@@ -183,7 +183,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "recon",
     "일계표",
     "danger",
-    "/finance",
+    p.recon_month ? `/finance?month=${p.recon_month}` : "/finance",
     `일계표 불일치 ${p.recon_open}건`,
     "장부와 카드·통장 입금이 안 맞는 건 확정",
   );
