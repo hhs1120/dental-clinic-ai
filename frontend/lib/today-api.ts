@@ -53,7 +53,7 @@ export interface TodaySheet {
     appeal_soon: number;
     /** 청구 전 상병 확인 경고 줄 — /claims?tab=pre와 같은 함수 */
     preclaim_warning: number;
-    /** 청구 전 AI 칩 수 — 요건 근거 못 찾음·누락(backend/claims.py counts.ai) */
+    /** 청구 전 요건 근거 못 찾음 줄 수(backend/claims.py counts.ai_missing — 처치 누락만 있는 줄은 뺌) */
     preclaim_ai: number;
   };
   ai: {

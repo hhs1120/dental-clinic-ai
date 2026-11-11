@@ -298,7 +298,7 @@ CREATE TABLE ax_claim_checks (
     created_at     TEXT NOT NULL
 );
 
--- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜). 화면이 GET /jobs/{id}로 폴링
+-- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜)·⑤-2 AI 점검(kind 'claim_check'). 화면이 GET /jobs/{id}로 폴링
 CREATE TABLE ax_jobs (
     id          INTEGER PRIMARY KEY,
     kind        TEXT NOT NULL,

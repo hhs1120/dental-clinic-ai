@@ -334,7 +334,7 @@ def run(
         "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_claim_checks'"
     ).fetchone()
     if dev and has_checks and conn.execute("SELECT 1 FROM ax_claim_checks LIMIT 1").fetchone():
-        # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check score --split test(사람)
+        # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check run --split test(사람)
         result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
