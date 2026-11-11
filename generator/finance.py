@@ -17,11 +17,16 @@ from generator.master import (
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     DEPOSIT_DELAY_DAYS,
+    EXPENSE_ALIAS_RATE,
     EXPENSE_AMOUNT_DIFF_RANGE,
     EXPENSE_AMOUNT_DIFF_RATE,
+    EXPENSE_DECOY_RATE,
     EXPENSE_DOC_LEAD_DAYS,
+    EXPENSE_ISSUER_ALIAS_RATE,
     EXPENSE_ITEMS,
+    EXPENSE_MIXED_ORDER_RATE,
     EXPENSE_NO_DOC_RATE,
+    EXPENSE_SPLIT_DOC_RATE,
     FEE_MISMATCH_RATE_DIFF,
     FULL_MOUTH,
     GUARDIAN_PAYER_SHARE,
@@ -46,6 +51,7 @@ from generator.master import (
     open_slots,
     recon_months,
     recon_test_months,
+    vendor_aliases,
 )
 
 FMT = "%Y-%m-%d %H:%M:%S"
@@ -788,6 +794,11 @@ def stage_expenses(run, rng, fake) -> None:
         o = with_docs[k]
         o["amount"] += max(100, int(o["amount"] * rng.uniform(lo, hi)) // 100 * 100)
 
+    decoys = _expense_confusers(rng.spawn(1)[0], outflows, doc, today)
+    conn.execute(  # 디코이 수 — verify가 어느 출금에도 안 붙은 증빙 수와 맞춘다(단계 안에서 정해져 meta를 여기서)
+        "INSERT INTO truth.truth_gen_meta VALUES ('expense_decoys', ?)", (str(len(decoys)),)
+    )
+
     # 적재 — 통장 출금은 8b 입금 뒤 id, 카드 사용·증빙은 시각순
     start = conn.execute("SELECT coalesce(max(id), 0) FROM fin_bank_transactions").fetchone()[0]
     bank = sorted(
@@ -797,9 +808,9 @@ def stage_expenses(run, rng, fake) -> None:
         o["id"] = i
     for i, o in enumerate(sorted(cards, key=lambda o: (o["at"], o["label"])), 1):
         o["id"] = i
-    docs = sorted(
-        (d for o in outflows for d in o["docs"]),
-        key=lambda d: (d["on"], d["issuer"], d["kind"], d["amount"]),
+    docs = sorted(  # 같은 날·같은 키면 디코이가 앞 — 가장 가까운 증빙을 고르는 규칙이 디코이를 먼저 만난다
+        [d for o in outflows for d in o["docs"]] + decoys,
+        key=lambda d: (d["on"], d["issuer"], d["kind"], d["amount"], not d.get("decoy")),
     )
     for i, d in enumerate(docs, 1):
         d["id"] = i
@@ -840,6 +851,89 @@ def stage_expenses(run, rng, fake) -> None:
             for o in outflows
         ],
     )
+
+
+def _expense_confusers(rng, outflows: list[dict], doc, today: date) -> list[dict]:
+    """⑧-2 헷갈리는 모양(데이터 재설계 설계 §2) — 새 자식 난수로 outflows를 고치고 디코이 증빙(어느 출금에도 안 붙음)을 낸다.
+    모양마다 평가 달 마지막 달(화면 기본 달)부터 고른다(RECON_LATEST_MONTH_MIN)"""
+    last = recon_months(today)[-1]
+
+    def pick(items: list, rate: float) -> list:
+        order = [items[int(i)] for i in rng.permutation(len(items))]
+        head = [o for o in order if o["at"].strftime("%Y-%m") == last][:RECON_LATEST_MONTH_MIN]
+        return (head + [o for o in order if o not in head])[: round(rate * len(items))]
+
+    # 쇼핑몰 혼합 주문 — 두 과목 품목, 정답은 금액이 큰 과목
+    shop = [
+        o
+        for o in outflows
+        if o["table"] == "card" and o["docs"] and o["vendor"]["kind"] == "shopping"
+    ]
+    for o in pick(shop, EXPENSE_MIXED_ORDER_RATE):
+        pool = EXPENSE_ITEMS["shopping"]
+        accts = sorted({a for _, a in pool})
+        if len(accts) < 2:
+            break
+        picks = [
+            [n for n, a in pool if a == acct][int(rng.integers(sum(a == acct for _, a in pool)))]
+            for acct in accts[:2]
+        ]
+        total = o["docs"][0]["amount"]
+        big = max(100, int(total * rng.uniform(0.55, 0.8)) // 100 * 100)
+        amounts = [big, total - big] if rng.random() < 0.5 else [total - big, big]
+        o["docs"] = [
+            doc(
+                o["vendor"]["docs"][0],
+                o["vendor"]["name"],
+                o["docs"][0]["on"],
+                total,
+                list(zip(picks, amounts, strict=True)),
+            )
+        ]
+        o["account"] = accts[:2][amounts.index(max(amounts))]
+        o["mixed"] = True
+    # 주문 두 건을 한 번에 결제 — 증빙 둘 = 출금 하나
+    cards = [
+        o
+        for o in outflows
+        if o["table"] == "card"
+        and not o.get("mixed")  # 혼합 주문을 쪼개면 한 증빙에 한 과목만 남아 정답 과목과 어긋난다
+        and len(o["docs"]) == 1
+        and o["docs"][0]["amount"] == o["amount"]
+    ]
+    for o in pick(cards, EXPENSE_SPLIT_DOC_RATE):
+        d0 = o["docs"][0]
+        a = max(100, int(d0["amount"] * rng.uniform(0.3, 0.7)) // 100 * 100)
+        items = [line for line in d0["body"].splitlines() if line.startswith("- ")]
+        name = items[0][2:].rsplit(" ", 1)[0] if items else "주문"
+        o["docs"] = [
+            doc(d0["kind"], d0["issuer"], d0["on"], x, [(name, x)]) for x in (a, d0["amount"] - a)
+        ]
+    # 디코이 — 같은 거래처·같은 금액의 취소 주문·견적, 진짜 증빙보다 출금에 가깝거나 같은 날
+    one = [
+        o
+        for o in outflows
+        if o["docs"] and o["table"] == "card" or (o["docs"] and o["vendor"]["pay"] == "auto_debit")
+    ]
+    decoys = []
+    for o in pick(one, EXPENSE_DECOY_RATE):
+        d0 = o["docs"][0]
+        on = o["at"].date() if o["table"] == "card" else o["at"].date() - timedelta(days=1)
+        word = "취소" if o["table"] == "card" else "견적(확정 전)"
+        d = doc(d0["kind"], d0["issuer"], on, o["amount"], [(word, o["amount"])], summary=word)
+        d["body"] = f"[{word}] " + d["body"]
+        d["decoy"] = True
+        decoys.append(d)
+    # 표기 변형 — 적요·가맹점명(은행·결제대행사), 월말 명세서 발행처(법인)
+    for o in pick([o for o in outflows], EXPENSE_ALIAS_RATE):
+        o["label"] = vendor_aliases(o["vendor"])["card" if o["table"] == "card" else "memo"]
+    month_end = [o for o in outflows if o["vendor"]["pay"] == "month_end_transfer" and o["docs"]]
+    for o in pick(month_end, EXPENSE_ISSUER_ALIAS_RATE):
+        alias = vendor_aliases(o["vendor"])["issuer"]
+        for d in o["docs"]:
+            d["body"] = d["body"].replace(d["issuer"], alias)
+            d["issuer"] = alias
+    return decoys
 
 
 def _hhmm(s: str):

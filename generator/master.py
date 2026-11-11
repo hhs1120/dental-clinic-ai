@@ -1276,6 +1276,25 @@ EXPENSE_ITEMS = {
 }
 # 증빙이 있는 출금 중 출금액이 증빙 합계보다 조금 많은 비율(배송비·이전 미지급분 등), 그 차이(증빙 합계 대비, 100원 단위
 # 내림 — 최소 100원) (§2.7 어긋남)
+# ⑧-2 헷갈리는 모양(데이터 재설계 설계 §2) — 규칙 기준선(evaluation/expense.py)을 속이지만 증빙을 읽으면 풀린다. 추정값
+EXPENSE_DECOY_RATE = 0.15  # 1:1 출금(카드·자동이체) 중 같은 거래처·같은 금액의 취소 주문·견적 증빙이 더 가까이 있는 몫
+EXPENSE_ALIAS_RATE = 0.12  # 출금 적요·가맹점명이 은행·결제대행사 표기로 찍히는 몫
+EXPENSE_ISSUER_ALIAS_RATE = 0.25  # 월말 이체 중 명세서 발행처가 법인 표기("(주)…")인 몫
+EXPENSE_SPLIT_DOC_RATE = (
+    0.12  # 증빙 있는 카드 사용 중 주문 두 건을 한 번에 결제한 몫(증빙 둘 = 출금 하나)
+)
+EXPENSE_MIXED_ORDER_RATE = 0.5  # 쇼핑몰 주문 중 두 과목 품목이 섞인 몫 — 정답은 금액이 큰 과목
+
+
+def vendor_aliases(v: dict) -> dict:
+    """거래처 표기 변형 — 증빙 발행처(법인 표기)·통장 적요(은행 표기 — 끝 글자 잘림)·카드 가맹점명(결제대행사 표기)"""
+    return {
+        "issuer": f"(주){v['name']}",
+        "memo": v["name"][:-1],
+        "card": f"KCP*{v['card_name'] or v['name']}",
+    }
+
+
 EXPENSE_AMOUNT_DIFF_RATE = 0.05
 EXPENSE_AMOUNT_DIFF_RANGE = (0.01, 0.05)
 # 병원 카드 사용 중 증빙이 없는 비율 — 영수증을 잃기 쉬운 카드 사용에만(이체·자동이체는 증빙이 온다). 전체 출금의 약 5%

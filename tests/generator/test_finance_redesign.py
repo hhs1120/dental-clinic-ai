@@ -127,3 +127,52 @@ def test_latest_month_has_new_shapes(conn):
         if a not in _sums(2)
     ]
     assert len(multi) >= RECON_LATEST_MONTH_MIN
+
+
+# ── ⑧-2 지출(데이터 재설계 설계 §2) ─────────────────────────────
+
+
+def test_expense_decoys_unattached_and_counted(conn):
+    """디코이 증빙은 어느 정답에도 없고, 수는 메타 expense_decoys"""
+    meta = dict(conn.execute("select key, value from truth.truth_gen_meta"))
+    used = {
+        int(i)
+        for (ids,) in conn.execute("select document_ids from truth.truth_expense_matches")
+        for i in __import__("json").loads(ids)
+    }
+    unused = [i for (i,) in conn.execute("select id from fin_expense_documents") if i not in used]
+    assert len(unused) == int(meta["expense_decoys"]) > 0
+
+
+def test_expense_aliases_and_splits_present(conn):
+    from generator.master import VENDORS, vendor_aliases
+
+    names = {v["name"] for v in VENDORS} | {v["card_name"] for v in VENDORS if v["card_name"]}
+    labels = [
+        m for (m,) in conn.execute("select memo from fin_bank_transactions where direction='out'")
+    ]
+    labels += [m for (m,) in conn.execute("select merchant from fin_card_expenses")]
+    aliases = {a for v in VENDORS for a in vendor_aliases(v).values()}
+    assert any(lab in aliases and lab not in names for lab in labels)
+    issuers = {i for (i,) in conn.execute("select issuer from fin_expense_documents")}
+    assert issuers & aliases
+    two = conn.execute(
+        "select count(*) from truth.truth_expense_matches where outflow_table='fin_card_expenses'"
+        " and json_array_length(document_ids) = 2"
+    ).fetchone()[0]
+    assert two > 0
+
+
+def test_mixed_orders_take_larger_account(conn):
+    """쇼핑몰 혼합 주문 — 정답 과목이 거래처 기본값(소모품비)과 다른 주문이 있다(금액 큰 과목)"""
+    n = conn.execute(
+        "select count(*) from truth.truth_expense_matches t join fin_card_expenses c on c.id = t.outflow_id"
+        " where t.outflow_table='fin_card_expenses' and c.merchant like '%모아덴탈몰%'"
+        " and t.account != '소모품비'"
+    ).fetchone()[0]
+    assert n > 0
+
+
+def test_expense_meta_words_absent(conn):
+    bodies = " ".join(b for (b,) in conn.execute("select body from fin_expense_documents"))
+    assert "디코이" not in bodies and "decoy" not in bodies.lower()

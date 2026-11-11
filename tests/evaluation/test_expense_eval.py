@@ -110,3 +110,50 @@ def test_score_dev_only_rows(tmp_path):
     c.execute("ATTACH DATABASE ? AS truth", (str(tmp_path / "truth.sqlite"),))
     r = ex.score(c, "dev", VENDORS)
     assert r == {"n": 1, "match": {"k": 1, "n": 1}, "account": {"k": 1, "n": 1}}
+
+
+# ── 데이터 재설계 모양이 규칙을 속이는지(규칙은 고정) ─────────────────
+
+
+def test_decoy_closer_fools_rule():
+    """자동이체 — 진짜 고지서는 5일 전, 견적(확정 전)이 1일 전이면 규칙은 견적을 고른다"""
+    out = {
+        "table": "fin_bank_transactions",
+        "at": "2026-11-20 06:00:00",
+        "amount": 900000,
+        "label": "한결빌딩관리",
+    }
+    docs = [
+        doc(1, "bill", "한결빌딩관리", "2026-11-15", 900000),
+        doc(2, "bill", "한결빌딩관리", "2026-11-19", 900000),
+    ]
+    assert ex.rule_match(out, docs, VENDORS) == [2]  # 정답은 [1]
+
+
+def test_issuer_alias_fools_month_end():
+    out = {
+        "table": "fin_bank_transactions",
+        "at": "2026-11-30 17:00:00",
+        "amount": 300000,
+        "label": "바른덴탈상사",
+    }
+    docs = [doc(1, "statement", "(주)바른덴탈상사", "2026-11-05", 300000)]
+    assert ex.rule_match(out, docs, VENDORS) == []  # 정답은 [1]
+
+
+def test_memo_alias_fools_account():
+    assert ex.rule_account({"label": "바른덴탈상"}, VENDORS) is None  # 정답은 재료비
+
+
+def test_two_orders_one_payment_fools_rule():
+    out = {
+        "table": "fin_card_expenses",
+        "at": "2026-11-10 12:00:00",
+        "amount": 50000,
+        "label": "페이온*모아덴탈몰",
+    }
+    docs = [
+        doc(1, "order_email", "모아덴탈몰", "2026-11-10", 20000),
+        doc(2, "order_email", "모아덴탈몰", "2026-11-10", 30000),
+    ]
+    assert ex.rule_match(out, docs, VENDORS) == []  # 정답은 [1, 2]

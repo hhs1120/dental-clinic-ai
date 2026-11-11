@@ -34,6 +34,7 @@ from generator.master import (
     cash_deposit_day,
     recon_months,
     recon_test_months,
+    vendor_aliases,
 )
 from generator.verify.common import _dt, _rows
 
@@ -461,8 +462,12 @@ def check_recon_mismatches(conn, ctx):
 # ── ⑧-2 지출 (8c단계) ───────────────────────────────────────
 
 _LAB_LINE = re.compile(r"^- (\S+) (?:(\d{2})번 )?(" + "|".join(LAB_FEES) + r") ([\d,]+)원$", re.M)
-_VENDOR = {v["name"]: v for v in VENDORS}
-_CARD_NAMES = {v["card_name"] or v["name"]: v for v in VENDORS if v["pay"] == "card"}
+_VENDOR = {v["name"]: v for v in VENDORS} | {
+    vendor_aliases(v)["memo"]: v for v in VENDORS
+}  # 은행 표기(끝 글자 잘림)도 그 거래처
+_CARD_NAMES = {v["card_name"] or v["name"]: v for v in VENDORS if v["pay"] == "card"} | {
+    vendor_aliases(v)["card"]: v for v in VENDORS if v["pay"] == "card"
+}  # 결제대행사 표기도
 
 
 def _outflows(conn) -> list[dict]:
@@ -517,10 +522,17 @@ def check_expense_matches(conn, ctx):
     ]
     used = Counter(d["id"] for r in rows for d in r["docs"])
     bad += [
-        {"document_id": i, "problem": "증빙이 한 출금에 정확히 속하지 않음"}
+        {"document_id": i, "problem": "증빙이 두 출금 이상에 속함"}
         for (i,) in conn.execute("SELECT id FROM fin_expense_documents")
-        if used.get(i, 0) != 1
+        if used.get(i, 0) > 1
     ]
+    # 디코이(어느 출금에도 안 붙은 증빙 — 취소 주문·견적) 수 = 메타 expense_decoys(데이터 재설계 설계 §2)
+    unused = [i for (i,) in conn.execute("SELECT id FROM fin_expense_documents") if i not in used]
+    meta = dict(conn.execute("SELECT key, value FROM truth.truth_gen_meta"))
+    if len(unused) != int(meta.get("expense_decoys", 0)):
+        bad.append(
+            {"unattached_documents": len(unused), "expected": meta.get("expense_decoys", 0)}
+        )
     with_docs = diffs = cards = no_docs = 0
     hi = EXPENSE_AMOUNT_DIFF_RANGE[1]
     for r in rows:
@@ -544,7 +556,7 @@ def check_expense_matches(conn, ctx):
         ):
             why = "split"
         elif any(
-            d["issuer"] != v["name"]
+            d["issuer"] not in (v["name"], vendor_aliases(v)["issuer"])
             or d["issued_on"] > r["at"][:10]
             or f"{d['amount']:,}원" not in d["body"]
             for d in r["docs"]
@@ -562,6 +574,14 @@ def check_expense_matches(conn, ctx):
                 if item in d["body"]
             }
             want = items if r["docs"] else {v["account"]}
+            if len(want) > 1:  # 혼합 주문 — 금액이 큰 품목의 과목(데이터 재설계 설계 §2)
+                spent = Counter()
+                for d in r["docs"]:
+                    for item, acct in EXPENSE_ITEMS[v["kind"]]:
+                        m = re.search(rf"- {re.escape(item)} ([\d,]+)원", d["body"])
+                        if m:
+                            spent[acct] += int(m[1].replace(",", ""))
+                want = {spent.most_common(1)[0][0]}
             if want != {t["account"]}:
                 bad.append(
                     {"outflow": (r["table"], r["id"]), "problem": "카드 계정 과목 ≠ 품목 과목"}
@@ -605,7 +625,9 @@ def check_expense_matches(conn, ctx):
 def check_lab_statements(conn, ctx):
     """기공소 명세서 줄 = 창 안·TODAY가 속한 달 전의 completed 인레이·크라운·브릿지 진료 1건(환자 이름·치아 — 브릿지는 치아 없음·보철 종류),
     줄 금액 = master.LAB_FEES, 명세서 금액 = 줄 합계 (§2.7)"""
-    lab = {v["name"] for v in VENDORS if v["kind"] == "lab"}
+    lab = {
+        n for v in VENDORS if v["kind"] == "lab" for n in (v["name"], vendor_aliases(v)["issuer"])
+    }
     codes = {p["code"]: p["name"] for p in PROCEDURES if p["name"] in LAB_FEES}
     want = Counter(
         (name, None if tooth == FULL_MOUTH else tooth, codes[code])
