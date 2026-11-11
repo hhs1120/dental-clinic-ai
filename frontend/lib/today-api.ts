@@ -53,6 +53,10 @@ export interface TodaySheet {
     appeal_soon: number;
     /** 청구 전 상병 확인 경고 줄 — /claims?tab=pre와 같은 함수 */
     preclaim_warning: number;
+    /** 확정 안 된 일계표 불일치 건 — /finance와 같은 함수(backend/recon.py open_count) */
+    recon_open: number;
+    /** 미확정 건이 있는 가장 이른 달 — 줄 링크가 그 달로 간다 */
+    recon_month: string | null;
   };
   ai: {
     autoclose_on: boolean;

@@ -6,8 +6,10 @@ from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
+import yaml
 
 from generator import verify
+from generator.clinic import master_values_rows
 from generator.master import REVIEW_NOTICE_DAYS
 from tests.generator.verify_db import CTX, ROOT, appt, make_db
 
@@ -825,6 +827,16 @@ def test_confirmed_uses_previous_open_day(tmp_path):
 
 def test_main_exit_codes(tmp_path, capsys):
     conn = make_db(tmp_path)
+    # main은 실제 config의 공휴일로 비교한다 — 테스트 DB의 은행 공휴일(CTX)을 그것으로 맞춘다
+    cfg = yaml.safe_load((ROOT / "config" / "generator.yaml").read_text(encoding="utf-8"))
+    real = frozenset(
+        date.fromisoformat(d)
+        for d in json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
+    )
+    conn.execute(
+        "UPDATE ax_master_values SET value = ? WHERE name = 'bank_holidays'",
+        (dict(master_values_rows(real))["bank_holidays"],),
+    )
     conn.commit()
     args = ["--db", str(tmp_path / "source.sqlite"), "--truth", str(tmp_path / "truth.sqlite")]
     assert verify.main(args) == 0

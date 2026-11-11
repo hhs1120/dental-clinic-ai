@@ -318,3 +318,19 @@ CREATE TABLE ax_claim_judgments (
     judged_by  TEXT NOT NULL,
     judged_at  TEXT NOT NULL
 );
+
+-- ⑧-1 불일치 건 사람 확정(기능 정의 §5 ⑧, backend/recon.py) — 건 키 단위, 다시 누르면 덮어씀.
+-- proposed_* = 확정할 때 보이던 제안(1단계는 규칙, 3단계부터 에이전트). 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_recon_confirmations (
+    item_key       TEXT PRIMARY KEY,
+    occurred_on    TEXT NOT NULL,
+    fin_ids        TEXT NOT NULL,  -- JSON [{"table": …, "id": …}]
+    payment_ids    TEXT NOT NULL,  -- JSON
+    proposed_by    TEXT NOT NULL CHECK (proposed_by IN ('rule', 'agent')),
+    proposed_cause TEXT NOT NULL,
+    cause          TEXT NOT NULL CHECK (cause IN ('split_payment', 'cancel_reapprove', 'fee_mismatch',
+                       'deposit_delay', 'non_clinical_sale', 'entry_missing', 'amount_typo', 'date_shift',
+                       'method_wrong')),
+    judged_by      TEXT NOT NULL,
+    judged_at      TEXT NOT NULL
+);

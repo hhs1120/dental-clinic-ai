@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from backend import autoclose, calls, claims, db, missed, prep, today
+from backend import autoclose, calls, claims, db, missed, prep, recon, today
 from backend import judge_queue as jq
 from generator.clinic import master_values_rows
 from tests.backend.call_db import LABELS, TODAY, classify_row, make_call_db
@@ -269,3 +269,31 @@ def test_today_claim_lines_match_screen(tmp_path):
 def test_today_claim_lines_zero(pconn):
     people = _sheet(pconn)["people"]
     assert (people["appeal_soon"], people["preclaim_warning"]) == (0, 0)
+
+
+def test_today_recon_line_matches_screen(tmp_path):
+    """일계표 불일치 = 확정 안 된 불일치 건(backend/recon.py open_count) — 확정하면 줄어든다"""
+    from tests.backend.test_recon_match import Books
+
+    b = Books(tmp_path / "source.sqlite")
+    b.pay("2026-11-03 10:00:00", 3_500, "card")
+    b.sale("2026-11-03 10:00:00", 35_000, "R1")
+    b.settle("2026-11-03")
+    conn = b.app()
+    people = _sheet(conn)["people"]
+    assert people["recon_open"] == recon.open_count(conn, TODAY) == 1
+    assert people["recon_month"] == "2026-11"  # 링크가 가는 달 — 미확정이 있는 가장 이른 달
+    key = recon.ledger(conn, TODAY)["days"][0]["items"][0]["key"]
+    recon.confirm(conn, key, "amount_typo", "데스크", "2026-12-01 09:00", TODAY)
+    conn.commit()
+    assert _sheet(conn)["people"]["recon_open"] == 0
+
+
+def test_today_recon_zero(tmp_path):
+    from tests.backend.test_recon_match import Books, clean_day
+
+    b = Books(tmp_path / "source.sqlite")
+    clean_day(b)
+    b.cash_in(b.settle("2026-11-03"))
+    people = _sheet(b.app())["people"]
+    assert (people["recon_open"], people["recon_month"]) == (0, None)

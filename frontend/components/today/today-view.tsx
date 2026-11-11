@@ -179,6 +179,15 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "청구 점검에서 허용 상병 밖 줄 보기",
   );
   count(
+    p.recon_open,
+    "recon",
+    "일계표",
+    "danger",
+    p.recon_month ? `/finance?month=${p.recon_month}` : "/finance",
+    `일계표 불일치 ${p.recon_open}건`,
+    "장부와 카드·통장 입금이 안 맞는 건 확정",
+  );
+  count(
     p.judge_pending,
     "judge",
     "판정 대기",
