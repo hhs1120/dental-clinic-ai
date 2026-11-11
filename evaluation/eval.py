@@ -471,6 +471,22 @@ def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
             f"제외 — 폴백 {e['fallback']} · 실패 {e['failed']} · few-shot {e['fewshot']}",
             "",
         ]
+    b = c.get("baselines")
+    if b and b["n"]:
+        vs = list(b["versions"])
+        out += [
+            f"### 강한 기준선과 나란히 — silver 재료 밖 골드 {b['n']}통화(n-gram은 재료 {b['trained_on']}통화로 학습)",
+            "",
+            "| 항목 | 규칙(학습 없음) | 글자 n-gram | " + " | ".join(vs) + " |",
+            "|---|---|---|" + "---|" * len(vs),
+        ]
+        out += [
+            f"| {i} | {_kn(b['rule'][i]) if i in b['rule'] else '—'} | {_kn(b['ngram'][i])} | "
+            + " | ".join(_kn(b["versions"][v][i]) for v in vs)
+            + " |"
+            for i in classification.ITEMS
+        ]
+        out.append("")
     for cmp in c["compare"]:
         out += [
             f"### 버전 비교 {cmp['a']} → {cmp['b']} — 모델 vs 골드 (교집합 {cmp['n']}건)",

@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from backend.prompts import FRONT_MATTER, PROMPTS_DIR
-from evaluation import EvalRefused
+from evaluation import EvalRefused, call_baselines
 from evaluation.metrics import inverse_weights, macro_accuracy, mcnemar_exact, weighted_accuracy
 from evaluation.splits import silver_split
 from generator.master import CALL_FLAGS
@@ -148,6 +148,8 @@ def evaluate(
             },
         }
     out["compare"] = [_compare(a, b, usable, gold_ids, gold) for a, b in combinations(versions, 2)]
+    # 강한 기준선(규칙·글자 n-gram)과 같은 통화에서 나란히 — 생성 녹취의 천장을 드러낸다(§2.2)
+    out["baselines"] = call_baselines.evaluate(calls, split, usable)
     out["blind"] = _blind(conn, rows, calls, split, versions)
     if dump:  # dev 판정 풀만 — 비풀(재료·검증)은 사람이 건별로 보지 않는다(평가 설계 §2.7)
         out["dump"] = [
