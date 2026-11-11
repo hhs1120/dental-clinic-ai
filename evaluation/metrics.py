@@ -12,6 +12,9 @@ SILVER_MATERIAL_SHARE = (
     0.7  # silver 재료 비율, 나머지는 검증(평가 설계 §2.7 — evaluation/splits.py)
 )
 GOLD_AUDIT_SAMPLE = 50  # 골드 점검 사람 표본 통화 수(평가 설계 §2.3 — evaluation/gold_audit.py)
+HARD_AGREED_SAMPLE = (
+    30  # 어려운 통화 일치 라벨 사람 표본 통화 수(어려운 통화 설계 §4 — evaluation/hard_labels.py)
+)
 
 ACTION_AUDIT_SAMPLE = 30  # 처리 정답 사람 표본 통화 수(evaluation/call_actions.py)
 
