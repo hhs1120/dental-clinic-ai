@@ -276,7 +276,9 @@ def test_fake_build_fills_hard_transcripts(t4):
 
 def test_sample_items_per_type(t4):
     conn, _, rows = t4
-    items = hard_calls.sample_items(conn)
+    items = hard_calls.sample_items(
+        conn.execute("SELECT call_uid, hard_type, half FROM truth.truth_hard_calls").fetchall()
+    )
     assert len(items) == len(set(items)) == 20
     by = Counter((rows[u]["hard_type"], rows[u]["half"]) for u in items)
     assert by == {

@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import re
-import sqlite3
 import sys
 from collections import defaultdict
 from datetime import date, timedelta
@@ -479,11 +478,12 @@ def stage_transcripts(run, rng, fake) -> None:
             )
 
 
-def sample_items(conn) -> list[str]:
-    """전체 배치 전 샘플 — 종류마다 SAMPLE_PER_TYPE건(urgency_inverted는 절반마다 반씩), call_uid 해시순"""
+def sample_items(rows) -> list[str]:
+    """전체 배치 전 샘플 — rows = (call_uid, 종류, 절반). 종류마다 SAMPLE_PER_TYPE건(urgency_inverted는 절반마다 반씩),
+    call_uid 해시순"""
     groups = defaultdict(list)
-    for r in conn.execute("SELECT call_uid, hard_type, half FROM truth.truth_hard_calls"):
-        groups[(r[1], r[2])].append(r[0])
+    for uid, hard_type, half in rows:
+        groups[(hard_type, half)].append(uid)
     out = []
     for (_, half), uids in sorted(groups.items(), key=lambda x: (x[0][0], x[0][1] or "")):
         n = SAMPLE_PER_TYPE // len(HARD_URGENCY_HALVES) if half else SAMPLE_PER_TYPE
@@ -492,14 +492,18 @@ def sample_items(conn) -> list[str]:
 
 
 def main(argv=None) -> int:
-    """python -m generator.hard_calls sample-items — 샘플 건(쉼표로 이음, make llm-fill-api ITEMS=)"""
+    """python -m generator.hard_calls sample-items — make data가 내보낸 녹취 작업에서 샘플 건(쉼표로 이음,
+    make llm-fill-api TASK=hard_transcript ITEMS= NO_BATCH=1). 녹취가 없으면 DB를 교체하지 않으므로 작업 파일을 읽는다"""
     args = argparse.ArgumentParser(description=main.__doc__)
     args.add_argument("cmd", choices=["sample-items"])
     args.parse_args(argv)
-    paths = output_paths()
-    conn = sqlite3.connect(f"file:{paths['source']}?mode=ro", uri=True)
-    conn.execute("ATTACH DATABASE ? AS truth", (f"file:{paths['truth']}?mode=ro",))
-    print(",".join(sample_items(conn)))
+    jobs = output_paths()["llm_jobs"] / f"{TASK.name}.jsonl"
+    rows = []
+    for line in jobs.read_text(encoding="utf-8").splitlines():
+        j = json.loads(line)
+        hard = json.loads(j["user"])["hard"]
+        rows.append((j["item"], hard["type"], hard.get("half")))
+    print(",".join(sample_items(rows)))
     return 0
 
 
