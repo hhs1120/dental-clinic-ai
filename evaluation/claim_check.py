@@ -12,11 +12,14 @@ AI 추천(근거 있음 → 다툴 만함, 없음 → 정당)의 정확도(답�
 import argparse
 import hashlib
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 
 from backend import claim_check as cc
 from backend.prep import master_values
+from generator.chart import EVIDENCE_WORDS
+from generator.master import ADJUST_REASONS, PERIO_POCKET_MIN_MM
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIRMED = (
@@ -84,6 +87,39 @@ def dev_sample(conn, today: date, n: int = 60) -> list[int]:
     return sorted(bad + hard + rest)
 
 
+# 키워드 기준선(평가 설계 §1 원칙 8) — 데이터 점검 때 규칙 그대로, 데이터를 바꾸기 전에 고정한다
+_REQ_PROCS = {k: r["procedures"] for k, r in ADJUST_REASONS.items() if r["type"] == "requirement"}
+_LINK = re.compile(r"\d+일 전")
+_POCKET = re.compile(r"치주낭\s*(\d+)\s*mm")
+
+
+def keyword_reasons(procedure_code: str, note: str) -> list[str]:
+    """그 줄에 걸리는 요건 사유 — 재시행(R01)은 본문에 "이력"이 있을 때, 잇몸치료는 "N일 전"이면 연결(R02) 아니면 소견(R03)"""
+    out = []
+    for key, procs in _REQ_PROCS.items():
+        if procedure_code not in procs:
+            continue
+        if key == "R01" and "이력" not in note:
+            continue
+        if key in ("R02", "R03") and (key == "R02") != bool(_LINK.search(note)):
+            continue
+        out.append(key)
+    return out
+
+
+def keyword_rule(note: str, reasons: list[str], perio_min_mm: int) -> bool:
+    """근거 없음(오류)으로 보면 True — 사유별 근거 낱말(generator.chart.EVIDENCE_WORDS)이 하나도 없거나, R03은 치주낭 mm가
+    perio_min_mm 미만이거나 숫자가 없을 때. 부정 표현은 가리지 않는다"""
+    for key in reasons:
+        if key == "R03":
+            m = _POCKET.search(note)
+            if not m or int(m[1]) < perio_min_mm:
+                return True
+        elif not any(w in note for w in EVIDENCE_WORDS.get(key, ())):
+            return True
+    return False
+
+
 def _pr(pairs: list[tuple[bool, bool]]) -> dict:
     """(예측 양성, 정답 양성) 목록 → tp·fp·fn·정밀도·재현율"""
     tp = sum(p and t for p, t in pairs)
@@ -103,6 +139,7 @@ def _requirement(lines: list[dict]) -> dict:
     return {
         "ai": _pr([(x["ai"] == "missing", x["error"]) for x in lines]),
         "narrative_all": _pr([(x["narrative"], x["error"]) for x in lines]),
+        "keyword": _pr([(x["keyword"], x["error"]) for x in lines]),
     }
 
 
@@ -136,6 +173,11 @@ def score(conn, today: date, split: str, claim_ids: list[int] | None = None) -> 
                 "ai": c["requirement"] if c["valid"] else "failed",
                 "error": t["claim_id"] in errors,
                 "narrative": t["claim_id"] in narrative,
+                "keyword": keyword_rule(
+                    t["note"] or "",
+                    keyword_reasons(t["procedure_code"], t["note"] or ""),
+                    PERIO_POCKET_MIN_MM,
+                ),
             }
         )
     adjust = [x for x in lines if x["status"] in cc.CUT and x["adjust_note"] in req]

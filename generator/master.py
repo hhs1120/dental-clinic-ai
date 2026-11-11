@@ -541,6 +541,8 @@ _INSURED_NAMES = (
     "임플란트 1차",
     "잇몸치료",
 )
+# R03 치주치료 산정 — 치주낭이 이 깊이(mm) 이상인 부위가 있어야 근거(§4.3). 차트 소견 생성과 청구 기준 문서가 함께 읽는다
+PERIO_POCKET_MIN_MM = 4
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
     ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),
