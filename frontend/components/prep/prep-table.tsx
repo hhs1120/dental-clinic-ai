@@ -134,13 +134,13 @@ export function PrepTable({
                     })
                   }
                 >
-                  <td className="px-3 py-2 align-top tabular-nums">
+                  <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                     <b>{r.time}</b>
                     <div className="text-xs text-muted-foreground">
                       {r.chair_no ? `${r.chair_no}번 체어` : "상담실"}
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-top whitespace-nowrap">
+                  <td className="px-3 py-2 align-middle whitespace-nowrap">
                     <Link
                       href={`/emr?chart=${encodeURIComponent(r.patient.chart_no)}`}
                       className="font-bold text-primary hover:underline"
@@ -156,13 +156,13 @@ export function PrepTable({
                       {r.patient.sex === "M" ? "남" : "여"}
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-top whitespace-nowrap">
+                  <td className="px-3 py-2 align-middle whitespace-nowrap">
                     {r.procedure}
                     <div className="text-xs text-muted-foreground">
                       {TYPE_LABEL[r.type]} · {r.staff} · {r.duration_min}분
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-top">
+                  <td className="px-3 py-2 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {r.chips
                         .filter((c) => c !== "appointment")
@@ -173,11 +173,11 @@ export function PrepTable({
                         ))}
                     </div>
                   </td>
-                  <td className="min-w-60 px-3 py-2 align-top">
+                  <td className="min-w-60 px-3 py-2 align-middle">
                     <SuggestionLine row={r} />
                   </td>
                   {past && (
-                    <td className="px-3 py-2 align-top">
+                    <td className="px-3 py-2 align-middle">
                       <Badge
                         variant={r.status === "noshow" ? "danger" : "muted"}
                       >

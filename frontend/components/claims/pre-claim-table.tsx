@@ -80,10 +80,10 @@ export function PreClaimTable({
           <tbody>
             {rows.map((r) => (
               <tr key={r.claim_id} className="border-t">
-                <td className="px-3 py-2 align-top whitespace-nowrap tabular-nums">
+                <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                   {r.service_date}
                 </td>
-                <td className="px-3 py-2 align-top whitespace-nowrap">
+                <td className="px-3 py-2 align-middle whitespace-nowrap">
                   <Link
                     href={`/emr?chart=${encodeURIComponent(r.chart_no)}`}
                     className="font-bold text-primary hover:underline"
@@ -91,15 +91,15 @@ export function PreClaimTable({
                     {r.name}
                   </Link>
                 </td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3 py-2 align-middle">
                   {r.procedure_name}
                   {toothText(r.tooth_no) && ` (${toothText(r.tooth_no)})`}
                 </td>
-                <td className="px-3 py-2 text-right align-top tabular-nums">
+                <td className="px-3 py-2 text-right align-middle tabular-nums">
                   {won(r.claim_amount)}
                 </td>
-                <td className="px-3 py-2 align-top">{r.dx_name ?? "-"}</td>
-                <td className="px-3 py-2 align-top">
+                <td className="px-3 py-2 align-middle">{r.dx_name ?? "-"}</td>
+                <td className="px-3 py-2 align-middle">
                   {r.warning ? (
                     <div className="flex flex-col items-start gap-1">
                       <Badge variant="warn">
