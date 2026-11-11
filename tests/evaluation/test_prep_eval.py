@@ -16,6 +16,9 @@ def row(appt, procedure_code, alerts=(), chips=("appointment",), **facts):
     return {
         "appointment_id": appt,
         "procedure_code": procedure_code,
+        "procedure": procedure_code,
+        "type": "treatment",
+        "last_visit": None,
         "alerts": [{"code": c, "label": c, "related": rel, "action": "x"} for c, rel in alerts],
         "balance": facts.get("balance", 0),
         "scaling_unused": facts.get("scaling_unused", False),
@@ -103,3 +106,44 @@ def test_not_generated_ignores_rows_of_cancelled_appointments(conn):
     # 만든 뒤 취소된 예약(104)의 남은 행은 "만들지 않은 예약" 계산에 섞이지 않는다
     put(conn, row(104, "U0001"), NONE)
     assert prep_eval.score(conn, [DAY])["not_generated"] == 3
+
+
+def test_template_baseline_same_rows(conn):
+    """템플릿 기준선(평가 설계 §4) — 같은 행의 사실만으로 "켜진 칩 키 전부로 제안, 다 꺼지면 none".
+    앱이 저장한 related로 주의 칩을 고르고, 채점은 LLM 제안과 같은 네 지표"""
+    put(conn, row(101, "U0011", [("ANTICOAG", True)], balance=30000), NONE)
+    put(conn, row(102, "U0001", [("GAG", True), ("HTN", False)]), NONE)
+    put(conn, row(103, "U0019"), NONE)
+    t = prep_eval.score(conn, [DAY])["template"]
+    assert t["valid"] == {"k": 3, "n": 3}
+    assert t["reflect"] == {"k": 2, "n": 2}
+    assert t["over_mention"] == {"k": 0, "n": 3}
+    assert t["over_suggest"] == {"k": 0, "n": 1}
+
+
+def test_report_shows_template_column(conn):
+    from evaluation import eval as ev
+
+    put(conn, row(101, "U0011", [("ANTICOAG", True)]), NONE)
+    p = {"days": ["2026-12-01", "2026-12-01"]} | prep_eval.score(conn, [DAY])
+    text = "\n".join(ev._render_prep(p))
+    assert "| 지표 | 제안(LLM) | 템플릿 기준선 |" in text
+
+
+def test_template_is_a_real_suggestion():
+    """템플릿은 실제 LLM 입력(backend.prep.llm_facts)의 키·값으로 만들고 실제 후검증을 통과한다 — 후검증 칸은 잰 값"""
+    from backend.prep import check_suggestion, llm_facts
+
+    r = row(
+        101,
+        "U0011",
+        [("ANTICOAG", True), ("HTN", False)],
+        balance=30000,
+        family_recall=[{"chart_no": "C-00002", "name": "가족", "last_hygiene": "2026-01-02"}],
+        open_plan=[{"procedure": "레진", "tooth": "16", "est_fee": 80000}],
+    )
+    s = prep_eval._template(r)
+    keys = [u["key"] for u in s["used_facts"]]
+    assert keys == ["balance", "alert.ANTICOAG", "plan.1", "family.C-00002"]
+    assert check_suggestion(llm_facts(r), s)
+    assert prep_eval._template(row(103, "U0019")) == NONE

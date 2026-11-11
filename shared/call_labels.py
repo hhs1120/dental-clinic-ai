@@ -68,14 +68,14 @@ FLAG_KO = {
 }
 
 
+def same_value(item: str, a, b) -> bool:
+    """한 항목 값이 같은가 — 급함은 urgent 여부만 본다(normal/low는 골드가 추첨이라 같은 것으로, 평가 설계 §2.2·§2.5)"""
+    return (a == "urgent") == (b == "urgent") if item == "urgency" else a == b
+
+
 def differing_items(a: dict, b: dict) -> list[str]:
-    """두 라벨에서 다른 항목(평가 설계 §2.5) — 급함은 urgent 여부만 본다(normal/low는 골드가 추첨이라 같은 것으로).
-    엇갈림·교차검증의 모델 오류가 같이 쓴다"""
-    return [
-        i
-        for i in ITEMS
-        if ((a[i] == "urgent") != (b[i] == "urgent") if i == "urgency" else a[i] != b[i])
-    ]
+    """두 라벨에서 다른 항목(평가 설계 §2.5) — 엇갈림·교차검증의 모델 오류가 같이 쓴다"""
+    return [i for i in ITEMS if not same_value(i, a[i], b[i])]
 
 
 LABEL_SCHEMA = {

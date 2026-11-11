@@ -11,11 +11,11 @@ from pathlib import Path
 import yaml
 
 from backend.prompts import FRONT_MATTER, PROMPTS_DIR
-from evaluation import EvalRefused
+from evaluation import EvalRefused, call_baselines
 from evaluation.metrics import inverse_weights, macro_accuracy, mcnemar_exact, weighted_accuracy
 from evaluation.splits import silver_split
 from generator.master import CALL_FLAGS
-from shared.call_labels import differing_items
+from shared.call_labels import differing_items, same_value
 
 ITEMS = ("primary_purpose", "counterpart", "urgency") + CALL_FLAGS  # 9항목
 PURPOSE = "primary_purpose"
@@ -59,13 +59,14 @@ def _classifications(conn) -> list[dict]:
 def _score(
     ids, pred: dict, ref: dict, calls: dict, population: Counter, drop: set | None = None
 ) -> dict:
-    """ids의 통화를 pred vs ref로 — 항목별 k/n, 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적).
+    """ids의 통화를 pred vs ref로 — 항목별 k/n(급함은 urgent 여부만 — shared.call_labels.same_value), 목적 Strict는 역확률 가중·카테고리 평균 병기(카테고리 = 골드 목적).
     drop = 모수에서 뺄 (통화, 항목) — 골드 점검의 골드 오류 추정(평가 설계 §2.3, dev만)"""
     ids = sorted(i for i in ids if i in pred and i in ref)
     drop = drop or set()
     keep = {i: [c for c in ids if (c, i) not in drop] for i in ITEMS}
     items = {
-        i: {"k": sum(pred[c][i] == ref[c][i] for c in keep[i]), "n": len(keep[i])} for i in ITEMS
+        i: {"k": sum(same_value(i, pred[c][i], ref[c][i]) for c in keep[i]), "n": len(keep[i])}
+        for i in ITEMS
     }
     rows = [
         (calls[c]["gold"][PURPOSE], pred[c][PURPOSE] == ref[c][PURPOSE]) for c in keep[PURPOSE]
@@ -147,6 +148,8 @@ def evaluate(
             },
         }
     out["compare"] = [_compare(a, b, usable, gold_ids, gold) for a, b in combinations(versions, 2)]
+    # 강한 기준선(규칙·글자 n-gram)과 같은 통화에서 나란히 — 생성 녹취의 천장을 드러낸다(§2.2)
+    out["baselines"] = call_baselines.evaluate(calls, split, usable)
     out["blind"] = _blind(conn, rows, calls, split, versions)
     if dump:  # dev 판정 풀만 — 비풀(재료·검증)은 사람이 건별로 보지 않는다(평가 설계 §2.7)
         out["dump"] = [
@@ -161,7 +164,7 @@ def evaluate(
             for v, pred in usable.items()
             for c in sorted(pool_ids & pred.keys())
             for i in ITEMS
-            if pred[c][i] != gold[c][i]
+            if not same_value(i, pred[c][i], gold[c][i])
         ]
     return out
 
@@ -319,8 +322,8 @@ def _compare(a: str, b: str, usable: dict, ref_ids: set, ref: dict) -> dict:
     ids = sorted(ref_ids & usable[a].keys() & usable[b].keys())
     items = {}
     for i in ITEMS:
-        ra = [usable[a][c][i] == ref[c][i] for c in ids]
-        rb = [usable[b][c][i] == ref[c][i] for c in ids]
+        ra = [same_value(i, usable[a][c][i], ref[c][i]) for c in ids]
+        rb = [same_value(i, usable[b][c][i], ref[c][i]) for c in ids]
         only_a = sum(x and not y for x, y in zip(ra, rb, strict=True))
         only_b = sum(y and not x for x, y in zip(ra, rb, strict=True))
         items[i] = {"a": sum(ra), "b": sum(rb), "p": mcnemar_exact(only_a, only_b)}

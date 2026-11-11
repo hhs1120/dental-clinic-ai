@@ -448,7 +448,12 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
 
 
 def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
-    out = ["## ① 분류", ""]
+    out = [
+        "## ① 분류",
+        "",
+        "급함은 urgent 여부만 센다(골드 normal/low가 녹취와 무관한 추첨 — 평가 설계 §2.2). 이 정의 전 리포트와 급함 숫자를 직접 비교하지 않는다",
+        "",
+    ]
     if not c["versions"]:
         out += ["분류 기록 없음", ""]
     for v, x in c["versions"].items():
@@ -471,6 +476,24 @@ def _render_classification(c: dict, audit_jv: str | None = None) -> list[str]:
             f"제외 — 폴백 {e['fallback']} · 실패 {e['failed']} · few-shot {e['fewshot']}",
             "",
         ]
+    b = c.get("baselines")
+    if b and b["n"]:
+        vs = list(b["versions"])
+        out += [
+            f"### 강한 기준선과 나란히 — silver 재료 밖 골드 {b['n']}통화(n-gram은 재료 {b['trained_on']}통화로 학습)",
+            "",
+            "모든 열이 같은 통화(모든 버전이 쓸 수 있는 통화)를 센다. 급함은 urgent 여부만(평가 설계 §2.2)",
+            "",
+            "| 항목 | 규칙(학습 없음) | 글자 n-gram | " + " | ".join(vs) + " |",
+            "|---|---|---|" + "---|" * len(vs),
+        ]
+        out += [
+            f"| {i} | {_kn(b['rule'][i]) if i in b['rule'] else '—'} | {_kn(b['ngram'][i])} | "
+            + " | ".join(_kn(b["versions"][v][i]) for v in vs)
+            + " |"
+            for i in classification.ITEMS
+        ]
+        out.append("")
     for cmp in c["compare"]:
         out += [
             f"### 버전 비교 {cmp['a']} → {cmp['b']} — 모델 vs 골드 (교집합 {cmp['n']}건)",
@@ -605,12 +628,19 @@ def _render_prep(p: dict) -> list[str]:
         f"{p['days'][0]} ~ {p['days'][1]} · 저장 행 {p['valid']['n']}({versions})"
         f" · 만들지 않은 예약 {p['not_generated']}",
         "",
-        "| 지표 | 값 |",
-        "|---|---|",
-        f"| 후검증 통과 | {_kn(p['valid'])} |",
-        f"| 주의사항 반영률(관련 주의사항이 있는 행) | {_kn(p['reflect'])} |",
-        f"| 과잉 언급률(무관 주의사항을 근거로 씀) | {_kn(p['over_mention'])} |",
-        f"| 과잉 제안률(칩이 다 꺼진 행의 suggest) | {_kn(p['over_suggest'])} |",
+        "| 지표 | 제안(LLM) | 템플릿 기준선 |",
+        "|---|---|---|",
+        *(
+            f"| {name} | {_kn(p[m])} | {_kn(p['template'][m])} |"
+            for m, name in (
+                ("valid", "후검증 통과"),
+                ("reflect", "주의사항 반영률(관련 주의사항이 있는 행)"),
+                ("over_mention", "과잉 언급률(무관 주의사항을 근거로 씀)"),
+                ("over_suggest", "과잉 제안률(칩이 다 꺼진 행의 suggest)"),
+            )
+        ),
+        "",
+        "템플릿 기준선 = 같은 행 사실만으로 켜진 칩 키를 모두 근거로 제안(LLM 없음) — 네 지표는 빠뜨림·지어냄만 재므로 둘이 같으면 제안의 쓸모는 이 지표로 가려지지 않는다",
         "",
     ]
 

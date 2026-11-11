@@ -332,3 +332,32 @@ def test_evaluate_judge_skips_trained_on_dev_only(conn):
     assert got["purpose"]["n"] == full - 1
     t = classification.evaluate_judge(conn, "test", skip={"c-0003"})["v1"]["judge_vs_gold"]
     assert t["purpose"]["n"] == 1
+
+
+def test_model_vs_gold_urgency_urgent_or_not(conn):
+    """급함 정확도는 urgent 여부만(평가 설계 §2.2) — 골드 normal/low는 녹취와 무관한 추첨이라 low ↔ normal은 맞음.
+    urgent ↔ normal은 여전히 틀림"""
+    base = classification.evaluate(conn, "dev")["versions"]["v1"]["model_vs_gold"]["items"][
+        "urgency"
+    ]
+    conn.execute("UPDATE truth.truth_call_labels SET urgency = 'low' WHERE call_uid = 'c-0001'")
+    same = classification.evaluate(conn, "dev")["versions"]["v1"]["model_vs_gold"]["items"][
+        "urgency"
+    ]
+    assert same == base
+    conn.execute("UPDATE truth.truth_call_labels SET urgency = 'urgent' WHERE call_uid = 'c-0001'")
+    worse = classification.evaluate(conn, "dev")["versions"]["v1"]["model_vs_gold"]["items"][
+        "urgency"
+    ]
+    assert worse["k"] == base["k"] - 1
+
+
+def test_compare_and_dump_urgency_urgent_or_not(conn):
+    """버전 비교·dev 오답 목록도 정확도와 같은 기준 — 골드 low vs 모델 normal은 오답이 아니다"""
+    before = classification.evaluate(conn, "dev")
+    conn.execute("UPDATE truth.truth_call_labels SET urgency = 'low' WHERE call_uid = 'c-0001'")
+    r = classification.evaluate(conn, "dev", dump=True)
+    assert [c["items"]["urgency"] for c in r["compare"]] == [
+        c["items"]["urgency"] for c in before["compare"]
+    ]
+    assert not any(d["item"] == "urgency" and d["call_uid"] == "c-0001" for d in r["dump"])
