@@ -7,6 +7,7 @@ from typing import NamedTuple
 
 from generator.master import (
     COURSE_VISITS,
+    DAYS_PER_MONTH,
     EPISODE_MIX,
     MAX_LEAD_DAYS,
     RECALL_CYCLE,
@@ -16,8 +17,6 @@ from generator.master import (
     age_band,
     age_on,
 )
-
-DAYS_PER_MONTH = 365.25 / 12
 
 
 class Arrival(NamedTuple):

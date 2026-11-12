@@ -9,10 +9,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from backend.harness.tools import Tool
+from backend.prep import master_values
 from shared.clinic import Clinic
 
-DAYS_PER_MONTH = 365.25 / 12  # 리콜 기한 계산 (가상 데이터 생성 설계 §2.2)
-SCALING = "스케일링"
 SETTLED = ("paid", "adjusted", "denied")  # 심사 결과가 있는 청구
 
 
@@ -112,7 +111,7 @@ def _schedule(clinic: Clinic, conn, args: dict) -> dict:
     }
 
 
-def _family_recall(conn, patient: dict, today: date) -> list[dict]:
+def _family_recall(conn, patient: dict, today: date, days_per_month: float) -> list[dict]:
     if patient["family_id"] is None:
         return []
     out = []
@@ -127,7 +126,7 @@ def _family_recall(conn, patient: dict, today: date) -> list[dict]:
     ):
         last = m["last_hygiene"]
         due = last and date.fromisoformat(last) + timedelta(
-            days=round(m["months"] * DAYS_PER_MONTH)
+            days=round(m["months"] * days_per_month)
         )
         out.append(
             {
@@ -156,11 +155,11 @@ def _summary(clinic: Clinic, conn, p: dict) -> dict:
         p["id"],
         today,
     )
+    mv = master_values(conn)
     scaling = conn.execute(
-        "SELECT EXISTS (SELECT 1 FROM source.emr_claims c JOIN source.emr_procedures r"
-        " ON r.code = c.procedure_code WHERE c.patient_id = ? AND r.name = ?"
-        " AND substr(c.service_date, 1, 4) = ?)",
-        (p["id"], SCALING, today[:4]),
+        "SELECT EXISTS (SELECT 1 FROM source.emr_claims c WHERE c.patient_id = ?"
+        " AND c.procedure_code = ? AND substr(c.service_date, 1, 4) = ?)",
+        (p["id"], mv["scaling_code"], today[:4]),
     ).fetchone()[0]
     return {
         "chart_no": p["chart_no"],
@@ -180,7 +179,7 @@ def _summary(clinic: Clinic, conn, p: dict) -> dict:
         "last_visit": last,
         "balance": _balance(conn, p["id"], today),
         "next_appointment": upcoming[0] if upcoming else None,
-        "family_recall": _family_recall(conn, p, clinic.today),
+        "family_recall": _family_recall(conn, p, clinic.today, mv["days_per_month"]),
         "scaling_claimed_this_year": bool(scaling),
         "open_plan_items": _rows(
             conn,

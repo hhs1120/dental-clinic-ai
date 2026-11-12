@@ -5,14 +5,20 @@ import json
 
 from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import (
+    ACCOUNTS,
     ADJUST_REASONS,
+    AGE_GROUP_RANGE,
     ALERT_TYPES,
     APPEAL_DAYS,
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     CASH_DEPOSIT_WEEKDAYS,
     CLINIC_NAME,
+    CONDITIONAL_INSURED_MIN_AGE,
+    DAYS_PER_MONTH,
     DIAGNOSES,
+    EXPENSE_ITEM_ACCOUNT_KINDS,
+    FULL_MOUTH,
     HOURS,
     NHIS_MEMO,
     ORAL_CARE_PRICES,
@@ -22,6 +28,7 @@ from generator.master import (
     SCALING_CODE,
     SCALING_MIN_AGE,
     STAFF,
+    VENDORS,
 )
 
 
@@ -49,7 +56,7 @@ def stage(run, rng, fake) -> None:
 def master_values_rows(holidays: frozenset = frozenset()) -> list[tuple[str, str]]:
     """(이름, JSON) — ④ 주의 칩 기준표(관련 시술·행동)와 보험 잔여 칩 기준, ⑨ 외부 이력 사유,
     ⑤ 재심 기한·허용 상병·사유 유형·기준 절·요건 사유, ⑧-1 원인 묶음·정산·현금 입금·구강용품·은행 공휴일
-    (holidays = config 공휴일). verify도 이것과 비교한다"""
+    (holidays = config 공휴일), ⑧-2 거래처 표·계정 과목, 급여 나이·월 일수·치아 단위 아닌 번호. verify도 이것과 비교한다"""
     requirement_notes: dict[str, list[str]] = {}
     for r in ADJUST_REASONS.values():
         if r["type"] == "requirement":
@@ -91,6 +98,27 @@ def master_values_rows(holidays: frozenset = frozenset()) -> list[tuple[str, str
         "oral_care_prices": ORAL_CARE_PRICES,
         # ⑧-1 은행 공휴일 — 정산 예상일·현금 입금일·대조 경계(§2.7)
         "bank_holidays": sorted(d.isoformat() for d in holidays),
+        # ⑧-2 거래처 표(설계 2026-11-11 재무 대조 §2) — 적요·가맹점명(card_name)으로 거래처를 가려 기본 계정 과목,
+        # by_item = 품목으로 과목이 정해지는 거래처(과목 확인 필요). 건수·금액 범위·증빙 종류는 생성 값이라 뺀다
+        "expense_vendors": [
+            {
+                "name": v["name"],
+                "card_name": v["card_name"],
+                "pay": v["pay"],
+                "account": v["account"],
+                "by_item": v["kind"] in EXPENSE_ITEM_ACCOUNT_KINDS,
+            }
+            for v in VENDORS
+        ],
+        # ⑧-2 계정 과목 목록 — 사람 확정에 고를 수 있는 값
+        "expense_accounts": list(ACCOUNTS),
+        # ⑤ 적용 연령별 급여 나이 범위(§2.1, None = 상한 없음)·조건부 급여 나이
+        "age_group_range": {k: list(v) for k, v in AGE_GROUP_RANGE.items()},
+        "conditional_insured_min_age": CONDITIONAL_INSURED_MIN_AGE,
+        # ③·④ 리콜 기한 개월 → 일(§2.6 (1))
+        "days_per_month": DAYS_PER_MONTH,
+        # ④ 치아 단위가 아닌 시술의 치아 번호(§2.3)
+        "full_mouth": FULL_MOUTH,
     }
     return [(name, json.dumps(v, ensure_ascii=False)) for name, v in values.items()]
 

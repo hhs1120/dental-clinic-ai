@@ -14,6 +14,7 @@ from backend.harness.loop import AgentSpec, Runner
 from backend.harness.store import RunStore
 from backend.harness.tools import ToolRegistry
 from backend.query_tools import query_tools
+from generator.clinic import master_values_rows
 from shared.clinic import Clinic
 from tests.backend.script import Script, answer, call
 
@@ -110,6 +111,7 @@ def clinic(tmp_path):
             (5, 105, 'K05', '치주치료 예정');
         """
     )
+    s.executemany("INSERT INTO ax_master_values VALUES (?, ?)", master_values_rows())
     s.commit()
     s.close()
     conn = db.connect(tmp_path / "a.sqlite", source)

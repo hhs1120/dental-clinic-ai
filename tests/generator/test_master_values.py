@@ -6,13 +6,19 @@ from datetime import date
 from generator.clinic import master_values_rows
 from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import (
+    ACCOUNTS,
     ADJUST_REASONS,
+    AGE_GROUP_RANGE,
     ALERT_TYPES,
     APPEAL_DAYS,
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     CASH_DEPOSIT_WEEKDAYS,
     CHART_REQUIREMENT,
+    CONDITIONAL_INSURED_MIN_AGE,
+    DAYS_PER_MONTH,
+    EXPENSE_ITEM_ACCOUNT_KINDS,
+    FULL_MOUTH,
     NHIS_MEMO,
     ORAL_CARE_PRICES,
     PROCEDURE_DIAGNOSES,
@@ -21,6 +27,7 @@ from generator.master import (
     RETREATMENT_REQUIREMENT,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    VENDORS,
 )
 from generator.verify.common import check_master_values
 from tests.generator.verify_db import CTX, make_db
@@ -59,6 +66,24 @@ def test_master_values_rows_match_master():
     }
     assert got["nhis_memo"] == NHIS_MEMO
     assert got["oral_care_prices"] == ORAL_CARE_PRICES
+    # ⑧-2 지출 증빙(설계 2026-11-11 재무 대조 §2)
+    assert got["expense_vendors"] == [
+        {
+            "name": v["name"],
+            "card_name": v["card_name"],
+            "pay": v["pay"],
+            "account": v["account"],
+            "by_item": v["kind"] in EXPENSE_ITEM_ACCOUNT_KINDS,
+        }
+        for v in VENDORS
+    ]
+    assert got["expense_accounts"] == list(ACCOUNTS)
+    assert [v["name"] for v in got["expense_vendors"] if v["by_item"]] == ["모아덴탈몰"]
+    # ⑤ 급여 나이·이미 backend에 박혀 있던 값
+    assert got["age_group_range"] == {k: list(v) for k, v in AGE_GROUP_RANGE.items()}
+    assert got["conditional_insured_min_age"] == CONDITIONAL_INSURED_MIN_AGE
+    assert got["days_per_month"] == DAYS_PER_MONTH == 365.25 / 12
+    assert got["full_mouth"] == FULL_MOUTH
 
 
 def test_bank_holidays_from_argument():
@@ -71,6 +96,10 @@ def test_no_generation_meta():
     got = {name: json.loads(value) for name, value in master_values_rows()}
     assert not any("link_failure" in n or "mismatch_counts" in n for n in got)
     assert all("weight" not in v for v in got["card_issuers"].values())
+    assert all(
+        set(v) == {"name", "card_name", "pay", "account", "by_item"}
+        for v in got["expense_vendors"]
+    )
 
 
 def test_requirement_notes_cover_chart_requirement():
@@ -93,4 +122,4 @@ def test_check_master_values_flags_missing_and_wrong(tmp_path):
     conn.execute("UPDATE ax_master_values SET value = '20' WHERE name = 'scaling_min_age'")
     assert [r["name"] for r in check_master_values(conn, CTX)] == ["scaling_min_age"]
     conn.execute("DELETE FROM ax_master_values")
-    assert len(check_master_values(conn, CTX)) == 15
+    assert len(check_master_values(conn, CTX)) == len(master_values_rows())

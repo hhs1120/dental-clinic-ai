@@ -15,13 +15,14 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 
-from generator.demand import DAYS_PER_MONTH, arrivals, recall_due
+from generator.demand import arrivals, recall_due
 from generator.master import (
     CHAIRS,
     CHECKUP_CODE,
     CHURN_MIN_DAYS,
     CHURN_SHARE,
     COURSE_INTERVAL_DAYS,
+    DAYS_PER_MONTH,
     DOCTOR_CONCURRENCY,
     DORMANT_MONTHLY_RATE,
     EPISODE_MIX,

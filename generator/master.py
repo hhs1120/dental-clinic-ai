@@ -95,6 +95,8 @@ RECALL_CYCLE_MONTHS = (
     12  # 급여 스케일링 연 1회에 맞춤 — 6개월이면 검진만 하는 위생 내원이 늘어 위생 비중이 부푼다
 )
 RECALL_JITTER_DAYS = 30
+# 개월 → 일 (리콜 기한·수요 발생률, §2.6 (1)) — backend도 ax_master_values로 같은 값을 읽는다
+DAYS_PER_MONTH = 365.25 / 12
 # 휴면 (§2.6 (1)): 환자마다 월 이 확률로(지수분포 — 구환은 창 시작부터, 신환은 등록 다음 날부터) 휴면일이 오고, 그날부터
 # 리콜·새 치료 수요가 없다(진행 중 에피소드는 이어 감). 다른 치과로 옮긴 건 아님(⑨ 정답 아님). 신환이 계속 들어오는 만큼 빠져야
 # 긴 창에서 하루 상한에 붙지 않는다 — 하루 채움 리포트로 맞춘 값
@@ -270,7 +272,7 @@ EXTRACTION_CODES = frozenset(
 IMPLANT_CODE = next(p["code"] for p in PROCEDURES if p["name"] == "임플란트 1차")
 
 # 적용 연령(age_group)별 나이 범위 (양 끝 포함, None = 상한 없음) — 급여 조건 (§2.1·§2.6 (4))
-_AGE_GROUP_RANGE = {
+AGE_GROUP_RANGE = {
     "child": (0, next(hi for name, _, hi, _ in AGE_BANDS if name == "child")),
     "age19plus": (SCALING_MIN_AGE, None),
     "senior": (CONDITIONAL_INSURED_MIN_AGE, None),
@@ -282,7 +284,7 @@ def insured_on(procedure: dict, age: int) -> bool:
     연 횟수(스케일링 연 1회)는 4단계가 2회째를 구강검진으로 바꿔 여기서 보지 않는다"""
     if procedure["is_insured"] == "no":
         return False
-    lo, hi = _AGE_GROUP_RANGE.get(procedure["age_group"], (0, None))
+    lo, hi = AGE_GROUP_RANGE.get(procedure["age_group"], (0, None))
     return lo <= age and (hi is None or age <= hi)
 
 
@@ -1239,6 +1241,9 @@ _VENDOR_ROWS = [
         None,
     ),
 ]
+# ⑧-2 품목으로 계정 과목이 정해지는 거래처 종류 — 쇼핑몰 주문만 정답이 품목을 따른다(§2.7).
+# 앱은 기본값을 보이되 과목 확인 필요로 두고 사람 확정을 기본값으로 기억하지 않는다
+EXPENSE_ITEM_ACCOUNT_KINDS = ("shopping",)
 VENDORS = [
     dict(
         zip(
