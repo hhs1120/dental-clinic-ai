@@ -94,11 +94,3 @@ def test_input_text_has_no_rule_answer(o):
     assert "하늘치재" in text and "50,000원" in text and "2026-11-10" in text
     assert d and "증빙" not in text and "재료비" not in text
     assert "못 찾음" not in text and "확인 필요" not in text and "세금계산서" not in text
-
-
-def test_outflow_by_key(o):
-    oid = o.bank("2026-11-10 10:00:00", "하늘치재", 50_000)
-    c = o.app()
-    key = _key(c, BANK, oid)
-    assert expense_tools.outflow_by_key(c, key)["id"] == oid
-    assert expense_tools.outflow_by_key(c, "nope") is None

@@ -75,7 +75,7 @@ def _add_pair(p: dict, rule_ok: bool, ai_ok: bool) -> str:
 
 def score_agent(conn, split: str) -> dict:
     """{n, prompt_version, rule{match,account}, agent{match,account}, pair_match, pair_account, by_group, by_confidence,
-    auto, missing, rows(dev)} — {k, n}은 맞은 수·전체(auto는 틀린 수·조건을 넘은 줄 수). 사람 확정은 보지 않는다"""
+    auto, missing(실행 없음), no_result(제출 없이 끝남), rows(dev)} — {k, n}은 맞은 수·전체(auto는 틀린 수·조건을 넘은 줄 수). 사람 확정은 보지 않는다"""
     data = app_expense._load(conn, None)
     cand = expense_auto.candidates(conn, data | {"conf": {}})
     by_out = {(o["table"], o["id"]): app_expense.outflow_key(o) for o in data["outflows"]}
@@ -86,7 +86,7 @@ def score_agent(conn, split: str) -> dict:
         for g in GROUPS
     }
     by_conf = {c: {"match": _kn(), "account": _kn()} for c in CONFIDENCES}
-    auto, missing, rows = _kn(), 0, []
+    auto, missing, no_result, rows = _kn(), 0, 0, []
     truth = conn.execute(
         "SELECT outflow_table, outflow_id, document_ids, account FROM truth.truth_expense_matches"
         " WHERE split = ? ORDER BY outflow_table, outflow_id",
@@ -99,7 +99,8 @@ def score_agent(conn, split: str) -> dict:
         r_m, r_a = c["rule_ids"] == want, c["rule_account"] == acct
         a_m = bool(a) and a["document_ids"] == want
         a_a = bool(a) and a["account"] == acct
-        missing += a is None
+        missing += c["agent"] is None  # 지금 버전 실행이 없음
+        no_result += c["agent"] is not None and a is None  # 제출 없이 끝남(상한 등)
         group = (
             "none"
             if not c["rule_ids"]
@@ -153,6 +154,7 @@ def score_agent(conn, split: str) -> dict:
         "by_confidence": by_conf,
         "auto": auto,
         "missing": missing,
+        "no_result": no_result,
         "rows": rows if split == "dev" else None,
     }
 

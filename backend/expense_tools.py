@@ -19,15 +19,14 @@ SEARCH_ROWS = 30  # 검색 결과 상한 — 모델 입력 상한(AgentSpec.resu
 _SOURCE = {"fin_bank_transactions": "통장 출금", "fin_card_expenses": "병원 카드 사용"}
 
 
-def outflow_by_key(conn: sqlite3.Connection, key: str) -> dict | None:
+def _find(data: dict, key: str) -> dict | None:
     """출금 키 → 출금(없으면 None)"""
-    data = expense._load(conn, None)
     return next((o for o in data["outflows"] if expense.outflow_key(o) == key), None)
 
 
 def _candidates(conn: sqlite3.Connection, key: str) -> list[dict]:
     data = expense._load(conn, None)
-    o = next((o for o in data["outflows"] if expense.outflow_key(o) == key), None)
+    o = _find(data, key)
     if o is None:
         raise ValueError(f"출금이 아님: {key}")
     return expense._candidates(o, data)

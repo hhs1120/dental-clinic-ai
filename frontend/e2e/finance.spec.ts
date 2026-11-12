@@ -664,7 +664,9 @@ const AI = (
 });
 
 /** 1번 줄 = 규칙·AI 같음, 2번 줄 = 규칙과 다름(규칙은 증빙 못 찾음). emptyAi면 2번 줄 AI가 증빙 없음 */
-const EXP_AI = (opts: { emptyAi?: boolean; auto?: boolean } = {}) => {
+const EXP_AI = (
+  opts: { emptyAi?: boolean; auto?: boolean; seeOnAgree?: string } = {},
+) => {
   const base = EXP() as {
     chips: Record<string, number>;
     rows: Record<string, unknown>[];
@@ -678,7 +680,7 @@ const EXP_AI = (opts: { emptyAi?: boolean; auto?: boolean } = {}) => {
   }));
   rows[0] = {
     ...rows[0],
-    agent: AI([11], [receipt], "복리후생비", null),
+    agent: AI([11], [receipt], "복리후생비", opts.seeOnAgree ?? null),
     agree: true,
     ...(opts.auto
       ? { auto: { id: 5, at: "2026-12-01 06:00:00" }, account_from: "auto" }
@@ -733,6 +735,18 @@ test("규칙과 같은 줄은 짧게", async ({ page }) => {
     ai.getByRole("button", { name: "이 제안으로 확정" }),
   ).toHaveCount(0);
   await expect(ai).not.toContainText("직원이 볼 것");
+});
+
+test("규칙과 같아도 직원이 볼 것은 보인다", async ({ page }) => {
+  await fakeExpenses(page, () =>
+    EXP_AI({ seeOnAgree: "두 과목이 섞인 주문 — 소모품비 29,000원" }),
+  );
+  await page.goto("/finance?tab=expense");
+  const ai = page.getByRole("region", { name: "AI 제안 솔밭식당" });
+  await expect(ai).toContainText("규칙·AI 같음");
+  await expect(ai).toContainText(
+    "직원이 볼 것: 두 과목이 섞인 주문 — 소모품비 29,000원",
+  );
 });
 
 test("증빙 없음 제안은 증빙 없이 확정", async ({ page }) => {

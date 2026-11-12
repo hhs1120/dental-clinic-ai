@@ -157,3 +157,48 @@ def test_today_expense_auto_list(o, tmp_path):
     r = today._expense_auto(c, DAY)
     assert r["on"] and r["total"] == 1
     assert (r["recent"][0]["label"], r["recent"][0]["account"]) == ("이음통신", "통신비")
+
+
+def test_main_refreshes_when_no_targets(o, tmp_path, monkeypatch):
+    """모든 출금을 조사한 뒤 정책을 켜고 make expense-ai — 대상 0건이어도 자동 확정을 다시 계산한다"""
+    from types import SimpleNamespace
+
+    oid, d = phone(o)
+    c = o.app()
+    investigate(c, tmp_path, LOOK, submit([d], account="통신비"))
+    on(c)
+    monkeypatch.setattr(expense_agent.db, "connect", lambda *a: c)
+    monkeypatch.setattr(expense_agent, "load_clinic", lambda: SimpleNamespace(today=DAY))
+    expense_agent.main(["run"])
+    assert expense_auto.active(c, {key_of(c, BANK, oid)})
+
+
+def test_policy_off_auto_does_not_own_docs(o, tmp_path):
+    """정책을 끄면 화면에서 사라진 자동 확정은 증빙을 막지 않는다(active와 같은 유효 조건)"""
+    oid, d = phone(o)
+    other = o.bank("2026-11-12 10:00:00", "이음통신", 33_000)
+    c = o.app()
+    investigate(c, tmp_path, LOOK, submit([d], account="통신비"))
+    c.execute(
+        "UPDATE ax_agent_runs SET status = 'failed' WHERE target = ?", (key_of(c, BANK, other),)
+    )
+    on(c)
+    expense_auto.refresh(c, DAY)
+    autoclose.set_policy(c, expense_auto.KIND, False)
+    expense.confirm(c, BANK, other, [d], "통신비", by="desk", at=AT, today=DAY)
+
+
+def test_earlier_today_drops_auto_from_counts(o, tmp_path):
+    """기준일을 앞당겨 출금이 범위 밖이면 오늘 화면 목록·수에 끼지 않는다"""
+    from datetime import date
+
+    from backend import today
+
+    oid, d = phone(o)
+    c = o.app()
+    on(c)
+    investigate(c, tmp_path, LOOK, submit([d], account="통신비"))
+    assert today._expense_auto(c, DAY)["total"] == 1
+    early = date(2026, 11, 5)
+    assert today._expense_auto(c, early)["total"] == 0
+    assert expense.open_summary(c, early)["count"] == 0

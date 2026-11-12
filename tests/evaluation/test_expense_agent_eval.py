@@ -121,3 +121,19 @@ def test_render_has_table(world):
     c, _, _ = world
     text = "\n".join(_render_expense(ex.score_agent(c, "dev")))
     assert "⑧-2" in text and "규칙" in text and "AI" in text
+
+
+def test_no_result_separate_from_missing(world):
+    """상한에 걸려 결과 없이 끝난 실행은 '실행 없음'과 따로 센다 — make expense-ai를 다시 돌려도 바뀌지 않으므로"""
+    from evaluation.eval import _render_expense
+
+    c, tmp, ids = world
+    plans = {
+        key(c, ids["a"]): (LOOK,),
+        key(c, ids["b"]): (LOOK, submit([ids["right"]], account="통신비")),
+    }
+    expense_agent.run_batch(c, ByTarget(c, plans), DAY, batch=False, state=tmp / "s.json")
+    r = ex.score_agent(c, "dev")
+    assert (r["missing"], r["no_result"]) == (0, 1)
+    text = "\n".join(_render_expense(r))
+    assert "결과 없이 끝난 정답 1건" in text and "make expense-ai" not in text

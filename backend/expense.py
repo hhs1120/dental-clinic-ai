@@ -13,6 +13,7 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
+from backend import db
 from backend.prep import master_values
 
 TABLES = {  # 출금 표 → (시각, 적요·가맹점명) 칸 — 통장은 출금만(설계 §2 대상)
@@ -258,11 +259,14 @@ def candidates(conn: sqlite3.Connection, table: str, outflow_id: int) -> list[di
 
 
 def live_doc_owners(conn: sqlite3.Connection, data: dict) -> dict[int, tuple[str, int]]:
-    """증빙 id → 그 증빙을 가진 살아 있는 확정의 출금(표, id) — 사람 확정과 되돌리지 않은 자동 확정"""
+    """증빙 id → 그 증빙을 가진 살아 있는 확정의 출금(표, id) — 사람 확정과 되돌리지 않은 자동 확정(정책이 켜졌을
+    때만 — 화면 expense_auto.active와 같은 유효 조건)"""
     owners = {}
     for (table, oid), r in data["conf"].items():
         for d in json.loads(r["document_ids"]):
             owners[d] = (table, oid)
+    if not db.get_setting(conn, "auto_policy", {}).get(AUTO_KIND):
+        return owners
     by_key = {outflow_key(o): (o["table"], o["id"]) for o in data["outflows"]}
     for r in conn.execute(
         "SELECT target, result FROM ax_auto_actions WHERE kind = ? AND reverted_at IS NULL",

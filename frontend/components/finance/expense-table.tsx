@@ -58,7 +58,7 @@ const pickText = (a: ExpenseAgent) =>
           .join(", ")
   } → ${a.account}`;
 
-/** AI 제안 칸(설계 §4 시안 v3) — 규칙과 같으면 한 줄, 다르면 결론·왜·직원이 볼 것·조사 과정과 확정 버튼 */
+/** AI 제안 칸(설계 §4) — 규칙과 같으면 한 줄(직원이 볼 것은 있으면 보임), 다르면 결론·왜·직원이 볼 것·조사 과정과 확정 버튼 */
 function AiPanel({
   row,
   agent,
@@ -92,6 +92,12 @@ function AiPanel({
       className="flex flex-col gap-2 rounded-md border border-status-info-border bg-status-info-bg p-3"
     >
       {head}
+      {/* 규칙과 같아도 사람이 볼 것(섞인 주문 등)은 보인다 */}
+      {agent.see && (
+        <p className="rounded-md border-l-4 border-status-warn-border bg-status-warn-bg px-3 py-1.5 text-sm text-status-warn-fg">
+          직원이 볼 것: {agent.see}
+        </p>
+      )}
       {!row.agree && (
         <>
           <div className="flex flex-col gap-1">
@@ -107,11 +113,6 @@ function AiPanel({
               ))}
             </ul>
           </div>
-          {agent.see && (
-            <p className="rounded-md border-l-4 border-status-warn-border bg-status-warn-bg px-3 py-1.5 text-sm text-status-warn-fg">
-              직원이 볼 것: {agent.see}
-            </p>
-          )}
           <details className="text-sm">
             <summary className="cursor-pointer text-muted-foreground">
               조사 과정 보기

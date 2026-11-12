@@ -342,7 +342,11 @@ def main(argv=None) -> None:
     print(
         f"조사 대상 {len(todo)}건 · 예상 비용 약 ${len(todo) * EST_USD:.2f}(일반 호출 기준, Batch면 줄어듦)"
     )
-    if not todo:
+    if not todo:  # 정책을 켠 뒤 다시 부르는 경우 — 조사할 것은 없어도 자동 마감은 다시 계산한다
+        from backend import recon_auto
+
+        print(f"자동 마감 {recon_auto.refresh(conn, today)}")
+        conn.commit()
         return
     gw = Gateway(load_config(), SqliteLlmLog(conn), "runtime")
     counts = run_batch(conn, gw, today, args.month, batch=not args.no_batch)

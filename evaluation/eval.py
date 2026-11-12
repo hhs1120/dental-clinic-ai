@@ -771,6 +771,8 @@ def _render_expense(r: dict) -> list[str]:
             f"주의: 지금 버전 실행이 없는 정답 {r['missing']}건(오답으로 셈) — make expense-ai",
             "",
         ]
+    if r["no_result"]:
+        out += [f"결과 없이 끝난 정답 {r['no_result']}건(조사 상한 등, 오답으로 셈)", ""]
     if r["rows"]:
         out += ["규칙이나 AI가 틀린 줄(dev):", ""]
         out += [
