@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev recon
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev recon expense-ai
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -154,3 +154,7 @@ fixture:
 # ⑧-1 조사 에이전트(backend/recon_agent.py) — 지금 프롬프트 버전으로 조사 안 한 불일치 건(과금, 이어 돎). MONTHS="2026-08 2026-09"로 달 제한, NO_BATCH=1이면 일반 호출만
 recon:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.recon_agent run $(foreach m,$(MONTHS),--month $(m)) $(if $(NO_BATCH),--no-batch)
+
+# ⑧-2 증빙 탐색 에이전트(backend/expense_agent.py) — 지금 프롬프트 버전으로 조사 안 한 출금(과금, 이어 돎). MONTHS="2026-08 2026-09"로 달 제한, NO_BATCH=1이면 일반 호출만
+expense-ai:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.expense_agent run $(foreach m,$(MONTHS),--month $(m)) $(if $(NO_BATCH),--no-batch)

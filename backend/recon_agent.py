@@ -9,7 +9,6 @@ submit_cause, 조회 도구는 backend/recon_tools.py(읽기 전용). 근거 번
 일괄(make recon)은 라운드 배치(backend/harness/rounds.py), 화면 `조사 시작`은 일반 호출(investigate)."""
 
 import argparse
-import re
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -19,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from backend import db, prompts, recon_match, recon_tools
 from backend.harness import rounds
-from backend.harness.hooks import BAD_ARGS, Rule
+from backend.harness.hooks import Rule
 from backend.harness.loop import AgentSpec, Runner
 from backend.harness.store import RunLocked, RunStore, SqliteLlmLog, parse_step
 from backend.harness.tools import Tool, ToolRegistry
@@ -51,8 +50,6 @@ CAUSES = (
     "method_wrong",
     "unknown",
 )
-_PREFIX = re.compile(r"^[\s*#>-]*(가설|비교)\s*[:：]\**\s*")
-_KIND = {"가설": "hypothesis", "비교": "compare"}
 ENDED = ("done", "handed_off")  # 결과가 있는 끝 — failed는 원인 미정이 아니라 다시 조사할 건
 _END_REASON = {
     "call_limit": "조사 상한에 걸려 원인 미정",
@@ -119,15 +116,7 @@ def rules() -> tuple[Rule, ...]:
 
 
 def _submitted(steps: list[dict]) -> dict | None:
-    for s in reversed(steps):
-        if (
-            s["kind"] == "tool"
-            and s["tool"] == SUBMIT
-            and s["hook_status"] == "pass"
-            and not s["is_error"]
-        ):
-            return s["args"]
-    return None
+    return recon_tools.submitted(steps, SUBMIT)
 
 
 _LIVE = (
@@ -196,71 +185,28 @@ def results(conn: sqlite3.Connection, keys: set[str]) -> dict[str, dict]:
     }
 
 
-def _short_block(text: str) -> str:
-    """인자 검증 오류(pydantic 원문) → 첫 오류 문구만 — 화면 막힘 줄"""
-    msgs = [
-        ln.strip().split(" [type=")[0]
-        for ln in text.splitlines()[1:]
-        if ln.startswith("  ") and not ln.strip().startswith("For further")
-    ]
-    return "막힘: " + (" · ".join(msgs) or text)
+def _conclusion(a: dict | None) -> dict:
+    """결론 줄 — 제출 인자, 제출 없이 끝났으면 '원인 미정'"""
+    if a is None:
+        return {
+            "kind": "conclusion",
+            "cause": "unknown",
+            "runner_up": None,
+            "evidence": [],
+            "text": "원인 미정",
+        }
+    return {
+        "kind": "conclusion",
+        "cause": a["cause"],
+        "runner_up": a["runner_up"],
+        "evidence": a["evidence"],
+        "text": a["reason"],
+    }
 
 
 def lines(steps: list[dict], finished: bool = True) -> list[dict]:
-    """조사 과정 줄 — 저장된 단계를 나눠 보인다. finished(실행이 done·handed_off로 끝남)면 제출이 없을 때 '원인 미정'
-    결론을 붙인다. 인자 검증에 막힌 조회는 검증 전 purpose·checked를 줄로 내지 않는다"""
-    nos = {s["seq"]: i + 1 for i, s in enumerate(recon_tools.lookup_steps(steps, SUBMIT))}
-    out = []
-    for s in steps:
-        if s["kind"] == "model":
-            for para in re.split(r"\n\s*\n", s["response"]["text"] or ""):
-                if not (para := para.strip()):
-                    continue
-                m = _PREFIX.match(para)
-                kind = _KIND[m.group(1)] if m else "note"
-                out.append({"kind": kind, "text": para[m.end() :].strip() if m else para})
-        elif s["kind"] == "tool":
-            if s["tool"] != SUBMIT and s["rule_id"] != BAD_ARGS:
-                for field, kind in (("checked", "compare"), ("purpose", "hypothesis")):
-                    if text := (s["args"] or {}).get(field):
-                        out.append({"kind": kind, "text": text})
-            if s["seq"] in nos:
-                out.append(
-                    {
-                        "kind": "lookup",
-                        "tool": s["tool"],
-                        "args": s["args"],
-                        "lookup_no": nos[s["seq"]],
-                        "text": s["result"]["summary"],
-                    }
-                )
-            elif s["tool"] == SUBMIT and s["hook_status"] == "pass" and not s["is_error"]:
-                a = s["args"]
-                out.append(
-                    {
-                        "kind": "conclusion",
-                        "cause": a["cause"],
-                        "runner_up": a["runner_up"],
-                        "evidence": a["evidence"],
-                        "text": a["reason"],
-                    }
-                )
-            else:
-                text = str(s["result"])
-                if s["rule_id"] == BAD_ARGS:
-                    text = _short_block(text.removeprefix("막힘: "))
-                out.append({"kind": "blocked", "tool": s["tool"], "text": text})
-    if finished and _submitted(steps) is None:
-        out.append(
-            {
-                "kind": "conclusion",
-                "cause": "unknown",
-                "runner_up": None,
-                "evidence": [],
-                "text": "원인 미정",
-            }
-        )
-    return out
+    """조사 과정 줄(recon_tools.trace_lines) — finished(실행이 done·handed_off로 끝남)면 제출이 없을 때 '원인 미정'"""
+    return recon_tools.trace_lines(steps, SUBMIT, _conclusion, finished)
 
 
 class _Live:
@@ -396,7 +342,11 @@ def main(argv=None) -> None:
     print(
         f"조사 대상 {len(todo)}건 · 예상 비용 약 ${len(todo) * EST_USD:.2f}(일반 호출 기준, Batch면 줄어듦)"
     )
-    if not todo:
+    if not todo:  # 정책을 켠 뒤 다시 부르는 경우 — 조사할 것은 없어도 자동 마감은 다시 계산한다
+        from backend import recon_auto
+
+        print(f"자동 마감 {recon_auto.refresh(conn, today)}")
+        conn.commit()
         return
     gw = Gateway(load_config(), SqliteLlmLog(conn), "runtime")
     counts = run_batch(conn, gw, today, args.month, batch=not args.no_batch)

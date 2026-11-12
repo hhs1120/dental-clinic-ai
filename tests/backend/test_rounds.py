@@ -158,3 +158,28 @@ def test_batch_wait_keeps_heartbeat(conn, tmp_path):
     (rid,) = _start(conn, runner, ["c-0001"])
     rounds.run_rounds(runner, gw, [rid], tmp_path / "s.json", min_batch=0, poll_seconds=0)
     assert seen[1] == t[0].isoformat(sep=" ", timespec="seconds")
+
+
+def test_batch_status_transient_error_keeps_polling(conn, tmp_path):
+    """Batch 진행 상태를 묻다가 서버 일시 오류(5xx·연결)가 나면 멈추지 않고 다음 확인에서 다시 묻는다"""
+    import anthropic
+    import httpx
+
+    calls = []
+
+    class Flaky(BatchScript):
+        def batch_status(self, bid):
+            calls.append(bid)
+            if len(calls) == 1:
+                raise anthropic.InternalServerError(
+                    "x",
+                    response=httpx.Response(500, request=httpx.Request("GET", "http://x")),
+                    body=None,
+                )
+            return "ended"
+
+    gw = Flaky(conn, [("tool", "submit_followup", SUBMIT)])
+    runner = _runner(conn, gw)
+    (rid,) = _start(conn, runner, ["c-0001"])
+    out = rounds.run_rounds(runner, gw, [rid], tmp_path / "s.json", min_batch=0, poll_seconds=0)
+    assert out[rid].status == "done" and len(calls) == 2

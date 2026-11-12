@@ -60,7 +60,7 @@ export interface TodaySheet {
     recon_open: number;
     /** 미확정 건이 있는 가장 이른 달 — 줄 링크가 그 달로 간다 */
     recon_month: string | null;
-    /** 지난달 출금 중 증빙 못 찾음·과목 확인 필요이면서 확정 안 된 수 — /finance 지출 증빙과 같은 함수(backend/expense.py open_summary) */
+    /** 지난달 출금 중 증빙 못 찾음·과목 확인 필요·규칙과 다름이면서 확정·자동 확정 안 된 수 — /finance 지출 증빙과 같은 함수(backend/expense.py open_summary) */
     expense_open: number;
     /** 줄 링크가 가는 달(기준일의 지난달), 0건이면 null */
     expense_month: string | null;
@@ -85,6 +85,19 @@ export interface TodaySheet {
         date: string;
         cause: Cause;
         at: string;
+      }[];
+    };
+    /** 지출 증빙 자동 확정(backend/today.py _expense_auto) — 정책 꺼짐이면 on false */
+    expense_auto: {
+      on: boolean;
+      total: number;
+      recent: {
+        id: number;
+        key: string;
+        at: string;
+        label: string;
+        amount: number;
+        account: string;
       }[];
     };
     prep: { rows: number; suggest: number; failed: number };

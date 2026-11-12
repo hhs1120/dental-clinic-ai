@@ -76,3 +76,22 @@ def test_post_confirm_bad_400(client, body):
 def test_today_has_expense_line(client):
     people = client.get("/today").json()["people"]
     assert (people["expense_open"], people["expense_month"]) == (1, "2026-11")
+
+
+def test_confirm_doc_owned_elsewhere_400(tmp_path):
+    """같은 증빙을 두 출금에 확정하면 두 번째는 400(설계 §4 확정 제한)"""
+    o = Outflows(tmp_path / "source.sqlite")
+    o.bank("2026-11-10 10:00:00", "하늘치재", 50_000)
+    o.bank("2026-11-12 10:00:00", "하늘치재", 50_000)
+    d = o.doc("tax_invoice", "하늘치재", "2026-11-09", 50_000)
+    o.app().close()
+    c = _client(tmp_path)
+    try:
+        rows = c.get("/finance/expenses").json()["rows"]
+        body = {"document_ids": [d], "account": "재료비", "part": "데스크"}
+        urls = [f"/finance/expenses/{r['table']}/{r['id']}/confirm" for r in rows]
+        assert c.post(urls[0], json=body).status_code == 200
+        r = c.post(urls[1], json=body)
+        assert r.status_code == 400 and "이미 다른 출금" in r.json()["detail"]
+    finally:
+        api.app.dependency_overrides.clear()

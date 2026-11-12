@@ -66,7 +66,7 @@ def test_unknown_label_needs_check_then_remembered(o):
     first, second = expense.sheet(c, DAY, "2026-11")["rows"]
     assert (first["account"], first["account_from"], first["check"]) == (None, None, True)
     assert first["vendor"] is None
-    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT)
+    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT, today=DAY)
     first, second = expense.sheet(c, DAY, "2026-11")["rows"]
     assert (first["account"], first["account_from"]) == ("복리후생비", "confirmed")
     assert first["confirmed"] == {"by": "desk", "at": AT}
@@ -85,7 +85,7 @@ def test_by_item_vendor_never_remembered(o):
     c = o.app()
     first = expense.sheet(c, DAY, "2026-11")["rows"][0]
     assert (first["account"], first["vendor"], first["check"]) == ("소모품비", "모아덴탈몰", True)
-    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT)
+    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT, today=DAY)
     second = expense.sheet(c, DAY, "2026-11")["rows"][1]
     assert (second["account"], second["account_from"], second["check"]) == (
         "소모품비",
@@ -106,7 +106,9 @@ def test_month_end_mismatch_none_then_pick_many(o):
     assert (row["docs"], row["diff"], row["account"]) == ([], None, "재료비")
     cands = expense.candidates(c, "fin_bank_transactions", oid)
     assert [d["id"] for d in cands] == [late, mid, early]  # 날짜 가까운 순
-    expense.confirm(c, "fin_bank_transactions", oid, [mid, late], "재료비", by="desk", at=AT)
+    expense.confirm(
+        c, "fin_bank_transactions", oid, [mid, late], "재료비", by="desk", at=AT, today=DAY
+    )
     sheet = expense.sheet(c, DAY, "2026-11")
     row = sheet["rows"][0]
     assert ([d["id"] for d in row["docs"]], row["diff"]) == ([mid, late], 10_000)
@@ -127,8 +129,8 @@ def test_confirm_rejects_bad_input(o):
         (t, oid, [far], "복리후생비"),  # 후보 밖 증빙
     ):
         with pytest.raises(ValueError):
-            expense.confirm(c, *args, by="desk", at=AT)
-    expense.confirm(c, t, oid, [near], "복리후생비", by="desk", at=AT)
+            expense.confirm(c, *args, by="desk", at=AT, today=DAY)
+    expense.confirm(c, t, oid, [near], "복리후생비", by="desk", at=AT, today=DAY)
     assert c.execute("SELECT COUNT(*) FROM ax_expense_confirmations").fetchone()[0] == 1
 
 
@@ -142,7 +144,7 @@ def test_open_summary_is_last_month_only(o):
     o.doc("receipt", "솔밭식당", "2026-11-07", 60_000)
     c = o.app()
     assert expense.open_summary(c, DAY) == {"count": 2, "month": "2026-11"}
-    expense.confirm(c, "fin_card_expenses", none, [], "복리후생비", by="desk", at=AT)
+    expense.confirm(c, "fin_card_expenses", none, [], "복리후생비", by="desk", at=AT, today=DAY)
     assert expense.open_summary(c, DAY) == {"count": 1, "month": "2026-11"}
 
 
@@ -186,6 +188,7 @@ def test_sheet_matches_rule(o):
         "found": 3,
         "none": 0,
         "check": 1,
+        "differ": 0,  # AI 결과 없음
         "open": 3,
     }
     assert sheet["accounts"] == mv["expense_accounts"]
@@ -212,7 +215,9 @@ def test_month_end_candidates_include_alias_issuer_whole_month(o):
     c = o.app()
     assert alias in [d["id"] for d in expense.candidates(c, "fin_bank_transactions", oid)]
     assert sky in [d["id"] for d in expense.candidates(c, "fin_bank_transactions", cut)]
-    expense.confirm(c, "fin_bank_transactions", oid, [alias], "재료비", by="desk", at=AT)
+    expense.confirm(
+        c, "fin_bank_transactions", oid, [alias], "재료비", by="desk", at=AT, today=DAY
+    )
 
 
 def test_label_containing_by_item_vendor_never_remembered(o):
@@ -222,7 +227,7 @@ def test_label_containing_by_item_vendor_never_remembered(o):
     c = o.app()
     first = expense.sheet(c, DAY, "2026-11")["rows"][0]
     assert (first["account"], first["check"], first["by_item"]) == (None, True, True)
-    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT)
+    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT, today=DAY)
     second = expense.sheet(c, DAY, "2026-11")["rows"][1]
     assert (second["account"], second["account_from"], second["check"]) == (None, None, True)
 
@@ -237,8 +242,8 @@ def test_chips_count_only_unconfirmed_work(o):
         "check": 1,
         "open": 2,
     }
-    expense.confirm(c, "fin_card_expenses", shop, [], "소모품비", by="desk", at=AT)
-    expense.confirm(c, "fin_card_expenses", none, [], "복리후생비", by="desk", at=AT)
+    expense.confirm(c, "fin_card_expenses", shop, [], "소모품비", by="desk", at=AT, today=DAY)
+    expense.confirm(c, "fin_card_expenses", none, [], "복리후생비", by="desk", at=AT, today=DAY)
     sheet = expense.sheet(c, DAY)
     assert {k: sheet["chips"][k] for k in ("none", "check", "open")} == {
         "none": 0,
@@ -246,3 +251,123 @@ def test_chips_count_only_unconfirmed_work(o):
         "open": 0,
     }
     assert [r["check"] for r in sheet["rows"]] == [False, False]
+
+
+# ── 확정 제한·출금 키 (설계 §4) ─────────────────────────────────────
+
+
+def test_confirm_rejects_doc_owned_by_other_outflow(o):
+    """같은 증빙은 한 출금에만 — 다른 출금에 살아 있는 확정이 있으면 막고, 같은 출금 덮어쓰기는 된다"""
+    a = o.bank("2026-11-10 10:00:00", "하늘치재", 50_000)
+    b = o.bank("2026-11-12 10:00:00", "하늘치재", 50_000)
+    d = o.doc("tax_invoice", "하늘치재", "2026-11-09", 50_000)
+    c = o.app()
+    bank = "fin_bank_transactions"
+    expense.confirm(c, bank, a, [d], "재료비", by="desk", at=AT, today=DAY)
+    with pytest.raises(ValueError, match="이미 다른 출금에 확정된 증빙"):
+        expense.confirm(c, bank, b, [d], "재료비", by="desk", at=AT, today=DAY)
+    expense.confirm(c, bank, a, [d], "소모품비", by="desk", at=AT, today=DAY)
+
+
+def test_confirm_rejects_outflow_after_today(o):
+    oid = o.bank("2026-12-02 10:00:00", "하늘치재", 50_000)
+    with pytest.raises(ValueError, match="기준일 이후 출금"):
+        expense.confirm(
+            o.app(), "fin_bank_transactions", oid, [], "재료비", by="desk", at=AT, today=DAY
+        )
+
+
+def test_outflow_key_stable_and_distinct():
+    a = {
+        "table": "fin_bank_transactions",
+        "at": "2026-11-10 10:00:00",
+        "amount": 50_000,
+        "label": "하늘치재",
+    }
+    assert expense.outflow_key(a) == expense.outflow_key(dict(a))
+    assert len(expense.outflow_key(a)) == 12
+    assert expense.outflow_key(a) != expense.outflow_key(a | {"at": "2026-11-10 10:01:00"})
+
+
+# ── AI 제안·규칙과 다름·자동 확정 (설계 §4) ─────────────────────────────
+
+
+def _ai(c, tmp_path, *steps):
+    from backend import expense_agent
+    from tests.backend.test_recon_agent import Script
+
+    expense_agent.run_batch(c, Script(c, *steps), DAY, batch=False, state=tmp_path / "s.json")
+
+
+def _submit(ids, account):
+    from tests.backend.test_expense_agent import submit
+
+    return submit(ids, account=account)
+
+
+LOOK = ("tool", "search_docs", {"purpose": "같은 금액 증빙"})
+
+
+def _phone(o):
+    oid = o.bank("2026-11-10 10:00:00", "이음통신", 33_000)
+    d = o.doc("bill", "이음통신", "2026-11-05", 33_000)
+    return oid, d
+
+
+def test_row_has_agent_and_agree(o, tmp_path):
+    oid, d = _phone(o)
+    c = o.app()
+    assert expense.sheet(c, DAY, "2026-11")["rows"][0]["agent"] is None
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    row = expense.sheet(c, DAY, "2026-11")["rows"][0]
+    assert row["key"] == expense.outflow_key(row) and row["agree"] is True
+    a = row["agent"]
+    assert (a["document_ids"], a["account"], a["confidence"]) == ([d], "통신비", "high")
+    assert a["docs"][0]["id"] == d and a["lines"]
+
+
+def test_differ_chip_and_open_summary_counts_differ(o, tmp_path):
+    """규칙은 고지서를 찾았지만 AI는 증빙 없음 — 규칙과 다름, 지난달 오늘 화면 수에 든다"""
+    oid, d = _phone(o)
+    c = o.app()
+    _ai(c, tmp_path, LOOK, _submit([], "통신비"))
+    sheet = expense.sheet(c, DAY, "2026-11")
+    assert sheet["rows"][0]["agree"] is False and sheet["chips"]["differ"] == 1
+    assert expense.open_summary(c, DAY)["count"] == 1
+
+
+def test_open_summary_skips_agreeing_rows(o, tmp_path):
+    _phone(o)
+    c = o.app()
+    assert expense.open_summary(c, DAY)["count"] == 0  # 규칙이 찾고 과목도 정해짐
+    d = c.execute("SELECT id FROM source.fin_expense_documents").fetchone()[0]
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    assert expense.open_summary(c, DAY)["count"] == 0
+
+
+def test_auto_row_shows_auto_result(o, tmp_path):
+    from backend import autoclose, expense_auto
+
+    oid, d = _phone(o)
+    c = o.app()
+    autoclose.set_policy(c, expense_auto.KIND, True)
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    row = expense.sheet(c, DAY, "2026-11")["rows"][0]
+    assert row["auto"]["id"] and row["account_from"] == "auto" and row["confirmed"] is None
+    assert expense.sheet(c, DAY, "2026-11")["chips"]["open"] == 0
+
+
+def test_sheet_query_count_independent_of_rows(tmp_path):
+    counts = []
+    for n in (3, 30):
+        (tmp_path / str(n)).mkdir()
+        s = Outflows(tmp_path / str(n) / "source.sqlite")
+        for i in range(n):
+            s.bank(f"2026-11-{1 + i % 28:02d} 10:00:00", "이음통신", 1_000 + i)
+        c = s.app()
+        seen: list[str] = []
+        c.set_trace_callback(seen.append)
+        expense.sheet(c, DAY, "2026-11")
+        c.set_trace_callback(None)
+        counts.append(len(seen))
+    assert counts[0] == counts[1]

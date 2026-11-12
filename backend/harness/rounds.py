@@ -2,16 +2,19 @@
 에이전트는 도구 결과를 보고 다음 호출을 정하므로 Batch 한 번으로 끝나지 않는다. 실행마다 Runner.drive를 기록 게이트웨이로
 돌려, 결과가 준비된 실행은 이어 가고 아닌 실행은 요청만 모은 채 멈춘다(하네스는 저장된 단계로 다시 세워 이어 가므로 상태가
 맞다). 모인 요청이 min_batch보다 많으면 Batch로 — 배치 id를 state_path에 남겨 끊겨도 다시 제출하지 않는다 — 적으면 일반
-호출로 바로 부른다. Batch를 기다리는 동안 잠근 실행의 하트비트를 갱신한다(잠금이 만료돼 다른 곳에 뺏기지 않게). 앞 라운드는 반값, 몇 건 안 남은 꼬리에서 Batch 대기를 되풀이하지 않게."""
+호출로 바로 부른다. Batch를 기다리는 동안 잠근 실행의 하트비트를 갱신한다(잠금이 만료돼 다른 곳에 뺏기지 않게).
+진행 상태 확인이 일시 오류(5xx·408·409·429·연결)면 멈추지 않고 다음 확인에서 다시 묻는다. 앞 라운드는 반값, 몇 건 안 남은 꼬리에서 Batch 대기를 되풀이하지 않게."""
 
 import json
 import time
 from dataclasses import replace
 from pathlib import Path
 
+import anthropic
+
 from backend.harness.loop import Outcome, Runner, external
 from backend.harness.store import RunLocked
-from shared.llm import BudgetExceeded
+from shared.llm import TRANSIENT_STATUS, BudgetExceeded
 
 ROUND_BATCH_MIN = 30  # 남은 실행이 이 수 이하면 그 라운드부터 일반 호출(사람이 정함)
 
@@ -139,8 +142,13 @@ def _collect(
     polls = 0
     while True:
         touch()
-        if gw.batch_status(state["batch_id"]) == "ended":
-            break
+        try:
+            if gw.batch_status(state["batch_id"]) == "ended":
+                break
+        except (anthropic.APIConnectionError, anthropic.APIStatusError) as e:
+            code = getattr(e, "status_code", None)
+            if code is not None and code < 500 and code not in TRANSIENT_STATUS:
+                raise
         polls += 1
         if max_polls and polls >= max_polls:
             raise TimeoutError(f"배치 {state['batch_id']} 진행 중 — 다시 실행하면 이어서 받는다")

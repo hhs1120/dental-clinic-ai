@@ -5,12 +5,15 @@
 에이전트 입력 글(input_text)에는 규칙 추정 원인과 생성 메타를 넣지 않는다(설계 §3 "입력에 넣지 않는 것").
 master 값은 source.ax_master_values로만 읽는다."""
 
+import re
 import sqlite3
+from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from backend.harness.hooks import BAD_ARGS
 from backend.harness.tools import Tool
 from backend.prep import master_values
 from backend.recon_match import add_bank_days
@@ -53,12 +56,84 @@ def lookup_steps(steps: list[dict], submit: str) -> list[dict]:
     ]
 
 
+_PREFIX = re.compile(r"^[\s*#>-]*(가설|비교)\s*[:：]\**\s*")
+_KIND = {"가설": "hypothesis", "비교": "compare"}
+
+
+def submitted(steps: list[dict], submit: str) -> dict | None:
+    """마지막으로 훅을 지나 오류 없이 돈 끝내는 도구의 인자 — 없으면 None"""
+    for s in reversed(steps):
+        if (
+            s["kind"] == "tool"
+            and s["tool"] == submit
+            and s["hook_status"] == "pass"
+            and not s["is_error"]
+        ):
+            return s["args"]
+    return None
+
+
+def short_block(text: str) -> str:
+    """인자 검증 오류(pydantic 원문) → 첫 오류 문구만 — 화면 막힘 줄"""
+    msgs = [
+        ln.strip().split(" [type=")[0]
+        for ln in text.splitlines()[1:]
+        if ln.startswith("  ") and not ln.strip().startswith("For further")
+    ]
+    return "막힘: " + (" · ".join(msgs) or text)
+
+
+def trace_lines(
+    steps: list[dict], submit: str, conclusion: Callable[[dict | None], dict], finished: bool
+) -> list[dict]:
+    """조사 과정 줄 — 저장된 단계를 나눠 보인다(설계 §3 "조사 과정 줄 종류"). 조회 인자 checked → 비교·purpose → 가설,
+    조회 → 조회 번호 + 요약, 끝내는 도구 → conclusion(인자), 막힘 → 막힘. 모델이 따로 쓴 글은 `가설:`·`비교:` 머리말로
+    (없으면 생각). finished(실행이 결과 있게 끝남)인데 제출이 없으면 conclusion(None). 인자 검증에 막힌 조회는 검증 전
+    purpose·checked를 줄로 내지 않는다"""
+    nos = {s["seq"]: i + 1 for i, s in enumerate(lookup_steps(steps, submit))}
+    out = []
+    for s in steps:
+        if s["kind"] == "model":
+            for para in re.split(r"\n\s*\n", s["response"]["text"] or ""):
+                if not (para := para.strip()):
+                    continue
+                m = _PREFIX.match(para)
+                kind = _KIND[m.group(1)] if m else "note"
+                out.append({"kind": kind, "text": para[m.end() :].strip() if m else para})
+        elif s["kind"] == "tool":
+            if s["tool"] != submit and s["rule_id"] != BAD_ARGS:
+                for field, kind in (("checked", "compare"), ("purpose", "hypothesis")):
+                    if text := (s["args"] or {}).get(field):
+                        out.append({"kind": kind, "text": text})
+            if s["seq"] in nos:
+                out.append(
+                    {
+                        "kind": "lookup",
+                        "tool": s["tool"],
+                        "args": s["args"],
+                        "lookup_no": nos[s["seq"]],
+                        "text": s["result"]["summary"],
+                    }
+                )
+            elif s["tool"] == submit and s["hook_status"] == "pass" and not s["is_error"]:
+                out.append(conclusion(s["args"]))
+            else:
+                text = str(s["result"])
+                if s["rule_id"] == BAD_ARGS:
+                    text = short_block(text.removeprefix("막힘: "))
+                out.append({"kind": "blocked", "tool": s["tool"], "text": text})
+    if finished and submitted(steps, submit) is None:
+        out.append(conclusion(None))
+    return out
+
+
 def _rows(conn, sql: str, *args) -> list[dict]:
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
-class _Note(BaseModel):
-    """조회마다 받는 조사 과정 칸 — 결과 계산에는 쓰지 않고 화면 줄(가설·비교)로만 보인다(설계 §3 "조사 과정 줄 종류")"""
+class Note(BaseModel):
+    """조회마다 받는 조사 과정 칸 — 결과 계산에는 쓰지 않고 화면 줄(가설·비교)로만 보인다(설계 §3 "조사 과정 줄 종류").
+    ⑧-2 증빙 조회 도구(backend/expense_tools.py)도 같은 칸을 쓴다"""
 
     purpose: str = Field(
         min_length=1, max_length=NOTE_MAX, description="이 조회로 확인하려는 것 한 줄"
@@ -70,11 +145,11 @@ class _Note(BaseModel):
     )
 
 
-class _Day(_Note):
+class _Day(Note):
     day: date
 
 
-class _Range(_Note):
+class _Range(Note):
     date_from: date
     date_to: date
     max_days: ClassVar[int] = 0
@@ -93,7 +168,7 @@ class _CardSales(_Range):
     amount_max: int | None = None
 
 
-class _Deposits(_Note):
+class _Deposits(Note):
     sales_date: date
     issuer: str | None = None
 
@@ -103,7 +178,7 @@ class _BankTx(_Range):
     direction: Literal["in", "out"] = "in"
 
 
-class _Patient(_Note):
+class _Patient(Note):
     patient_id: int
 
 
@@ -111,7 +186,7 @@ class _Balance(_Patient):
     before: date
 
 
-class _Oral(_Note):
+class _Oral(Note):
     amount: int | None = Field(default=None, gt=0)
 
 

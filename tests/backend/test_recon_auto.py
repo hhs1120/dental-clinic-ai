@@ -103,3 +103,15 @@ def test_revert_endpoint_accepts_recon_auto():
     from backend import api
 
     assert {recon_auto.KIND, autoclose.KIND} <= set(api.AUTO_KINDS)
+
+
+def test_main_refreshes_when_no_targets(conn, monkeypatch):
+    """⑧-1도 — 모든 건을 조사한 뒤 정책을 켜고 make recon, 대상 0건이어도 자동 마감을 다시 계산"""
+    from types import SimpleNamespace
+
+    investigated(conn)
+    on(conn)
+    monkeypatch.setattr(recon_agent.db, "connect", lambda *a: conn)
+    monkeypatch.setattr(recon_agent, "load_clinic", lambda: SimpleNamespace(today=DAY))
+    recon_agent.main(["run"])
+    assert set(recon_auto.active(conn, {key(conn)})) == {key(conn)}

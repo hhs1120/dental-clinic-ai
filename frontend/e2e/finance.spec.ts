@@ -628,6 +628,166 @@ test("같은 출금처의 다른 줄을 확정해도 펼친 줄은 그대로", a
   await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
 });
 
+// ── 4단계 지출 증빙 AI(설계 §4) ─────────────────────────────
+
+const unknownShop = {
+  id: 31,
+  kind: "receipt",
+  issuer: "낯선가게",
+  issued_on: "2026-11-10",
+  amount: 9000,
+  body: "낯선가게 영수증 종이컵 9,000원",
+};
+
+const AI = (
+  ids: number[],
+  docs: unknown[],
+  account: string,
+  see: string | null,
+) => ({
+  document_ids: ids,
+  docs,
+  account,
+  confidence: "mid",
+  reasons: [{ text: "같은 날 같은 금액 영수증", lookups: [1] }],
+  see,
+  status: "done",
+  lines: [
+    { kind: "hypothesis", text: "같은 날 같은 금액 증빙" },
+    {
+      kind: "lookup",
+      tool: "search_docs",
+      lookup_no: 1,
+      text: "증빙 검색 (금액 9,000~9,000) 1건",
+    },
+  ],
+});
+
+/** 1번 줄 = 규칙·AI 같음, 2번 줄 = 규칙과 다름(규칙은 증빙 못 찾음). emptyAi면 2번 줄 AI가 증빙 없음 */
+const EXP_AI = (
+  opts: { emptyAi?: boolean; auto?: boolean; seeOnAgree?: string } = {},
+) => {
+  const base = EXP() as {
+    chips: Record<string, number>;
+    rows: Record<string, unknown>[];
+  };
+  const rows: Record<string, unknown>[] = base.rows.map((r) => ({
+    ...r,
+    key: `k${r.id}`,
+    agent: null,
+    agree: null,
+    auto: null,
+  }));
+  rows[0] = {
+    ...rows[0],
+    agent: AI([11], [receipt], "복리후생비", opts.seeOnAgree ?? null),
+    agree: true,
+    ...(opts.auto
+      ? { auto: { id: 5, at: "2026-12-01 06:00:00" }, account_from: "auto" }
+      : {}),
+  };
+  rows[1] = {
+    ...rows[1],
+    agent: opts.emptyAi
+      ? AI([], [], "복리후생비", "영수증을 받아 두었는지 확인")
+      : AI([31], [unknownShop], "소모품비", "영수증 날짜 확인"),
+    agree: false,
+  };
+  return {
+    ...base,
+    chips: { ...base.chips, differ: 1, open: opts.auto ? 2 : 3 },
+    rows,
+  };
+};
+
+test("규칙과 다른 줄은 AI 칸이 펼쳐지고 이 제안으로 확정", async ({ page }) => {
+  await fakeExpenses(page, () => EXP_AI());
+  let body = "";
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/2/confirm",
+    (r) => {
+      body = r.request().postData() ?? "";
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  const ai = page.getByRole("region", { name: "AI 제안 KCP*낯선가게" });
+  await expect(ai).toContainText("규칙과 다름");
+  await expect(ai).toContainText("영수증 · 낯선가게");
+  await expect(ai).toContainText("소모품비");
+  await expect(ai).toContainText("확신 중간");
+  await expect(ai).toContainText("같은 날 같은 금액 영수증");
+  await expect(ai).toContainText("조회 1");
+  await expect(ai).toContainText("직원이 볼 것: 영수증 날짜 확인");
+  await ai.getByText("조사 과정 보기").click();
+  await expect(ai).toContainText("같은 날 같은 금액 증빙");
+  await ai.getByRole("button", { name: "이 제안으로 확정" }).click();
+  await expect.poll(() => body).toContain('"document_ids":[31]');
+  expect(body).toContain("소모품비");
+});
+
+test("규칙과 같은 줄은 짧게", async ({ page }) => {
+  await fakeExpenses(page, () => EXP_AI());
+  await page.goto("/finance?tab=expense");
+  const ai = page.getByRole("region", { name: "AI 제안 솔밭식당" });
+  await expect(ai).toContainText("규칙·AI 같음");
+  await expect(
+    ai.getByRole("button", { name: "이 제안으로 확정" }),
+  ).toHaveCount(0);
+  await expect(ai).not.toContainText("직원이 볼 것");
+});
+
+test("규칙과 같아도 직원이 볼 것은 보인다", async ({ page }) => {
+  await fakeExpenses(page, () =>
+    EXP_AI({ seeOnAgree: "두 과목이 섞인 주문 — 소모품비 29,000원" }),
+  );
+  await page.goto("/finance?tab=expense");
+  const ai = page.getByRole("region", { name: "AI 제안 솔밭식당" });
+  await expect(ai).toContainText("규칙·AI 같음");
+  await expect(ai).toContainText(
+    "직원이 볼 것: 두 과목이 섞인 주문 — 소모품비 29,000원",
+  );
+});
+
+test("증빙 없음 제안은 증빙 없이 확정", async ({ page }) => {
+  await fakeExpenses(page, () => EXP_AI({ emptyAi: true }));
+  let body = "";
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/2/confirm",
+    (r) => {
+      body = r.request().postData() ?? "";
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  const ai = page.getByRole("region", { name: "AI 제안 KCP*낯선가게" });
+  await expect(ai).toContainText("증빙 없음 → 복리후생비");
+  await ai.getByRole("button", { name: "증빙 없이 확정" }).click();
+  await expect.poll(() => body).toContain('"document_ids":[]');
+});
+
+test("규칙과 다름 칩으로 거른다", async ({ page }) => {
+  await fakeExpenses(page, () => EXP_AI());
+  await page.goto("/finance?tab=expense");
+  await page.getByRole("button", { name: "규칙과 다름 1" }).click();
+  await expect(page.locator("tr[data-outflow]")).toHaveCount(1);
+  await expect(expRow(page, "KCP*낯선가게")).toBeVisible();
+});
+
+test("자동 확정 줄은 배지와 되돌리기", async ({ page }) => {
+  await fakeExpenses(page, () => EXP_AI({ auto: true }));
+  let reverted = false;
+  await page.route("**/api/auto-actions/5/revert", (r) => {
+    reverted = true;
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/finance?tab=expense");
+  const r = expRow(page, "솔밭식당");
+  await expect(r).toContainText("자동 확정");
+  await r.getByRole("button", { name: "되돌리기" }).click();
+  await expect.poll(() => reverted).toBe(true);
+});
+
 // ── 3단계 조사 에이전트(설계 §3) ─────────────────────────────
 
 const AGENT = {

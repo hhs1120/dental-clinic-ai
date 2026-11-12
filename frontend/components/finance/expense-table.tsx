@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 
+import { Line } from "@/components/finance/recon-item";
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,11 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { errorText } from "@/lib/api";
+import { ApiError, errorText } from "@/lib/api";
+import { revertAuto } from "@/lib/calls-api";
 import {
   ACCOUNT_FROM_LABEL,
+  CONFIDENCE_LABEL,
   confirmExpense,
   DOC_KIND_LABEL,
+  type ExpenseAgent,
   type ExpenseDoc,
   type ExpenseRow,
   type ExpenseSheet,
@@ -26,7 +30,7 @@ import {
 import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
 
-export type ExpenseChip = "found" | "none" | "check" | "open";
+export type ExpenseChip = "found" | "none" | "check" | "differ" | "open";
 
 /** 2026-11-03(…) → 11/03 */
 const md = (s: string) => `${s.slice(5, 7)}/${s.slice(8, 10)}`;
@@ -35,8 +39,108 @@ const keep: Record<ExpenseChip, (r: ExpenseRow) => boolean> = {
   found: (r) => r.docs.length > 0,
   none: (r) => r.docs.length === 0 && !r.confirmed,
   check: (r) => r.check,
-  open: (r) => !r.confirmed,
+  differ: (r) => r.agree === false && !r.confirmed && !r.auto,
+  open: (r) => !r.confirmed && !r.auto,
 };
+
+const CONFIDENCE_VARIANT = { high: "ok", mid: "warn", low: "danger" } as const;
+
+/** AI 결론 한 줄 — 고른 증빙(또는 증빙 없음) → 과목 */
+const pickText = (a: ExpenseAgent) =>
+  `${
+    a.docs.length === 0
+      ? "증빙 없음"
+      : a.docs
+          .map(
+            (d) =>
+              `${DOC_KIND_LABEL[d.kind] ?? d.kind} · ${d.issuer} ${md(d.issued_on)} ${won(d.amount)}`,
+          )
+          .join(", ")
+  } → ${a.account}`;
+
+/** AI 제안 칸(설계 §4) — 규칙과 같으면 한 줄(직원이 볼 것은 있으면 보임), 다르면 결론·왜·직원이 볼 것·조사 과정과 확정 버튼 */
+function AiPanel({
+  row,
+  agent,
+  busy,
+  onConfirm,
+  onChange,
+}: {
+  row: ExpenseRow;
+  agent: ExpenseAgent;
+  busy: boolean;
+  onConfirm: () => void;
+  onChange: () => void;
+}) {
+  const head = (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-bold text-status-info-fg">AI 제안</span>
+      {row.agree ? (
+        <Badge variant="ok">규칙·AI 같음</Badge>
+      ) : (
+        <Badge variant="warn">규칙과 다름</Badge>
+      )}
+      <span className="font-bold">{pickText(agent)}</span>
+      <Badge variant={CONFIDENCE_VARIANT[agent.confidence]}>
+        {CONFIDENCE_LABEL[agent.confidence]}
+      </Badge>
+    </div>
+  );
+  return (
+    <section
+      aria-label={`AI 제안 ${row.label}`}
+      className="flex flex-col gap-2 rounded-md border border-status-info-border bg-status-info-bg p-3"
+    >
+      {head}
+      {/* 규칙과 같아도 사람이 볼 것(섞인 주문 등)은 보인다 */}
+      {agent.see && (
+        <p className="rounded-md border-l-4 border-status-warn-border bg-status-warn-bg px-3 py-1.5 text-sm text-status-warn-fg">
+          직원이 볼 것: {agent.see}
+        </p>
+      )}
+      {!row.agree && (
+        <>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-bold text-status-info-fg">왜</span>
+            <ul className="flex list-disc flex-col gap-1 pl-5">
+              {agent.reasons.map((r, k) => (
+                <li key={k}>
+                  {r.text}{" "}
+                  <span className="text-xs text-muted-foreground">
+                    (조회 {r.lookups.join("·")})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-muted-foreground">
+              조사 과정 보기
+            </summary>
+            <ol className="mt-1 flex flex-col gap-1">
+              {agent.lines.map((l, k) => (
+                <Line key={k} line={l} />
+              ))}
+            </ol>
+          </details>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={busy} onClick={onConfirm}>
+              {agent.docs.length === 0 ? "증빙 없이 확정" : "이 제안으로 확정"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={onChange}
+            >
+              바꾸기
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 /** 찾은 증빙 — 한 장이면 종류·발행처·일자, 여러 장이면 "거래명세서 n장 합계"(세금계산서는 따로 붙임) */
 function DocsText({
@@ -178,27 +282,34 @@ function Row({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const save = () => {
+  const run = (p: Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    confirmExpense(
-      row.table,
-      row.id,
-      [...picked].sort((a, b) => a - b),
-      account,
-      readPart(),
-    ).then(
+    p.then(
       () => {
         setBusy(false);
         onSaved();
       },
       (e) => {
         setBusy(false);
-        setError(errorText(e));
+        // 409 = 다른 사람이 먼저 되돌림 — 오류 없이 다시 조회만
+        if (e instanceof ApiError && e.status === 409) onSaved();
+        else setError(errorText(e));
       },
     );
   };
+  const save = (ids: number[], acct: string) =>
+    run(
+      confirmExpense(
+        row.table,
+        row.id,
+        [...ids].sort((a, b) => a - b),
+        acct,
+        readPart(),
+      ),
+    );
   const c = row.confirmed;
+  const agent = row.agent?.account ? row.agent : null;
   return (
     <Fragment>
       <tr data-outflow={`${row.table}-${row.id}`} className="border-t">
@@ -246,11 +357,24 @@ function Row({
                 확정함 · {c.by} {md(c.at)}
               </Badge>
             )}
+            {row.auto && !c && (
+              <>
+                <Badge variant="info">자동 확정 · {md(row.auto.at)}</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => run(revertAuto(row.auto!.id, readPart()))}
+                >
+                  되돌리기
+                </Button>
+              </>
+            )}
             <Button
               size="sm"
-              variant={c ? "outline" : "default"}
+              variant={c || row.auto ? "outline" : "default"}
               disabled={busy || !account}
-              onClick={save}
+              onClick={() => save(picked, account)}
             >
               확정
             </Button>
@@ -265,6 +389,19 @@ function Row({
           </div>
         </td>
       </tr>
+      {agent && !c && (
+        <tr>
+          <td colSpan={7} className="px-3 pb-3">
+            <AiPanel
+              row={row}
+              agent={agent}
+              busy={busy}
+              onConfirm={() => save(agent.document_ids ?? [], agent.account!)}
+              onChange={() => setOpen(true)}
+            />
+          </td>
+        </tr>
+      )}
       {(open || error) && (
         <tr>
           <td colSpan={7} className="bg-muted/40 px-3 py-3">

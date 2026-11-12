@@ -27,6 +27,7 @@ from backend import (
     documents,
     emr,
     expense,
+    expense_auto,
     judge_queue,
     metrics,
     missed,
@@ -857,13 +858,21 @@ class ExpenseConfirm(BaseModel):
 
 @app.post("/finance/expenses/{table}/{outflow_id}/confirm")
 def finance_expense_confirm(
-    table: str, outflow_id: int, body: ExpenseConfirm, paths: Paths, now: Now
+    table: str, outflow_id: int, body: ExpenseConfirm, paths: Paths, clinic: ClinicDep, now: Now
 ) -> dict:
-    """출금 사람 확정(덮어씀) — 기록 시각은 실제 시계. 없는 출금·모르는 과목·후보 밖 증빙은 400"""
+    """출금 사람 확정(덮어씀) — 기록 시각은 실제 시계. 없는 출금·모르는 과목·후보 밖 증빙·기준일 이후 출금·
+    다른 출금에 이미 확정된 증빙은 400(설계 §4)"""
     conn = _open_rw(paths)
     try:
         expense.confirm(
-            conn, table, outflow_id, body.document_ids, body.account, by=body.part, at=_stamp(now)
+            conn,
+            table,
+            outflow_id,
+            body.document_ids,
+            body.account,
+            by=body.part,
+            at=_stamp(now),
+            today=clinic.today,
         )
         conn.commit()
         return {"ok": True}
@@ -883,9 +892,8 @@ def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
         conn.close()
 
 
-AUTO_KINDS = (
-    autoclose.KINDS | recon_auto.KINDS
-)  # 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감
+# 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감·⑧-2 지출 증빙 자동 확정
+AUTO_KINDS = autoclose.KINDS | recon_auto.KINDS | expense_auto.KINDS
 
 
 @app.post("/auto-actions/{action_id}/revert")

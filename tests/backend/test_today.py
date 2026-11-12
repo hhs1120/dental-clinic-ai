@@ -334,7 +334,16 @@ def test_today_expense_line_matches_screen(tmp_path):
     people = _sheet(conn)["people"]
     assert people["expense_open"] == expense.open_summary(conn, TODAY)["count"] == 1
     assert people["expense_month"] == "2026-11"
-    expense.confirm(conn, "fin_card_expenses", oid, [], "복리후생비", "데스크", "2026-12-01 09:00")
+    expense.confirm(
+        conn,
+        "fin_card_expenses",
+        oid,
+        [],
+        "복리후생비",
+        "데스크",
+        "2026-12-01 09:00",
+        date(2026, 12, 1),
+    )
     conn.commit()
     people = _sheet(conn)["people"]
     assert (people["expense_open"], people["expense_month"]) == (0, None)
