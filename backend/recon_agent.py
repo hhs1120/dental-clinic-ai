@@ -26,11 +26,11 @@ from shared.llm import Gateway, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT, ALIAS, TASK = "recon_cause", "recon", "recon"
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: 상한 12, 구강용품 조합은 도구가 계산(조합이 없으면 진료 외 매출 아님)
 SUBMIT = "submit_cause"
 EVIDENCE_RULE = "recon.evidence"
-# 조사 단계 상한(끝내는 도구 포함) — 시작값, dev 단계 수 분포를 보고 다시 정한다(설계 §3)
-RECON_MAX_TOOL_CALLS = 8
+# 조사 단계 상한(끝내는 도구 포함) — 시작값 8은 dev 시험 5건 중 2건이 걸려(한 턴에 조회 3~4개를 묶어 부름) 12로(설계 §3)
+RECON_MAX_TOOL_CALLS = 12
 RECON_MAX_USD = 0.3  # 실행당 비용 상한 — 넘으면 원인 미정으로 끝난다
 EST_USD = 0.08  # 건당 예상 비용(일반 호출, 추정) — 일괄 시작 때 찍는 값
 STATE = ROOT / "data" / "recon_batch.json"

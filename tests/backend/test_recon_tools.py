@@ -92,12 +92,35 @@ def test_range_limits():
     by = {t.name: t for t in recon_tools.tools(SUBMIT)}
     with pytest.raises(ValidationError):
         by["find_amount"].args.model_validate(
-            {"amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-02"}
+            {"amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-03"}
         )
     with pytest.raises(ValidationError):
         by["card_sales"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-09"})
     with pytest.raises(ValidationError):
         by["bank_tx"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-16"})
+
+
+def test_range_limit_is_inclusive():
+    """상한 = 날짜 차이 N일까지 — 모델이 ±15일(차이 30)·31일 차이로 부르는 흔한 꼴이 막히지 않게"""
+    by = {t.name: t for t in recon_tools.tools(SUBMIT)}
+    by["find_amount"].args.model_validate(
+        {"amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-02"}
+    )
+    by["card_sales"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-08"})
+
+
+def test_oral_care_combos(b):
+    """금액이 구강용품 몇 개의 합으로 정확히 되는지 코드가 계산한다(개수 제한 없이 — 3개 이상 판매도)"""
+    conn = b.app()
+    prices = master.ORAL_CARE_PRICES
+    a, c = sorted(prices.values())[:2]
+    r = call(conn, "oral_care_prices", amount=a * 2 + c)
+    assert r["combos"] and all(
+        sum(prices[n] * k for n, k in x.items()) == a * 2 + c for x in r["combos"]
+    )
+    none = call(conn, "oral_care_prices", amount=1)
+    assert none["combos"] == [] and "조합 없음" in none["summary"]
+    assert call(conn, "oral_care_prices")["combos"] is None
 
 
 def _step(tool, status="pass", err=0):

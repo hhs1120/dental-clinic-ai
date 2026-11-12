@@ -32,6 +32,8 @@ CARD_SALES_DAYS = (
 BANK_TX_DAYS = 14
 FIND_AMOUNT_DAYS = 31
 BALANCE_ROWS = 10
+ORAL_MAX_ITEMS = 10  # 구강용품 조합 — 한 번 판매의 개수 상한
+ORAL_MAX_COMBOS = 5
 
 
 def won(n: int) -> str:
@@ -66,8 +68,8 @@ class _Range(BaseModel):
     @model_validator(mode="after")
     def _span(self):
         span = (self.date_to - self.date_from).days
-        if span < 0 or span >= self.max_days:
-            raise ValueError(f"기간은 {self.max_days}일 안(date_from ≤ date_to)")
+        if span < 0 or span > self.max_days:
+            raise ValueError(f"date_to − date_from은 0~{self.max_days}일")
         return self
 
 
@@ -95,8 +97,8 @@ class _Balance(_Patient):
     before: date
 
 
-class _None(BaseModel):
-    pass
+class _Oral(BaseModel):
+    amount: int | None = Field(default=None, gt=0)
 
 
 class _FindAmount(_Range):
@@ -271,9 +273,40 @@ def _family(conn, a) -> dict:
     }
 
 
+def oral_combos(prices: dict[str, int], amount: int) -> list[dict[str, int]]:
+    """amount가 구강용품 몇 개(ORAL_MAX_ITEMS개까지, 같은 품목 여러 개 포함)의 합으로 정확히 되는 조합 — 개수 적은 순
+    ORAL_MAX_COMBOS개. 숫자 맞추기는 코드가 한다(기능 정의 §3 원칙 2)"""
+    items = sorted(prices.items(), key=lambda kv: -kv[1])
+    out: list[dict[str, int]] = []
+
+    def walk(i: int, left: int, used: dict[str, int], n: int) -> None:
+        if left == 0:
+            out.append(dict(used))
+            return
+        if i == len(items) or n == ORAL_MAX_ITEMS:
+            return
+        name, price = items[i]
+        for k in range(min(left // price, ORAL_MAX_ITEMS - n), -1, -1):
+            if k:
+                used[name] = k
+            walk(i + 1, left - k * price, used, n + k)
+            used.pop(name, None)
+
+    walk(0, amount, {}, 0)
+    return sorted(out, key=lambda c: (sum(c.values()), sorted(c.items())))[:ORAL_MAX_COMBOS]
+
+
 def _oral_care_prices(conn, a) -> dict:
     prices = master_values(conn)["oral_care_prices"]
-    return {"summary": f"구강용품 {len(prices)}가지", "prices": prices}
+    if a["amount"] is None:
+        return {"summary": f"구강용품 {len(prices)}가지", "prices": prices, "combos": None}
+    combos = oral_combos(prices, a["amount"])
+    shown = " / ".join(" + ".join(f"{n}×{k}" for n, k in c.items()) for c in combos[:2])
+    return {
+        "summary": f"{won(a['amount'])} 구강용품 " + (f"조합 {shown}" if combos else "조합 없음"),
+        "prices": prices,
+        "combos": combos,
+    }
 
 
 def _find_amount(conn, a) -> dict:
@@ -353,7 +386,11 @@ _SPECS = {
         "환자의 그날 전 미수 잔액과 남은 금액이 있는 수납",
     ),
     "family": (_Patient, _family, "환자의 보호자·같은 가족"),
-    "oral_care_prices": (_None, _oral_care_prices, "구강용품 가격표"),
+    "oral_care_prices": (
+        _Oral,
+        _oral_care_prices,
+        "구강용품 가격표 — amount를 주면 그 금액이 구강용품 몇 개의 합으로 정확히 되는 조합(코드가 계산)",
+    ),
     "find_amount": (
         _FindAmount,
         _find_amount,
