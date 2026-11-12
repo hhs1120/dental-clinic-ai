@@ -23,6 +23,8 @@ const EMPTY = {
     preclaim_ai: 0,
     recon_open: 0,
     recon_month: null,
+    expense_open: 0,
+    expense_month: null,
   },
   ai: {
     autoclose_on: false,
@@ -320,4 +322,21 @@ test("일계표 불일치 줄 → 미확정이 있는 가장 이른 달", async 
   await fakeToday(page, EMPTY);
   await page.goto("/today");
   await expect(page.getByText(/일계표 불일치/)).toHaveCount(0);
+});
+
+test("지출 증빙 확인 줄 → 지출 증빙 탭 지난달", async ({ page }) => {
+  await fakeToday(page, {
+    ...EMPTY,
+    people: { ...EMPTY.people, expense_open: 2, expense_month: "2026-11" },
+  });
+  await page.goto("/today");
+  await page
+    .getByRole("region", { name: "사람이 볼 일" })
+    .getByRole("link", { name: /지출 증빙 확인 2건/ })
+    .click();
+  await expect(page).toHaveURL(/\/finance\?tab=expense&month=2026-11$/);
+  await page.unroute("**/api/today");
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByText(/지출 증빙 확인/)).toHaveCount(0);
 });

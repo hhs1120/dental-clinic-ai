@@ -197,6 +197,17 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "장부와 카드·통장 입금이 안 맞는 건 확정",
   );
   count(
+    p.expense_open,
+    "expense",
+    "지출 증빙",
+    "warn",
+    p.expense_month
+      ? `/finance?tab=expense&month=${p.expense_month}`
+      : "/finance?tab=expense",
+    `지출 증빙 확인 ${p.expense_open}건`,
+    "지난달 출금 중 증빙 못 찾음·과목 확인 필요",
+  );
+  count(
     p.judge_pending,
     "judge",
     "판정 대기",
