@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ApiError, errorText, useFetch } from "@/lib/api";
 import { revertAuto, shortAt, useLabels } from "@/lib/calls-api";
+import { CAUSE_LABEL } from "@/lib/finance-api";
 import { readPart } from "@/lib/part";
 import {
   fetchToday,
@@ -277,6 +278,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const failed = ai.prep.failed + ai.classify_failed + ai.followup_failed;
   const summary = [
     ai.autoclose_on ? `자동 처리 ${ai.auto_total}건` : "자동 종결 꺼짐",
+    ...(ai.recon_auto.on ? [`일계표 자동 마감 ${ai.recon_auto.total}건`] : []),
     `오늘 준비표 ${ai.prep.rows}행`,
     `실패 ${failed}`,
   ].join(" · ");
@@ -380,6 +382,43 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
               </Link>
             )}
           </div>
+          {ai.recon_auto.on && (
+            <div className="flex flex-col gap-2">
+              <h3 className="font-bold">일계표 불일치 자동 마감</h3>
+              {ai.recon_auto.recent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  자동으로 마감한 불일치 건이 없습니다
+                </p>
+              ) : (
+                <ul className="flex flex-col divide-y">
+                  {ai.recon_auto.recent.map((x) => (
+                    <li key={x.id} className="flex items-center gap-3 py-2">
+                      <Link
+                        href={`/finance?month=${x.date.slice(0, 7)}&day=${x.date}`}
+                        className="min-w-0 flex-1 hover:underline"
+                      >
+                        <div className="font-medium">
+                          {x.date} · {CAUSE_LABEL[x.cause]}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          규칙과 에이전트 원인이 같음 · 장부 수정 불필요 ·{" "}
+                          {shortAt(x.at)}
+                        </div>
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy.has(x.id)}
+                        onClick={() => reopen(x.id)}
+                      >
+                        되돌리기
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <h3 className="font-bold">결과 표에서 센 것</h3>
             <ul className="flex flex-col divide-y">

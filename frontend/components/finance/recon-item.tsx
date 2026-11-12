@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { errorText } from "@/lib/api";
+import { ApiError, errorText } from "@/lib/api";
+import { revertAuto } from "@/lib/calls-api";
 import {
+  agentCauseLabel,
   type Cause,
   CAUSE_LABEL,
   CAUSES,
@@ -21,6 +23,9 @@ import {
   METHOD_LABEL,
   postConfirm,
   type ReconItem,
+  type ReconLine,
+  streamInvestigate,
+  TOOL_LABEL,
 } from "@/lib/finance-api";
 import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
@@ -29,7 +34,107 @@ import { readPart } from "@/lib/part";
 const at = (s: string) =>
   `${s.slice(5, 7)}/${s.slice(8, 10)}${s.length > 10 ? ` ${s.slice(11, 16)}` : ""}`;
 
-/** 불일치 건 하나 — 관련 장부·금융 행, 규칙 추정 원인, 사람 확정(맞음 / 아님 → 원인 고르기) */
+const LINE_BADGE: Record<
+  Exclude<ReconLine["kind"], "note" | "lookup">,
+  { label: string; variant: "muted" | "warn" | "ok" }
+> = {
+  hypothesis: { label: "가설", variant: "muted" },
+  compare: { label: "비교", variant: "muted" },
+  blocked: { label: "막힘", variant: "warn" },
+  conclusion: { label: "결론", variant: "ok" },
+};
+
+/** 조사 과정 줄 하나 — 생각(머리말 없는 글)은 배지 없이 흐리게 */
+function Line({ line }: { line: ReconLine }) {
+  if (line.kind === "note")
+    return <li className="text-sm text-muted-foreground">{line.text}</li>;
+  if (line.kind === "lookup")
+    return (
+      <li className="flex gap-2 text-sm">
+        <Badge variant="info">조회 {line.lookup_no}</Badge>
+        <span>
+          {TOOL_LABEL[line.tool ?? ""] ?? line.tool} — {line.text}
+        </span>
+      </li>
+    );
+  const b = LINE_BADGE[line.kind];
+  return (
+    <li className="flex gap-2 text-sm">
+      <Badge variant={b.variant}>{b.label}</Badge>
+      <span>
+        {line.kind === "conclusion" && (
+          <b>
+            {agentCauseLabel(line.cause)}
+            {line.evidence?.length
+              ? ` · 근거 조회 ${line.evidence.join("·")}`
+              : ""}{" "}
+            —{" "}
+          </b>
+        )}
+        {line.text}
+      </span>
+    </li>
+  );
+}
+
+/** 조사 과정 — 저장된 줄을 보이고, 조사 전이면 `조사 시작`(누르면 줄이 하나씩). 다시 조사는 없다(설계 §3) */
+function Investigation({
+  item,
+  onDone,
+}: {
+  item: ReconItem;
+  onDone: () => void;
+}) {
+  const [live, setLive] = useState<ReconLine[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
+  const start = () => {
+    const ctl = new AbortController();
+    abort.current = ctl;
+    setLive([]);
+    setError(null);
+    streamInvestigate(
+      item.key,
+      (e) => {
+        if (e.type === "line") setLive((ls) => [...(ls ?? []), e.line]);
+        else if (e.type === "error") setError(e.message);
+        else onDone();
+      },
+      ctl.signal,
+    ).catch(() => {});
+  };
+  const saved = item.agent?.lines;
+  const lines = live ?? saved;
+  const running = live !== null && !error && item.agent == null;
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-muted/40 p-2">
+      <div className="flex items-center gap-2">
+        <h3 className="font-bold">조사 과정</h3>
+        {running && (
+          <span className="text-sm text-muted-foreground">조사 중…</span>
+        )}
+        <span className="flex-1" />
+        {item.agent == null && live === null && (
+          <Button size="sm" variant="outline" onClick={start}>
+            조사 시작
+          </Button>
+        )}
+      </div>
+      {lines && lines.length > 0 && (
+        <ol className="flex flex-col gap-1">
+          {lines.map((l, k) => (
+            <Line key={k} line={l} />
+          ))}
+        </ol>
+      )}
+      {error && <ErrorBand text={error} />}
+    </div>
+  );
+}
+
+/** 불일치 건 하나 — 관련 장부·금융 행, 조사 과정, 규칙 추정·에이전트 원인, 자동 마감, 사람 확정(맞음 / 아님 → 원인 고르기).
+ * 맞음은 에이전트 결과가 있으면 그 1순위를, 없으면 규칙 추정을 확정한다(원인 미정이면 맞음 없이 고르기만) */
 export function ReconItemView({
   item,
   onSaved,
@@ -54,6 +159,30 @@ export function ReconItemView({
     );
   };
   const c = item.confirmation;
+  const agent = item.agent;
+  const proposed: Cause | null =
+    agent && agent.cause && agent.cause !== "unknown"
+      ? agent.cause
+      : agent?.cause === "unknown"
+        ? null
+        : item.rule_cause;
+  const auto = item.auto;
+  const reopen = (id: number) => {
+    setBusy(true);
+    setError(null);
+    revertAuto(id, readPart()).then(
+      () => {
+        setBusy(false);
+        onSaved();
+      },
+      (e) => {
+        setBusy(false);
+        // 409 = 다른 사람이 먼저 되돌림 — 오류 없이 다시 조회만
+        if (e instanceof ApiError && e.status === 409) onSaved();
+        else setError(errorText(e));
+      },
+    );
+  };
   return (
     <section
       aria-label={`불일치 건 ${at(item.date)}`}
@@ -104,10 +233,35 @@ export function ReconItemView({
           )}
         </div>
       </div>
+      <Investigation item={item} onDone={onSaved} />
       <div className="flex flex-wrap items-center gap-2">
-        <span>
+        {agent && agent.cause && (
+          <span>
+            에이전트: <b>{agentCauseLabel(agent.cause)}</b>
+            {agent.runner_up && (
+              <span className="text-muted-foreground">
+                {" "}
+                (2순위 {agentCauseLabel(agent.runner_up)})
+              </span>
+            )}
+          </span>
+        )}
+        <span className={agent?.cause ? "text-muted-foreground" : undefined}>
           규칙 추정: <b>{CAUSE_LABEL[item.rule_cause]}</b>
         </span>
+        {auto && (
+          <>
+            <Badge variant="info">자동 마감 · {at(auto.at)}</Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => reopen(auto.id)}
+            >
+              되돌리기
+            </Button>
+          </>
+        )}
         {c && (
           <Badge variant="ok">
             {CAUSE_LABEL[c.cause]} · {c.by} {at(c.at)}
@@ -116,15 +270,15 @@ export function ReconItemView({
         <span className="flex-1" />
         <Button
           size="sm"
-          variant={c?.cause === item.rule_cause ? "secondary" : "outline"}
-          disabled={busy}
-          onClick={() => save(item.rule_cause)}
+          variant={c && c.cause === proposed ? "secondary" : "outline"}
+          disabled={busy || proposed === null}
+          onClick={() => proposed && save(proposed)}
         >
           맞음
         </Button>
         <span className="text-sm text-muted-foreground">아님 →</span>
         <Select
-          value={c && c.cause !== item.rule_cause ? c.cause : ""}
+          value={c && c.cause !== proposed ? c.cause : ""}
           onValueChange={(v) => save(v as Cause)}
           disabled={busy}
         >

@@ -627,3 +627,125 @@ test("같은 출금처의 다른 줄을 확정해도 펼친 줄은 그대로", a
   await expect(rows.nth(0)).toContainText("지난 확정");
   await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
 });
+
+// ── 3단계 조사 에이전트(설계 §3) ─────────────────────────────
+
+const AGENT = {
+  run_id: 1,
+  status: "done",
+  cause: "cancel_reapprove",
+  runner_up: "split_payment",
+  evidence: [1],
+  reason: "같은 금액 승인이 취소되고 다시 승인됨",
+  lines: [
+    { kind: "hypothesis", text: "취소 후 재승인 같다" },
+    {
+      kind: "lookup",
+      tool: "card_sales",
+      lookup_no: 1,
+      text: "2026-11-03~2026-11-03 카드 승인 3건",
+    },
+    {
+      kind: "conclusion",
+      cause: "cancel_reapprove",
+      runner_up: "split_payment",
+      evidence: [1],
+      text: "같은 금액 승인이 취소되고 다시 승인됨",
+    },
+  ],
+};
+
+const withAgent =
+  (agent: unknown, auto: unknown = null) =>
+  () => {
+    const nov = NOV() as { days: { items: Record<string, unknown>[] }[] };
+    nov.days[1].items = [{ ...cancelItem(null), agent, auto }];
+    return nov;
+  };
+
+test("저장된 조사 과정과 에이전트 원인 — 맞음은 에이전트 1순위를 확정", async ({
+  page,
+}) => {
+  await fakeRecon(page, withAgent(AGENT));
+  let body = "";
+  await page.route("**/api/finance/recon/aaaaaaaaaaaa/confirm", (r) => {
+    body = r.request().postData() ?? "";
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await expect(item).toContainText("조회 1");
+  await expect(item).toContainText(
+    "카드 승인 — 2026-11-03~2026-11-03 카드 승인 3건",
+  );
+  await expect(item).toContainText("에이전트: 취소 후 재승인");
+  await expect(item.getByRole("button", { name: "조사 시작" })).toHaveCount(0);
+  await item.getByRole("button", { name: "맞음" }).click();
+  await expect.poll(() => body).toContain("cancel_reapprove");
+});
+
+test("원인 미정이면 맞음 없이 고르기만", async ({ page }) => {
+  await fakeRecon(
+    page,
+    withAgent({
+      ...AGENT,
+      status: "handed_off",
+      cause: "unknown",
+      runner_up: null,
+      evidence: [],
+    }),
+  );
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await expect(item).toContainText("에이전트: 원인 미정");
+  await expect(item.getByRole("button", { name: "맞음" })).toBeDisabled();
+});
+
+test("조사 시작 — 줄이 생기고 끝나면 다시 조회", async ({ page }) => {
+  let done = false;
+  await fakeRecon(page, () => (done ? withAgent(AGENT)() : NOV()));
+  const sse = [
+    { event: "line", data: { line: AGENT.lines[0] } },
+    { event: "line", data: { line: AGENT.lines[1] } },
+    { event: "line", data: { line: AGENT.lines[2] } },
+    { event: "done", data: { agent: { ...AGENT, lines: undefined } } },
+  ]
+    .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`)
+    .join("");
+  await page.route("**/api/finance/recon/aaaaaaaaaaaa/investigate", (r) => {
+    done = true;
+    return r.fulfill({ contentType: "text/event-stream", body: sse });
+  });
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await item.getByRole("button", { name: "조사 시작" }).click();
+  await expect(item).toContainText("취소 후 재승인 같다");
+  await expect(item).toContainText("에이전트: 취소 후 재승인");
+  await expect(item.getByRole("button", { name: "조사 시작" })).toHaveCount(0);
+});
+
+test("자동 마감 건은 배지와 되돌리기", async ({ page }) => {
+  await fakeRecon(
+    page,
+    withAgent(AGENT, {
+      id: 5,
+      cause: "cancel_reapprove",
+      reason: "규칙과 에이전트 원인이 같음 · 장부 수정 불필요",
+      at: "2026-12-01 06:00:00",
+    }),
+  );
+  let reverted = false;
+  await page.route("**/api/auto-actions/5/revert", (r) => {
+    reverted = true;
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await expect(item).toContainText("자동 마감");
+  await item.getByRole("button", { name: "되돌리기" }).click();
+  await expect.poll(() => reverted).toBe(true);
+});
