@@ -33,7 +33,7 @@ AUTO_KIND, HUMAN_REVERT = "expense_autoconfirm", "사람이 바꿈"
 
 
 def outflow_key(o: dict) -> str:
-    """출금 키 — 표·시각·금액·출금처 글자 해시(앱 설계 §7.3 "출금일·금액·적요"). 실행 대상·자동 확정 키"""
+    """출금 키 — 표·시각·금액·출금처 글자 해시(앱 설계 §7.3 자연키 표). 실행 대상·자동 확정 키"""
     raw = f"{o['table']}|{o['at']}|{o['amount']}|{o['label']}"
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
