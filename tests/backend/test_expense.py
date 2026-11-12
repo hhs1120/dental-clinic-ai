@@ -188,6 +188,7 @@ def test_sheet_matches_rule(o):
         "found": 3,
         "none": 0,
         "check": 1,
+        "differ": 0,  # AI 결과 없음
         "open": 3,
     }
     assert sheet["accounts"] == mv["expense_accounts"]
@@ -286,3 +287,87 @@ def test_outflow_key_stable_and_distinct():
     assert expense.outflow_key(a) == expense.outflow_key(dict(a))
     assert len(expense.outflow_key(a)) == 12
     assert expense.outflow_key(a) != expense.outflow_key(a | {"at": "2026-11-10 10:01:00"})
+
+
+# ── AI 제안·규칙과 다름·자동 확정 (설계 §4) ─────────────────────────────
+
+
+def _ai(c, tmp_path, *steps):
+    from backend import expense_agent
+    from tests.backend.test_recon_agent import Script
+
+    expense_agent.run_batch(c, Script(c, *steps), DAY, batch=False, state=tmp_path / "s.json")
+
+
+def _submit(ids, account):
+    from tests.backend.test_expense_agent import submit
+
+    return submit(ids, account=account)
+
+
+LOOK = ("tool", "search_docs", {"purpose": "같은 금액 증빙"})
+
+
+def _phone(o):
+    oid = o.bank("2026-11-10 10:00:00", "이음통신", 33_000)
+    d = o.doc("bill", "이음통신", "2026-11-05", 33_000)
+    return oid, d
+
+
+def test_row_has_agent_and_agree(o, tmp_path):
+    oid, d = _phone(o)
+    c = o.app()
+    assert expense.sheet(c, DAY, "2026-11")["rows"][0]["agent"] is None
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    row = expense.sheet(c, DAY, "2026-11")["rows"][0]
+    assert row["key"] == expense.outflow_key(row) and row["agree"] is True
+    a = row["agent"]
+    assert (a["document_ids"], a["account"], a["confidence"]) == ([d], "통신비", "high")
+    assert a["docs"][0]["id"] == d and a["lines"]
+
+
+def test_differ_chip_and_open_summary_counts_differ(o, tmp_path):
+    """규칙은 고지서를 찾았지만 AI는 증빙 없음 — 규칙과 다름, 지난달 오늘 화면 수에 든다"""
+    oid, d = _phone(o)
+    c = o.app()
+    _ai(c, tmp_path, LOOK, _submit([], "통신비"))
+    sheet = expense.sheet(c, DAY, "2026-11")
+    assert sheet["rows"][0]["agree"] is False and sheet["chips"]["differ"] == 1
+    assert expense.open_summary(c, DAY)["count"] == 1
+
+
+def test_open_summary_skips_agreeing_rows(o, tmp_path):
+    _phone(o)
+    c = o.app()
+    assert expense.open_summary(c, DAY)["count"] == 0  # 규칙이 찾고 과목도 정해짐
+    d = c.execute("SELECT id FROM source.fin_expense_documents").fetchone()[0]
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    assert expense.open_summary(c, DAY)["count"] == 0
+
+
+def test_auto_row_shows_auto_result(o, tmp_path):
+    from backend import autoclose, expense_auto
+
+    oid, d = _phone(o)
+    c = o.app()
+    autoclose.set_policy(c, expense_auto.KIND, True)
+    _ai(c, tmp_path, LOOK, _submit([d], "통신비"))
+    row = expense.sheet(c, DAY, "2026-11")["rows"][0]
+    assert row["auto"]["id"] and row["account_from"] == "auto" and row["confirmed"] is None
+    assert expense.sheet(c, DAY, "2026-11")["chips"]["open"] == 0
+
+
+def test_sheet_query_count_independent_of_rows(tmp_path):
+    counts = []
+    for n in (3, 30):
+        (tmp_path / str(n)).mkdir()
+        s = Outflows(tmp_path / str(n) / "source.sqlite")
+        for i in range(n):
+            s.bank(f"2026-11-{1 + i % 28:02d} 10:00:00", "이음통신", 1_000 + i)
+        c = s.app()
+        seen: list[str] = []
+        c.set_trace_callback(seen.append)
+        expense.sheet(c, DAY, "2026-11")
+        c.set_trace_callback(None)
+        counts.append(len(seen))
+    assert counts[0] == counts[1]

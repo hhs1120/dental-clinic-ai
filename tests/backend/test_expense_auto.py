@@ -144,3 +144,16 @@ def test_auto_ignores_missing_outflows(o, tmp_path):
 
 def test_revert_endpoint_accepts_expense_auto():
     assert expense_auto.KIND in set(api.AUTO_KINDS)
+
+
+def test_today_expense_auto_list(o, tmp_path):
+    from backend import today
+
+    oid, d = phone(o)
+    c = o.app()
+    assert today._expense_auto(c, DAY) == {"on": False, "total": 0, "recent": []}
+    on(c)
+    investigate(c, tmp_path, LOOK, submit([d], account="통신비"))
+    r = today._expense_auto(c, DAY)
+    assert r["on"] and r["total"] == 1
+    assert (r["recent"][0]["label"], r["recent"][0]["account"]) == ("이음통신", "통신비")

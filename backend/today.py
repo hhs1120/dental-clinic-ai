@@ -4,8 +4,8 @@
 calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자동 처리는 통화 화면과 같은 유효 조건,
 재심 신청 기한 임박·청구 전 상병 경고는 청구 점검 화면(claims.adjusted `soon` 칩·claims.pre_claim 경고 줄),
 일계표 불일치는 재무 대조 화면의 확정 안 된 건(recon.open_summary — 링크는 그런 건이 있는 가장 이른 달),
-지출 증빙 확인은 지출 증빙 탭의 지난달 확인할 출금(expense.open_summary). 일계표 자동 마감은 일계표와 같은
-유효 조건(recon_auto.active — 정책 켜짐·지금 탐지 건).
+지출 증빙 확인은 지출 증빙 탭의 지난달 확인할 출금(expense.open_summary). 일계표 자동 마감·지출 증빙 자동 확정은
+그 화면과 같은 유효 조건(recon_auto.active·expense_auto.active — 정책 켜짐·지금 화면의 건).
 미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. LLM을 부르지 않는다."""
 
 import sqlite3
@@ -16,6 +16,7 @@ from backend import (
     calls,
     claims,
     expense,
+    expense_auto,
     judge_queue,
     prep,
     recon,
@@ -91,6 +92,27 @@ def _recon_auto(conn: sqlite3.Connection, today: date) -> dict:
     return {"on": True, "total": len(act), "recent": recent}
 
 
+def _expense_auto(conn: sqlite3.Connection, today: date) -> dict:
+    """되돌리지 않은 지출 증빙 자동 확정(backend/expense_auto.py) — 최근 확정 순, 기준일 전 출금만"""
+    if not expense_auto.policy_on(conn):
+        return {"on": False, "total": 0, "recent": []}
+    outflows = {expense.outflow_key(o): o for o in expense._load(conn, today)["outflows"]}
+    act = expense_auto.active(conn, set(outflows))
+    rows = sorted(act.items(), key=lambda kv: (kv[1]["at"], kv[1]["id"]), reverse=True)
+    recent = [
+        {
+            "id": v["id"],
+            "key": k,
+            "at": outflows[k]["at"],
+            "label": outflows[k]["label"],
+            "amount": outflows[k]["amount"],
+            "account": v["account"],
+        }
+        for k, v in rows[:AUTO_RECENT]
+    ]
+    return {"on": True, "total": len(act), "recent": recent}
+
+
 def _failures(conn) -> dict:
     """활성 분류 행 기준 — 분류 실패(ok가 아님, 또는 분류 행 없이 남은 새 통화 — 분류 중 예외로 통화만 남는
     경우, calls.add_call)·처리안 실패 통화 수. 분류 행 없는 생성 통화(버전 전환 직후 일괄 분류 전)는 세지 않는다.
@@ -145,7 +167,7 @@ def _recon(conn: sqlite3.Connection, today: date) -> dict:
 
 
 def _expense(conn: sqlite3.Connection, today: date) -> dict:
-    """지출 증빙 확인 — 지난달 출금 중 증빙 없음·과목 확인 필요이면서 확정 안 된 수와 링크할 달"""
+    """지출 증빙 확인 — 지난달 출금 중 사람이 볼 줄(증빙 없음·과목 확인 필요·규칙과 다름) 수와 링크할 달"""
     s = expense.open_summary(conn, today)
     return {"expense_open": s["count"], "expense_month": s["month"]}
 
@@ -176,6 +198,10 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             **_expense(conn, today),
         },
         "ai": _auto(conn)
-        | {"recon_auto": _recon_auto(conn, today), "prep": _prep_saved(conn, today)}
+        | {
+            "recon_auto": _recon_auto(conn, today),
+            "expense_auto": _expense_auto(conn, today),
+            "prep": _prep_saved(conn, today),
+        }
         | _failures(conn),
     }
