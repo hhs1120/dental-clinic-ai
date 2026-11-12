@@ -2,6 +2,7 @@
 # 별칭 → 모델 순서. 첫 모델이 기본, 오류(재시도 소진)·거절이면 다음 모델로 폴백
 aliases:
   gen: [claude-sonnet-5-5, claude-sonnet-5]        # 생성기 7·9·9b
+  gen_hard: [gpt-6.1-sol]                          # 생성기 어려운 통화 녹취 — 분류(Haiku)·라벨(Opus)과 다른 계열, 폴백 없음(어려운 통화 설계 §3.5)
   classify: [claude-haiku-5-5, claude-sonnet-5-5]  # ① 분류기 라벨
   summarize: [claude-haiku-5-5, claude-sonnet-5-5] # ① 분류기 요약·할 일
   judge: [qwen3.5-2b-judge]                        # ① 판정기 라벨 — 로컬 Qwen(--group finetune), 폴백 없음. 옛 판정기 버전(v1·v2 Solar)은 다시 돌리지 않는다(Qwen 판정기 설계 "비교 규칙")
@@ -9,11 +10,13 @@ aliases:
   followup: [claude-sonnet-5-5]                    # ① 후속 에이전트(backend/followup.py) — 앱 설계 §7 그 밖의 에이전트
   blind_judge: [claude-haiku-5-5]                  # ② 블라인드 LLM 쌍 비교(평가 설계 §2.4) — 요약을 쓴 모델과 같아 자기 글 쏠림은 사람 투표 일치율로 본다
   rerank: [claude-haiku-5-5]                       # ③ LLM 리랭킹 — 다른 모델로 넘어가면 비교가 섞인다
-  gold_audit: [claude-opus-5-5]                    # 골드 점검 중재(평가 설계 §2.3) — 생성기(Sonnet)·판정기(Solar)와 다른 모델, 폴백 없음(섞이면 중재가 바뀐다)
+  gold_audit: [claude-opus-5-5]                    # 골드 점검 중재(평가 설계 §2.3) — 생성기(Sonnet)·판정기(Qwen)와 다른 모델, 폴백 없음(섞이면 중재가 바뀐다)
+  hard_label: [claude-opus-5-5]                    # 어려운 통화 Opus 독립 라벨(evaluation/hard_labels.py) — 녹취만 읽음, 폴백 없음
   action_label: [claude-opus-5-5]                  # 처리 정답 라벨(evaluation/call_actions.py) — 후속 에이전트(Sonnet)와 다른 모델, 폴백 없음
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
 models:
   claude-opus-5-5: { input: 4.00, output: 20.00, cache_read: 0.20 }  # 서버 측 폴백 안 씀 — 골드 점검 중재만
+  gpt-6.1-sol: { input: 2.00, output: 10.00, cache_read: 0.10, provider: openai }  # developers.openai.com/api/docs/pricing (2026-11-11) — Batch는 BATCH_PRICE_SHARE
   claude-sonnet-5-5: { input: 2.00, output: 10.00, cache_read: 0.20, server_fallback: true }
   claude-sonnet-5: { input: 2.00, output: 10.00, cache_read: 0.20 }
   claude-haiku-5-5: { input: 0.10, output: 0.50 }   # 프롬프트 10만 토큰 이하 단가(넘으면 0.50/2.50 — 분류 입력은 통화 하나라 해당 없음)

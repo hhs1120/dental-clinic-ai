@@ -84,7 +84,8 @@ CREATE TABLE truth_expense_matches (
 
 -- 통화 골드 라벨 (6단계, 평가 설계 §6). 목적·상대·급함·노이즈 enum은 master.CALL_*.
 -- accepted_purposes = [주 목적, 부 주제 목적](JSON), noise_type NULL = 노이즈 없음,
--- used_fact = 통화 시점 사실(JSON — 예약류는 appointment_id), split = 판정 풀 dev/test, 나머지 silver
+-- used_fact = 통화 시점 사실(JSON — 예약류는 appointment_id), split = 판정 풀 dev/test, 나머지 silver,
+-- hc- 어려운 통화는 hard(채점 전용 — 어려운 통화 설계 §2)
 CREATE TABLE truth_call_labels (
     call_uid          TEXT PRIMARY KEY,  -- source.sqlite ax_calls.call_uid
     primary_purpose   TEXT NOT NULL,
@@ -99,7 +100,16 @@ CREATE TABLE truth_call_labels (
     has_todo          INTEGER NOT NULL,
     noise_type        TEXT,
     used_fact         TEXT NOT NULL,
-    split             TEXT NOT NULL CHECK (split IN ('dev', 'test', 'silver'))
+    split             TEXT NOT NULL CHECK (split IN ('dev', 'test', 'silver', 'hard'))
+);
+
+-- 어려운 통화 (hc-, 어려운 통화 설계 §3.2·§4). half = urgency_inverted의 절반(그 밖 NULL),
+-- label_source = generated(생성 라벨 그대로) / agreed(생성·Opus 일치) / human(사람 검토)
+CREATE TABLE truth_hard_calls (
+    call_uid     TEXT PRIMARY KEY,  -- truth_call_labels.call_uid
+    hard_type    TEXT NOT NULL,
+    half         TEXT,
+    label_source TEXT NOT NULL CHECK (label_source IN ('generated', 'agreed', 'human'))
 );
 
 -- RAG 문서 정답 (9단계 문서 계획, 평가 설계 §6). kind = core / old_version(공지 옛 버전) / similar(비슷한 주제, 짝의 사실 없음) /

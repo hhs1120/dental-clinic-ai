@@ -896,6 +896,96 @@ EVAL_RARE_PURPOSES = ("complaint", "emergency", "unknown")
 EVAL_RARE_SHARE = 0.6
 EVAL_MIN_PER_SPLIT = 2
 
+# 어려운 통화 평가셋 hc- (어려운 통화 설계 docs/superpowers/specs/2026-11-11-hard-calls-design.md §3.2·§3.3).
+# 종류마다 HARD_CALLS_PER_TYPE건, urgency_inverted는 HARD_URGENCY_HALVES 절반씩. 일부러 고르게 나눈 셋(현실 비율 아님)
+HARD_CALL_TYPES = ("indirect", "reversal", "urgency_inverted", "misleading_noise", "outbound_real")
+HARD_CALLS_PER_TYPE = 50
+HARD_URGENCY_HALVES = (
+    "calm_urgent",
+    "pain_not_urgent",
+)  # 담담하지만 급함 / 통증 낱말은 있지만 급하지 않음
+# 종류별 (목적, 방향) — 종류 안 할당량은 CALL_PURPOSE_SHARE 비율. 예약류는 녹음 없는 기존 예약 이벤트에 붙인다(§3.3)
+# reversal은 처음 꺼낸 목적이 끝까지 주 목적(분류 정의 "처음 꺼낸 목적")이고 표시 항목 하나(HARD_REVERSAL_FLIP)가
+# 통화 중 뒤집힌다 — 예약은 날짜를 정했다가 미뤄 이벤트 없음(appt_confirmed 0), 그 밖은 할 일
+HARD_TYPE_PURPOSES = {
+    "indirect": tuple(
+        (p, "inbound")
+        for p in (
+            "book",
+            "reschedule",
+            "cancel",
+            "recall_q",
+            "treatment_q",
+            "insurance_q",
+            "price_q",
+            "billing_q",
+            "document_req",
+            "complaint",
+            "other",
+        )
+    ),
+    "reversal": tuple(
+        (p, "inbound")
+        for p in ("book", "treatment_q", "insurance_q", "price_q", "billing_q", "document_req")
+    ),
+    "urgency_inverted": (
+        ("emergency", "inbound"),
+        ("treatment_q", "inbound"),
+        ("book", "inbound"),
+    ),
+    "misleading_noise": tuple(
+        (p, "inbound")
+        for p in (
+            "book",
+            "reschedule",
+            "cancel",
+            "confirm",
+            "recall_q",
+            "treatment_q",
+            "insurance_q",
+            "price_q",
+            "billing_q",
+            "document_req",
+            "emergency",
+            "complaint",
+            "other",
+            "unknown",
+        )
+    ),
+    "outbound_real": (
+        ("confirm", "outbound"),
+        ("recall_q", "outbound"),
+        ("billing_q", "outbound"),
+        ("treatment_q", "outbound"),
+    ),
+}
+# urgency_inverted 절반별 목적 — calm_urgent는 응급(허용 목적에 treatment_q도), pain_not_urgent는 진료 문의·예약
+HARD_HALF_PURPOSES = {"calm_urgent": ("emergency",), "pain_not_urgent": ("treatment_q", "book")}
+HARD_REVERSAL_FLIP = {"book": "appt_confirmed"}  # 그 밖 목적은 has_todo
+HARD_RARE_MIN = 3  # 희귀 목적(EVAL_RARE_PURPOSES)이 허용된 종류에서 그 목적마다 최소 건수
+HARD_WINDOW_DAYS = (
+    60  # 통화 날짜 창 — TODAY 전 이 일수 안(§3.3, 변경·취소 이벤트가 30일로는 모자람)
+)
+# calm_urgent의 정의 신호(prompts/classify/v2/labels.md urgency 절) → 녹취에 꼭 들어갈 낱말(그중 하나).
+# 녹취는 이 상태를 센 낱말(HARD_CALM_FORBIDDEN) 없이 담담하게 말한다
+HARD_URGENT_SIGNS = {
+    "발치한 자리에서 피가 아직 조금씩 계속 남": ("피",),
+    "볼 한쪽이 부어 거울로 봐도 차이가 남": ("부어", "부었", "부은", "붓"),
+    "앞니가 깨져 조각이 떨어져 나감": ("깨져", "깨졌", "깨진", "부러"),
+    "잇몸이 부어 입을 벌리기 불편함": ("부어", "부었", "부은", "붓"),
+}
+HARD_CALM_FORBIDDEN = (
+    r"아프|아파|아픈|통증|응급|급(해|하|한|히)|(?<![조의])심(해|하|한)|못 참|죽겠"
+)
+# pain_not_urgent의 "지금은 급하지 않음" 근거 → 꼭 들어갈 낱말(그중 하나). 통증 낱말(HARD_PAIN_WORDS)도 하나 나온다
+HARD_NOT_URGENT_CUES = {
+    "지난주에 아팠지만 지금은 괜찮음": ("괜찮",),
+    "가끔 찬 것에 살짝 시린 정도": ("살짝", "가끔"),
+    "아이가 넘어져 부딪혔지만 다 나음": ("나았", "다 나"),
+    "예전에 아팠던 이가 요즘은 멀쩡함": ("멀쩡", "괜찮"),
+}
+HARD_PAIN_WORDS = ("아팠", "아프", "아파", "시린", "시려", "시큰", "통증", "욱신")
+
 
 # 문자 (§2.5, 8단계). 리마인드는 리마인드 날, 리콜은 그달 첫 진료일 개원 시각(HOURS["open"])에 일괄
 MESSAGE_CONFIRM_DELAY_MIN = (1, 5)  # 예약 확정 문자 = 예약을 잡은 뒤 (양 끝 포함, 분)

@@ -1,0 +1,4777 @@
+[
+ {
+  "call_uid": "hc-0001",
+  "transcript_sha": "459b00b18072c6c614e29ea4dfdeca8ab937a4b756bf768ccc26c0db6d39695b",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0002",
+  "transcript_sha": "7d3ffbfdaa9485f08bbbab13768a99c43fb410b423ddae4d0351f484de82b3c8",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0003",
+  "transcript_sha": "ace40edcbcdb380fd5d7c2b3636e1f7728cabd165240b7823b7837c0123854d2",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0004",
+  "transcript_sha": "d13062523067ddbf3bd946db68495191ce1f7fdd61d848017c84c9211a9de78d",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0005",
+  "transcript_sha": "66997abb6fd1d609bb0db0a613d72f45aa1b31eea973c28899cb9f9ac64e3e9b",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0006",
+  "transcript_sha": "2c2fb98847874d4afea8a21bc89bc82afc789757cce9949cf5607df8001cf85e",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "human"
+ },
+ {
+  "call_uid": "hc-0007",
+  "transcript_sha": "2b49b371c7d2b22150c5506d4fec874526534a3e210f207c902b555c8dd6f74f",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0008",
+  "transcript_sha": "2d12ae187e638a489d8279dba7d13e38872dfbcbeb18ea7f0caef9e007955666",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0009",
+  "transcript_sha": "c24da6dab7594158a24783e616ffa7e4b11fb96977c3c1e20db84915041571f1",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0010",
+  "transcript_sha": "032b647d28cb1aedb73a3da436f189fdcdff4e3e7fa62a47c275f7f0bd76a4b6",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0011",
+  "transcript_sha": "06e2ad096a5e47fca07892a7cff9279797bef6884594c561fca3aad73b32c789",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0012",
+  "transcript_sha": "5c80e852b015b6a19812f834e364f69669c67057c81a1f860e4eb73661f88d49",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0013",
+  "transcript_sha": "6538c1e2677c056d32ada2e561d4967835c3d032a4be4830753a5f91c0189b64",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0014",
+  "transcript_sha": "89fb5fbdc0c053f679c0f7472194d6e4320b933b091ca2fac9449b9435781ddc",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0015",
+  "transcript_sha": "1f0d323067c2df4ba5bd219f6ede97458fed74255497fd077012aae9bb69d206",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0016",
+  "transcript_sha": "ba35f9876de8d3910836eeaf3163a35a92fb618c5512b928cba08297ebc0be94",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0017",
+  "transcript_sha": "176e2aa8919faa7988ec421ba73df83f8b34629936fb6af1f6fdde141eb8ba1a",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0018",
+  "transcript_sha": "09be309c5817ec27b08643912a90aeb47ec497d66e1207bcb89c7fd0b435ef4b",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0019",
+  "transcript_sha": "293faa3ace44be0cc4b432667db6df25bccb7784e24466b17b461546476fe799",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0020",
+  "transcript_sha": "d5bba5948d858160411bbd08bc7f9a1af8df05a2a08edc1576082b79e788761a",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0021",
+  "transcript_sha": "accf9cd04ff5b3ba09b4802e185d07b8c0a37a55170714b2064623593f9e80cf",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0022",
+  "transcript_sha": "6c070490009866395095b71e45dd42f903863b90adf8c092362ad70d072ccb1c",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0023",
+  "transcript_sha": "8a70326f0b64143073f9371a4bad12eff6121c6fdbd4874d6ef8fa33ecde1ec6",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0024",
+  "transcript_sha": "9f8ea98fd489f28b5a702fda6980e8d45ed8fd8f5d81a2f06bcdb2ee51dc8920",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0025",
+  "transcript_sha": "d06ea63cbd7ff392581e3641e33ba3586e272d7e81ddd44db0934351327631e0",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0026",
+  "transcript_sha": "eb671c2f5543975dbab31679a3cd6846694f54235d0f44099e26c8110778047e",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0027",
+  "transcript_sha": "c97d7a03c5deaff34dc046aa884632e4452d66130e02cbaef5caccef57d4f369",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0028",
+  "transcript_sha": "933d816f03b53c943f2bb0e4d6b9707d6c83372f2c3ae110478986568df18a27",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0029",
+  "transcript_sha": "3e8777215a58a49ce41758e93d5e0ca9b98823d8806cbb56f1f6bf80f821b3f6",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0030",
+  "transcript_sha": "233888de2cfcbcde4d6c1e506b66c6e868cf5dae80ebef90904f630f41cc1897",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0031",
+  "transcript_sha": "571349e97b4b502f07e257538b7e228bf6c5b63575c8395c56fff0df565bed54",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0032",
+  "transcript_sha": "4c09a3217c22628cd4ebd2c2e6960723af189eee5f21ab170012fcc27774cf46",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0033",
+  "transcript_sha": "8372d3a453d5c7d5403e606eff45fb64f3e4fe52916afd47fea2fd27785ea7ca",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0034",
+  "transcript_sha": "08d56cd58b1572f008e6915dca8ee90b4bf892a6d6e7ee6577813b6b1cb5474d",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0035",
+  "transcript_sha": "cb65977e2e4b121e06000d38cd962bfb0284458af555192d7eb8853ac849b2a6",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0036",
+  "transcript_sha": "7c539244c20a0f1957bf1d81635f5976719da3a5d3ca6ff01a1581960d5914ad",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0037",
+  "transcript_sha": "40c836710397e43191670da6ceb5df5ab6d7a58b5506f108dd3e2ca56b375723",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0038",
+  "transcript_sha": "bb727f3f7f1e28b02a0b590962c81efebe2a22d34b997604558a6020ff70d1d7",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0039",
+  "transcript_sha": "15c068db6af359a44aea7dc0d95f3d70b6d06676494e1a3193efe7b3058ddebb",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0040",
+  "transcript_sha": "7f46e1b59973d15867d87fde2538adb16f240fa3ab2bd08ba59176a3756bc2f1",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0041",
+  "transcript_sha": "c65559824317bb6f9d7101f5f257515def3f6b7ba520649036a383b553857fb6",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0042",
+  "transcript_sha": "894d4fcd0b85a28757343270274adb793ab3516c010ea6f60fa144c03bb9c637",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0043",
+  "transcript_sha": "2365dbfe7196f314dbeb3445274ff56c0d8550c09487cb740f25aab84f126ad0",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0044",
+  "transcript_sha": "725b06b38f2426cdef8b2e2bd829d8d924b5c36d6cafbf118c9885e4547d77da",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0045",
+  "transcript_sha": "9dbd4352ce6aa6c92005b4c85811a83339087c3afafd31894393d6e9e115f7c3",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0046",
+  "transcript_sha": "024ea226434e249c211f67b360fa041ce8277463759dde9178750c22703d8c02",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0047",
+  "transcript_sha": "886183e393a9991bea94767b0ada5f5651ddc84bd357a7634029b43107c3645f",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0048",
+  "transcript_sha": "6853b756d308436d6b32790d1a7a47cbe81af2ea1195584d0485fcebe8a85d17",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0049",
+  "transcript_sha": "407cc2fc3936406ffd542f9215aff81a4398336d19532a9fdc610791ece9a0c6",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0050",
+  "transcript_sha": "ba37862fab823bd84d96e50aec3646a5ed08446c84606579a4442179af2f5185",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0051",
+  "transcript_sha": "d0e46a8f8b473fc1ba2a2ddcd9cce0067de1d1690fd1202569f6cb0dc30283dd",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0052",
+  "transcript_sha": "dbd2882ac6ffa3e2698323c2d2638571b65da6c8edbae144f0b3b5ee6e96216e",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0053",
+  "transcript_sha": "109f3c5923e7fecee780571ade7ad1d0ca6b8c5f578ff0bab4a0e93a93955c2c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0054",
+  "transcript_sha": "fab32c44f6b0e9f9fe471c8336651c885ea05e1073b93c0e3163c4c40e00f52b",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0055",
+  "transcript_sha": "f56b9b8c6a258335e568e0a9fb430720b55877fb5e7417ec4ad48735b1a81f40",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0056",
+  "transcript_sha": "853e3e6a9d8ef7d3ace459d5846f27654e66d81b4211130996f1c320649a1972",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0057",
+  "transcript_sha": "c8bf75c79867130f2c1580fac73507df097a08c3049b14ba1343a32c496c3090",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "guardian",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0058",
+  "transcript_sha": "7631b94e30811bb6e3ddad71952ade07a3ae817e1cc226e3ef98b14097b041c4",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0059",
+  "transcript_sha": "0b94caa6eaca8034c98efc8e267eb855e0d944afadcf14700328698b88fa63a2",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0060",
+  "transcript_sha": "b629dbc05f186a1ab08c89103e37c1f7c58a48bf89984e68513da9b92048506c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0061",
+  "transcript_sha": "0207a28144107f8d3ab2f1d5c08ac84f90f5d78d1725234f790a0d8891880236",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0062",
+  "transcript_sha": "36355a16e10e8294e28a6f371b0c1ffcda2dc77d90f41f23af070f3f2499814b",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0063",
+  "transcript_sha": "f1199d30a67f8be6fb9903a96a56439a64085bc469f7406f3656c1edfd4e9dec",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0064",
+  "transcript_sha": "8834a9129ca9330a7b1415c02b6896028d23dfae9c3cf9e842b949413fca2b33",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0065",
+  "transcript_sha": "add72d14cfe45de5fd93f0ee7dd99a0689e7cf23ae5109b04a28d32f083828d0",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0066",
+  "transcript_sha": "05940dbbe15603a6f7dda3f458b17df51406a6aef9e9bc93f73696cca306bd82",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0067",
+  "transcript_sha": "ce848fae23d3ed125d45f02c4c97ea2d95b3156722696dd7616bb24f2aaa7e30",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0068",
+  "transcript_sha": "bddf3a619f3e3e963fa2d8f3f59a2cc35ecee548da091a6643d2a0f09ee349db",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "vendor",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0069",
+  "transcript_sha": "10a2f359a36d8609e78302cfe6cf4072b8b64cdf2cddba9671eea7dc13372bc3",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0070",
+  "transcript_sha": "cf2e53828e80f345769c1955269564c489238a3fac356b2f2a40a1d7fa0f0555",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0071",
+  "transcript_sha": "725d5fee80b5e7829fcaa8df830b63e5ca660081e0790cad99071d1374ed96f1",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0072",
+  "transcript_sha": "274485fd82a8e7ecc1ce9e85ecf61c9d280fcc91956310faaa3e8f63504b1830",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0073",
+  "transcript_sha": "63c879bab94330c49f519c366eaf707b8970ad66ae17d75318f6deb99f43f649",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0074",
+  "transcript_sha": "09f36a35b05bda140a4c3054221f58c825aaeb04fb874dc7679c991fe54a407d",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0075",
+  "transcript_sha": "861a916f3d396cac0b4281d645e1dcff21c6a1499ae8c16a3e12c88886c29fda",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0076",
+  "transcript_sha": "7ade0eb4278a5927aedff24fcc402090f2446d8afe2bbd0a6aa7df8bda273be7",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0077",
+  "transcript_sha": "f0ee955bc0d44629b703399efc696be63b15f77ccedd05986f0f2fb8b60bf6ce",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0078",
+  "transcript_sha": "0282bd9516e37fcfafd5a2b8f08a4c9e4bdfb76f439bff4418c2262b7506962c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0079",
+  "transcript_sha": "f1223c96cf9a213090ffeec263fad5bb883c70f52859af84da98ee6debd233cb",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0080",
+  "transcript_sha": "adb8cf7e11792a00c4c898b5ff0c3562eb6707c14e601ebc2c04f1ea5b286111",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0081",
+  "transcript_sha": "2c9c505d77be86617a5b6f3e693a00df4de28406e4c196c6682a4fff00bb9b72",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0082",
+  "transcript_sha": "03051597f09bf434a57df088eb7692936291f2b756d476c159538963af2efeee",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0083",
+  "transcript_sha": "1be861958a13aae210bfd65d3756eeb01298faa4242d0cae3bd9e565bc2b4f02",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0084",
+  "transcript_sha": "b73f5836dfaaaa4711a981ad3ba43fdba61f2908fc79212e6f73ea1a69d34a1c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0085",
+  "transcript_sha": "4c4a51a9bcd75a933856c9a86e0b9b407fd8f2a8ddff0f20b810d3c3c08458e6",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0086",
+  "transcript_sha": "ec1797ccf4bc079c8798e5c74ac47499a588074c529f40afa6d663940ccb787b",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0087",
+  "transcript_sha": "ff811360f197fa5c47d337c5f77de42b7af72518ae735a1f407281ab7129776e",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0088",
+  "transcript_sha": "a22a0d7ea0c572d327b2ad70b2e79a0a4e11a846e655f8e13390d0368ad7fde1",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0089",
+  "transcript_sha": "82b0322fbf9bd13082e57a28e560f7be40b83909ea543fe4c020d62fb2b71f76",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0090",
+  "transcript_sha": "09421b98a30874ad17052a7c9d51e37956d5976b4a47c4d5a3385c8ea48a0fb3",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0091",
+  "transcript_sha": "c3f76c8233461dedde018c40324c096d761c2fe53e4b572b15cb4587b157d2a6",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0092",
+  "transcript_sha": "02b3b20426c1f5aa23497d9fdf65264fa964f56b001949536955e7da16ae6ab5",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0093",
+  "transcript_sha": "2a51acdbfd001e3694fdf8fc3d09b45470a1cf5b910a1b22a13c0f274bd1eb30",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0094",
+  "transcript_sha": "b63253978e58e5c81dc304e6cd0213e151252a2288fa5463e5e4c377e984cc6e",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0095",
+  "transcript_sha": "3903a55ca08913796a8d7b4197e935419f71ecfe008a1329b08408358553c115",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0096",
+  "transcript_sha": "cf16fc3ea91dfac545b67b7a49d72266db4ba97ac9995da5539208f77d1f03a1",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0097",
+  "transcript_sha": "ee82b00245ea0685b6ca1d4239a4fc70a70c48f19a7e252f6750b4acdc2430aa",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0098",
+  "transcript_sha": "64ccaf7f2aa19387820b61c5a7ac8191d907aac45aa1e584a5be266022e6dbe4",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0099",
+  "transcript_sha": "43df85d93e6023b768634c1a48cb08820939193be08f07359cafdc5495dd9d3e",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0100",
+  "transcript_sha": "51089cd84c92bb2674a90f118443936e4ac3de0e4e690f0030bff51fc7e018f9",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0101",
+  "transcript_sha": "b0fb7b265845f5e97f43344383d94122ade1e57b0741364378dc3cfb66f32035",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0102",
+  "transcript_sha": "1a3aefe215755d5f443c27a9954564800f85c915507d4ab8d10447f6eff2c7a9",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0103",
+  "transcript_sha": "be8643f1ef02921ba1408101931bf49a8b39a18a2888489c9f68a55aafec716b",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0104",
+  "transcript_sha": "76866a4a8ce34ced643e24d171fac479c9718e3be136045b10cea1e188e04e17",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "other",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0105",
+  "transcript_sha": "2c60e17298b664746a9b6e1a9faf27b624ea03f8cacdfca36291cd3f6d192cb3",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0106",
+  "transcript_sha": "291dcba24bc491e527a47417ea67378c16e6265e7e43cfa26aae5d97692eb72a",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0107",
+  "transcript_sha": "591118b23c724ecaa062761847a23509f7f6c631e84eef94f8735d3116bb0c02",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0108",
+  "transcript_sha": "5ea362bc51c0d6ad23c5e64240f69c6ca4573ec1e854c7c930346d0f6fa35e5b",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0109",
+  "transcript_sha": "8387644d11a0d66210898bbb7e486b6a2cb3f1a1e6cc7af70e6aa93c45bd9ffa",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0110",
+  "transcript_sha": "c0ca143f074c27c2b4876d5492a719911db82bbdf1c7abe85f7c0a977b632947",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0111",
+  "transcript_sha": "25b289c956d2e2329ed4f49c6b61e55d932452f1954051df84adea2b04ec7711",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0112",
+  "transcript_sha": "9ec64764fae00ef3cc37f212ec0f20309858713637a6fa4bc0b21579e452589a",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0113",
+  "transcript_sha": "39be9e6ae666def4c070c66c0fcd2ddaaf2ede43f83b0ca2418a25aef305b28c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0114",
+  "transcript_sha": "389bfabd207fa6da86df78136314d93d5002efd3347dc10e75512218b807401a",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0115",
+  "transcript_sha": "0502fea3de25c408ce4212e6f757601c423337a9bd430040a640301c396c2de4",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0116",
+  "transcript_sha": "b12fab847bc8934b366b745d84b3dcd4b5883d2ea637e1df3c67ea608be0a19b",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0117",
+  "transcript_sha": "31e47c02e76627b5a7af7fb7d1c22f9dad9e4d594507e785fa8e380170e5e04c",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0118",
+  "transcript_sha": "fb0dcaebe6fda82de301eb5eb96b32e55ec7384138e01aa1f5beb1164cebcc2a",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0119",
+  "transcript_sha": "22c7a4e1ce86e726a800dea81bd968fcea94639dc31645cc6db91bf4565739b6",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0120",
+  "transcript_sha": "0fbbdc6a91a374962c8e350a91f5a106396f40eeabef533367d2486c2123a2d1",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0121",
+  "transcript_sha": "9274e3b54623a553b6c605a2a1c71fa693242d144c7388d22aa7d7d8668474fc",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0122",
+  "transcript_sha": "65e9956cfc491663ae7c3f2e13318cdba871a6ffe4c75631f4515efc07191947",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0123",
+  "transcript_sha": "11eebcae9a5b9fb15ea9722e8e4521fe89cbde8dd84771de01e9c0e1d79fae0a",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0124",
+  "transcript_sha": "ece57c0b2a144ff559053ef22c67cbc3778be11e90c8a62b53235b09c36ab1d2",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0125",
+  "transcript_sha": "96e118123fba22cac0c1db409df34d35897fe9340f762e878ba64d649579f8d6",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0126",
+  "transcript_sha": "4aa4b005f4163944b7f2a5d3ee4bba37441bdb31f9fb1bb6aa33a27172357e69",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0127",
+  "transcript_sha": "fb5733506f33ae91c9335aa8c472709a30c3d76a6af2ec54ce3e270a381988f2",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0128",
+  "transcript_sha": "5e5b83130cb125ddfebf524c80a271306cbd44fcc51a0f75ce17f68ec5863150",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0129",
+  "transcript_sha": "0488f24dae2029bba802c5aee8308a65a2ba71739936991dd3c5c8d8346e4c5f",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0130",
+  "transcript_sha": "3ca45946eb37380576283660cc2aee729b72a709c2222229e142f140bb4f7712",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0131",
+  "transcript_sha": "f455abeac8a2c7b60ea63d8ef89319fad80480dfcb10ab6492e09ffee2ef7009",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0132",
+  "transcript_sha": "f41a4efd2e27efdd747a11aba495302e9e81b6244d8a622010c9e2601aaabb66",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0133",
+  "transcript_sha": "f5a2b7567c073ce3a2d4a6b4cb581498bf419ed93b8efd29c95f45d5d5c7345f",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0134",
+  "transcript_sha": "3383a52de842e39a55bb262062c916aed0cdacb8f23a41bf2184b8a61f1e9610",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0135",
+  "transcript_sha": "ed2158b455e46707c702186e85c74e341823fb5dcb9ec4f70940b25d3a6c207d",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0136",
+  "transcript_sha": "368a20b97da71e29f722c5edd1836a245d412bc14cd10219e5e323d9f3ebb3fe",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0137",
+  "transcript_sha": "7e60a4165afc273df890d58f93fc29ad9b54145201828a62deb385ebc68c38e5",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0138",
+  "transcript_sha": "63635a85d3808f73381377131d6edb3f7291bdbb7d2671f5f2458b9aad4b93d0",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0139",
+  "transcript_sha": "ae13c39897e3e12b73ec60a5c2ea785fb6e04c5cc74bb54ffbcc5c69208deae8",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0140",
+  "transcript_sha": "5bf2da1d3a92caf2567eeeeadda99abaa86be3bd61315cae2c2d1a8e600448bc",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0141",
+  "transcript_sha": "a0039373a40afa9439534a2be6f844ee2ab8c034f0fd8456e961f7498dbc556f",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0142",
+  "transcript_sha": "e2f43f965e63fcfed5559940024476f0c984d7cd55b18f085251f5d1d3ec27ec",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0143",
+  "transcript_sha": "8803cd60f097b7af1f5fb724b0ee38c64dc5ebbab80ca33920e3a2bdadbf9ca0",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0144",
+  "transcript_sha": "8335b396673987843592d0c38452e479b37a428e8fce77cff1399b94e477998e",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0145",
+  "transcript_sha": "d2c57705cb3e0a0127aa781d0f5a80f044b662827610b22149533ccda19da036",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0146",
+  "transcript_sha": "37ba74691776695a0a46180312abc31f141ccf2f2329385732d5db86676a8600",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0147",
+  "transcript_sha": "f9fa91bc2d03afedaead2feb5b3236a4276bf1361a611b83fef29f8f93a7473a",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0148",
+  "transcript_sha": "2bdac804c217ba08e85c0bd2c28d96849f53e92fd632bcd48be57fe64b40b041",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0149",
+  "transcript_sha": "a84fbc802591b0382be5aab353571ef3bf42b60a2d9c42bc431da6ddb188ef3a",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0150",
+  "transcript_sha": "9f1a2b7f2b98530943862737ce4c0a075c2f82026c615fd4c9b3bb321826a909",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0151",
+  "transcript_sha": "8f86111d216b074240b47db13ac66a9650d285dc8ea77214783cb870fabe0340",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0152",
+  "transcript_sha": "f65d2e14ce341fdca6098153eaaca9d79df4e93b139aecd2d42a5dfb31ffdacb",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0153",
+  "transcript_sha": "5215b14d9d75b2dc519ee298f0ec1ba60ce489d94d4a586e3525f66720b967c3",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0154",
+  "transcript_sha": "5eb42a66515dc6b6099e3073bb64802da105ad1330f80eba1b032f401f739d7c",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0155",
+  "transcript_sha": "c16d60f56369fb74cffdceffdd12f2280519fa939b6294050af9a9f78de6f2b0",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0156",
+  "transcript_sha": "b3ea19cb299d7c64c6af86ffe8fb2f094956120873e7e3a789b5f34b3f14f64a",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0157",
+  "transcript_sha": "eccc6c4fcee4372a8df9796dde73f57b40ddde96a0f95ad65f63609925b0bc27",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0158",
+  "transcript_sha": "e6e533d8e87ae49df8a5e02d76001865fa51deceb785b75a4642b23b847f7c9e",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0159",
+  "transcript_sha": "1d343e2b0e3ba876bda7b8ea80c6e13a99732c64b923b4292afb97032301fc31",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0160",
+  "transcript_sha": "1f170ef15325acb1c4cfc883cf121735562903361e3b20885750e004bb13ce8c",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0161",
+  "transcript_sha": "b78566d34dd38b0abc1599ae94d5e2cb6c10dc78a446087a5a323e7ab560c0b9",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0162",
+  "transcript_sha": "e401cf722410ba02d331ade3ac9722531e2401c0594686ca82393483c2b65f24",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0163",
+  "transcript_sha": "6b0778b97112d43ecf675429806a8666fada146cb77ee4fbca9e846edf571f05",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0164",
+  "transcript_sha": "47e198ab278d78e5fed0ea92b81df737e4c4c564a5eb7fc0f68822519ca78356",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0165",
+  "transcript_sha": "b5826779cd8b196f511d27f45a44057f83df46f976e798e37386b31d29fa0de7",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0166",
+  "transcript_sha": "36b928732a7e32fed64540ec62f46fb388d83a8bf706fef19fc6148b211fccff",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0167",
+  "transcript_sha": "333a959dc8f6014cf0a5b6b6a6b5a6053ee52862cae75fa58777c85fda1d1e19",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0168",
+  "transcript_sha": "6fdd18d038d31dd1f1e72e4745df37632f2df2a2238ce622d18c23bc29f67563",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0169",
+  "transcript_sha": "90c305f5626de58b3581e1cc6484717b6833f0470674d231d46bf9dc99c7a754",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0170",
+  "transcript_sha": "3c08574dfa6440bfd80314de6996f9cf5ffccd1dff54709bc875fa8c11146897",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0171",
+  "transcript_sha": "dd8cbf5e20926656aca72fc122490e7f2eb9e6f0c8c8cdfd85c07ead39725905",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0172",
+  "transcript_sha": "d530bc0788d223607c23b80dbd2239f325bd2505ba12f26ca52fca90fdc31132",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0173",
+  "transcript_sha": "d08f83a2fe85e84e957eb8fcadc1cc10f65cb03620228e1e487f8265c42530ff",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0174",
+  "transcript_sha": "139e81d4644544dd0f3f0a4ed708b746692a9737b664064c96bc9221e0d4cde4",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0175",
+  "transcript_sha": "a76de260449343d3a91c350d9b9e0bf4d0759bbe7b7a1fae3bc7fdcf2e01cf30",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0176",
+  "transcript_sha": "6e4a661cdb9b63ad75dd199b0bf168668a7cab15dbffcb609412266d92ae5862",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0177",
+  "transcript_sha": "7c05363e6fd422972b4fe60842221fb5c1b2947d33675cfbde10896e41eb5ff7",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0178",
+  "transcript_sha": "db6bac91a963a76d0a5b8b9a40ed87218fbf6cbdcc27948a61b1aa04ea29abb0",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0179",
+  "transcript_sha": "549eb652620d5fef97cba20ae4b3c3aa3c55be5b378465568466de5c8bca56b3",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0180",
+  "transcript_sha": "da40ebb0c2ac7ec390c4ade22cd3a50adbbddd84982b32679f987d717e559558",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0181",
+  "transcript_sha": "1a97b5d81733f7c44c11859903b05cf7e4540a72a60fafeef3202cf62ce50ca0",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0182",
+  "transcript_sha": "c522de372f661f7dbfa1ef6d5befbf3ddf48199010a42c20ac70008ae71a288c",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0183",
+  "transcript_sha": "5cd5dc6fdcbca99b98db62fead6396f5a17db940de8667ba250e79e35d59f8d2",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0184",
+  "transcript_sha": "590502818f1df114a06a17e773daac1b346426252b64badacc6d816ad6d30521",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0185",
+  "transcript_sha": "acdf7a68dd9b5961954f6ab5f5295ac0cf779f5c8219a02ec705ab246a264474",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0186",
+  "transcript_sha": "2497553f8e3e68ec90666bd73c0cce3fcb01277e3c93230cb9e8be238d3f62f0",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0187",
+  "transcript_sha": "29630eccc02c64756b57d42f61b2eb76c69e1200ca8812a0bba95ec71f4960fe",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0188",
+  "transcript_sha": "405c8f3909bf20dec4847db855b94368d092f64dd48d47730ecf19ea3fe6ee3b",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0189",
+  "transcript_sha": "9d8905b237270330f86dc2cae5e287b6ec8a0009bd4cdcc256c3683d98c8a22b",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0190",
+  "transcript_sha": "b26aaccd2ac3fa886fe6ba829daf5b598d1e7c42b25e6814237957839a4144c0",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0191",
+  "transcript_sha": "c9f32619224188c0c509afeb44c69df57f287c32048ccb912412c4e4cbe49104",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0192",
+  "transcript_sha": "0c06c46dfc318e997d7f39c0919b37711cf647fca88965f9e7fa0a8dc93139aa",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0193",
+  "transcript_sha": "3ec46195ea2c0401c2936e75df6e76fafbf919995e4fe2d48e577c2214a9a4f5",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0194",
+  "transcript_sha": "685f58ea2916e7ad41021ba56bab86256ce70c5216c3ac4e28a1cf84a9c5a186",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0195",
+  "transcript_sha": "60e42fb833114083a56c3577cd0110b6c9946b650bebffc71b765e34c59620fe",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "human"
+ },
+ {
+  "call_uid": "hc-0196",
+  "transcript_sha": "e89aa9bf51f90bb121a278314c5e027ebfeaac91ae6b70d772e6f1b181be1328",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0197",
+  "transcript_sha": "ed2486db4c4585b488a67b1aa7ff91c4e0cee49d0378a0be83e285250b2bce32",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0198",
+  "transcript_sha": "9fd2f837f8e9839cb606be782880007e17df8e710fe3f39c1b7ff35a61b6b310",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0199",
+  "transcript_sha": "9756595a44ce60257c682c08255cd7e59208f64f4666da0986cb165e1c4afb8b",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0200",
+  "transcript_sha": "dfa58f26c3b2af3878dcd34d78006ec0d56cb5634a9dad60c54dbd6e78f3e71a",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0201",
+  "transcript_sha": "071f715e6d4b3b5363227eb387ccbb73371cb3220fdb1cbc51ccba83d0dfd509",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0202",
+  "transcript_sha": "8e63be5be4b7cb376f0bc2a5de4fad05a25e91f8e4172192b734177d5d500ce1",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0203",
+  "transcript_sha": "59331f1f13602d78ddef7de1b256041d92c6bbbeacf9f3e159ecda53f97b119a",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0204",
+  "transcript_sha": "aca9b89e3b6db0e50a5ce342be16ca579dbe2401503e2d742608c3abb1e18ef9",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0205",
+  "transcript_sha": "9b3013ab6388d86a615c381cb09f8c801384dee3c5befc988d4c7308644e0e66",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0206",
+  "transcript_sha": "6ee00438fc599ad9c15aa2b573d528fb50ca6117a8453666250f93a8d90da08d",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0207",
+  "transcript_sha": "a245a2b6c6bb69a72daee524aafdf15b9907ac61cebdc3d97055e0f296a1d22f",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0208",
+  "transcript_sha": "3ebbab7b2a91c5a3637fc1b94f94296c7892e9eb8369490d4a3cf0f5a41e2b92",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0209",
+  "transcript_sha": "4659b3e56722482983918f6174350b7d897f0cddc41a3d3b57f8900f8e0f38e9",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0210",
+  "transcript_sha": "831419f87af12e719ba6cc5e5361bebd4b870b07b1f3b595f8e0005a8dc50be0",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0211",
+  "transcript_sha": "09adc424513f9fb1844eceecbfa2ca3aa5bf028d9c3ef5a9ae0d501a96496073",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0212",
+  "transcript_sha": "33f8719a7e4d291368c930cff728cd81e64aac8fe096de2430b3b05476394aad",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0213",
+  "transcript_sha": "919c9a82d70d91354d7bc525ea8dcc06093ce4e807598000454e76fde35d1320",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0214",
+  "transcript_sha": "cef18488890f5336c892e13e956f0ed718116545dabb6763aed1a5a4ac36fcd6",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0215",
+  "transcript_sha": "72a41c281ec23c058cb99c6db29bcf0ae98a493d7a75acbca24423936099ba0c",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0216",
+  "transcript_sha": "2ebd829c145e52f6c30a2a1cbebfdef4637346b0ba23f277ac9a4723ab048ace",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0217",
+  "transcript_sha": "8689d7d2946ef30ca9417f0895a3881b403de6917db040be4f5138b577395cce",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0218",
+  "transcript_sha": "db9005aabe6a33db9de6d48d82a36d8a7ce7fdc5a5621cde905c72aef73eb825",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0219",
+  "transcript_sha": "5bf190b00302b10938d0562e141b51370a52603a67bd09a1036f7b665d05e42e",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0220",
+  "transcript_sha": "e646b5bfe1cc4cdd4d8dda8c71429110923e7f011fa278b2a492de02fd0f0db6",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0221",
+  "transcript_sha": "2246e6a1c9fe8c0f0dc5280dd150499541eb95c4467f3dcf2b7cf5da3dd26bb2",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0222",
+  "transcript_sha": "988d4dd4173ed3d88387b10112a072024f67c0856ddc7bcc135927ca778969b6",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0223",
+  "transcript_sha": "d2bc84b3c58d1fce7d9f805d1041bf83c37477f516e2ae4a41aa78c3565bdfc8",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0224",
+  "transcript_sha": "51803f79e1ee683737674b25e212a8ab9f34b9e8e6abff15d438dfa225f5b0a8",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0225",
+  "transcript_sha": "97217e2e8fa19623bc8b710f28e5bb482c3d2faf977cab856130c419ccadade7",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0226",
+  "transcript_sha": "1735a889b7a311d023877aa34590ffd7a3506c4f8b930c6a29e089b61420cdcb",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0227",
+  "transcript_sha": "8af993c988e49f271ac5c820395a998177ccaac1f018cb2a4c9061f316eafb45",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0228",
+  "transcript_sha": "23f3dd9adf7749e51156f438c32e63e263e1a882a56891ed0aa97ed66e88869e",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0229",
+  "transcript_sha": "84d097e8f67ff1b505f16d21cdebec522bb2872e65a1ef54e5b5bc37d6277de1",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0230",
+  "transcript_sha": "779fc6d7086bc3f87650a7846dba7caa5555f522fe90d4550edcca4173c6aa46",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0231",
+  "transcript_sha": "f4aeda8a09c426719513ea3a611dbd6ce7f25ad67573ff459081e8d81df74c22",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0232",
+  "transcript_sha": "a380dae3e997a26e60b1e5c8b817ec2702c8f896164a6c51ff243b12f5e9e881",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0233",
+  "transcript_sha": "f5b15e22c57123b7c829dcdf6d5b76babe876e28ee67e7f1aacd5d68b21656e8",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0234",
+  "transcript_sha": "ebb96a5b5a8cfaaa558a425ade19cd7d11c4d166ac7e912450a3b273098b0279",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0235",
+  "transcript_sha": "44b5b1ce46cec4c1e353152afd651fc4f6d02cbceceb99ee9383f03d7c095a36",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0236",
+  "transcript_sha": "33c3f568e2ec13c3a3bd842e0101e11823e0da15bdd7b00e665b8bb8928bb1bc",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0237",
+  "transcript_sha": "f7c354ba959e576bafa094806695d2a85b9ee1f2aa249c1a27170a9b53cc42cb",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0238",
+  "transcript_sha": "313259e6abfb9f4640013fbc8274e3a2bfa069a83861abb4884a24fa4959fa11",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0239",
+  "transcript_sha": "585ada33b49e12aa20c056f67a0ba15f5350a1c98d25f3a77463f6974ed3fc1c",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0240",
+  "transcript_sha": "9ba84d493b625ded8bcac4fd35af96b261d5c94cc4046eb4889dc60941fbaa47",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0241",
+  "transcript_sha": "f1cd155bca347067d69720041da520386400ec17ad19e0f5fb20ddc77262e98a",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0242",
+  "transcript_sha": "c7458cfa5541a5868f3a9623b03fb7b0f317b140323f1078319d6c4216f57186",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0243",
+  "transcript_sha": "ccd96847e21271f39f7fae6381d87234938fa3c8a2be7e8a5a6f99b671154a91",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "vendor",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0244",
+  "transcript_sha": "a0e2169768207be86b75a904cd434fbc4e9720e2261f587b01d71a2e35a61fc3",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0245",
+  "transcript_sha": "0b28733881c5072fcdd8bcb1731436b10eb6ec6c65db9e1c9592a738ab7c8027",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0246",
+  "transcript_sha": "e279446a0919459beca0711fe7d8958e33a4b20d707d25396db0a21e9014f118",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0247",
+  "transcript_sha": "1ffbf43c3bf774862000b5540f620d1587e80e31146df22787f193014b457cb4",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0248",
+  "transcript_sha": "0759c368f6d3a0c01e1f837fc2ec1836369760ae43ef485075a6969e7843dc52",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0249",
+  "transcript_sha": "853be9ee6f51a7615ecc6c519ff9fb43bdbd95007a68e424cd1ad5abf32a9ecd",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0250",
+  "transcript_sha": "4ca8cab0ec949e9e5855bb49f18859e162a77a7749413270d75706c5756540e5",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ }
+]

@@ -47,6 +47,7 @@ class Task:
     schema: dict  # 출력 JSON 스키마
     store: tuple[str, ...]  # 캐시에 남기는 출력 필드
     fake: bool = True  # 가짜 모드에서 FakeGateway로 채울지 (False면 그 건은 단계가 그대로 둔다)
+    alias: str = ALIAS  # config/llm.yaml 별칭 — 작업 줄에 남아 fill-api가 그 별칭으로 채운다
 
 
 def _hash(obj) -> str:
@@ -161,7 +162,7 @@ class LLMContext:
             if not task.fake:
                 return None
             r = self.gateway.complete(
-                ALIAS,
+                task.alias,
                 task=task.name,
                 system=system,
                 schema=task.schema,
@@ -187,6 +188,7 @@ class LLMContext:
             {
                 "key": _hash([task.name, item, prompt_hash, input_hash, attempt]),
                 "task": task.name,
+                "alias": task.alias,
                 "item": item,
                 "attempt": attempt,
                 "prompt_version": f"{task.prompt}@{prompt_hash[:8]}",
@@ -490,10 +492,15 @@ def fill_api(
     sleep=time.sleep,
     poll_sec: int = POLL_SEC,
     limit: int | None = None,
+    items: list[str] | None = None,
+    use_batch: bool = True,
 ) -> Path | None:
     """남은 작업을 Batch로 제출하고 끝날 때까지 기다려 결과 파일을 쓴다. 배치 번호·제출 키를 저장해 두어 끊긴 뒤 다시
     부르면 이어서 기다린다. 거절·잘림·JSON 오류는 error 줄(실패 시도), 처리 안 된 건(오류·만료)은 줄 없음(같은 작업 그대로).
-    limit(시험 채우기)이면 남은 작업에서 그만큼을 같은 간격으로 뽑는다"""
+    limit(시험 채우기)이면 남은 작업에서 그만큼을 같은 간격으로 뽑는다. items면 그 건만, use_batch=False면 건마다 바로
+    부른다(샘플 확인 — 어려운 통화 설계 §3.5). 별칭은 작업 줄의 alias(옛 줄은 ALIAS)"""
+    if not use_batch:
+        return _fill_direct(paths, task, gateway, limit, items)
     state = paths["llm_jobs"] / f"{task}.batch.json"
     jobs = (
         {j["key"]: j for j in _read_jsonl(paths["llm_jobs"] / f"{task}.jsonl")}
@@ -506,12 +513,9 @@ def fill_api(
         if any(k not in jobs for k in keys):
             raise StaleBatch(f"배치 {batch_id}는 옛 작업입니다 — {state}를 지우고 다시 채우세요")
     else:
-        todo = pending(paths, task)
+        todo = _todo(paths, task, limit, items)
         if not todo:
-            print(f"{task}: 채울 작업 없음 (make data가 내보낸 작업이 없거나 전부 들여옴)")
             return None
-        if limit is not None and limit < len(todo):
-            todo = [todo[i * len(todo) // limit] for i in range(limit)]
         requests = [
             {
                 "custom_id": j["key"],
@@ -522,17 +526,18 @@ def fill_api(
             for j in todo
         ]
         batch_id = gateway.submit_batch(
-            ALIAS, requests, task=task, prompt_version=todo[0]["prompt_version"]
+            _alias(todo[0]), requests, task=task, prompt_version=todo[0]["prompt_version"]
         )
         keys = [j["key"] for j in todo]
         state.write_text(json.dumps({"batch_id": batch_id, "keys": keys}), encoding="utf-8")
         print(f"{task}: 배치 {batch_id} 제출 ({len(todo)}건)")
-    while (status := gateway.batch_status(batch_id)) != "ended":
+    alias = _alias(jobs[keys[0]])
+    while (status := gateway.batch_status(batch_id, alias)) != "ended":
         print(f"{task}: 배치 {batch_id} {status} — {poll_sec}초 뒤 다시 확인")
         sleep(poll_sec)
     first = jobs[keys[0]]
     results = gateway.batch_results(
-        batch_id, ALIAS, task=task, prompt_version=first["prompt_version"], schema=first["schema"]
+        batch_id, alias, task=task, prompt_version=first["prompt_version"], schema=first["schema"]
     )
     rows = [
         {"key": key, "source": r.model} | ({"output": r.data} if r.ok else {"error": r.error})
@@ -542,7 +547,47 @@ def fill_api(
     out = paths["llm_results"] / f"{task}.api-{batch_id}.jsonl"
     _write_jsonl(out, rows)
     state.unlink()
-    print(f"{task}: 결과 {len(rows)}건 → {out} (처리 안 됨 {len(results) - len(rows)}건)")
+    print(f"{task}: 결과 {len(rows)}건 → {out} (처리 안 됨 {len(keys) - len(rows)}건)")
+    return out
+
+
+def _alias(job: dict) -> str:
+    return job.get("alias", ALIAS)
+
+
+def _todo(paths: dict, task: str, limit: int | None, items: list[str] | None) -> list[dict]:
+    todo = pending(paths, task)
+    if items is not None:
+        todo = [j for j in todo if j["item"] in set(items)]
+    if not todo:
+        print(f"{task}: 채울 작업 없음 (make data가 내보낸 작업이 없거나 전부 들여옴)")
+    if limit is not None and limit < len(todo):
+        todo = [todo[i * len(todo) // limit] for i in range(limit)]
+    return todo
+
+
+def _fill_direct(paths: dict, task: str, gateway, limit, items) -> Path | None:
+    """건마다 바로 부른다 — 결과 파일 모양은 배치와 같다(make llm-import가 그대로 읽음)"""
+    todo = _todo(paths, task, limit, items)
+    if not todo:
+        return None
+    rows = []
+    for j in todo:
+        r = gateway.complete(
+            _alias(j),
+            task=task,
+            system=j["system"],
+            schema=j["schema"],
+            messages=[{"role": "user", "content": j["user"]}],
+            prompt_version=j["prompt_version"],
+        )
+        rows.append(
+            {"key": j["key"], "source": r.model}
+            | ({"output": r.data} if r.ok else {"error": r.error})
+        )
+    out = paths["llm_results"] / f"{task}.direct-{_hash([j['key'] for j in todo])[:12]}.jsonl"
+    _write_jsonl(out, rows)
+    print(f"{task}: 바로 부르기 {len(rows)}건 → {out}")
     return out
 
 
@@ -566,6 +611,8 @@ def main(argv=None) -> int:
     fill = sub.add_parser("fill-api", help="작업 하나의 남은 작업을 Batch API로 채운다")
     fill.add_argument("--task", required=True)
     fill.add_argument("--limit", type=_positive, help="시험용 — 남은 작업에서 같은 간격으로 N건만")
+    fill.add_argument("--items", help="이 건만(쉼표로 이음) — 샘플 확인")
+    fill.add_argument("--no-batch", action="store_true", help="건마다 바로 부른다(배치 단가 아님)")
     args = parser.parse_args(argv)
     paths = output_paths()
     if args.cmd == "import":
@@ -586,7 +633,14 @@ def main(argv=None) -> int:
         return 0
     gateway = llm.Gateway(llm.load_config(), llm.JsonlLog(paths["llm_log"]), scope="generator")
     try:
-        fill_api(paths, args.task, gateway, limit=args.limit)
+        fill_api(
+            paths,
+            args.task,
+            gateway,
+            limit=args.limit,
+            items=args.items.split(",") if args.items else None,
+            use_batch=not args.no_batch,
+        )
     except StaleBatch as e:
         print(e)
         return 1

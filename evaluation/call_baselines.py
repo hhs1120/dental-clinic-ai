@@ -6,6 +6,7 @@
 급함은 urgent 여부만(shared.call_labels.same_value)."""
 
 import re
+from collections import defaultdict
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -49,9 +50,11 @@ def predict(model, text: str):
     return int(out) if out.isdigit() else out
 
 
-def evaluate(calls: dict, split: str, usable: dict) -> dict:
+def evaluate(calls: dict, split: str, usable: dict, hard: dict | None = None) -> dict:
     """calls = classification._calls 모양, usable = {버전: {call_uid: 라벨}}(분류기 채점과 같은 폴백·실패 제외).
     채점 통화는 재료 밖 골드 중 모든 버전이 쓸 수 있는 것 — 표의 열이 모두 같은 통화를 센다.
+    split hard면 채점 통화는 hard(classification._calls(hard=True))에서, 재료는 그대로 silver(어려운 통화 설계 §6)이고
+    종류별(by_type)·urgency_inverted 절반별(by_half) 같은 모양을 더한다.
     → {trained_on, n, ids, rule: {has_todo}, ngram: {항목: k/n}, versions: {버전: {항목: k/n}}}. 재료가 없으면 n 0"""
     silver = [
         {"call_uid": u, **{k: c["gold"][k] for k in ("primary_purpose", "emergency", "complaint")}}
@@ -59,11 +62,15 @@ def evaluate(calls: dict, split: str, usable: dict) -> dict:
         if c["split"] == "silver"
     ]
     material = sorted(u for u, part in silver_split(silver).items() if part == "material")
+    pool = hard if split == "hard" else calls
     ids = sorted(
         u
-        for u, c in calls.items()
+        for u, c in pool.items()
         if u not in material
-        and (c["split"] in ("silver", "dev") if split == "dev" else c["split"] == "test")
+        and (
+            split == "hard"
+            or (c["split"] in ("silver", "dev") if split == "dev" else c["split"] == "test")
+        )
         and all(u in ok for ok in usable.values())
     )
     if not material or not ids:
@@ -78,30 +85,40 @@ def evaluate(calls: dict, split: str, usable: dict) -> dict:
     models = {
         i: train([(calls[u]["transcript"], calls[u]["gold"][i]) for u in material]) for i in ITEMS
     }
+    out = {"trained_on": len(material)} | _score(pool, ids, models, usable)
+    if split == "hard":
+        for key, name in (("hard_type", "by_type"), ("half", "by_half")):
+            groups = defaultdict(list)
+            for u in ids:
+                if pool[u][key]:
+                    groups[pool[u][key]].append(u)
+            out[name] = {g: _score(pool, us, models, usable) for g, us in sorted(groups.items())}
+    return out
 
+
+def _score(pool: dict, ids: list[str], models: dict, usable: dict) -> dict:
     def kn(ok) -> dict:
         return {"k": sum(ok(u) for u in ids), "n": len(ids)}
 
     return {
-        "trained_on": len(material),
         "n": len(ids),
         "ids": ids,
         "rule": {
             "has_todo": kn(
-                lambda u: rule_has_todo(calls[u]["transcript"]) == calls[u]["gold"]["has_todo"]
+                lambda u: rule_has_todo(pool[u]["transcript"]) == pool[u]["gold"]["has_todo"]
             )
         },
         "ngram": {
             i: kn(
                 lambda u, i=i: same_value(
-                    i, predict(models[i], calls[u]["transcript"]), calls[u]["gold"][i]
+                    i, predict(models[i], pool[u]["transcript"]), pool[u]["gold"][i]
                 )
             )
             for i in ITEMS
         },
         "versions": {
             v: {
-                i: kn(lambda u, i=i, ok=ok: same_value(i, ok[u][i], calls[u]["gold"][i]))
+                i: kn(lambda u, i=i, ok=ok: same_value(i, ok[u][i], pool[u]["gold"][i]))
                 for i in ITEMS
             }
             for v, ok in usable.items()

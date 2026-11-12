@@ -1,5 +1,5 @@
 """LLM 게이트웨이 — 생성기·앱의 모든 LLM 호출이 지나는 모듈 하나 (앱 설계 §7). 프로바이더마다 공식 SDK를 직접 쓴다 —
-Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜닝 판정기 — Qwen 판정기 설계 "게이트웨이 로컬 갈래").
+Anthropic, OpenAI(Chat Completions — 어려운 통화 녹취, 어려운 통화 설계 §3.5), Upstage(Solar, OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜닝 판정기 — Qwen 판정기 설계 "게이트웨이 로컬 갈래").
 모델의 프로바이더는 설정의 provider(없으면 anthropic).
 설정은 config/llm.yaml: 별칭 → 모델 순서, 모델별 단가, 일일 비용 상한.
 - 폴백: 일시 오류(연결·408·409·429·5xx — SDK 재시도를 다 쓴 뒤)나 거절이면 다음 모델로. 그 밖의 오류(400 등),
@@ -10,12 +10,12 @@ Anthropic, Upstage(Solar, OpenAI 호환 API라 openai SDK), 로컬 MLX(파인튜
   동시 호출 수 × 1건 비용만큼 넘을 수 있다(허용)
 - FakeGateway는 같은 인터페이스로 입력 해시에서 결정적 응답 — 테스트·CI·fixture용(과금 없음)
 - 결과의 log_id = 그 호출의 기록 행 id(SqliteLlmLog면 ax_llm_calls.id, JsonlLog면 None)
-- Batch(생성기 API 채우기·분류 일괄): Anthropic만, 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
+- Batch(생성기 API 채우기·분류 일괄): Anthropic·OpenAI(Chat Completions 배치 — 상태·결과는 별칭의 프로바이더로), 별칭의 첫 모델만, 서버 측 폴백 없음(Batch에서 거부), 비용은 단가 × BATCH_PRICE_SHARE.
   결과 1건 = 기록 1행. 처리 안 된 건(오류·취소·만료)은 기록하지 않고 None
 - 로컬 MLX: 모델·어댑터는 처음 부를 때 한 번 올려 프로세스 안에서 다시 쓰고, 적재·생성은 잠금 하나로 한 번에 하나씩.
   출력 상한 LOCAL_MAX_TOKENS(요청 max_tokens는 안 씀), 비용 0, 구조화 출력이 없어 첫 JSON 객체를 data로. 모델·어댑터가
   없으면 예외 대신 실패 결과. 응답 모델은 "<설정 이름>@<어댑터 지문>"
-의존성: anthropic은 generator·backend 그룹, openai는 backend 그룹(Upstage 모델을 처음 부를 때 import),
+의존성: anthropic은 generator·backend 그룹, openai는 backend 그룹(OpenAI·Upstage 모델을 처음 부를 때 import),
 mlx-lm은 finetune 그룹(로컬 모델을 처음 부를 때 import — uv run --group finetune)
 """
 
@@ -42,6 +42,8 @@ TRANSIENT_STATUS = (408, 409, 429)  # + 5xx — SDK 재시도 기준과 같음
 ATTEMPT_ITERATIONS = ("message", "fallback_message")  # usage.iterations 중 모델 시도
 BATCH_PRICE_SHARE = 0.5  # Batch 단가 = 일반 단가의 이 배수
 UPSTAGE_BASE_URL = "https://api.upstage.ai/v1"
+OPENAI_BATCH_ENDPOINT = "/v1/chat/completions"
+OPENAI_BATCH_DONE = ("completed", "failed", "expired", "cancelled")
 LOCAL_MAX_TOKENS = 256  # 로컬 판정기 출력 상한 — 정답 JSON은 100토큰 안팎(evaluation/finetune/qwen/infer.py와 같음)
 _LOCAL_MODELS: dict = {}  # (설정 이름, base, adapter) → (model, tokenizer, 응답 모델 이름) — 게이트웨이는 요청마다 새로 만들어진다
 _LOCAL_LOCK = threading.Lock()  # MLX 적재·생성은 한 번에 하나(API 스레드가 동시에 부를 수 있다)
@@ -248,6 +250,21 @@ def _output_config(schema: dict | None, effort: str | None) -> dict | None:
     return out or None
 
 
+def _chat_params(provider: str, model: str, system, messages, max_tokens, schema, effort) -> dict:
+    """Chat Completions 요청 본문 — OpenAI는 추론 모델이라 출력 상한이 max_completion_tokens"""
+    head = [{"role": "system", "content": system}] if system is not None else []
+    key = "max_completion_tokens" if provider == "openai" else "max_tokens"
+    params = {"model": model, key: max_tokens, "messages": head + list(messages)}
+    if schema is not None:
+        params["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "labels", "schema": schema, "strict": True},
+        }
+    if effort is not None:
+        params["reasoning_effort"] = effort
+    return params
+
+
 class _Base:
     def __init__(self, log, scope: str, clock=datetime.now):
         self.log, self.scope, self.clock = log, scope, clock
@@ -286,6 +303,7 @@ class Gateway(_Base):
         client=None,
         *,
         upstage_client=None,
+        openai_client=None,
         local_generate=None,
         local_constrain=None,
         clock=datetime.now,
@@ -294,6 +312,7 @@ class Gateway(_Base):
         self.config = config
         self.client = client if client is not None else anthropic.Anthropic()
         self.upstage_client = upstage_client  # 없으면 Upstage 모델을 처음 부를 때 만든다
+        self.openai_client = openai_client  # 없으면 OpenAI 모델을 처음 부를 때 만든다
         self.local_generate = local_generate or _mlx_generate  # 테스트는 가짜를 넣는다
         self.local_constrain = local_constrain or _mlx_constrain
 
@@ -343,27 +362,32 @@ class Gateway(_Base):
             )
         return self.client.messages.create(**params)
 
-    def _upstage(self, model: str, system, messages, max_tokens, schema, effort, state) -> tuple:
-        """Upstage 한 시도 — 토큰·비용·오류는 state에 더하고 ("next" | "stop" | "ok", (text, data))를 돌려준다.
-        폴백 규칙은 Anthropic과 같다(일시 오류면 next, 그 밖의 오류·잘림·JSON 파싱 실패면 stop).
-        effort는 reasoning_effort로 보낸다(없으면 추론 꺼짐 — 추론 토큰도 max_tokens 안)"""
+    def _openai(self):
         import openai
 
-        if self.upstage_client is None:
-            self.upstage_client = openai.OpenAI(
-                api_key=os.environ["UPSTAGE_API_KEY"], base_url=UPSTAGE_BASE_URL
-            )
-        head = [{"role": "system", "content": system}] if system is not None else []
-        params = {"model": model, "max_tokens": max_tokens, "messages": head + list(messages)}
-        if schema is not None:
-            params["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": "labels", "schema": schema, "strict": True},
-            }
-        if effort is not None:
-            params["reasoning_effort"] = effort
+        if self.openai_client is None:
+            self.openai_client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        return self.openai_client
+
+    def _upstage(self, model: str, system, messages, max_tokens, schema, effort, state) -> tuple:
+        """Upstage·OpenAI 한 시도(같은 Chat Completions 모양) — 토큰·비용·오류는 state에 더하고
+        ("next" | "stop" | "ok", (text, data))를 돌려준다. 폴백 규칙은 Anthropic과 같다(일시 오류면 next, 그 밖의 오류·
+        잘림·JSON 파싱 실패면 stop). effort는 reasoning_effort로 보낸다(없으면 추론 꺼짐 — 추론 토큰도 max_tokens 안)"""
+        import openai
+
+        if self._provider(model) == "openai":
+            client = self._openai()
+        else:
+            if self.upstage_client is None:
+                self.upstage_client = openai.OpenAI(
+                    api_key=os.environ["UPSTAGE_API_KEY"], base_url=UPSTAGE_BASE_URL
+                )
+            client = self.upstage_client
+        params = _chat_params(
+            self._provider(model), model, system, messages, max_tokens, schema, effort
+        )
         try:
-            response = self.upstage_client.chat.completions.create(**params)
+            response = client.chat.completions.create(**params)
         except openai.APIConnectionError as e:  # 타임아웃 포함
             state["errors"].append(f"{model}: {type(e).__name__}")
             return "next", None
@@ -493,10 +517,10 @@ class Gateway(_Base):
         try:
             for model in chain:
                 state["model"] = state["tried"] = model
-                if self._provider(model) in ("upstage", "mlx"):
+                if self._provider(model) in ("upstage", "openai", "mlx"):
                     outcome, got = (
                         self._upstage(model, system, messages, max_tokens, schema, effort, state)
-                        if self._provider(model) == "upstage"
+                        if self._provider(model) != "mlx"
                         else self._local(model, system, messages, schema, state)
                     )
                     if outcome == "next":
@@ -572,6 +596,8 @@ class Gateway(_Base):
         있으면 그것으로(단건 호출과 같은 버전은 같은 설정 — 앱 설계 §7.2), max_tokens 인자는 없을 때의 기본값. 하루 상한은 보지 않는다 — 건수가 정해진 배치는 사람이
         보고 제출한다(기능 정의 §7). 비용은 결과에서 기록"""
         model = self.config["aliases"][alias][0]
+        if self._provider(model) == "openai":
+            return self._openai_submit(model, requests, max_tokens)
         if self._provider(model) != "anthropic":
             raise ValueError(f"{self._provider(model)}: batch 미지원")
         batch = []
@@ -591,7 +617,41 @@ class Gateway(_Base):
             batch.append({"custom_id": r["custom_id"], "params": params})
         return self.client.messages.batches.create(requests=batch).id
 
-    def batch_status(self, batch_id: str) -> str:
+    def _openai_submit(self, model: str, requests: list[dict], max_tokens: int) -> str:
+        """OpenAI Batch — 요청마다 Chat Completions 본문 한 줄(JSONL)을 올리고 배치를 만든다(도구 호출은 없다)"""
+        lines = [
+            json.dumps(
+                {
+                    "custom_id": r["custom_id"],
+                    "method": "POST",
+                    "url": OPENAI_BATCH_ENDPOINT,
+                    "body": _chat_params(
+                        "openai",
+                        model,
+                        r.get("system"),
+                        r["messages"],
+                        r.get("max_tokens", max_tokens),
+                        r.get("schema"),
+                        r.get("effort"),
+                    ),
+                },
+                ensure_ascii=False,
+            )
+            for r in requests
+        ]
+        client = self._openai()
+        upload = client.files.create(
+            file=("batch.jsonl", "\n".join(lines).encode()), purpose="batch"
+        )
+        return client.batches.create(
+            input_file_id=upload.id, endpoint=OPENAI_BATCH_ENDPOINT, completion_window="24h"
+        ).id
+
+    def batch_status(self, batch_id: str, alias: str | None = None) -> str:
+        """끝났으면 "ended"(Anthropic과 같은 말) — OpenAI(별칭의 프로바이더)는 completed·failed·expired·cancelled"""
+        if alias is not None and self._provider(self.config["aliases"][alias][0]) == "openai":
+            status = self._openai().batches.retrieve(batch_id).status
+            return "ended" if status in OPENAI_BATCH_DONE else status
         return self.client.messages.batches.retrieve(batch_id).processing_status
 
     def batch_results(
@@ -605,6 +665,8 @@ class Gateway(_Base):
     ) -> dict:
         """{custom_id: LLMResult | None}. 거절·잘림·JSON 파싱 실패는 ok=False, 처리 안 된 건은 None"""
         model = self.config["aliases"][alias][0]
+        if self._provider(model) == "openai":
+            return self._openai_results(batch_id, model, alias, task, prompt_version, schema)
         out = {}
         for entry in self.client.messages.batches.results(batch_id):
             if entry.result.type != "succeeded":
@@ -684,6 +746,56 @@ class Gateway(_Base):
                 alias, task, prompt_version, ("batch", entry.custom_id), result
             )
         return out
+
+    def _openai_results(self, batch_id, model, alias, task, prompt_version, schema) -> dict:
+        """OpenAI 배치 결과 — 출력 파일의 200 줄만 결과, 오류 파일·200 아닌 줄(만료·취소·서버 오류)은 None"""
+        client = self._openai()
+        batch = client.batches.retrieve(batch_id)
+        if batch.status == "failed":  # 입력 검증 실패 등 — 결과 파일이 없다
+            print(f"OpenAI 배치 {batch_id} 실패: {batch.errors}")
+        price = self._price(model, model)
+        out = {}
+        for file_id in (batch.output_file_id, batch.error_file_id):
+            if not file_id:
+                continue
+            for line in client.files.content(file_id).text.splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                response = row.get("response") or {}
+                if response.get("status_code") != 200:
+                    out[row["custom_id"]] = None
+                    continue
+                result = _openai_batch_result(model, price, response["body"], schema)
+                out[row["custom_id"]] = self._record(
+                    alias, task, prompt_version, ("batch", row["custom_id"]), result
+                )
+        return out
+
+
+def _openai_batch_result(model: str, price: dict, body: dict, schema) -> "LLMResult":
+    """OpenAI 배치 성공 줄의 Chat Completions 본문 → LLMResult(배치 단가)"""
+    u = body.get("usage") or {}
+    tokens_in, tokens_out = u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+    cost = (tokens_in * price["input"] + tokens_out * price["output"]) / 1e6 * BATCH_PRICE_SHARE
+    actual = body.get("model", model)
+    choice = body["choices"][0]
+    message = choice.get("message") or {}
+
+    def result(ok, text="", data=None, error=None):
+        return LLMResult(ok, text, data, actual, False, tokens_in, tokens_out, cost, 0, error)
+
+    if message.get("refusal"):
+        return result(False, error=f"{actual}: refusal")
+    if choice.get("finish_reason") != "stop":
+        return result(False, error=f"{actual}: finish_reason {choice.get('finish_reason')}")
+    text = message.get("content") or ""
+    if schema is None:
+        return result(True, text)
+    try:
+        return result(True, text, json.loads(text))
+    except json.JSONDecodeError:
+        return result(False, error=f"{actual}: JSON 파싱 실패")
 
 
 def _fake_value(schema: dict, seed: str, key: str, root: dict):

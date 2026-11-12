@@ -88,7 +88,7 @@ def _population() -> Counter:
     conn.execute(f"ATTACH 'file:{ROOT}/ground_truth/truth.sqlite?mode=ro' AS truth")
     rows = conn.execute(
         "SELECT l.primary_purpose, COUNT(*) FROM ax_calls c JOIN truth.truth_call_labels l"
-        " USING (call_uid) WHERE c.source = 'generated' GROUP BY 1"
+        " USING (call_uid) WHERE c.source = 'generated' AND l.split != 'hard' GROUP BY 1"
     ).fetchall()
     conn.close()
     return Counter(dict(rows))

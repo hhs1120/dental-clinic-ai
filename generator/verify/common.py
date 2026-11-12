@@ -14,6 +14,12 @@ from generator.master import (
     PROCEDURES,
 )
 
+# 어려운 통화(hc-, 어려운 통화 설계 §3.1) — c- 통화 규칙(슬롯 수·행 순서·판정 풀·전사 규칙)은 hc-를 세지 않고
+# hc-는 verify/hard_calls.py가 본다. 시각·길이·화자·누출처럼 모든 통화에 같은 규칙은 둘 다 본다
+HARD_PREFIX = "hc-"
+C_ONLY = f"call_uid NOT LIKE '{HARD_PREFIX}%'"
+
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -51,6 +57,9 @@ class Ctx:
     unrecorded_settlements: int = 0
     non_clinical_multi: int = 0
     settlement_errors: dict | None = None  # 정산 수납 장부 실수 종류별 수 — truth_gen_meta에서
+    hard_calls: int = (
+        0  # 어려운 통화 hc- 건수 — truth_gen_meta(없으면 0 = hc- 없음, verify 테스트 DB)
+    )
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
@@ -72,6 +81,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         call_slots=int(meta["call_slots"]),
         eval_pool=int(meta["eval_pool"]),
         blind_pool=int(meta["blind_pool"]),
+        hard_calls=int(meta.get("hard_calls", 0)),
         documents_core=int(meta["documents_core"]),
         documents_distractor=int(meta["documents_distractor"]),
         link_failure_days=int(meta["link_failure_days"]),

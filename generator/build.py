@@ -1,6 +1,7 @@
 """생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체, 정답 JSON. 단계는 가상 데이터 생성 설계 §5.1.
 LLM 단계(7·9·9b)는 캐시만 읽는다 — 빈 건이 있으면 끝까지 돌아 작업을 내보내고 DB를 바꾸지 않은 채 LLMMissing(generator/llm_jobs.py)."""
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -20,6 +21,7 @@ from generator import (
     documents,
     emergency,
     finance,
+    hard_calls,
     messages,
     patients,
     pre_window,
@@ -29,6 +31,8 @@ from generator import (
 )
 from generator.llm_jobs import LLMContext
 from generator.master import (
+    HARD_CALL_TYPES,
+    HARD_CALLS_PER_TYPE,
     LEDGER_DEBT_CALLS,
     LEDGER_ERROR_KINDS,
     LINK_FAILURE_DAYS,
@@ -85,6 +89,9 @@ STAGES: list = [
     ("documents", documents.stage_bodies),
     ("chart_narratives", chart.stage_narratives),
     ("master_values", clinic.stage_master_values),
+    # 어려운 통화 hc- — 맨 끝(앞 단계 결과·캐시 그대로, 어려운 통화 설계 §3.1), 녹취는 LLM gen_hard(§3.5)
+    ("hard_calls", hard_calls.stage_slots),
+    ("hard_transcripts", hard_calls.stage_transcripts),
 ]
 
 
@@ -121,10 +128,12 @@ def generate(
     fake_llm: bool = False,
     llm_paths: dict | None = None,
     rag_qa_path: Path | None = None,
+    hard_labels_path: Path | None = None,
 ) -> Run:
     """임시 파일에 전부 쓴 뒤 교체 — 단계 실행 중에 실패하면 기존 DB는 그대로. 단계 상태(run.state)를 보려고 Run을 돌려준다.
     fake_llm: LLM 단계를 가짜 게이트웨이로(테스트). llm_paths: 캐시·작업 폴더(기본 generator/paths.py).
-    rag_qa_path: 사람이 쓴 RAG 질문 JSON — 있으면 truth_rag_qa에 적재(make data만 준다. 테스트 생성은 문서·전사가 달라 넣지 않음)"""
+    rag_qa_path: 사람이 쓴 RAG 질문 JSON — 있으면 truth_rag_qa에 적재(make data만 준다. 테스트 생성은 문서·전사가 달라 넣지 않음)
+    hard_labels_path: 어려운 통화 최종 라벨 JSON(evaluation/hard_labels.py finalize) — 있으면 hc- 생성 라벨을 덮어쓴다"""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     tmp_src, tmp_truth = (p.with_name(p.name + ".tmp") for p in (source_path, truth_path))
     for p in (tmp_src, tmp_truth):
@@ -151,6 +160,7 @@ def generate(
                 ("call_slots", str(cfg["calls_with_transcript"])),
                 ("eval_pool", str(cfg["eval_pool_size"])),
                 ("blind_pool", str(cfg["blind_pool_size"])),
+                ("hard_calls", str(len(HARD_CALL_TYPES) * HARD_CALLS_PER_TYPE)),
                 ("documents_core", str(cfg["documents"]["core"])),
                 ("documents_distractor", str(cfg["documents"]["distractor"])),
                 ("link_failure_days", str(LINK_FAILURE_DAYS)),
@@ -167,6 +177,14 @@ def generate(
         )
         for name, stage in STAGES:
             stage(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
+        if hard_labels_path and hard_labels_path.exists():
+            if redo := apply_hard_labels(
+                conn, json.loads(hard_labels_path.read_text(encoding="utf-8"))
+            ):
+                print(
+                    f"어려운 통화 최종 라벨 다시: {len(redo)}통화(녹취가 바뀌었거나 JSON에 없음) —"
+                    " make hard-label → make hard-review → make data"
+                )
         if rag_qa_path and rag_qa_path.exists():
             insert_rag_qa(
                 conn, json.loads(rag_qa_path.read_text(encoding="utf-8")), schema="truth"
@@ -184,6 +202,53 @@ def generate(
     os.replace(tmp_truth, truth_path)
     write_truth_json(truth_path)
     return run
+
+
+HARD_LABEL_COLS = (
+    "primary_purpose",
+    "accepted_purposes",
+    "counterpart",
+    "urgency",
+    "emergency",
+    "complaint",
+    "price_inquiry",
+    "wants_appt",
+    "appt_confirmed",
+    "has_todo",
+)
+
+
+def apply_hard_labels(conn: sqlite3.Connection, rows: list[dict]) -> list[str]:
+    """hard_call_labels.json 행 → hc- 생성 라벨을 최종 라벨로, truth_hard_calls.label_source(어려운 통화 설계 §4 저장).
+    DB에 없는 call_uid가 있으면 옛 파일이라 멈춘다. 라벨한 녹취의 해시(transcript_sha)가 지금 녹취와 다르거나 JSON에 없는
+    hc-는 덮지 않고 생성 라벨로 둔다 — 그 call_uid 목록을 돌려준다(다시 라벨: make hard-label → make hard-review)"""
+    have = {r[0] for r in conn.execute("SELECT call_uid FROM truth.truth_hard_calls")}
+    if stale := sorted({r["call_uid"] for r in rows} - have):
+        raise ValueError(f"최종 라벨의 hc- 통화가 DB에 없음(옛 파일): {stale[:5]}")
+    sha = {
+        uid: hashlib.sha256((text or "").encode()).hexdigest()
+        for uid, text in conn.execute(
+            "SELECT h.call_uid, c.transcript FROM truth.truth_hard_calls h"
+            " JOIN ax_calls c USING (call_uid)"
+        )
+    }
+    keep = [r for r in rows if r.get("transcript_sha") == sha.get(r["call_uid"])]
+    for r in keep:
+        labels = r["labels"]
+        conn.execute(
+            f"UPDATE truth.truth_call_labels SET {', '.join(f'{c} = ?' for c in HARD_LABEL_COLS)}"
+            " WHERE call_uid = ?",
+            [
+                json.dumps(labels[c]) if c == "accepted_purposes" else labels[c]
+                for c in HARD_LABEL_COLS
+            ]
+            + [r["call_uid"]],
+        )
+        conn.execute(
+            "UPDATE truth.truth_hard_calls SET label_source = ? WHERE call_uid = ?",
+            (r["label_source"], r["call_uid"]),
+        )
+    return sorted(have - {r["call_uid"] for r in keep})
 
 
 RAG_QA_JSON_COLS = ("answer_doc_ids", "expected_tools", "expected_args")
@@ -224,6 +289,7 @@ def insert_rag_qa(conn: sqlite3.Connection, qa: list[dict], schema: str = "main"
 TRUTH_JSON = {
     "call_labels.json": ("truth_call_labels", "call_uid", ("accepted_purposes", "used_fact")),
     "doc_meta.json": ("truth_doc_meta", "doc_id", ("avoid_doc_ids", "planted_facts")),
+    "hard_calls.json": ("truth_hard_calls", "call_uid", ()),
 }
 
 

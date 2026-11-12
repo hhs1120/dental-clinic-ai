@@ -19,6 +19,8 @@ def output_paths() -> dict[str, Path]:
         / "llm"
         / "results",  # 일회용 — 채운 결과, make llm-import가 지움
         "truth": ROOT / "ground_truth" / "truth.sqlite",
+        # 어려운 통화 최종 라벨(어려운 통화 설계 §4 — evaluation/hard_labels.py가 쓰고 make data가 적재)
+        "hard_labels": ROOT / "ground_truth" / "hard_call_labels.json",
         "rag_qa": ROOT
         / "ground_truth"
         / "rag_qa.json",  # 사람이 쓴 RAG 질문(평가 설계 §3.1) — make data가 truth_rag_qa로 적재

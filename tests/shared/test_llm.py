@@ -978,3 +978,111 @@ def test_valid_output_is_not_redone(tmp_path):
 def test_unparsable_output_is_redone_with_constraint(tmp_path):
     gw, seen = _mlx_with_constrain(tmp_path, "글만 냄")
     assert gw.complete("q", task="judge", messages=MSGS, schema=ENUM_SCHEMA).ok and seen
+
+
+# ── OpenAI (Chat Completions·Batch — 어려운 통화 녹취, 어려운 통화 설계 §3.5) ─────────────
+
+OA_CONFIG = {
+    "aliases": {"oa": ["gpt-x"]},
+    "models": {"gpt-x": {"input": 2.0, "output": 10.0, "provider": "openai"}},
+    "daily_usd_limit": {"generator": 1.0, "runtime": 0.5},
+}
+
+
+def _oa_gateway(tmp_path, oa):
+    return llm.Gateway(
+        OA_CONFIG,
+        llm.JsonlLog(tmp_path / "calls.jsonl"),
+        scope="generator",
+        client=StubClient(),
+        openai_client=oa,
+        clock=lambda: NOW,
+    )
+
+
+def test_openai_complete_uses_completion_tokens(tmp_path):
+    oa = UpstageStub(_chat(model="gpt-x-2026"))
+    r = _oa_gateway(tmp_path, oa).complete(
+        "oa", task="hard_transcript", messages=MSGS, schema=LABELS_SCHEMA, max_tokens=900
+    )
+    assert r.ok and r.data == {"label": "예약"}
+    assert r.cost_usd == pytest.approx((1000 * 2.0 + 100 * 10.0) / 1e6)
+    ((_, kwargs),) = oa.calls
+    assert kwargs["max_completion_tokens"] == 900 and "max_tokens" not in kwargs
+    assert kwargs["response_format"]["json_schema"]["strict"] is True
+
+
+class _OaFiles:
+    def __init__(self, contents):
+        self.contents, self.created = contents, []
+
+    def create(self, file, purpose):
+        self.created.append((file, purpose))
+        return types.SimpleNamespace(id="file-in")
+
+    def content(self, file_id):
+        return types.SimpleNamespace(text=self.contents[file_id])
+
+
+class _OaBatches:
+    def __init__(self, status, out, err):
+        self.status, self.out, self.err, self.created = status, out, err, []
+
+    def create(self, **kwargs):
+        self.created.append(kwargs)
+        return types.SimpleNamespace(id="batch_1")
+
+    def retrieve(self, batch_id):
+        return types.SimpleNamespace(
+            status=self.status,
+            output_file_id=self.out,
+            error_file_id=self.err,
+            errors=getattr(self, "errors", None),
+        )
+
+
+def _oa_line(key, text, finish="stop"):
+    body = _chat(text=text, model="gpt-x-2026", finish=finish).model_dump()
+    return json.dumps({"custom_id": key, "response": {"status_code": 200, "body": body}})
+
+
+def test_openai_batch_submit_and_partial_results(tmp_path):
+    """제출은 JSONL 파일 → /v1/chat/completions 배치, 결과는 성공·잘림 실패·만료(None)로 나뉘고 비용은 배치 단가"""
+    out = "\n".join([_oa_line("k1", '{"label": "예약"}'), _oa_line("k2", "{", "length")])
+    err = json.dumps({"custom_id": "k3", "response": None, "error": {"code": "batch_expired"}})
+    files = _OaFiles({"file-out": out, "file-err": err})
+    oa = types.SimpleNamespace(
+        files=files, batches=_OaBatches("completed", "file-out", "file-err")
+    )
+    gw = _oa_gateway(tmp_path, oa)
+    reqs = [
+        {"custom_id": k, "messages": MSGS, "schema": LABELS_SCHEMA} for k in ("k1", "k2", "k3")
+    ]
+    assert gw.submit_batch("oa", reqs, task="hard_transcript") == "batch_1"
+    (created,) = oa.batches.created
+    assert created["endpoint"] == "/v1/chat/completions" and created["input_file_id"] == "file-in"
+    (((_, payload), purpose),) = files.created
+    lines = [json.loads(x) for x in payload.decode().splitlines()]
+    assert purpose == "batch" and [x["custom_id"] for x in lines] == ["k1", "k2", "k3"]
+    assert lines[0]["url"] == "/v1/chat/completions" and lines[0]["body"]["model"] == "gpt-x"
+    assert gw.batch_status("batch_1", "oa") == "ended"
+    r = gw.batch_results("batch_1", "oa", task="hard_transcript", schema=LABELS_SCHEMA)
+    assert r["k1"].ok and r["k1"].data == {"label": "예약"}
+    assert r["k1"].cost_usd == pytest.approx((1000 * 2.0 + 100 * 10.0) / 1e6 * 0.5)
+    assert not r["k2"].ok and r["k3"] is None
+
+
+def test_openai_batch_status_in_progress(tmp_path):
+    oa = types.SimpleNamespace(files=None, batches=_OaBatches("in_progress", None, None))
+    assert _oa_gateway(tmp_path, oa).batch_status("batch_1", "oa") == "in_progress"
+
+
+def test_openai_batch_failed_shows_reason(tmp_path, capsys):
+    """입력 검증 실패 등으로 배치가 failed면 결과 파일이 없다 — 사유(batch.errors)를 보여 주고 빈 결과(다시 돌면 재제출)"""
+    batches = _OaBatches("failed", None, None)
+    batches.errors = types.SimpleNamespace(
+        data=[types.SimpleNamespace(code="invalid_json", message="line 3")]
+    )
+    oa = types.SimpleNamespace(files=_OaFiles({}), batches=batches)
+    r = _oa_gateway(tmp_path, oa).batch_results("batch_1", "oa", task="hard_transcript")
+    assert r == {} and "invalid_json" in capsys.readouterr().out

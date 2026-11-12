@@ -7,6 +7,7 @@ import pytest
 
 from evaluation import EvalRefused
 from evaluation import eval as ev
+from shared.call_labels import ITEMS
 from tests.evaluation.eval_db import add_judge
 from tests.evaluation.test_rag import SEARCH, FakeApp, make_rag_db
 
@@ -567,3 +568,23 @@ def test_dev_report_shows_new_chat_metrics(conn, tmp_path):
     md = out["report_path"].read_text(encoding="utf-8")
     assert "차트형 인용" in md and "공지형 현재 값" in md and "답 내용" in md
     assert "단순 RAG 기준선" in md
+
+
+def test_render_hard_lines_by_type_and_half():
+    """어려운 통화 표(어려운 통화 설계 §6) — 전체·종류별·절반별 줄, 고르게 나눈 셋이라는 주석"""
+    kn = {"k": 1, "n": 2}
+    part = {
+        "n": 2,
+        "rule": {"has_todo": kn},
+        "ngram": {i: kn for i in ITEMS},
+        "versions": {"v2": {i: kn for i in ITEMS}},
+    }
+    h = part | {
+        "trained_on": 9,
+        "ids": ["hc-0001", "hc-0002"],
+        "by_type": {"reversal": part},
+        "by_half": {"calm_urgent": part},
+    }
+    text = "\n".join(ev._render_hard(h))
+    assert "어려운 통화" in text and "고르게 나눈" in text
+    assert "| 전체 | 2 |" in text and "| reversal | 2 |" in text and "| calm_urgent | 2 |" in text

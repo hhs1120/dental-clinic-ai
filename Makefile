@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -14,8 +14,8 @@ llm-prune:
 	PYTHONHASHSEED=0 uv run python -m generator --prune-llm-cache
 
 llm-fill-api:
-	$(if $(TASK),,$(error TASK=transcript·document·chart 중 하나))
-	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT))
+	$(if $(TASK),,$(error TASK=transcript·document·chart·hard_transcript 중 하나))
+	uv run $(if $(wildcard .env),--env-file .env) python -m generator.llm_jobs fill-api --task $(TASK) $(if $(LIMIT),--limit $(LIMIT)) $(if $(ITEMS),--items $(ITEMS)) $(if $(NO_BATCH),--no-batch)
 
 verify:
 	uv run python -m generator.verify
@@ -44,6 +44,13 @@ gold-arbitrate:
 
 gold-audit:
 	uv run python -m evaluation.gold_audit audit
+
+# 어려운 통화 정답 라벨(어려운 통화 설계 §4) — Opus 독립 라벨(과금, Batch, 이어 돎) / 사람 검토 → 최종 JSON, 그 뒤 make data
+hard-label:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.hard_labels label
+
+hard-review:
+	uv run python -m evaluation.hard_labels review
 
 # 코어 합격 기준(기능 정의 §6) — 무료 검사 먼저, 과금하는 dev 평가(evaluation/gate.py)는 마지막. make dev를 끄고 돌린다
 gate: frontend/node_modules

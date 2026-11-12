@@ -108,7 +108,12 @@ def test_today_scene_call(db):
 
 
 def test_call_ids_follow_time(db):
-    times = [r[0] for r in db.execute("SELECT started_at FROM ax_calls ORDER BY id")]
+    times = [
+        r[0]
+        for r in db.execute(
+            "SELECT started_at FROM ax_calls WHERE call_uid LIKE 'c-%' ORDER BY id"
+        )
+    ]
     assert times == sorted(times)
 
 

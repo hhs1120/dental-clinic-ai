@@ -361,3 +361,50 @@ def test_compare_and_dump_urgency_urgent_or_not(conn):
         c["items"]["urgency"] for c in before["compare"]
     ]
     assert not any(d["item"] == "urgency" and d["call_uid"] == "c-0001" for d in r["dump"])
+
+
+def _add_hard(conn, purpose="emergency", predicted="treatment_q"):
+    """hc- 통화 한 건(split hard)과 v2 분류 — 어려운 통화 설계 §2·§6"""
+    conn.execute(
+        "INSERT INTO truth.truth_call_labels VALUES ('hc-0001', ?, ?, 'patient', 'urgent',"
+        " 1, 0, 0, 0, 0, 0, NULL, '{}', 'hard')",
+        (purpose, json.dumps([purpose])),
+    )
+    conn.execute(
+        "INSERT INTO truth.truth_hard_calls VALUES ('hc-0001', 'urgency_inverted', 'calm_urgent',"
+        " 'agreed')"
+    )
+    conn.execute(
+        "INSERT INTO source.ax_calls (id, call_uid, source, direction, started_at, duration_sec,"
+        " has_transcript, transcript) VALUES (99, 'hc-0001', 'generated', 'inbound',"
+        " '2026-11-20 10:00:00', 100, 1, '환자: 볼이 좀 부었네요')"
+    )
+    conn.execute(
+        "INSERT INTO ax_llm_calls (id, task, model_alias, model_actual, prompt_version, fallback_used,"
+        " ok, created_at) VALUES (99, 'classify', 'classify', 'claude-haiku-5-5', 'v2', 0, 1,"
+        " '2026-12-01 09:00:00')"
+    )
+    conn.execute(
+        "INSERT INTO ax_call_classifications (id, call_uid, model_alias, model_actual, prompt_version,"
+        " status, labels, summary, llm_call_id) VALUES (99, 'hc-0001', 'classify', 'claude-haiku-5-5',"
+        " 'v2', 'ok', ?, '요약', 99)",
+        (json.dumps(labels(predicted)),),
+    )
+
+
+def test_hard_calls_do_not_change_dev_scores(conn):
+    """hc-(split hard)는 dev 채점·가중 모집단에 들지 않는다 — 기존 숫자 그대로(설계 §2)"""
+    before = classification.evaluate(conn, "dev")
+    _add_hard(conn)
+    after = classification.evaluate(conn, "dev")
+    assert before["versions"] == after["versions"]
+    assert "hc-0001" not in classification._calls(conn)
+
+
+def test_hard_section_scores_hard_only(conn):
+    _add_hard(conn)
+    hard = classification.evaluate(conn, "dev")["hard"]
+    assert hard["n"] == 1 and hard["ids"] == ["hc-0001"]
+    assert hard["versions"]["v2"]["primary_purpose"] == {"k": 0, "n": 1}
+    assert hard["by_type"]["urgency_inverted"]["versions"]["v2"]["urgency"]["n"] == 1
+    assert hard["by_half"]["calm_urgent"]["n"] == 1

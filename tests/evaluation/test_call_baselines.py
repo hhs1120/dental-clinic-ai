@@ -29,6 +29,18 @@ def _call(split, purpose, todo, text):
     }
 
 
+def test_hard_rows_stay_out_of_dev_scoring():
+    """split hard(어려운 통화 설계 §2)는 재료에도 dev 채점에도 들지 않는다"""
+    calls = {}
+    for k in range(40):
+        purpose, todo = ("book", 1) if k % 2 else ("cancel", 0)
+        calls[f"c-{k:04d}"] = _call("silver", purpose, todo, f"직원: 예약 {purpose} {k}")
+    calls["c-dev1"] = _call("dev", "book", 1, "직원: 다시 연락드릴게요. 예약")
+    calls["hc-0001"] = _call("hard", "book", 1, "직원: 다시 연락드릴게요. 예약 hc")
+    r = cb.evaluate(calls, "dev", {"v": {u: c["gold"] for u, c in calls.items()}})
+    assert r["n"] and not any(u.startswith("hc-") for u in r["ids"])
+
+
 def test_evaluate_trains_on_material_and_scores_outside():
     """재료로 학습한 통화는 채점에서 빠지고, 분류기 버전도 같은 통화에서 센다"""
     calls = {}
