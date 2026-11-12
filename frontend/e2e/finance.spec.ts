@@ -1,5 +1,5 @@
-// ⑧ 재무 대조 일계표(설계 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1) — 확정은 앱 DB에 남고
-// 실데이터엔 경계 사례(정산 대기·확정된 건)가 고정돼 있지 않으므로 /api/finance/recon은 page.route 가짜 응답으로 준다
+// ⑧ 재무 대조 일계표·지출 증빙(설계 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1·§2) — 확정은 앱 DB에 남고
+// 실데이터엔 경계 사례(정산 대기·확정된 건)가 고정돼 있지 않으므로 /api/finance/recon·expenses는 page.route 가짜 응답으로 준다
 import { expect, type Page, test } from "@playwright/test";
 
 type Confirmation = {
@@ -252,7 +252,10 @@ test("메뉴에서 재무 대조가 열림", async ({ page }) => {
   await expect(page).toHaveURL(/\/finance$/);
   await expect(page.getByRole("heading", { name: "재무 대조" })).toBeVisible();
   await expect(page.getByText("준비 중")).toHaveCount(0);
-  await expect(page.getByRole("tablist")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "일계표" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(page.getByText("불일치 있는 날 3")).toBeVisible();
 });
 
@@ -381,4 +384,246 @@ test("현금이 대조 전인 날은 현금 입금 칸에 대조 전", async ({ 
   await page.goto("/finance");
   await expect(row(page, "2026-11-25")).toContainText("대조 전");
   await expect(row(page, "2026-11-25")).toContainText("차이 없음");
+});
+
+// ── ⑧-2 지출 증빙 탭 (설계 §2) ─────────────────────────────
+
+const receipt = {
+  id: 11,
+  kind: "receipt",
+  issuer: "솔밭식당",
+  issued_on: "2026-11-03",
+  amount: 18000,
+  body: "솔밭식당 영수증 점심 식대 18,000원",
+};
+const statement = (id: number, on: string, amount: number) => ({
+  id,
+  kind: "statement",
+  issuer: "바른덴탈상사",
+  issued_on: on,
+  amount,
+  body: `거래명세서 ${amount}원`,
+});
+
+type ExpConfirmed = { by: string; at: string } | null;
+
+const EXP = (kcp: ExpConfirmed = null) => {
+  const rows = [
+    {
+      table: "fin_card_expenses",
+      id: 1,
+      at: "2026-11-03 12:00:00",
+      label: "솔밭식당",
+      amount: 18000,
+      vendor: "솔밭식당",
+      docs: [receipt],
+      diff: 0,
+      account: "복리후생비",
+      account_from: "vendor",
+      check: false,
+      confirmed: null,
+    },
+    {
+      table: "fin_card_expenses",
+      id: 2,
+      at: "2026-11-10 12:00:00",
+      label: "KCP*낯선가게",
+      amount: 9000,
+      vendor: null,
+      docs: [],
+      diff: null,
+      account: kcp ? "소모품비" : null,
+      account_from: kcp ? "confirmed" : null,
+      check: !kcp,
+      confirmed: kcp,
+    },
+    {
+      table: "fin_bank_transactions",
+      id: 3,
+      at: "2026-11-30 10:00:00",
+      label: "바른덴탈상사",
+      amount: 90000,
+      vendor: "바른덴탈상사",
+      docs: [
+        statement(21, "2026-11-10", 40000),
+        statement(22, "2026-11-20", 50000),
+      ],
+      diff: 0,
+      account: "재료비",
+      account_from: "vendor",
+      check: false,
+      confirmed: null,
+    },
+  ];
+  return {
+    months: ["2026-10", "2026-11"],
+    month: "2026-11",
+    accounts: ["재료비", "소모품비", "복리후생비"],
+    chips: {
+      outflows: 3,
+      amount: 117000,
+      found: 2,
+      none: 1,
+      check: kcp ? 0 : 1,
+      open: kcp ? 2 : 3,
+    },
+    rows,
+  };
+};
+
+async function fakeExpenses(page: Page, sheet: () => unknown) {
+  await page.route("**/api/finance/expenses?*", (r) =>
+    r.fulfill({ json: sheet() }),
+  );
+  await page.route("**/api/finance/expenses", (r) =>
+    r.fulfill({ json: sheet() }),
+  );
+}
+
+const expRow = (page: Page, label: string) =>
+  page.locator("tr[data-outflow]", { hasText: label });
+
+test("지출 증빙 탭으로 가면 칩과 줄", async ({ page }) => {
+  await fakeRecon(page, () => NOV());
+  await fakeExpenses(page, () => EXP());
+  await page.goto("/finance");
+  await page.getByRole("tab", { name: "지출 증빙" }).click();
+  await expect(page).toHaveURL(/tab=expense/);
+  await expect(page.getByText("출금 3 · 117,000원")).toBeVisible();
+  await expect(page.getByRole("button", { name: "미확정 3" })).toBeVisible();
+  await expect(expRow(page, "솔밭식당")).toContainText("영수증 · 솔밭식당");
+  await expect(expRow(page, "솔밭식당")).toContainText("거래처 기본");
+  await expect(expRow(page, "바른덴탈상사")).toContainText(
+    "거래명세서 2장 합계",
+  );
+  await expect(expRow(page, "KCP*낯선가게")).toContainText("증빙 못 찾음");
+  await expect(expRow(page, "KCP*낯선가게")).toContainText("과목 확인 필요");
+  await expect(page.getByText("fin_card_expenses")).toHaveCount(0);
+});
+
+test("증빙 못 찾음 칩으로 거른다", async ({ page }) => {
+  await fakeExpenses(page, () => EXP());
+  await page.goto("/finance?tab=expense");
+  await page.getByRole("button", { name: "증빙 못 찾음 1" }).click();
+  await expect(page).toHaveURL(/chip=none/);
+  await expect(page.locator("tr[data-outflow]")).toHaveCount(1);
+  await expect(expRow(page, "KCP*낯선가게")).toBeVisible();
+});
+
+test("과목을 골라 확정하면 확정으로 바뀌고 다시 불러도 남는다", async ({
+  page,
+}) => {
+  let confirmed: ExpConfirmed = null;
+  await fakeExpenses(page, () => EXP(confirmed));
+  let body: unknown = null;
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/2/confirm",
+    (r) => {
+      body = r.request().postDataJSON();
+      confirmed = { by: "데스크", at: "2026-12-01 09:10:00" };
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  const kcp = expRow(page, "KCP*낯선가게");
+  await expect(kcp.getByRole("button", { name: "확정" })).toBeDisabled();
+  await kcp.getByRole("combobox", { name: "계정 과목" }).click();
+  await page.getByRole("option", { name: "소모품비" }).click();
+  await kcp.getByRole("button", { name: "확정" }).click();
+  await expect
+    .poll(() => body)
+    .toEqual({ document_ids: [], account: "소모품비", part: "데스크" });
+  await expect(kcp).toContainText("확정함 · 데스크");
+  await page.reload();
+  await expect(expRow(page, "KCP*낯선가게")).toContainText("확정함 · 데스크");
+});
+
+test("줄을 펼치면 증빙 본문과 후보 — 체크해서 증빙을 바꿔 확정", async ({
+  page,
+}) => {
+  await fakeExpenses(page, () => EXP());
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/1/candidates",
+    (r) =>
+      r.fulfill({
+        json: {
+          docs: [
+            receipt,
+            { ...receipt, id: 12, issued_on: "2026-11-05", amount: 17000 },
+          ],
+        },
+      }),
+  );
+  let body: { document_ids?: number[] } | null = null;
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/1/confirm",
+    (r) => {
+      body = r.request().postDataJSON();
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  await expRow(page, "솔밭식당")
+    .getByRole("button", { name: "펼치기" })
+    .click();
+  const detail = page.getByRole("region", { name: /출금 상세/ });
+  await expect(detail).toContainText("점심 식대 18,000원");
+  await detail.getByRole("checkbox", { name: /11\/05 · 17,000원/ }).click();
+  await detail.getByRole("checkbox", { name: /11\/03 · 18,000원/ }).click();
+  await expRow(page, "솔밭식당").getByRole("button", { name: "확정" }).click();
+  await expect.poll(() => body?.document_ids).toEqual([12]);
+});
+
+test("증빙 없이 확정한 줄은 중립 표시 증빙 없음", async ({ page }) => {
+  await fakeExpenses(page, () =>
+    EXP({ by: "데스크", at: "2026-12-01 09:10:00" }),
+  );
+  await page.goto("/finance?tab=expense");
+  const kcp = expRow(page, "KCP*낯선가게");
+  await expect(kcp).toContainText("증빙 없음");
+  await expect(kcp).not.toContainText("증빙 못 찾음");
+  await expect(kcp).not.toContainText("과목 확인 필요");
+});
+
+test("같은 출금처의 다른 줄을 확정해도 펼친 줄은 그대로", async ({ page }) => {
+  let remembered = false;
+  const twin = (id: number, day: string) => ({
+    table: "fin_card_expenses",
+    id,
+    at: `2026-11-${day} 12:00:00`,
+    label: "KCP*낯선가게",
+    amount: 9000,
+    vendor: null,
+    by_item: false,
+    docs: [],
+    diff: null,
+    account: remembered ? "소모품비" : null,
+    account_from: remembered ? "memory" : null,
+    check: !remembered,
+    confirmed: null,
+  });
+  await fakeExpenses(page, () => ({
+    ...EXP(),
+    rows: [twin(2, "10"), twin(4, "20")],
+  }));
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/*/candidates",
+    (r) => r.fulfill({ json: { docs: [receipt] } }),
+  );
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/4/confirm",
+    (r) => {
+      remembered = true;
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  const rows = page.locator("tr[data-outflow]");
+  await rows.nth(0).getByRole("button", { name: "펼치기" }).click();
+  await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
+  await rows.nth(1).getByRole("combobox", { name: "계정 과목" }).click();
+  await page.getByRole("option", { name: "소모품비" }).click();
+  await rows.nth(1).getByRole("button", { name: "확정" }).click();
+  await expect(rows.nth(0)).toContainText("지난 확정");
+  await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
 });

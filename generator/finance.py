@@ -25,6 +25,7 @@ from generator.master import (
     EXPENSE_DIFF_REASONS,
     EXPENSE_DOC_LEAD_DAYS,
     EXPENSE_ISSUER_ALIAS_RATE,
+    EXPENSE_ITEM_ACCOUNT_KINDS,
     EXPENSE_ITEMS,
     EXPENSE_MIXED_ORDER_RATE,
     EXPENSE_NO_DOC_RATE,
@@ -1063,7 +1064,7 @@ def _expense_confusers(rng, outflows: list[dict], doc, today: date) -> list[dict
     shop = [
         o
         for o in outflows
-        if o["table"] == "card" and o["docs"] and o["vendor"]["kind"] == "shopping"
+        if o["table"] == "card" and o["docs"] and o["vendor"]["kind"] in EXPENSE_ITEM_ACCOUNT_KINDS
     ]
     for o in pick(shop, EXPENSE_MIXED_ORDER_RATE):
         pool = EXPENSE_ITEMS["shopping"]

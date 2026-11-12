@@ -210,14 +210,14 @@ def test_same_as_prep_rules(prep_src):
     for day in days:
         d = day.isoformat()
         claims = missed._claims(prep_src, d, mv)
-        plans = missed._open_plans(prep_src, d)
+        plans = missed._open_plans(prep_src, d, mv["full_mouth"])
         balances = missed._balances(prep_src, d)
         visits = missed._visits(prep_src, d)
         for p in pats:
             scaled = claims.get(p["id"], {}).get("scaled", False)
             want = prep._scaling_unused(prep_src, p, day, "", mv)
             assert missed._scaling_unused(p["birth_date"], scaled, day, mv) == want, (day, p["id"])
-            want_plan = len(prep._open_plan(prep_src, p["id"], day, None))
+            want_plan = len(prep._open_plan(prep_src, p["id"], day, None, mv["full_mouth"]))
             assert plans.get(p["id"], 0) == want_plan, (day, p["id"])
             if p["id"] == 1:
                 want_plans[d] = want_plan
@@ -234,10 +234,12 @@ def test_same_as_prep_rules(prep_src):
             for pid, v in visits.items()
             if pid != 1
             and v["last_hygiene"]
-            and missed._recall_overdue(v["last_hygiene"], v["months"], day)
+            and missed._recall_overdue(v["last_hygiene"], v["months"], day, mv["days_per_month"])
             and not v["booked"]
         }
-        assert got == {m["chart_no"] for m in prep._family_recall(prep_src, p1, day)}, day
+        assert got == {
+            m["chart_no"] for m in prep._family_recall(prep_src, p1, day, mv["days_per_month"])
+        }, day
     # ④ 도우미와 같을 뿐 아니라 경계 사례가 실제로 걸린다(둘이 같이 틀리지 않게) — 김철수의 열린 항목 수
     assert want_plans == {
         "2026-11-10": 0,  # 그날 만든 계획 1은 아직
@@ -252,7 +254,10 @@ def test_same_as_prep_rules(prep_src):
         "2026-12-01": 2,
     }
     family = {
-        d: {m["chart_no"] for m in prep._family_recall(prep_src, p1, date.fromisoformat(d))}
+        d: {
+            m["chart_no"]
+            for m in prep._family_recall(prep_src, p1, date.fromisoformat(d), mv["days_per_month"])
+        }
         for d in ("2026-11-28", "2026-11-29")
     }
     assert family == {

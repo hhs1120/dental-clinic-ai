@@ -348,3 +348,17 @@ CREATE TABLE ax_recon_confirmations (
     judged_by      TEXT NOT NULL,
     judged_at      TEXT NOT NULL
 );
+
+-- ⑧-2 지출 증빙 사람 확정(재무 대조 설계 §2, backend/expense.py) — 출금 단위, 다시 누르면 덮어씀.
+-- label = 그 출금의 적요·가맹점명 글자 그대로 — 같은 글자의 다음 출금 과목 기본값(품목으로 정하는 거래처는 기억 안 함).
+-- document_ids = 확정한 증빙 id들(JSON, [] = 증빙 없음). 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_expense_confirmations (
+    outflow_table TEXT NOT NULL CHECK (outflow_table IN ('fin_bank_transactions', 'fin_card_expenses')),
+    outflow_id    INTEGER NOT NULL,
+    label         TEXT NOT NULL,
+    document_ids  TEXT NOT NULL,
+    account       TEXT NOT NULL,
+    judged_by     TEXT NOT NULL,
+    judged_at     TEXT NOT NULL,
+    PRIMARY KEY (outflow_table, outflow_id)
+);

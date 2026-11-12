@@ -25,10 +25,6 @@ CHIPS = (
     "open_plan",
     "unconfirmed",
 )
-DAYS_PER_MONTH = (
-    365.25 / 12
-)  # 리콜 주기(개월) → 일 — backend/query_tools.py _family_recall과 같은 기준
-FULL_MOUTH = "00"  # 치아 단위가 아닌 시술의 치아 번호(가상 데이터 생성 설계 §2.3)
 ALIAS, TASK, PROMPT_VERSION = "chat", "prep", "v1"  # config/llm.yaml "③ 챗·④ 제안"
 DAYS = 8  # 날짜 탭 — 기준일 포함 최근 8일(기능 정의 §4 ④)
 ROOT = Path(__file__).resolve().parents[1]
@@ -110,7 +106,7 @@ def _scaling_unused(conn, p, day: date, planned: str, mv: dict) -> bool:
     )
 
 
-def _family_recall(conn, p, day: date) -> list[dict]:
+def _family_recall(conn, p, day: date, days_per_month: float) -> list[dict]:
     """리콜이 지난 가족 — 그날 전 마지막 위생 내원 + 리콜 주기 < 그날, 그날 아침 이후 위생 예약이 잡혀 있던 사람은 뺀다"""
     if p["family_id"] is None:
         return []
@@ -129,13 +125,13 @@ def _family_recall(conn, p, day: date) -> list[dict]:
     ):
         if m["last"] is None or m["booked"]:
             continue
-        due = date.fromisoformat(m["last"]) + timedelta(days=round(m["months"] * DAYS_PER_MONTH))
+        due = date.fromisoformat(m["last"]) + timedelta(days=round(m["months"] * days_per_month))
         if due < day:
             out.append({"chart_no": m["chart_no"], "name": m["name"], "last_hygiene": m["last"]})
     return out
 
 
-def _open_plan(conn, pid: int, day: date, today_item: int | None) -> list[dict]:
+def _open_plan(conn, pid: int, day: date, today_item: int | None, full_mouth: str) -> list[dict]:
     """그날 아침 열린 치료계획 항목 — 지금 status가 아니라 그날 기준으로 다시 계산한다.
     끝남 = 그날 전 completed 연결 예약, 대체됨 = 계획을 만든 뒤·그날 전에 다른 계획(또는 계획 밖)의 completed
     진료가 같은 치아에(전체 구강 시술은 같은 시술코드) 들어감(가상 데이터 생성 설계 검사 "치료계획"과 같은 규칙).
@@ -158,7 +154,7 @@ def _open_plan(conn, pid: int, day: date, today_item: int | None) -> list[dict]:
             it["id"],
             d,
         )
-        same = "t.procedure_code = ?" if it["tooth_no"] == FULL_MOUTH else "t.tooth_no = ?"
+        same = "t.procedure_code = ?" if it["tooth_no"] == full_mouth else "t.tooth_no = ?"
         replaced = _one(
             conn,
             "SELECT EXISTS (SELECT 1 FROM source.emr_treatments t"
@@ -167,7 +163,7 @@ def _open_plan(conn, pid: int, day: date, today_item: int | None) -> list[dict]:
             f" WHERE t.patient_id = ? AND {same} AND t.performed_at > ? AND date(t.performed_at) < ?"
             " AND (o.plan_id IS NULL OR o.plan_id != ?))",
             pid,
-            it["procedure_code"] if it["tooth_no"] == FULL_MOUTH else it["tooth_no"],
+            it["procedure_code"] if it["tooth_no"] == full_mouth else it["tooth_no"],
             it["created_at"],
             d,
             it["plan"],
@@ -259,8 +255,8 @@ def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
             "balance": max(balance, 0),  # 더 낸 금액은 미수가 아니다
             "alerts": _alerts(conn, p["id"], d, a["code"], mv["alert_rules"]),
             "scaling_unused": _scaling_unused(conn, p, day, a["code"], mv),
-            "family_recall": _family_recall(conn, p, day),
-            "open_plan": _open_plan(conn, p["id"], day, a["plan_item_id"]),
+            "family_recall": _family_recall(conn, p, day, mv["days_per_month"]),
+            "open_plan": _open_plan(conn, p["id"], day, a["plan_item_id"], mv["full_mouth"]),
         }
         row["chips"] = chips(row, day, today)
         out.append(row)

@@ -258,7 +258,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
 
 ## 3. 생성기가 적재하는 `ax_*`
 
-생성기는 `ax_calls`·`ax_documents`·`ax_master_values`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). `ax_master_values`는 backend가 `generator/`를 import하지 않고 master 값을 읽는 길이다 — 이름 → JSON. 이름과 원본 값은 `generator/clinic.py` `master_values_rows`(원본은 `master`·`generator/doc_catalog.py`), 쓰는 곳은 ④ 주의 칩·보험 잔여 칩, ⑨ 다른 치과 추정, ⑤ 재심 신청 기한·상병 확인 경고·사유 유형·기준 절·요건 사유, ⑧-1 대조·규칙 기준선(은행 공휴일은 `config/holidays.json`에서 — 연동 실패일 같은 생성 메타는 싣지 않는다). 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
+생성기는 `ax_calls`·`ax_documents`·`ax_master_values`만 `data/source.sqlite`에 적재한다(생성기와 앱 사이의 계약, §0). `ax_master_values`는 backend가 `generator/`를 import하지 않고 master 값을 읽는 길이다 — 이름 → JSON. 이름과 원본 값은 `generator/clinic.py` `master_values_rows`(원본은 `master`·`generator/doc_catalog.py`), 쓰는 곳은 ④ 주의 칩·보험 잔여 칩, ⑨ 다른 치과 추정, ⑤ 재심 신청 기한·상병 확인 경고·사유 유형·기준 절·요건 사유, ⑧-1 대조·규칙 기준선(은행 공휴일은 `config/holidays.json`에서 — 연동 실패일 같은 생성 메타는 싣지 않는다), ⑧-2 거래처 표(이름·카드 내역 가맹점명·결제 방식·기본 계정 과목·품목으로 정함 표시 — 건수·금액 범위·증빙 종류 같은 생성 값은 싣지 않는다)·계정 과목 목록, ⑤ 급여 적용 연령 범위·조건부 급여 나이, ③·④·⑨ 리콜 기한의 월 일수·치아 단위가 아닌 시술의 치아 번호. 나머지 `ax_*`와 `make index`·`make fixture`는 [[치과 AX - 앱 설계]].
 
 **`ax_calls`**
 | 컬럼 | 의미 |

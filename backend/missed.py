@@ -11,7 +11,7 @@ import sqlite3
 from datetime import date, datetime
 
 from backend import db
-from backend.prep import DAYS_PER_MONTH, FULL_MOUTH, _age, master_values
+from backend.prep import _age, master_values
 
 # 칩 순서 = 화면 순서(설계 §2). 화면 문구는 frontend/lib/missed-api.ts
 CHIPS = ("recall", "scaling_unused", "noshow", "balance", "open_plan", "other_clinic")
@@ -200,7 +200,7 @@ def _no_reply(conn, d: str) -> dict[int, int]:
     )
 
 
-def _open_plans(conn, d: str) -> dict[int, int]:
+def _open_plans(conn, d: str, full_mouth: str) -> dict[int, int]:
     """치료계획 한 번(CTE) — 그날 아침 열린 항목 수. ④ `_open_plan`과 같은 규칙: 그날 전에 만든 계획의 항목 중
     끝나지 않음(그날 전 completed 연결 예약 없음)·대체되지 않음(계획을 만든 뒤·그날 전에 다른 계획 또는 계획 밖의
     진료가 같은 치아에 — 전체 구강 시술은 같은 시술코드). 예약이 없는 환자라 그날 예정 항목은 없다"""
@@ -221,14 +221,14 @@ def _open_plans(conn, d: str) -> dict[int, int]:
             "  AND t.performed_at > pl.created_at AND date(t.performed_at) < :d"
             "  AND (o.plan_id IS NULL OR o.plan_id != pl.id))"
             " GROUP BY pl.patient_id",
-            {"d": d, "fm": FULL_MOUTH},
+            {"d": d, "fm": full_mouth},
         ).fetchall()
     )
 
 
-def _recall_overdue(last_hygiene: str, months: int, day: date) -> bool:
+def _recall_overdue(last_hygiene: str, months: int, day: date, days_per_month: float) -> bool:
     """마지막 위생 내원 + 리콜 주기 < 그날(④ `_family_recall`과 같은 계산)"""
-    due = date.fromisoformat(last_hygiene).toordinal() + round(months * DAYS_PER_MONTH)
+    due = date.fromisoformat(last_hygiene).toordinal() + round(months * days_per_month)
     return due < day.toordinal()
 
 
@@ -244,7 +244,7 @@ def facts(conn: sqlite3.Connection, day: date) -> list[dict]:
     claims = _claims(conn, d, mv)
     balances = _balances(conn, d)
     no_reply = _no_reply(conn, d)
-    plans = _open_plans(conn, d)
+    plans = _open_plans(conn, d, mv["full_mouth"])
     out = []
     for pid, v in _visits(conn, d).items():
         if v["last_visit"] is None or v["booked"]:
@@ -255,7 +255,7 @@ def facts(conn: sqlite3.Connection, day: date) -> list[dict]:
         run = no_reply.get(pid, 0)
         on = {
             "recall": v["last_hygiene"] is not None
-            and _recall_overdue(v["last_hygiene"], v["months"], day),
+            and _recall_overdue(v["last_hygiene"], v["months"], day, mv["days_per_month"]),
             "scaling_unused": _scaling_unused(v["birth_date"], c["scaled"], day, mv),
             "noshow": noshow,
             "balance": balance > 0,
@@ -265,7 +265,7 @@ def facts(conn: sqlite3.Connection, day: date) -> list[dict]:
         chips = [k for k in CHIPS if on[k]]
         if not chips:
             continue
-        months = (day - date.fromisoformat(v["last_visit"])).days / DAYS_PER_MONTH
+        months = (day - date.fromisoformat(v["last_visit"])).days / mv["days_per_month"]
         out.append(
             {
                 "patient_id": pid,
