@@ -30,6 +30,7 @@ const EMPTY = {
     autoclose_on: false,
     auto_total: 0,
     auto_recent: [],
+    recon_auto: { on: false, total: 0, recent: [] },
     prep: { rows: 0, suggest: 0, failed: 0 },
     classify_failed: 0,
     followup_failed: 0,
@@ -107,6 +108,19 @@ const FULL = {
     autoclose_on: true,
     auto_total: 1,
     auto_recent: [AUTO],
+    recon_auto: {
+      on: true,
+      total: 1,
+      recent: [
+        {
+          id: 2,
+          key: "cccccccccccc",
+          date: "2026-11-05",
+          cause: "fee_mismatch",
+          at: "2026-12-01 06:00:00",
+        },
+      ],
+    },
     prep: { rows: 26, suggest: 12, failed: 1 },
     classify_failed: 0,
     followup_failed: 0,
@@ -192,7 +206,9 @@ test("AI가 한 일은 접힌 채 요약, 펼치면 다시 열기", async ({ pag
   await fakeToday(page, FULL);
   await page.goto("/today");
   const ai = page.getByRole("region", { name: "AI가 한 일" });
-  await expect(ai).toContainText("자동 처리 1건 · 오늘 준비표 26행 · 실패 1");
+  await expect(ai).toContainText(
+    "자동 처리 1건 · 일계표 자동 마감 1건 · 오늘 준비표 26행 · 실패 1",
+  );
   await expect(ai.getByRole("button", { name: "다시 열기" })).toHaveCount(0);
   await ai.getByRole("button", { name: "펼치기" }).click();
   await expect(ai.getByRole("button", { name: "다시 열기" })).toBeVisible();
@@ -339,4 +355,27 @@ test("지출 증빙 확인 줄 → 지출 증빙 탭 지난달", async ({ page }
   await fakeToday(page, EMPTY);
   await page.goto("/today");
   await expect(page.getByText(/지출 증빙 확인/)).toHaveCount(0);
+});
+
+test("일계표 자동 마감 — AI가 한 일 목록과 되돌리기", async ({ page }) => {
+  let reverted = false;
+  await fakeToday(page, () =>
+    reverted
+      ? {
+          ...FULL,
+          ai: { ...FULL.ai, recon_auto: { on: true, total: 0, recent: [] } },
+        }
+      : FULL,
+  );
+  await page.route("**/api/auto-actions/2/revert", (r) => {
+    reverted = true;
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/today");
+  const ai = page.getByRole("region", { name: "AI가 한 일" });
+  await expect(ai).toContainText("일계표 자동 마감 1건");
+  await ai.getByRole("button", { name: "펼치기" }).click();
+  await expect(ai).toContainText("2026-11-05 · 수수료 차이");
+  await ai.getByRole("button", { name: "되돌리기" }).click();
+  await expect(ai).toContainText("자동으로 마감한 불일치 건이 없습니다");
 });

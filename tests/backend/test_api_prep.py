@@ -1,7 +1,7 @@
 """④ 준비표 API (backend/api.py — GET /prep, POST /jobs/prep-regenerate, GET /jobs/{id})."""
 
 import time
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -55,14 +55,30 @@ def test_get_prep_out_of_range_400(client):
     assert client.get("/prep?date=oops").status_code == 422
 
 
-def test_job_done_after_build(client):
+class _Ticking(datetime):
+    """부를 때마다 1초씩 가는 시계 — 행마다 저장 시각이 달라지는(초가 넘어가는) 경우를 늘 재현한다"""
+
+    at = datetime(2026, 12, 1, 9, 0, 0)
+
+    @classmethod
+    def now(cls, tz=None):
+        cls.at += timedelta(seconds=1)
+        return cls.at
+
+
+def test_job_done_after_build(client, monkeypatch):
+    from backend import prep
+
+    monkeypatch.setattr(prep, "datetime", _Ticking)
     job = _wait(client, client.post("/jobs/prep-regenerate?date=2026-12-01").json()["job_id"])
     assert job["status"] == "done" and job["done"] == job["total"] == 3
     body = client.get("/prep").json()
     first = body["rows"][0]
     assert first["generated"] is True and first["suggestion"]["action"] == "suggest"
     assert first["suggestion_valid"] is True and first["stale"] is False
-    assert first["changed"] == [] and first["made_at"] == body["generated_at"] is not None
+    assert first["changed"] == [] and first["made_at"] is not None
+    # 행마다 저장 시각(made_at)이 따로고, 준비표 생성 시각은 그 가운데 가장 늦은 것
+    assert body["generated_at"] == max(r["made_at"] for r in body["rows"])
 
 
 def test_stale_row_lists_changed_facts(client, tmp_path):

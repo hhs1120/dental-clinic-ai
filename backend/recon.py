@@ -11,7 +11,7 @@ from collections import defaultdict
 from datetime import date
 from itertools import combinations_with_replacement
 
-from backend import recon_match
+from backend import recon_agent, recon_auto, recon_match
 
 
 def _oral_sums(prices: dict) -> set[int]:
@@ -150,7 +150,15 @@ def _rows(books: dict) -> tuple[dict, dict]:
     return pays, fin
 
 
-def _view(item: dict, books: dict, pays: dict, fin: dict, conf: dict) -> dict:
+def _view(
+    item: dict,
+    books: dict,
+    pays: dict,
+    fin: dict,
+    conf: dict,
+    agent: dict | None,
+    auto: dict | None,
+) -> dict:
     out = {k: v for k, v in item.items() if k != "parts"}
     # 정산 행에는 받은 값과 기대값(코드가 계산한 수수료·예상 입금일)을 함께 — 직원이 "얼마여야 했나"를 본다
     detail = {
@@ -175,6 +183,8 @@ def _view(item: dict, books: dict, pays: dict, fin: dict, conf: dict) -> dict:
         "ledger_rows": [pays[i] for i in item["payment_ids"]],
         "fin_rows": rows,
         "confirmation": conf.get(item["key"]),
+        "agent": agent,
+        "auto": auto,
     }
 
 
@@ -215,6 +225,9 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
     cash_pending = {
         d for days in period.values() if any(status[x] == "pending" for x in days) for d in days
     }
+    keys = {i["key"] for i in found}
+    closed = recon_auto.active(conn, keys)  # 자동 마감은 확정 안 된 건에서 뺀다
+    agents = recon_agent.results(conn, keys)
     by_day: dict[str, list[dict]] = defaultdict(list)
     for i in found:
         by_day[i["date"]].append(i)
@@ -257,10 +270,14 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
                     "fin": transfer[k],
                     "diff": led[(k, "transfer")] - transfer[k],
                 },
-                "items": [_view(i, books, pays, fin, conf) for i in by_day[k]],
+                "items": [
+                    _view(i, books, pays, fin, conf, agents.get(i["key"]), closed.get(i["key"]))
+                    for i in by_day[k]
+                ],
             }
         )
     in_month = [i for i in found if i["date"].startswith(month or "")]
+    done = conf.keys() | closed.keys()
     return {
         "months": months,
         "month": month,
@@ -268,25 +285,32 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
         "chips": {
             "days": len([d for d in books["open_days"] if d.strftime("%Y-%m") == month]),
             "mismatch_days": len({i["date"] for i in in_month}),
-            "open_items": sum(i["key"] not in conf for i in in_month),
-            "open_all": sum(i["key"] not in conf for i in found),
+            "open_items": sum(i["key"] not in done for i in in_month),
+            "open_all": sum(i["key"] not in done for i in found),
         },
         "days": rows,
     }
 
 
 def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, today: date) -> None:
-    """사람 확정 — 지금 탐지에 있는 건 키·원인 9개 중 하나, 아니면 ValueError. 덮어씀, 커밋은 부르는 쪽"""
+    """사람 확정 — 지금 탐지에 있는 건 키·원인 9개 중 하나, 아니면 ValueError. 덮어씀, 커밋은 부르는 쪽.
+    그때 보이던 제안의 출처를 남긴다 — 지금 버전 조사 결과가 있으면 에이전트 1순위(unknown 포함), 없으면 규칙"""
     books = recon_match.load(conn, today)
     item = next((i for i in recon_match.detect(books) if i["key"] == key), None)
     if item is None:
         raise ValueError(f"불일치 건이 아님: {key}")
     if cause not in books["mv"]["recon_causes"]:
         raise ValueError(f"모르는 원인: {cause}")
+    agent = recon_agent.result(conn, key)
+    proposal = (
+        ("agent", agent["cause"])
+        if agent and agent["cause"] is not None
+        else ("rule", rule_cause(item, books))
+    )
     conn.execute(
         "INSERT INTO ax_recon_confirmations (item_key, occurred_on, fin_ids, payment_ids,"
         " proposed_by, proposed_cause, cause, judged_by, judged_at)"
-        " VALUES (?, ?, ?, ?, 'rule', ?, ?, ?, ?) ON CONFLICT(item_key) DO UPDATE SET"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(item_key) DO UPDATE SET"
         " cause = excluded.cause, proposed_by = excluded.proposed_by,"
         " proposed_cause = excluded.proposed_cause, judged_by = excluded.judged_by,"
         " judged_at = excluded.judged_at",
@@ -295,7 +319,7 @@ def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, to
             item["date"],
             json.dumps(item["fin"]),
             json.dumps(item["payment_ids"]),
-            rule_cause(item, books),
+            *proposal,
             cause,
             by,
             at,
@@ -304,10 +328,11 @@ def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, to
 
 
 def open_summary(conn: sqlite3.Connection, today: date) -> dict:
-    """확정 안 된 불일치 건 수(전 기간)와 그런 건이 있는 가장 이른 달 — 오늘 화면 '일계표 불일치' 줄과 링크.
+    """확정·자동 마감 안 된 불일치 건 수(전 기간)와 그런 건이 있는 가장 이른 달 — 오늘 화면 '일계표 불일치' 줄과 링크.
     수는 /finance 칩 open_all과 같다"""
-    conf = _confirmations(conn)
-    open_ = [i for i in recon_match.detect(recon_match.load(conn, today)) if i["key"] not in conf]
+    found = recon_match.detect(recon_match.load(conn, today))
+    done = _confirmations(conn).keys() | recon_auto.active(conn, {i["key"] for i in found}).keys()
+    open_ = [i for i in found if i["key"] not in done]
     return {"count": len(open_), "month": min((i["date"][:7] for i in open_), default=None)}
 
 

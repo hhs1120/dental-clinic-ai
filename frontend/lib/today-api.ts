@@ -1,4 +1,5 @@
 // 오늘 화면 API 타입과 호출 — 응답 모양의 원본은 backend/today.py sheet(기능 정의 §4 오늘 화면)
+import type { Cause } from "@/lib/finance-api";
 import { getJson, postJson } from "@/lib/api";
 import type { LabelNames } from "@/lib/calls-api";
 
@@ -74,6 +75,18 @@ export interface TodaySheet {
       reason: string;
       at: string;
     }[];
+    /** 일계표 자동 마감(backend/today.py _recon_auto) — 정책 꺼짐이면 on false */
+    recon_auto: {
+      on: boolean;
+      total: number;
+      recent: {
+        id: number;
+        key: string;
+        date: string;
+        cause: Cause;
+        at: string;
+      }[];
+    };
     prep: { rows: number; suggest: number; failed: number };
     classify_failed: number;
     followup_failed: number;

@@ -4,13 +4,24 @@
 calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자동 처리는 통화 화면과 같은 유효 조건,
 재심 신청 기한 임박·청구 전 상병 경고는 청구 점검 화면(claims.adjusted `soon` 칩·claims.pre_claim 경고 줄),
 일계표 불일치는 재무 대조 화면의 확정 안 된 건(recon.open_summary — 링크는 그런 건이 있는 가장 이른 달),
-지출 증빙 확인은 지출 증빙 탭의 지난달 확인할 출금(expense.open_summary).
+지출 증빙 확인은 지출 증빙 탭의 지난달 확인할 출금(expense.open_summary). 일계표 자동 마감은 일계표와 같은
+유효 조건(recon_auto.active — 정책 켜짐·지금 탐지 건).
 미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. LLM을 부르지 않는다."""
 
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from backend import autoclose, calls, claims, expense, judge_queue, prep, recon
+from backend import (
+    autoclose,
+    calls,
+    claims,
+    expense,
+    judge_queue,
+    prep,
+    recon,
+    recon_auto,
+    recon_match,
+)
 
 AUTO_RECENT = 20  # "AI가 한 일" 펼친 자동 처리 목록 — 최근에 닫힌 순, 나머지는 통화 기록에서
 REFUSED_DAYS = 7  # 근거 없는 질문 — 실제 시계 기준 최근 이 날수(확인함 없이 지나면 빠진다)
@@ -64,6 +75,20 @@ def _auto(conn) -> dict:
         p,
     ).fetchall()
     return {"autoclose_on": True, "auto_total": total, "auto_recent": [dict(r) for r in recent]}
+
+
+def _recon_auto(conn: sqlite3.Connection, today: date) -> dict:
+    """되돌리지 않은 일계표 자동 마감 — 최근 마감 순"""
+    if not recon_auto.policy_on(conn):
+        return {"on": False, "total": 0, "recent": []}
+    dates = {i["key"]: i["date"] for i in recon_match.detect(recon_match.load(conn, today))}
+    act = recon_auto.active(conn, set(dates))
+    rows = sorted(act.items(), key=lambda kv: (kv[1]["at"], kv[1]["id"]), reverse=True)
+    recent = [
+        {"id": v["id"], "key": k, "date": dates[k], "cause": v["cause"], "at": v["at"]}
+        for k, v in rows[:AUTO_RECENT]
+    ]
+    return {"on": True, "total": len(act), "recent": recent}
 
 
 def _failures(conn) -> dict:
@@ -150,5 +175,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             **_recon(conn, today),
             **_expense(conn, today),
         },
-        "ai": _auto(conn) | {"prep": _prep_saved(conn, today)} | _failures(conn),
+        "ai": _auto(conn)
+        | {"recon_auto": _recon_auto(conn, today), "prep": _prep_saved(conn, today)}
+        | _failures(conn),
     }

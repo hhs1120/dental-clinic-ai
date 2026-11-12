@@ -2,7 +2,7 @@
 에이전트는 도구 결과를 보고 다음 호출을 정하므로 Batch 한 번으로 끝나지 않는다. 실행마다 Runner.drive를 기록 게이트웨이로
 돌려, 결과가 준비된 실행은 이어 가고 아닌 실행은 요청만 모은 채 멈춘다(하네스는 저장된 단계로 다시 세워 이어 가므로 상태가
 맞다). 모인 요청이 min_batch보다 많으면 Batch로 — 배치 id를 state_path에 남겨 끊겨도 다시 제출하지 않는다 — 적으면 일반
-호출로 바로 부른다. 앞 라운드는 반값, 몇 건 안 남은 꼬리에서 Batch 대기를 되풀이하지 않게."""
+호출로 바로 부른다. Batch를 기다리는 동안 잠근 실행의 하트비트를 갱신한다(잠금이 만료돼 다른 곳에 뺏기지 않게). 앞 라운드는 반값, 몇 건 안 남은 꼬리에서 Batch 대기를 되풀이하지 않게."""
 
 import json
 import time
@@ -77,8 +77,14 @@ def run_rounds(
     active = [r for r in mine if store.run(r)["status"] == "running"]
     out = {r: Outcome(r, store.run(r)["status"]) for r in mine if r not in active}
     direct = set()  # 배치에서 결과가 없던 실행 — 다음 라운드는 일반 호출로(재제출 반복을 막는다)
+
+    def touch() -> None:
+        with store.conn:
+            store.touch(active, runner.owner)
+
     if state_path.exists():  # 끊기기 전에 제출한 배치부터 받는다
-        direct |= _collect(gw, rec, json.loads(state_path.read_text()), poll_seconds, max_polls)
+        state = json.loads(state_path.read_text())
+        direct |= _collect(gw, rec, state, poll_seconds, max_polls, touch)
         state_path.unlink()
     while active:
         for run in list(active):
@@ -115,7 +121,7 @@ def run_rounds(
                 "prompt_version": kw0.get("prompt_version"),
             }
             state_path.write_text(json.dumps(state))
-            direct |= _collect(gw, rec, state, poll_seconds, max_polls)
+            direct |= _collect(gw, rec, state, poll_seconds, max_polls, touch)
             state_path.unlink()
         else:
             try:
@@ -126,10 +132,15 @@ def run_rounds(
     return out
 
 
-def _collect(gw, rec, state: dict, poll_seconds: int, max_polls: int | None) -> set[int]:
-    """배치 결과를 채운다 — 결과가 없던 실행 id를 돌려준다(다음 라운드는 일반 호출)"""
+def _collect(
+    gw, rec, state: dict, poll_seconds: int, max_polls: int | None, touch=lambda: None
+) -> set[int]:
+    """배치 결과를 채운다 — 결과가 없던 실행 id를 돌려준다(다음 라운드는 일반 호출). touch는 확인마다 하트비트"""
     polls = 0
-    while gw.batch_status(state["batch_id"]) != "ended":
+    while True:
+        touch()
+        if gw.batch_status(state["batch_id"]) == "ended":
+            break
         polls += 1
         if max_polls and polls >= max_polls:
             raise TimeoutError(f"배치 {state['batch_id']} 진행 중 — 다시 실행하면 이어서 받는다")

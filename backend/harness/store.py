@@ -28,6 +28,15 @@ def _dump(value) -> str | None:
     return None if value is None else json.dumps(value, ensure_ascii=False, default=str)
 
 
+def parse_step(row) -> dict:
+    """ax_agent_steps 행 → JSON 칸을 푼 dict"""
+    step = dict(row)
+    for name in JSON_FIELDS:
+        if step[name] is not None:
+            step[name] = json.loads(step[name])
+    return step
+
+
 class RunStore:
     lock_ttl = 600  # 초 — 하트비트가 이만큼 끊기면 잠금 만료. 호출 최악 시간보다 길어야 한다(harness/llm.py)
 
@@ -92,14 +101,7 @@ class RunStore:
         rows = self.conn.execute(
             "SELECT * FROM ax_agent_steps WHERE run_id = ? ORDER BY seq", (run_id,)
         ).fetchall()
-        out = []
-        for row in rows:
-            step = dict(row)
-            for name in JSON_FIELDS:
-                if step[name] is not None:
-                    step[name] = json.loads(step[name])
-            out.append(step)
-        return out
+        return [parse_step(row) for row in rows]
 
     def add_usage(
         self, run_id: int, owner: str, model_calls=0, tool_calls=0, cost_usd=0.0
@@ -112,6 +114,19 @@ class RunStore:
         )
         if cur.rowcount != 1:
             raise RunLocked(f"실행 {run_id} 잠금을 잃음")
+
+    def touch(self, run_ids, owner: str) -> None:
+        """이 실행기가 잠근 끝나지 않은 실행들의 하트비트만 갱신 — 라운드 배치가 Batch를 기다리는 동안(harness/rounds.py)"""
+        now = _stamp(self.clock())
+        self.conn.executemany(
+            "UPDATE ax_agent_runs SET heartbeat_at = ? WHERE id = ? AND locked_by = ?"
+            " AND status = 'running'",
+            [(now, r, owner) for r in run_ids],
+        )
+
+    def fresh_since(self) -> str:
+        """이 시각 이후 하트비트면 잠금이 살아 있다 — 끊긴 running(잠금 만료)을 가리는 쪽이 쓴다"""
+        return _stamp(self.clock() - timedelta(seconds=self.lock_ttl))
 
     def finish(self, run_id: int, status: str, owner: str, result=None, reason=None) -> None:
         cur = self.conn.execute(

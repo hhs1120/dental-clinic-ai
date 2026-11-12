@@ -91,6 +91,120 @@ export interface ReconItem {
   ledger_rows: LedgerRow[];
   fin_rows: FinRow[];
   confirmation: Confirmation | null;
+  /** 지금 프롬프트 버전 조사 결과(backend/recon_agent.py results) — 조사 전이면 null */
+  agent?: ReconAgent | null;
+  /** 되돌리지 않은 자동 마감(backend/recon_auto.py) */
+  auto?: ReconAuto | null;
+}
+
+/** 에이전트 원인 — 근거가 모자라면 unknown */
+export type AgentCause = Cause | "unknown";
+
+export const agentCauseLabel = (c: AgentCause | null | undefined) =>
+  c == null ? "" : c === "unknown" ? "원인 미정" : CAUSE_LABEL[c];
+
+/** 조사 과정 줄 — 원본은 backend/recon_agent.py lines (설계 §3 "조사 과정 줄 종류") */
+export interface ReconLine {
+  kind: "hypothesis" | "compare" | "note" | "lookup" | "blocked" | "conclusion";
+  text: string;
+  tool?: string;
+  lookup_no?: number;
+  cause?: AgentCause;
+  runner_up?: AgentCause | null;
+  evidence?: number[];
+}
+
+export interface ReconAgentResult {
+  run_id: number;
+  /** handed_off = 조사·비용 상한에 걸림(원인 미정) */
+  status: "done" | "handed_off" | "running";
+  cause: AgentCause | null;
+  runner_up: AgentCause | null;
+  evidence: number[];
+  reason: string | null;
+}
+
+export interface ReconAgent extends ReconAgentResult {
+  lines: ReconLine[];
+}
+
+export interface ReconAuto {
+  id: number;
+  cause: Cause;
+  reason: string;
+  at: string;
+}
+
+/** 조회 도구 이름 — 키는 backend/recon_tools.py LOOKUPS */
+export const TOOL_LABEL: Record<string, string> = {
+  ledger_day: "그날 장부",
+  card_sales: "카드 승인",
+  card_deposits: "정산 입금",
+  bank_tx: "통장",
+  visits_day: "그날 내원",
+  patient_balance: "환자 미수",
+  family: "가족",
+  oral_care_prices: "구강용품 가격표",
+  find_amount: "같은 금액 찾기",
+  submit_cause: "원인 내기",
+};
+
+export type InvestigateEvent =
+  | { type: "line"; line: ReconLine }
+  | { type: "done"; agent: ReconAgentResult }
+  | { type: "error"; message: string };
+
+/** event:/data: 블록 하나 → 이벤트(lib/chat-api.ts와 같은 형식). 모르는 형식은 버린다 */
+function parseEvent(block: string): InvestigateEvent | null {
+  let kind = "";
+  let data = "";
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event: ")) kind = line.slice(7);
+    else if (line.startsWith("data: ")) data += line.slice(6);
+  }
+  if (!kind || !data) return null;
+  return { type: kind, ...JSON.parse(data) } as InvestigateEvent;
+}
+
+/** POST /finance/recon/{key}/investigate — 조사 과정 줄을 도착 순서대로 넘긴다. HTTP 오류는 error 이벤트로 */
+export async function streamInvestigate(
+  key: string,
+  onEvent: (e: InvestigateEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/finance/recon/${key}/investigate`, {
+      method: "POST",
+      signal,
+    });
+  } catch (e) {
+    if (signal.aborted) throw e;
+    onEvent({ type: "error", message: "서버에 연결하지 못했습니다" });
+    return;
+  }
+  if (!res.ok || !res.body) {
+    let message = "조사를 시작하지 못했습니다";
+    try {
+      const detail = (await res.json()).detail;
+      if (typeof detail === "string") message = detail;
+    } catch {}
+    onEvent({ type: "error", message });
+    return;
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let cut;
+    while ((cut = buffer.indexOf("\n\n")) >= 0) {
+      const event = parseEvent(buffer.slice(0, cut));
+      buffer = buffer.slice(cut + 2);
+      if (event) onEvent(event);
+    }
+  }
 }
 
 export interface ReconDay {

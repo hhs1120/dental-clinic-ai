@@ -338,7 +338,7 @@ def run(
         # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check run --split test(사람)
         result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
     if dev and _has_recon(conn):
-        # ⑧-1 규칙 기준선(평가 설계 §5) — 과금 없음. test 묶음은 3단계에서 에이전트와 짝 비교로
+        # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
@@ -722,23 +722,53 @@ _RECON_GROUP = {"rule": "규칙으로 되는 원인", "ambiguous": "애매한 �
 
 def _render_recon(r: dict) -> list[str]:
     out = [
-        "## ⑧-1 규칙 기준선",
+        "## ⑧-1 원인 정확도 — 규칙 기준선 vs 조사 에이전트",
         "",
-        f"불일치 정답 {r['n']}건 · 탐지 {_kn(r['detected'])}",
+        f"불일치 정답 {r['n']}건 · 탐지 {_kn(r['detected'])} · 에이전트 프롬프트 {r['prompt_version']}",
         "",
-        "| 묶음 | 원인 정확도(top-1) |",
-        "|---|---|",
-        f"| 전체 | {_kn(r['rule'])} |",
+        "| 묶음 | 규칙(top-1) | 에이전트(top-1) |",
+        "|---|---|---|",
+        f"| 전체 | {_kn(r['rule'])} | {_kn(r['agent'])} |",
     ]
-    out += [f"| {_RECON_GROUP.get(g, g)} | {_kn(kn)} |" for g, kn in r["by_group"].items()]
-    out.append("")
+    out += [
+        f"| {_RECON_GROUP.get(g, g)} | {_kn(kn)} | {_kn(r['agent_by_group'][g])} |"
+        for g, kn in r["by_group"].items()
+    ]
+    p = r["pair"]
+    out += [
+        "",
+        f"짝 비교: 구제(규칙 틀림 → 에이전트 맞음) {p['rescued']} · 손실 {p['lost']}"
+        f" · 둘 다 맞음 {p['both']} · 둘 다 틀림 {p['neither']}",
+        f"기권(unknown) {_kn(r['abstain'])} · 조사 단계 수 평균 {r['steps_mean']}",
+        "자동 마감 오류(조건을 넘은 건 중 틀림): "
+        + " · ".join(f"{_RECON_GROUP.get(g, g)} {_kn(kn)}" for g, kn in r["auto"].items()),
+        "",
+    ]
+    if r["missing"]:
+        out += [
+            f"주의: 지금 버전 조사 실행이 없는 정답 {r['missing']}건(오답으로 셈) — make recon",
+            "",
+        ]
+    if r["steps_hist"]:
+        out += [
+            "단계 수 분포: " + " · ".join(f"{k}단계 {v}건" for k, v in r["steps_hist"].items()),
+            "",
+        ]
     if r["by_cause"] is not None:
-        out += ["| 원인 | 맞음 |", "|---|---|"]
+        out += ["| 원인 | 규칙 맞음 |", "|---|---|"]
         out += [f"| {c} | {_kn(kn)} |" for c, kn in r["by_cause"].items()]
         out.append("")
     if r["wrong"]:
-        out += ["틀린 건(dev):", ""]
+        out += ["규칙이 틀린 건(dev):", ""]
         out += [f"- {w['date']} 정답 {w['cause']} · 규칙 {w['rule_cause']}" for w in r["wrong"]]
+        out.append("")
+    if r["pair_rows"]:
+        out += ["에이전트 짝 비교 건(dev, 둘 다 맞음 제외):", ""]
+        out += [
+            f"- {x['date']} 정답 {x['cause']} · 규칙 {x['rule_cause']} · 에이전트 {x['agent_cause']}"
+            f" ({x['pair']})"
+            for x in r["pair_rows"]
+        ]
         out.append("")
     return out
 
