@@ -66,6 +66,7 @@ def test_get_today_shape(client):
         "autoclose_on",
         "auto_total",
         "auto_recent",
+        "recon_auto",
         "prep",
         "classify_failed",
         "followup_failed",

@@ -19,7 +19,7 @@ from backend import db, prompts, recon_match, recon_tools
 from backend.harness import rounds
 from backend.harness.hooks import Rule
 from backend.harness.loop import AgentSpec, Runner
-from backend.harness.store import RunLocked, RunStore, SqliteLlmLog
+from backend.harness.store import RunLocked, RunStore, SqliteLlmLog, parse_step
 from backend.harness.tools import Tool, ToolRegistry
 from shared.clinic import load_clinic
 from shared.llm import Gateway, load_config
@@ -133,11 +133,8 @@ def _latest(conn: sqlite3.Connection, key: str):
     ).fetchone()
 
 
-def result(conn: sqlite3.Connection, key: str) -> dict | None:
-    """그 건의 지금 버전 최신 실행 요약 — 제출이 없으면 unknown(상한·비용·글로 끝남), 도는 중이면 cause None"""
-    run = _latest(conn, key)
-    if run is None:
-        return None
+def _summary(run, steps: list[dict]) -> dict:
+    """실행 하나 요약 — 제출이 없으면 unknown(상한·비용·글로 끝남), 도는 중이면 cause None"""
     out = {
         "run_id": run["id"],
         "status": run["status"],
@@ -150,13 +147,44 @@ def result(conn: sqlite3.Connection, key: str) -> dict | None:
     }
     if run["status"] == "running":
         return out
-    args = _submitted(RunStore(conn).steps(run["id"]))
+    args = _submitted(steps)
     if args is None:
         return out | {
             "cause": "unknown",
             "reason": _END_REASON.get(run["reason"], "원인을 내지 않음"),
         }
     return out | {k: args[k] for k in ("cause", "runner_up", "evidence", "reason")}
+
+
+def result(conn: sqlite3.Connection, key: str) -> dict | None:
+    """그 건의 지금 버전 최신 실행(done·handed_off·running) 요약 — 없으면 None"""
+    run = _latest(conn, key)
+    return None if run is None else _summary(run, RunStore(conn).steps(run["id"]))
+
+
+def results(conn: sqlite3.Connection, keys: set[str]) -> dict[str, dict]:
+    """result()와 조사 과정 줄(lines)을 여러 건에 — 쿼리 수가 건 수와 무관하다(일계표 화면)"""
+    latest = {}
+    for run in conn.execute(
+        "SELECT * FROM ax_agent_runs WHERE agent = ? AND prompt_version = ?"
+        " AND status IN ('done', 'handed_off', 'running') ORDER BY id",
+        (AGENT, PROMPT_VERSION),
+    ):
+        if run["target"] in keys:
+            latest[run["target"]] = run
+    steps: dict[int, list[dict]] = {r["id"]: [] for r in latest.values()}
+    for row in conn.execute(
+        "SELECT s.* FROM ax_agent_steps s JOIN ax_agent_runs r ON r.id = s.run_id"
+        " WHERE r.agent = ? AND r.prompt_version = ? ORDER BY s.run_id, s.seq",
+        (AGENT, PROMPT_VERSION),
+    ):
+        if row["run_id"] in steps:
+            steps[row["run_id"]].append(parse_step(row))
+    return {
+        k: _summary(run, steps[run["id"]])
+        | {"lines": lines(steps[run["id"]], finished=run["status"] != "running")}
+        for k, run in latest.items()
+    }
 
 
 def lines(steps: list[dict], finished: bool = True) -> list[dict]:

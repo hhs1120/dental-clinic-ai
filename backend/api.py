@@ -32,6 +32,9 @@ from backend import (
     missed,
     prep,
     recon,
+    recon_agent,
+    recon_auto,
+    recon_match,
     search_summary,
     today,
 )
@@ -208,6 +211,11 @@ class ChatBody(BaseModel):
 
 def get_chat_gateway():
     """연결 → 게이트웨이. 테스트가 가짜로 바꾼다"""
+    return make_gateway
+
+
+def get_recon_gateway():
+    """⑧-1 조사 에이전트 — 연결 → 게이트웨이. 테스트가 대본 게이트웨이로 바꾼다"""
     return make_gateway
 
 
@@ -758,6 +766,59 @@ def finance_recon_confirm(
         conn.close()
 
 
+def _recon_worker(paths, gateway, key: str, today: dt.date, events: queue.Queue) -> None:
+    """작업 스레드 — 자기 연결로 조사를 끝까지 돌린다. 스트림이 끊겨도 기록이 남게. 끝나면 자동 마감 다시 계산"""
+    conn = db.connect(*paths)
+    try:
+        agent = recon_agent.investigate(
+            conn,
+            gateway(conn),
+            key,
+            today,
+            on_line=lambda line: events.put({"type": "line", "line": line}),
+        )
+        recon_auto.refresh(conn, today)
+        conn.commit()
+        events.put({"type": "done", "agent": agent})
+    except Exception as e:  # 화면에는 짧게, 실행 기록은 하네스가 남긴다
+        events.put({"type": "error", "message": f"조사 중 오류: {type(e).__name__}"})
+    finally:
+        conn.close()
+        events.put(None)
+
+
+@app.post("/finance/recon/{key}/investigate")
+def finance_recon_investigate(
+    key: str,
+    paths: Paths,
+    clinic: ClinicDep,
+    gateway: Annotated[object, Depends(get_recon_gateway)],
+) -> StreamingResponse:
+    """불일치 건 조사(설계 §3) — 조사 과정 줄(line)·결과(done)·오류(error) SSE. 지금 탐지에 없는 건 400,
+    지금 버전으로 이미 조사했거나 조사 중이면 409(다시 조사하지 않는다)"""
+    conn = _open_rw(paths)
+    try:
+        keys = {i["key"] for i in recon_match.detect(recon_match.load(conn, clinic.today))}
+        if key not in keys:
+            raise HTTPException(400, f"불일치 건이 아님: {key}")
+        if r := recon_agent.result(conn, key):
+            raise HTTPException(
+                409, "조사 중인 건" if r["status"] == "running" else "이미 조사한 건"
+            )
+    finally:
+        conn.close()
+    events: queue.Queue = queue.Queue()
+    threading.Thread(
+        target=_recon_worker, args=(paths, gateway, key, clinic.today, events)
+    ).start()
+
+    def stream():
+        while (event := events.get()) is not None:
+            yield _sse(event)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
 @app.get("/finance/expenses")
 def finance_expenses(paths: Paths, clinic: ClinicDep, month: str | None = None) -> dict:
     """지출 증빙 — 그 달(없으면 가장 최근 달) 출금별 증빙·과목(backend/expense.py, 설계 §2). 모르는 달 400"""
@@ -816,6 +877,11 @@ def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
         conn.close()
 
 
+AUTO_KINDS = (
+    autoclose.KINDS | recon_auto.KINDS
+)  # 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감
+
+
 @app.post("/auto-actions/{action_id}/revert")
 def revert_auto(action_id: int, body: Part, paths: Paths, now: Now) -> dict:
     """자동 처리 되돌리기(앱 설계 §3b) — 앱 상태만 복원하고 해당 큐로 돌려보낸다"""
@@ -824,9 +890,9 @@ def revert_auto(action_id: int, body: Part, paths: Paths, now: Now) -> dict:
         row = conn.execute(
             "SELECT kind FROM ax_auto_actions WHERE id = ?", (action_id,)
         ).fetchone()
-        if row is None or row["kind"] not in autoclose.KINDS:
+        if row is None or row["kind"] not in AUTO_KINDS:
             raise HTTPException(404, "자동 처리를 찾을 수 없습니다")
-        if not revert_auto_action(conn, autoclose.KINDS, action_id, body.part, clock=lambda: now):
+        if not revert_auto_action(conn, AUTO_KINDS, action_id, body.part, clock=lambda: now):
             raise HTTPException(409, "이미 되돌린 자동 처리입니다")
         conn.commit()
         return {"ok": True}

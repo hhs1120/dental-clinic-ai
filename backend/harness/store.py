@@ -28,6 +28,15 @@ def _dump(value) -> str | None:
     return None if value is None else json.dumps(value, ensure_ascii=False, default=str)
 
 
+def parse_step(row) -> dict:
+    """ax_agent_steps 행 → JSON 칸을 푼 dict"""
+    step = dict(row)
+    for name in JSON_FIELDS:
+        if step[name] is not None:
+            step[name] = json.loads(step[name])
+    return step
+
+
 class RunStore:
     lock_ttl = 600  # 초 — 하트비트가 이만큼 끊기면 잠금 만료. 호출 최악 시간보다 길어야 한다(harness/llm.py)
 
@@ -92,14 +101,7 @@ class RunStore:
         rows = self.conn.execute(
             "SELECT * FROM ax_agent_steps WHERE run_id = ? ORDER BY seq", (run_id,)
         ).fetchall()
-        out = []
-        for row in rows:
-            step = dict(row)
-            for name in JSON_FIELDS:
-                if step[name] is not None:
-                    step[name] = json.loads(step[name])
-            out.append(step)
-        return out
+        return [parse_step(row) for row in rows]
 
     def add_usage(
         self, run_id: int, owner: str, model_calls=0, tool_calls=0, cost_usd=0.0

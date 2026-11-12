@@ -85,3 +85,21 @@ def test_auto_ignores_stale_keys(conn):
     on(conn)
     recon_auto.refresh(conn, DAY)
     assert recon_auto.active(conn, {"other"}) == {}
+
+
+def test_today_recon_auto_list(conn):
+    from backend import today
+
+    assert today._recon_auto(conn, DAY) == {"on": False, "total": 0, "recent": []}
+    investigated(conn)
+    on(conn)
+    recon_auto.refresh(conn, DAY)
+    r = today._recon_auto(conn, DAY)
+    assert r["on"] and r["total"] == 1
+    assert r["recent"][0]["key"] == key(conn) and r["recent"][0]["cause"] == "fee_mismatch"
+
+
+def test_revert_endpoint_accepts_recon_auto():
+    from backend import api
+
+    assert {recon_auto.KIND, autoclose.KIND} <= set(api.AUTO_KINDS)

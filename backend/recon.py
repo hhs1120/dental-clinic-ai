@@ -11,7 +11,7 @@ from collections import defaultdict
 from datetime import date
 from itertools import combinations_with_replacement
 
-from backend import recon_auto, recon_match
+from backend import recon_agent, recon_auto, recon_match
 
 
 def _oral_sums(prices: dict) -> set[int]:
@@ -150,7 +150,15 @@ def _rows(books: dict) -> tuple[dict, dict]:
     return pays, fin
 
 
-def _view(item: dict, books: dict, pays: dict, fin: dict, conf: dict) -> dict:
+def _view(
+    item: dict,
+    books: dict,
+    pays: dict,
+    fin: dict,
+    conf: dict,
+    agent: dict | None,
+    auto: dict | None,
+) -> dict:
     out = {k: v for k, v in item.items() if k != "parts"}
     # 정산 행에는 받은 값과 기대값(코드가 계산한 수수료·예상 입금일)을 함께 — 직원이 "얼마여야 했나"를 본다
     detail = {
@@ -175,6 +183,8 @@ def _view(item: dict, books: dict, pays: dict, fin: dict, conf: dict) -> dict:
         "ledger_rows": [pays[i] for i in item["payment_ids"]],
         "fin_rows": rows,
         "confirmation": conf.get(item["key"]),
+        "agent": agent,
+        "auto": auto,
     }
 
 
@@ -215,6 +225,9 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
     cash_pending = {
         d for days in period.values() if any(status[x] == "pending" for x in days) for d in days
     }
+    keys = {i["key"] for i in found}
+    closed = recon_auto.active(conn, keys)  # 자동 마감은 확정 안 된 건에서 뺀다
+    agents = recon_agent.results(conn, keys)
     by_day: dict[str, list[dict]] = defaultdict(list)
     for i in found:
         by_day[i["date"]].append(i)
@@ -257,13 +270,13 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
                     "fin": transfer[k],
                     "diff": led[(k, "transfer")] - transfer[k],
                 },
-                "items": [_view(i, books, pays, fin, conf) for i in by_day[k]],
+                "items": [
+                    _view(i, books, pays, fin, conf, agents.get(i["key"]), closed.get(i["key"]))
+                    for i in by_day[k]
+                ],
             }
         )
     in_month = [i for i in found if i["date"].startswith(month or "")]
-    closed = recon_auto.active(
-        conn, {i["key"] for i in found}
-    )  # 자동 마감은 확정 안 된 건에서 뺀다
     done = conf.keys() | closed.keys()
     return {
         "months": months,
@@ -280,17 +293,24 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
 
 
 def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, today: date) -> None:
-    """사람 확정 — 지금 탐지에 있는 건 키·원인 9개 중 하나, 아니면 ValueError. 덮어씀, 커밋은 부르는 쪽"""
+    """사람 확정 — 지금 탐지에 있는 건 키·원인 9개 중 하나, 아니면 ValueError. 덮어씀, 커밋은 부르는 쪽.
+    그때 보이던 제안의 출처를 남긴다 — 지금 버전 조사 결과가 있으면 에이전트 1순위(unknown 포함), 없으면 규칙"""
     books = recon_match.load(conn, today)
     item = next((i for i in recon_match.detect(books) if i["key"] == key), None)
     if item is None:
         raise ValueError(f"불일치 건이 아님: {key}")
     if cause not in books["mv"]["recon_causes"]:
         raise ValueError(f"모르는 원인: {cause}")
+    agent = recon_agent.result(conn, key)
+    proposal = (
+        ("agent", agent["cause"])
+        if agent and agent["cause"] is not None
+        else ("rule", rule_cause(item, books))
+    )
     conn.execute(
         "INSERT INTO ax_recon_confirmations (item_key, occurred_on, fin_ids, payment_ids,"
         " proposed_by, proposed_cause, cause, judged_by, judged_at)"
-        " VALUES (?, ?, ?, ?, 'rule', ?, ?, ?, ?) ON CONFLICT(item_key) DO UPDATE SET"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(item_key) DO UPDATE SET"
         " cause = excluded.cause, proposed_by = excluded.proposed_by,"
         " proposed_cause = excluded.proposed_cause, judged_by = excluded.judged_by,"
         " judged_at = excluded.judged_at",
@@ -299,7 +319,7 @@ def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, to
             item["date"],
             json.dumps(item["fin"]),
             json.dumps(item["payment_ids"]),
-            rule_cause(item, books),
+            *proposal,
             cause,
             by,
             at,
