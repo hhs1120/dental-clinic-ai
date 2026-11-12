@@ -27,9 +27,8 @@ TABLES = {  # 출금 표 → (시각, 적요·가맹점명) 칸 — 통장은 �
 DOC_COLS = "id, kind, issuer, issued_on, amount, body"
 
 DOC_WINDOW = (-3, 14)  # 증빙일이 출금 3일 뒤 ~ 14일 전 (출금일 − 증빙일, 일)
-AUTO_KIND = (
-    "expense_autoconfirm"  # 자동 확정 종류(backend/expense_auto.py) — 확정 제한이 함께 읽는다
-)
+# 자동 확정 종류(backend/expense_auto.py) — 확정 제한이 함께 읽는다. 사람 확정이 그 자동 확정을 되돌릴 때 남기는 이
+AUTO_KIND, HUMAN_REVERT = "expense_autoconfirm", "사람이 바꿈"
 
 
 def outflow_key(o: dict) -> str:
@@ -236,7 +235,7 @@ def confirm(
     today: date,
 ) -> None:
     """사람 확정 — 없는 출금·모르는 과목·후보 밖 증빙 id·기준일 이후 출금·다른 출금에 이미 확정된 증빙은
-    ValueError(설계 §4 확정 제한). 덮어씀, 커밋은 부르는 쪽"""
+    ValueError(설계 §4 확정 제한). 덮어씀, 그 출금의 살아 있는 자동 확정은 되돌린다. 커밋은 부르는 쪽"""
     data = _load(conn, None)
     o = _outflow(data, table, outflow_id)
     if o["at"] >= today.isoformat():
@@ -258,6 +257,11 @@ def confirm(
         " document_ids = excluded.document_ids, account = excluded.account,"
         " judged_by = excluded.judged_by, judged_at = excluded.judged_at",
         (table, outflow_id, o["label"], json.dumps(sorted(set(document_ids))), account, by, at),
+    )
+    conn.execute(
+        "UPDATE ax_auto_actions SET reverted_by = ?, reverted_at = ?"
+        " WHERE kind = ? AND target = ? AND reverted_at IS NULL",
+        (HUMAN_REVERT, at, AUTO_KIND, outflow_key(o)),
     )
 
 

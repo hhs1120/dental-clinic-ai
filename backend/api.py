@@ -27,6 +27,7 @@ from backend import (
     documents,
     emr,
     expense,
+    expense_auto,
     judge_queue,
     metrics,
     missed,
@@ -891,9 +892,8 @@ def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
         conn.close()
 
 
-AUTO_KINDS = (
-    autoclose.KINDS | recon_auto.KINDS
-)  # 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감
+# 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감·⑧-2 지출 증빙 자동 확정
+AUTO_KINDS = autoclose.KINDS | recon_auto.KINDS | expense_auto.KINDS
 
 
 @app.post("/auto-actions/{action_id}/revert")

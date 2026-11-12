@@ -238,7 +238,11 @@ def run_batch(
         min_batch=rounds.ROUND_BATCH_MIN if batch else len(ids) + 1,
         poll_seconds=poll_seconds,
     )
+    from backend import expense_auto  # expense_auto가 results()를 읽으므로 순환을 피해 여기서
+
     counts: dict = {"cost_usd": 0.0}
+    counts["auto"] = expense_auto.refresh(conn, today)  # 정책 꺼짐이면 아무것도 안 함
+    conn.commit()
     for rid in ids:
         run = store.run(rid)
         counts[run["status"]] = counts.get(run["status"], 0) + 1
