@@ -44,8 +44,8 @@ const LINE_BADGE: Record<
   conclusion: { label: "결론", variant: "ok" },
 };
 
-/** 조사 과정 줄 하나 — 생각(머리말 없는 글)은 배지 없이 흐리게 */
-function Line({ line }: { line: ReconLine }) {
+/** 조사 과정 줄 하나 — 생각(머리말 없는 글)은 배지 없이 흐리게. ⑧-2 AI 칸도 쓴다(결론 줄에 원인이 없으면 글만) */
+export function Line({ line }: { line: ReconLine }) {
   if (line.kind === "note")
     return <li className="text-sm text-muted-foreground">{line.text}</li>;
   if (line.kind === "lookup")
@@ -62,7 +62,7 @@ function Line({ line }: { line: ReconLine }) {
     <li className="flex gap-2 text-sm">
       <Badge variant={b.variant}>{b.label}</Badge>
       <span>
-        {line.kind === "conclusion" && (
+        {line.kind === "conclusion" && line.cause && (
           <b>
             {agentCauseLabel(line.cause)}
             {line.evidence?.length

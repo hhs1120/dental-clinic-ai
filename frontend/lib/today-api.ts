@@ -87,6 +87,19 @@ export interface TodaySheet {
         at: string;
       }[];
     };
+    /** 지출 증빙 자동 확정(backend/today.py _expense_auto) — 정책 꺼짐이면 on false */
+    expense_auto: {
+      on: boolean;
+      total: number;
+      recent: {
+        id: number;
+        key: string;
+        at: string;
+        label: string;
+        amount: number;
+        account: string;
+      }[];
+    };
     prep: { rows: number; suggest: number; failed: number };
     classify_failed: number;
     followup_failed: number;

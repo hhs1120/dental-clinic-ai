@@ -264,9 +264,36 @@ export const DOC_KIND_LABEL: Record<string, string> = {
 /** 계정 과목이 어디서 왔나 — 이 출금의 확정 / 같은 출금처의 지난 확정 / 거래처 기본 과목 */
 export const ACCOUNT_FROM_LABEL: Record<string, string> = {
   confirmed: "확정",
+  auto: "자동 확정",
   memory: "지난 확정",
   vendor: "거래처 기본",
 };
+
+/** AI 확신도(backend/expense_agent.py SubmitArgs confidence) */
+export const CONFIDENCE_LABEL: Record<ExpenseAgent["confidence"], string> = {
+  high: "확신 높음",
+  mid: "확신 중간",
+  low: "확신 낮음",
+};
+
+/** 근거 글머리 하나 — 글과 근거 조회 번호 */
+export interface ExpenseReason {
+  text: string;
+  lookups: number[];
+}
+
+/** 지금 프롬프트 버전 증빙 탐색 결과(backend/expense_agent.py results, 설계 §4). 제출 없이 끝났으면 account null */
+export interface ExpenseAgent {
+  document_ids: number[] | null;
+  docs: ExpenseDoc[];
+  account: string | null;
+  confidence: "high" | "mid" | "low";
+  reasons: ExpenseReason[];
+  /** 직원이 볼 것 — 없으면 null */
+  see: string | null;
+  status: "done" | "handed_off" | "running";
+  lines: ReconLine[];
+}
 
 export interface ExpenseDoc {
   id: number;
@@ -291,12 +318,20 @@ export interface ExpenseRow {
   /** 출금액 − 증빙 합(증빙 없으면 null) */
   diff: number | null;
   account: string | null;
-  account_from: "confirmed" | "memory" | "vendor" | null;
+  account_from: "confirmed" | "auto" | "memory" | "vendor" | null;
   /** 품목으로 과목이 정해지는 거래처(쇼핑몰) — 사람 확정을 기본값으로 기억하지 않는다 */
   by_item: boolean;
   /** 과목 확인 필요(확정 전) — 과목이 비었거나 품목으로 정하는 거래처 */
   check: boolean;
   confirmed: { by: string; at: string } | null;
+  /** 출금 키(backend/expense.py outflow_key) */
+  key: string;
+  /** AI 결과 — 조사 전이면 null */
+  agent: ExpenseAgent | null;
+  /** 규칙과 같음(증빙 집합·과목) — AI 결과가 없으면 null */
+  agree: boolean | null;
+  /** 되돌리지 않은 자동 확정(backend/expense_auto.py) */
+  auto: { id: number; at: string } | null;
 }
 
 export interface ExpenseSheet {
@@ -309,6 +344,8 @@ export interface ExpenseSheet {
     found: number;
     none: number;
     check: number;
+    /** 확정·자동 확정 안 된 줄 중 규칙과 다름 */
+    differ: number;
     open: number;
   };
   rows: ExpenseRow[];

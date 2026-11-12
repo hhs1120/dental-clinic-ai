@@ -31,6 +31,7 @@ const EMPTY = {
     auto_total: 0,
     auto_recent: [],
     recon_auto: { on: false, total: 0, recent: [] },
+    expense_auto: { on: false, total: 0, recent: [] },
     prep: { rows: 0, suggest: 0, failed: 0 },
     classify_failed: 0,
     followup_failed: 0,
@@ -121,6 +122,7 @@ const FULL = {
         },
       ],
     },
+    expense_auto: { on: false, total: 0, recent: [] },
     prep: { rows: 26, suggest: 12, failed: 1 },
     classify_failed: 0,
     followup_failed: 0,
@@ -378,4 +380,31 @@ test("일계표 자동 마감 — AI가 한 일 목록과 되돌리기", async (
   await expect(ai).toContainText("2026-11-05 · 수수료 차이");
   await ai.getByRole("button", { name: "되돌리기" }).click();
   await expect(ai).toContainText("자동으로 마감한 불일치 건이 없습니다");
+});
+
+const EXPENSE_AUTO = {
+  on: true,
+  total: 1,
+  recent: [
+    {
+      id: 3,
+      key: "dddddddddddd",
+      at: "2026-11-10 10:00:00",
+      label: "이음통신",
+      amount: 33000,
+      account: "통신비",
+    },
+  ],
+};
+
+test("지출 증빙 자동 확정 목록", async ({ page }) => {
+  await fakeToday(page, {
+    ...FULL,
+    ai: { ...FULL.ai, expense_auto: EXPENSE_AUTO },
+  });
+  await page.goto("/today");
+  const ai = page.getByRole("region", { name: "AI가 한 일" });
+  await expect(ai).toContainText("지출 증빙 자동 확정 1건");
+  await ai.getByRole("button", { name: "펼치기" }).click();
+  await expect(ai).toContainText("11/10 · 이음통신 · 33,000원 → 통신비");
 });

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ApiError, errorText, useFetch } from "@/lib/api";
 import { revertAuto, shortAt, useLabels } from "@/lib/calls-api";
+import { won } from "@/lib/format";
 import { CAUSE_LABEL } from "@/lib/finance-api";
 import { readPart } from "@/lib/part";
 import {
@@ -279,6 +280,9 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const summary = [
     ai.autoclose_on ? `자동 처리 ${ai.auto_total}건` : "자동 종결 꺼짐",
     ...(ai.recon_auto.on ? [`일계표 자동 마감 ${ai.recon_auto.total}건`] : []),
+    ...(ai.expense_auto.on
+      ? [`지출 증빙 자동 확정 ${ai.expense_auto.total}건`]
+      : []),
     `오늘 준비표 ${ai.prep.rows}행`,
     `실패 ${failed}`,
   ].join(" · ");
@@ -403,6 +407,43 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
                         <div className="text-xs text-muted-foreground">
                           규칙과 에이전트 원인이 같음 · 장부 수정 불필요 ·{" "}
                           {shortAt(x.at)}
+                        </div>
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy.has(x.id)}
+                        onClick={() => reopen(x.id)}
+                      >
+                        되돌리기
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {ai.expense_auto.on && (
+            <div className="flex flex-col gap-2">
+              <h3 className="font-bold">지출 증빙 자동 확정</h3>
+              {ai.expense_auto.recent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  자동으로 확정한 출금이 없습니다
+                </p>
+              ) : (
+                <ul className="flex flex-col divide-y">
+                  {ai.expense_auto.recent.map((x) => (
+                    <li key={x.id} className="flex items-center gap-3 py-2">
+                      <Link
+                        href={`/finance?tab=expense&month=${x.at.slice(0, 7)}`}
+                        className="min-w-0 flex-1 hover:underline"
+                      >
+                        <div className="font-medium">
+                          {x.at.slice(5, 7)}/{x.at.slice(8, 10)} · {x.label} ·{" "}
+                          {won(x.amount)} → {x.account}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          규칙과 AI 증빙·과목이 같음
                         </div>
                       </Link>
                       <Button

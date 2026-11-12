@@ -135,7 +135,7 @@ function LedgerTab({
   );
 }
 
-/** 칩 — 출금 전체(거름 없음)와 네 가지 거름(설계 §2) */
+/** 칩 — 출금 전체(거름 없음)와 다섯 가지 거름(설계 §2·§4) */
 const expenseChips = (s: ExpenseSheet) => [
   {
     key: null,
@@ -144,6 +144,7 @@ const expenseChips = (s: ExpenseSheet) => [
   { key: "found", text: `증빙 찾음 ${s.chips.found}` },
   { key: "none", text: `증빙 못 찾음 ${s.chips.none}` },
   { key: "check", text: `과목 확인 필요 ${s.chips.check}` },
+  { key: "differ", text: `규칙과 다름 ${s.chips.differ}` },
   { key: "open", text: `미확정 ${s.chips.open}` },
 ];
 
@@ -164,9 +165,9 @@ function ExpenseTab({
     attempt,
   );
   if (!sheet) return <Loading error={error} />;
-  const on = (["found", "none", "check", "open"] as string[]).includes(
-    chip ?? "",
-  )
+  const on = (
+    ["found", "none", "check", "differ", "open"] as string[]
+  ).includes(chip ?? "")
     ? (chip as ExpenseChip)
     : null;
   return (
