@@ -298,6 +298,20 @@ CREATE TABLE ax_claim_checks (
     created_at     TEXT NOT NULL
 );
 
+-- ⑤-2b 추가 처치 누락(backend/claim_omission.py) — 청구 줄 하나에 한 행, 칸은 ax_claim_checks와 같다. facts = LLM 입력
+-- (청구된 시술·치아·나이·차트 서술), result = AI 원답 {omissions[{procedure,tooth,quote}]} — 급여 거름은 읽을 때 코드가 한다.
+-- 후검증 실패면 NULL·valid 0
+CREATE TABLE ax_claim_omissions (
+    claim_id       INTEGER PRIMARY KEY,
+    facts          TEXT NOT NULL,
+    facts_hash     TEXT NOT NULL,
+    result         TEXT,
+    valid          INTEGER NOT NULL DEFAULT 0,
+    prompt_version TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
 -- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜)·⑤-2 AI 점검(kind 'claim_check'). 화면이 GET /jobs/{id}로 폴링
 CREATE TABLE ax_jobs (
     id          INTEGER PRIMARY KEY,
