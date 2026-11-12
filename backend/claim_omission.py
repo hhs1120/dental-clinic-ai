@@ -33,7 +33,7 @@ def schema(names: list[str]) -> dict:
                     "type": "object",
                     "properties": {
                         "procedure": {"type": "string", "enum": names},
-                        "tooth": {"type": ["string", "null"]},
+                        "tooth": {"anyOf": [{"type": "string"}, {"type": "null"}]},
                         "quote": {"type": "string"},
                     },
                     "required": ["procedure", "tooth", "quote"],

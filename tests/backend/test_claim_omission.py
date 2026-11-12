@@ -207,3 +207,10 @@ def test_todo_ids_app_only(src):
     assert co.todo_ids(conn, DAY, MODEL) == {pend}
     build(conn, FakeGw(), scope="app")
     assert co.todo_ids(conn, DAY, MODEL) == set()
+
+
+def test_schema_accepted_by_sdk():
+    """SDK 구조화 출력 변환이 받는 꼴 — type 목록(["string","null"])은 받지 않아 anyOf로"""
+    from anthropic.lib._parse._transform import transform_schema
+
+    transform_schema(co.schema(["아말감/GI"]))
