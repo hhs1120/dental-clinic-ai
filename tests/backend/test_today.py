@@ -321,3 +321,20 @@ def test_today_recon_zero(tmp_path):
     b.cash_in(b.settle("2026-11-03"))
     people = _sheet(b.app())["people"]
     assert (people["recon_open"], people["recon_month"]) == (0, None)
+
+
+def test_today_expense_line_matches_screen(tmp_path):
+    """지출 증빙 확인 = 지난달 증빙 없음·과목 확인 필요이면서 확정 안 된 출금(backend/expense.py open_summary)"""
+    from backend import expense
+    from tests.backend.test_expense import Outflows
+
+    o = Outflows(tmp_path / "source.sqlite")
+    oid = o.card("2026-11-05 12:00:00", "솔밭식당", 50_000)  # 영수증 없음
+    conn = o.app()
+    people = _sheet(conn)["people"]
+    assert people["expense_open"] == expense.open_summary(conn, TODAY)["count"] == 1
+    assert people["expense_month"] == "2026-11"
+    expense.confirm(conn, "fin_card_expenses", oid, [], "복리후생비", "데스크", "2026-12-01 09:00")
+    conn.commit()
+    people = _sheet(conn)["people"]
+    assert (people["expense_open"], people["expense_month"]) == (0, None)
