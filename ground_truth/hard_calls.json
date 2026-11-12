@@ -3,1500 +3,1500 @@
   "call_uid": "hc-0001",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0002",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0003",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0004",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0005",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0006",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "human"
  },
  {
   "call_uid": "hc-0007",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0008",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0009",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0010",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0011",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0012",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0013",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0014",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0015",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0016",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0017",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0018",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0019",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0020",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0021",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0022",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0023",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0024",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0025",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0026",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0027",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0028",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0029",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0030",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0031",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0032",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0033",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0034",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0035",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0036",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0037",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0038",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0039",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0040",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0041",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0042",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0043",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0044",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0045",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0046",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0047",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0048",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0049",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0050",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0051",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0052",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0053",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0054",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0055",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0056",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0057",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0058",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0059",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0060",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0061",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0062",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0063",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0064",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0065",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0066",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0067",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0068",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0069",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0070",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0071",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0072",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0073",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0074",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0075",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0076",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0077",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0078",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0079",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0080",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0081",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0082",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0083",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0084",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0085",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0086",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0087",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0088",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0089",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0090",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0091",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0092",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0093",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0094",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0095",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0096",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0097",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0098",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0099",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0100",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0101",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0102",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0103",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0104",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0105",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0106",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0107",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0108",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0109",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0110",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0111",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0112",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0113",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0114",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0115",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0116",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0117",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0118",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0119",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0120",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0121",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0122",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0123",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0124",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0125",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0126",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0127",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0128",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0129",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0130",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0131",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0132",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0133",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0134",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0135",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0136",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0137",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0138",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0139",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0140",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0141",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0142",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0143",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0144",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0145",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0146",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0147",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0148",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0149",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0150",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0151",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0152",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0153",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0154",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0155",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0156",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0157",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0158",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0159",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0160",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0161",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0162",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0163",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0164",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0165",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0166",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0167",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0168",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0169",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0170",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0171",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0172",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0173",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0174",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0175",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0176",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0177",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0178",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0179",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0180",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0181",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0182",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0183",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0184",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0185",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0186",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0187",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0188",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0189",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0190",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0191",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0192",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0193",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0194",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0195",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "human"
  },
  {
   "call_uid": "hc-0196",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0197",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0198",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0199",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0200",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0201",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0202",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0203",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0204",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0205",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0206",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0207",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0208",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0209",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0210",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0211",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0212",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0213",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0214",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0215",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0216",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0217",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0218",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0219",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0220",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0221",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0222",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0223",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0224",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0225",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0226",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0227",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0228",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0229",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0230",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0231",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0232",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0233",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0234",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0235",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0236",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0237",
   "hard_type": "urgency_inverted",
   "half": "pain_not_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0238",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0239",
   "hard_type": "reversal",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0240",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0241",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0242",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0243",
   "hard_type": "indirect",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0244",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0245",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0246",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0247",
   "hard_type": "misleading_noise",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0248",
   "hard_type": "urgency_inverted",
   "half": "calm_urgent",
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0249",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  },
  {
   "call_uid": "hc-0250",
   "hard_type": "outbound_real",
   "half": null,
-  "label_source": "generated"
+  "label_source": "agreed"
  }
 ]

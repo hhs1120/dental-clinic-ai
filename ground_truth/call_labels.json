@@ -73060,9 +73060,9 @@
  },
  {
   "call_uid": "hc-0006",
-  "primary_purpose": "treatment_q",
+  "primary_purpose": "recall_q",
   "accepted_purposes": [
-   "treatment_q"
+   "recall_q"
   ],
   "counterpart": "patient",
   "urgency": "normal",

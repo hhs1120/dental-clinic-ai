@@ -1,0 +1,4527 @@
+[
+ {
+  "call_uid": "hc-0001",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0002",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0003",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0004",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0005",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0006",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "human"
+ },
+ {
+  "call_uid": "hc-0007",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0008",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0009",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0010",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0011",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0012",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0013",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0014",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0015",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0016",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0017",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0018",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0019",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0020",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0021",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0022",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0023",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0024",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0025",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0026",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0027",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0028",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0029",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0030",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0031",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0032",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0033",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0034",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0035",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0036",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0037",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0038",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0039",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0040",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0041",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0042",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0043",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0044",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0045",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0046",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0047",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0048",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0049",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0050",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0051",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0052",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0053",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0054",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0055",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0056",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0057",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "guardian",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0058",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0059",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0060",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0061",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0062",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0063",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0064",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0065",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0066",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0067",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0068",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "vendor",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0069",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0070",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0071",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0072",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0073",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0074",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0075",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0076",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0077",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0078",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0079",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0080",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0081",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0082",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0083",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0084",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0085",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0086",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0087",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0088",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0089",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0090",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0091",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0092",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0093",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0094",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0095",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0096",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0097",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0098",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0099",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0100",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0101",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0102",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0103",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0104",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "other",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0105",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0106",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0107",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0108",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0109",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0110",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0111",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0112",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0113",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0114",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0115",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0116",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0117",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0118",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0119",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0120",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0121",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0122",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0123",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0124",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0125",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0126",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0127",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0128",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0129",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0130",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0131",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0132",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0133",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0134",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0135",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0136",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0137",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0138",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0139",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0140",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0141",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0142",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0143",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0144",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0145",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0146",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0147",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0148",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0149",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0150",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0151",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0152",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0153",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0154",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0155",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0156",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0157",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0158",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0159",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0160",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0161",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0162",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0163",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0164",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0165",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0166",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0167",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0168",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0169",
+  "labels": {
+   "primary_purpose": "complaint",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 1,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "complaint"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0170",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0171",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0172",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0173",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0174",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0175",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0176",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0177",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0178",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0179",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0180",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0181",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0182",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0183",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0184",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0185",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0186",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "insurer",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0187",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0188",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0189",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0190",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0191",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0192",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0193",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0194",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0195",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "human"
+ },
+ {
+  "call_uid": "hc-0196",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0197",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0198",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0199",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "guardian",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0200",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0201",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0202",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0203",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0204",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0205",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0206",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0207",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0208",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0209",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0210",
+  "labels": {
+   "primary_purpose": "document_req",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "document_req"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0211",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0212",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0213",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0214",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0215",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0216",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0217",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0218",
+  "labels": {
+   "primary_purpose": "unknown",
+   "counterpart": "new_caller",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "unknown"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0219",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0220",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0221",
+  "labels": {
+   "primary_purpose": "cancel",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "cancel"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0222",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0223",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0224",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0225",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0226",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0227",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0228",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0229",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0230",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0231",
+  "labels": {
+   "primary_purpose": "insurance_q",
+   "counterpart": "patient",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "insurance_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0232",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0233",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0234",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0235",
+  "labels": {
+   "primary_purpose": "reschedule",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "reschedule"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0236",
+  "labels": {
+   "primary_purpose": "price_q",
+   "counterpart": "new_caller",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 1,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "price_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0237",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0238",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0239",
+  "labels": {
+   "primary_purpose": "billing_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "billing_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0240",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0241",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0242",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0243",
+  "labels": {
+   "primary_purpose": "other",
+   "counterpart": "vendor",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "other"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0244",
+  "labels": {
+   "primary_purpose": "treatment_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0245",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0246",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0247",
+  "labels": {
+   "primary_purpose": "book",
+   "counterpart": "guardian",
+   "urgency": "low",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 1,
+   "appt_confirmed": 1,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "book"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0248",
+  "labels": {
+   "primary_purpose": "emergency",
+   "counterpart": "patient",
+   "urgency": "urgent",
+   "emergency": 1,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 1,
+   "accepted_purposes": [
+    "emergency",
+    "treatment_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0249",
+  "labels": {
+   "primary_purpose": "recall_q",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "recall_q"
+   ]
+  },
+  "label_source": "agreed"
+ },
+ {
+  "call_uid": "hc-0250",
+  "labels": {
+   "primary_purpose": "confirm",
+   "counterpart": "patient",
+   "urgency": "normal",
+   "emergency": 0,
+   "complaint": 0,
+   "price_inquiry": 0,
+   "wants_appt": 0,
+   "appt_confirmed": 0,
+   "has_todo": 0,
+   "accepted_purposes": [
+    "confirm"
+   ]
+  },
+  "label_source": "agreed"
+ }
+]
