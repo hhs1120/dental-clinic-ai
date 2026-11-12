@@ -3,22 +3,39 @@
 따로 만든다 — 사례의 모양·청구 줄·정답은 코드가 정하고(case_specs) LLM(별칭 gen)은 차트 서술 한 단락만 쓰며, 코드 검사
 (check_note)를 통과한 문장만 남긴다. 원본 emr_*·truth_*는 그대로(데이터 고정). 정답이 붙은 입력이라 호출·실행 기록은
 evaluation/ 파일에만 쓴다(app.sqlite에 쓰지 않는다 — CLAUDE.md 절대 규칙).
-uv run --env-file .env python -m evaluation.claim_omission cases   (과금, 이어 돎 — make claim-omission-cases)"""
+채점은 항목 단위 — (시술 코드, 치아)가 정답과 같으면 맞음, 아니면 잘못 잡음, 짝 없는 정답은 놓침. 키워드 기준선(같은 문장에
+청구 치아가 아닌 치아 번호 + 시술 이름, 계획·부정은 가리지 않음)도 같은 급여 거름·같은 규칙.
+실데이터: dev는 누락 정답이 없는 줄에서 잘못 잡은 수만(누락 줄 23건은 dev에서 빼고 test 전용), test는 사람.
+uv run --env-file .env python -m evaluation.claim_omission cases           (과금, 이어 돎 — make claim-omission-cases)
+uv run --env-file .env python -m evaluation.claim_omission synth --split dev (과금, 이어 돎 — make claim-omission-synth)
+uv run python -m evaluation.claim_omission real --split test                (사람, 과금 없음 — 저장된 make claim-omission SCOPE=all 결과)"""
 
 import argparse
 import hashlib
 import json
 import random
 import re
+from datetime import datetime
 from pathlib import Path
 
 import yaml
 
-from generator.master import CHART_FORBIDDEN_WORDS, PROCEDURE_ALIASES, PROCEDURES
+from backend import claim_omission as co
+from backend.prep import master_values
+from evaluation.claim_check import claim_split
+from generator.master import (
+    AGE_GROUP_RANGE,
+    CHART_FORBIDDEN_WORDS,
+    PROCEDURE_ALIASES,
+    PROCEDURES,
+)
 from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ROOT / "evaluation" / "claim_omission_cases.jsonl"
+RUNS = (
+    ROOT / "evaluation" / "claim_omission_runs.jsonl"
+)  # 합성 사례 점검 기록(app.sqlite에 쓰지 않음)
 LLM_LOG = ROOT / "evaluation" / "claim_omission_llm.jsonl"  # ax_llm_calls에 쓰지 않는다
 WRITE_ALIAS, WRITE_TASK = "gen", "claim-omission-case"
 WRITE_ATTEMPTS = 3
@@ -241,13 +258,296 @@ def load_cases(path: Path = CASES, *, specs: list[dict] | None = None) -> list[d
     ]
 
 
+# ── 채점 ──────────────────────────────────────────────────────────
+
+
+class AlreadyRun(Exception):
+    pass
+
+
+def match(pred: list[tuple], truth: list[tuple]) -> dict:
+    """항목 단위 — 같은 (시술 코드, 치아)는 맞음, 남은 예측은 잘못 잡음, 남은 정답은 놓침"""
+    p, t = set(pred), set(truth)
+    return {"tp": len(p & t), "fp": len(p - t), "fn": len(t - p)}
+
+
+def _pr(counts: list[dict]) -> dict:
+    tp, fp, fn = (sum(c[k] for c in counts) for k in ("tp", "fp", "fn"))
+    return {
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "precision": tp / (tp + fp) if tp + fp else None,
+        "recall": tp / (tp + fn) if tp + fn else None,
+    }
+
+
+_TOOTH_NO = re.compile(r"(\d{2})번")
+
+
+def keyword_items(
+    note: str, claimed_code: str, claimed_tooth, age: int, index: dict, age_range: dict
+) -> list[tuple]:
+    """키워드 기준선(평가 설계 §1 원칙 8) — 문장마다 청구 치아가 아닌 'NN번'과 시술 이름·별칭이 같이 있으면 (코드, 치아),
+    그 뒤 AI와 같은 급여 거름(backend.claim_omission.insured_items). 계획·부정·다른 병원은 가리지 않는다"""
+    items = []
+    for sent in _sentences(note):
+        names = [n for n in index if n in sent]
+        for tooth in _TOOTH_NO.findall(sent):
+            if tooth == claimed_tooth:
+                continue
+            items += [{"procedure": n, "tooth": tooth, "quote": sent} for n in names]
+    facts = {"tooth": claimed_tooth, "age": age}
+    got = co.insured_items(items, claimed_code, facts, index, age_range)
+    return [(x["procedure_code"], x["tooth"]) for x in got]
+
+
+def _index_and_ages(conn=None) -> tuple[dict, dict]:
+    """시술 표·나이 범위 — 합성 사례는 생성기 상수, 실데이터는 앱이 읽는 source"""
+    if conn is None:
+        return co.procedure_index(PROCEDURES), {k: list(v) for k, v in AGE_GROUP_RANGE.items()}
+    rows = [dict(r) for r in conn.execute("SELECT * FROM source.emr_procedures")]
+    return co.procedure_index(rows), master_values(conn)["age_group_range"]
+
+
+def _facts(c: dict) -> dict:
+    tooth = c["claimed"]["tooth"]
+    return {
+        "procedure": c["claimed"]["procedure"],
+        "tooth": None if tooth == "00" else tooth,
+        "age": c["claimed"]["age"],
+        "note": c["note"],
+    }
+
+
+def _note_hash(note: str) -> str:
+    return hashlib.sha256(note.encode()).hexdigest()[:16]
+
+
+def run_synth(gw, split: str, cases: list[dict], path: Path = RUNS) -> dict:
+    """그 분할의 합성 사례를 앱과 같은 요청·후검증·한 번 더로 점검해 path에 덧붙인다. (사례, 문장, 프롬프트 버전, 모델)이
+    같은 기록이 있으면 다시 부르지 않는다"""
+    model = gw.config["aliases"][co.ALIAS][0]
+    have = {(r["id"], r["note_hash"], r["prompt_version"], r["model"]) for r in _read(path)}
+    names = [p["name"] for p in PROCEDURES]
+    out = {"called": 0, "skipped": 0, "failed": 0}
+    for c in cases:
+        if split_of(c["id"]) != split:
+            continue
+        h = _note_hash(c["note"])
+        if (c["id"], h, co.PROMPT_VERSION, model) in have:
+            out["skipped"] += 1
+            continue
+        facts = _facts(c)
+
+        def ask():
+            return gw.complete(
+                co.ALIAS,
+                task=co.TASK,
+                prompt_version=co.PROMPT_VERSION,
+                **co._request(facts, names),  # noqa: B023 — 같은 반복 안에서만 부른다
+            )
+
+        used = ask()
+        got = co._valid(used, facts)
+        if got is None:
+            used = ask()
+            got = co._valid(used, facts)
+        out["called"] += 1
+        out["failed"] += got is None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "id": c["id"],
+                        "note_hash": h,
+                        "prompt_version": co.PROMPT_VERSION,
+                        "model": used.model if used else model,
+                        "result": got,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    return out
+
+
+def score_synth(cases: list[dict], runs: list[dict], split: str) -> dict:
+    """합성 사례 채점 — 지금 프롬프트 버전의 마지막 기록, 후검증 실패는 빈 답(앱에서 아무 표시 없음)"""
+    index, ages = _index_and_ages()
+    last = {(r["id"], r["note_hash"]): r for r in runs if r["prompt_version"] == co.PROMPT_VERSION}
+    ai, kw, by_shape = [], [], {}
+    failed = missing = 0
+    for c in cases:
+        if split_of(c["id"]) != split:
+            continue
+        r = last.get((c["id"], _note_hash(c["note"])))
+        missing += r is None
+        failed += r is not None and r["result"] is None
+        claimed = c["claimed"]
+        facts = _facts(c)
+        pred = []
+        if r and r["result"]:
+            got = co.insured_items(
+                r["result"]["omissions"], claimed["procedure_code"], facts, index, ages
+            )
+            pred = [(x["procedure_code"], x["tooth"]) for x in got]
+        truth = [tuple(t) for t in c["truth"]]
+        a = match(pred, truth)
+        k = match(
+            keyword_items(
+                c["note"], claimed["procedure_code"], facts["tooth"], claimed["age"], index, ages
+            ),
+            truth,
+        )
+        ai.append(a)
+        kw.append(k)
+        s = by_shape.setdefault(c["shape"], {"n": 0, "ai_ok": 0, "keyword_ok": 0})
+        s["n"] += 1
+        s["ai_ok"] += a["fp"] == a["fn"] == 0
+        s["keyword_ok"] += k["fp"] == k["fn"] == 0
+    return {
+        "n": len(ai),
+        "failed": failed,
+        "missing": missing,
+        "ai": _pr(ai),
+        "keyword": _pr(kw),
+        "by_shape": by_shape,
+    }
+
+
+def score_real(conn, split: str) -> dict:
+    """실데이터 채점 — 지금 버전으로 점검한 제출·대기 줄. 누락 정답 줄은 test에서만 센다(분할과 무관, 설계 §2b).
+    dev: 정상 줄에서 잘못 잡은 줄·항목 수(AI·키워드). test: 그에 더해 정답 줄 중 맞힌 수와 항목 단위 정밀도·재현율.
+    conn은 앱 DB에 source·truth를 붙인 연결"""
+    index, ages = _index_and_ages(conn)
+    truth: dict[int, list[tuple]] = {}
+    for cid, code, tooth in conn.execute(
+        "SELECT c.id, e.extra_procedure_code, e.extra_tooth_no FROM truth.truth_claim_errors e"
+        " JOIN source.emr_claims c ON c.treatment_id = e.treatment_id"
+        " WHERE e.kind = 'omitted_extra'"
+    ):
+        truth.setdefault(cid, []).append((code, tooth))
+    rows = co.targets(conn, None, scope="all")  # today는 쓰지 않는다
+    saved = co.results(conn, [r["claim_id"] for r in rows])
+    ai, kw = [], []
+    normal = ai_fp_lines = ai_fp_items = kw_fp_lines = failed = missing = found = n_hits = 0
+    for r in rows:
+        positive = r["claim_id"] in truth
+        if positive and split != "test":
+            continue
+        if not positive and claim_split(r["claim_id"]) != split:
+            continue
+        got = saved.get(r["claim_id"])
+        if got is None or got["prompt_version"] != co.PROMPT_VERSION:
+            missing += 1
+            continue
+        failed += not got["valid"]
+        pred = [(x["procedure_code"], x["tooth"]) for x in got["omissions"] or []]
+        tooth = None if r["tooth_no"] == "00" else r["tooth_no"]
+        key = keyword_items(r["note"] or "", r["procedure_code"], tooth, r["age"], index, ages)
+        want = truth.get(r["claim_id"], [])
+        a, k = match(pred, want), match(key, want)
+        ai.append(a)
+        kw.append(k)
+        if positive:
+            n_hits += 1
+            found += a["tp"] > 0
+        else:
+            normal += 1
+            ai_fp_lines += a["fp"] > 0
+            ai_fp_items += a["fp"]
+            kw_fp_lines += k["fp"] > 0
+    out = {
+        "split": split,
+        "prompt_version": co.PROMPT_VERSION,
+        "lines": normal,
+        "missing": missing,
+        "failed": failed,
+        "ai_fp_lines": ai_fp_lines,
+        "ai_fp_items": ai_fp_items,
+        "keyword_fp_lines": kw_fp_lines,
+    }
+    if split == "test":
+        out |= {"hits": {"found": found, "n": n_hits}, "ai": _pr(ai), "keyword": _pr(kw)}
+    return out
+
+
+def _test_runs(reports_dir: Path) -> Path:
+    return Path(reports_dir) / "claim_omission_runs.jsonl"
+
+
+def check_test(reports_dir: Path, kind: str, version: str, force: bool = False) -> None:
+    """test는 종류(synth·real)·프롬프트 버전마다 한 번(평가 설계 §1 원칙 2) — 다시 돌리려면 force"""
+    seen = _read(_test_runs(reports_dir))
+    if not force and any((h["kind"], h["prompt_version"]) == (kind, version) for h in seen):
+        raise AlreadyRun(
+            f"test claim_omission {kind}({version})은 이미 돌렸다 — 다시 돌리려면 --force"
+        )
+
+
+def record_test(reports_dir: Path, kind: str, version: str) -> None:
+    """채점이 끝난 뒤에 남긴다 — 도중에 실패하면 한 번으로 세지 않는다"""
+    path = _test_runs(reports_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(
+            json.dumps(
+                {
+                    "kind": kind,
+                    "split": "test",
+                    "prompt_version": version,
+                    "at": datetime.now().isoformat(),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+
+
+def _write(out: dict, name: str) -> None:
+    path = ROOT / "reports" / f"claim_omission_{name}_{datetime.now():%Y%m%d_%H%M%S}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m evaluation.claim_omission")
-    p.add_argument("command", choices=("cases",))
+    sub = p.add_subparsers(dest="command", required=True)
+    sub.add_parser("cases", help="합성 사례 문장 쓰기(과금, 이어 돎)")
+    s = sub.add_parser(
+        "synth", help="합성 사례 점검·채점(과금, 이어 돎) — test는 사람, 버전마다 한 번"
+    )
+    s.add_argument("--split", choices=("dev", "test"), required=True)
+    s.add_argument("--force", action="store_true")
+    r = sub.add_parser("real", help="실데이터 test 채점(사람, 과금 없음) — 버전마다 한 번")
+    r.add_argument("--split", choices=("test",), required=True)
+    r.add_argument("--force", action="store_true")
     args = p.parse_args(argv)
     if args.command == "cases":
         gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
         print(write_cases(gw))
+        return
+    if args.command == "synth":
+        if args.split == "test":
+            check_test(ROOT / "reports", "synth", co.PROMPT_VERSION, args.force)
+        cases = load_cases()
+        gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
+        print(run_synth(gw, args.split, cases))
+        _write(
+            score_synth(cases, _read(RUNS), args.split) | {"split": args.split},
+            f"synth_{args.split}",
+        )
+        if args.split == "test":
+            record_test(ROOT / "reports", "synth", co.PROMPT_VERSION)
+        return
+    from evaluation.claim_check import _connect
+
+    check_test(ROOT / "reports", "real", co.PROMPT_VERSION, args.force)
+    _write(score_real(_connect(), "test"), "real_test")
+    record_test(ROOT / "reports", "real", co.PROMPT_VERSION)
 
 
 if __name__ == "__main__":
