@@ -28,7 +28,7 @@
 - 앱의 도구 설명·권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보·재현 테스트까지만, 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
 - 테이블 접두어는 소속 시스템 기준: `emr_` 전자차트 원본 · `fin_` 재무 원본 · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다(가상 데이터 생성 설계 §0)
 - 시드 고정(`config/generator.yaml`), 생성기는 단계마다 `seed`와 단계 이름으로 따로 만든 난수 생성기를 쓴다 — 단계를 더해도 기존 결과가 그대로(가상 데이터 생성 설계 §5.1)
-- 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않고 추가 데이터는 새 테이블로. **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인
+- 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않고 추가 데이터는 새 테이블이나, 기존 행을 바꾸지 않는 새 단계로(번호 체계·분할을 따로 — 예: 어려운 통화 `hc-`). **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인
 - 정형(코드) 단계를 고치면 그 뒤 LLM 입력이 바뀐 건의 캐시가 다시 나간다(앞 단계일수록 넓게) — 고치기 전에 `make data`로 나갈 작업 수를 확인(단계 순서는 가상 데이터 생성 설계 §5.1)
 - verify 검사를 생성 코드보다 먼저 작성한다 (TDD)
 - 분류기의 통화 입력은 `transcript`·`direction`만(`backend/classify.py` `classify`)
@@ -45,7 +45,7 @@
 - `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
 - ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
-- ① `make hard-label`(과금, 이어 돎) / `hard-review` — 어려운 통화 정답 라벨(`evaluation/hard_labels.py`, 평가 설계 §2.1). 샘플 녹취 건은 `python -m generator.hard_calls sample-items`
+- ① `make hard-label`(과금, 이어 돎) / `hard-review` — 어려운 통화 정답 라벨(`evaluation/hard_labels.py`, 평가 설계 §2.1)
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py`)
 - ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
 - ④ `make prep [DATE=] [NO_BATCH=1]`(과금, 이어 돎, `backend/prep.py`)
