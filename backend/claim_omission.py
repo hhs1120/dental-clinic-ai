@@ -18,7 +18,7 @@ from backend.prep import _age, _batchable, master_values
 from shared.llm import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
-TASK, ALIAS, PROMPT_VERSION = "claim_omission", "chat", "v1"
+TASK, ALIAS, PROMPT_VERSION = "claim_omission", "chat", "v2"
 _TOOTH = re.compile(r"[1-4][1-8]")  # 영구치 치아 번호(FDI)
 
 

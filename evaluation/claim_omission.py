@@ -156,9 +156,17 @@ def case_specs() -> list[dict]:
     return out
 
 
+_SPLIT: dict[str, str] = {}
+
+
 def split_of(case_id: str) -> str:
-    """사례 id 해시로 반반 — 프롬프트는 dev로만 고친다"""
-    return "dev" if hashlib.sha256(case_id.encode()).digest()[0] % 2 == 0 else "test"
+    """모양마다 순서대로 dev·test를 번갈아 — 모양이 한쪽에만 몰리지 않게(프롬프트는 dev로만 고친다)"""
+    if not _SPLIT:
+        seen: dict[str, int] = {}
+        for s in case_specs():
+            i = seen[s["shape"]] = seen.get(s["shape"], -1) + 1
+            _SPLIT[s["id"]] = "dev" if i % 2 == 0 else "test"
+    return _SPLIT[case_id]
 
 
 def _spec_hash(spec: dict) -> str:
@@ -200,6 +208,14 @@ def check_note(spec: dict, note: str) -> list[str]:
         w in s for s in with_tooth for w in _words(spec["claimed"]["procedure"])
     ):
         problems.append("추가 처치 문장에 청구된 시술 이름이 있다")
+    if (
+        shape in SHAPES_HIT
+    ):  # 누락 있음은 그날 한 처치 — 추가 처치 문장에 안 한 처치의 표지가 있으면 라벨과 어긋난다
+        problems += [
+            f"추가 처치 문장에 '{w}'가 있다(그날 한 처치로 적는다)"
+            for w in sorted({w for k in NOT_DONE for w in _MARKERS[k]})
+            if any(w in s for s in with_tooth)
+        ]
     if shape in NOT_DONE:
         problems += [
             f"'{w}'처럼 그날 하지 않았다고 직접 쓰지 않는다" for w in NEGATION if w in note
@@ -356,9 +372,13 @@ def _note_hash(note: str) -> str:
 
 def run_synth(gw, split: str, cases: list[dict], path: Path = RUNS) -> dict:
     """그 분할의 합성 사례를 앱과 같은 요청·후검증·한 번 더로 점검해 path에 덧붙인다. (사례, 문장, 프롬프트 버전, 모델)이
-    같은 기록이 있으면 다시 부르지 않는다"""
+    같고 통과한 기록이 있으면 다시 부르지 않는다"""
     model = gw.config["aliases"][co.ALIAS][0]
-    have = {(r["id"], r["note_hash"], r["prompt_version"], r["model"]) for r in _read(path)}
+    have = {  # 후검증에 실패한 기록은 다시 부른다(이어 돎)
+        (r["id"], r["note_hash"], r["prompt_version"], r["model"])
+        for r in _read(path)
+        if r["result"] is not None
+    }
     names = [p["name"] for p in PROCEDURES]
     out = {"called": 0, "skipped": 0, "failed": 0}
     for c in cases:
@@ -505,7 +525,7 @@ def score_real(conn, split: str) -> dict:
 
 
 def _test_runs(reports_dir: Path) -> Path:
-    return Path(reports_dir) / "claim_omission_runs.jsonl"
+    return Path(reports_dir) / "claim_omission_test_runs.jsonl"
 
 
 def check_test(reports_dir: Path, kind: str, version: str, force: bool = False) -> None:

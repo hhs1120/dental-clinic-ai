@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -51,6 +51,10 @@ hard-label:
 
 hard-review:
 	uv run python -m evaluation.hard_labels review
+
+# dev 평가 리포트(evaluation/eval.py) — 저장된 결과로 채점, 검색 절은 질문 임베딩 API를 부른다(색인 모델 키). test는 사람: python -m evaluation.eval --split test --section …
+eval:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.eval --split dev
 
 # 코어 합격 기준(기능 정의 §6) — 무료 검사 먼저, 과금하는 dev 평가(evaluation/gate.py)는 마지막. make dev를 끄고 돌린다
 gate: frontend/node_modules

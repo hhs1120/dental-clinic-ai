@@ -214,3 +214,11 @@ def test_schema_accepted_by_sdk():
     from anthropic.lib._parse._transform import transform_schema
 
     transform_schema(co.schema(["아말감/GI"]))
+
+
+def test_prompt_v2_no_ambiguous_example():
+    """v2 — '때움'은 레진과 아말감/GI가 갈리지 않는 말이라 예시로 들지 않는다(설계 §2b)"""
+    from backend import prompts
+
+    assert co.PROMPT_VERSION == "v2"
+    assert "때움" not in prompts.load(co.TASK, co.PROMPT_VERSION)["system"]

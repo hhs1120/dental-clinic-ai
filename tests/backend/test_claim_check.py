@@ -306,7 +306,7 @@ def test_job_api_builds_app_scope(client, src):
     from backend import db
 
     conn = db.connect(src.path.parent / "app.sqlite", src.path)
-    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+    assert cc.todo_ids(conn, DAY) == set()
 
 
 def test_job_runs_both(client, src):
@@ -337,9 +337,9 @@ def test_pending_count(src):
     claim(src, 1)
     claim(src, 2, note_text="")
     conn = src.app()
-    assert cc.pending(conn, DAY) == {"pre": 1, "adjust": 0}
+    assert len(cc.todo_ids(conn, DAY)) == 1
     build(conn, FakeGw(), scope="app")
-    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+    assert cc.todo_ids(conn, DAY) == set()
 
 
 def test_pending_split_by_tab(src):
@@ -347,7 +347,9 @@ def test_pending_split_by_tab(src):
     claim(src, 1)
     claim(src, 2, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(10))
     claim(src, 3, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(20))
-    assert cc.pending(src.app(), DAY) == {"pre": 1, "adjust": 2}
+    from backend.claims import _ai_pending
+
+    assert _ai_pending(src.app(), DAY) == {"pre": 1, "adjust": 2}
 
 
 class BatchGw(FakeGw):

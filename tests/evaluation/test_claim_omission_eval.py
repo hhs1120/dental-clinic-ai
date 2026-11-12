@@ -54,10 +54,13 @@ def test_specs_age_rules():
             assert s["extra"]["procedure"] == "레진"
 
 
-def test_split_half():
-    dev = sum(ev.split_of(s["id"]) == "dev" for s in ev.case_specs())
-    assert 15 <= dev <= 26
-    assert ev.split_of("om-01") == ev.split_of("om-01")
+def test_split_by_shape():
+    """모양마다 반반 — 어느 모양도 dev나 test 한쪽에만 몰리지 않는다(프롬프트를 고칠 때 모든 모양을 본다)"""
+    specs = ev.case_specs()
+    for shape in ev.SHAPES_HIT + ev.SHAPES_DECOY:
+        sides = [ev.split_of(s["id"]) for s in specs if s["shape"] == shape]
+        assert "dev" in sides and "test" in sides, shape
+        assert abs(sides.count("dev") - sides.count("test")) <= 1
 
 
 # ── 문장 검사 ─────────────────────────────────────────────────────
@@ -118,6 +121,20 @@ def test_check_note_no_direct_negation():
 def test_negation_rule_only_for_not_done_decoys():
     s = spec("adult_sealant")
     assert ev.check_note(s, note_for(s, "{c} 시행함. 오늘 {t}번 실란트 함께 시행함.")) == []
+
+
+def test_hit_note_must_be_done_that_day():
+    """누락 있는 모양의 추가 처치 문장에 계획·거절·다른 치과·지난 내원 표지가 있으면 라벨(그날 함)과 어긋난다"""
+    s = spec("separated")
+    assert ev.check_note(
+        s, note_for(s, "{c} 시행함. 출혈 적음. {t}번 아말감/GI 다음 내원 시 예정.")
+    )
+    assert ev.check_note(
+        s, note_for(s, "{c} 시행함. 출혈 적음. {t}번 아말감/GI는 다른 치과에서 함.")
+    )
+    assert (
+        ev.check_note(s, note_for(s, "{c} 시행함. 다음 내원 예정. {t}번 아말감/GI 시행함.")) == []
+    )
 
 
 # ── 문장 쓰기 ─────────────────────────────────────────────────────
@@ -314,6 +331,17 @@ def test_test_runs_once(tmp_path):
         ev.check_test(tmp_path, "real", "v1")
     ev.check_test(tmp_path, "synth", "v1")  # 종류가 다르면 따로
     ev.check_test(tmp_path, "real", "v1", force=True)
+
+
+def test_run_synth_retries_failed(tmp_path, monkeypatch):
+    """두 번 다 후검증에 실패한 사례는 다음 실행에 다시 부른다(이어 돎 — backend build와 같음)"""
+    monkeypatch.setattr(ev, "split_of", lambda cid: "dev")
+    cases = [case("a", "plain", [("U0006", "12")], HIT_NOTE)]
+    bad = {"omissions": [HIT_ITEM | {"quote": "차트에 없는 문장입니다"}]}
+    path = tmp_path / "runs.jsonl"
+    assert ev.run_synth(Gw(llm(bad), llm(bad)), "dev", cases, path)["failed"] == 1
+    gw = Gw(llm({"omissions": [HIT_ITEM]}))
+    assert ev.run_synth(gw, "dev", cases, path) == {"called": 1, "skipped": 0, "failed": 0}
 
 
 def test_run_synth_reuses(tmp_path, monkeypatch):
