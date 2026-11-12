@@ -200,3 +200,49 @@ def test_months_and_unknown_month(o):
     assert (got["months"], got["month"]) == (["2026-10", "2026-11"], "2026-11")
     with pytest.raises(ValueError):
         expense.sheet(c, DAY, "2026-12")
+
+
+def test_month_end_candidates_include_alias_issuer_whole_month(o):
+    """월말 이체 후보 = 창 안 증빙 + 출금한 달 발행 증빙 전부 — 발행처 별칭((주)…)·잘린 적요여도 사람이 고를 수 있다"""
+    oid = o.bank("2026-11-30 10:00:00", "바른덴탈상사", 100_000)
+    alias = o.doc("statement", "(주)바른덴탈상사", "2026-11-02", 60_000)  # 창 밖·별칭
+    cut = o.bank("2026-11-30 11:00:00", "하늘치", 50_000)  # 잘린 적요 — 거래처 모름
+    sky = o.doc("statement", "(주)하늘치재", "2026-11-03", 50_000)
+    o.doc("statement", "(주)바른덴탈상사", "2026-10-02", 60_000)  # 다른 달·창 밖
+    c = o.app()
+    assert alias in [d["id"] for d in expense.candidates(c, "fin_bank_transactions", oid)]
+    assert sky in [d["id"] for d in expense.candidates(c, "fin_bank_transactions", cut)]
+    expense.confirm(c, "fin_bank_transactions", oid, [alias], "재료비", by="desk", at=AT)
+
+
+def test_label_containing_by_item_vendor_never_remembered(o):
+    """결제대행사가 덧붙은 쇼핑몰 표기(KCP*페이온*모아덴탈몰) — 거래처 표에 없어도 품목으로 정하는 거래처라 기억 안 함"""
+    o.card("2026-11-03 12:00:00", "KCP*페이온*모아덴탈몰", 30_000)
+    o.card("2026-11-20 12:00:00", "KCP*페이온*모아덴탈몰", 40_000)
+    c = o.app()
+    first = expense.sheet(c, DAY, "2026-11")["rows"][0]
+    assert (first["account"], first["check"], first["by_item"]) == (None, True, True)
+    expense.confirm(c, first["table"], first["id"], [], "복리후생비", by="desk", at=AT)
+    second = expense.sheet(c, DAY, "2026-11")["rows"][1]
+    assert (second["account"], second["account_from"], second["check"]) == (None, None, True)
+
+
+def test_chips_count_only_unconfirmed_work(o):
+    """과목 확인 필요·증빙 못 찾음은 남은 일 — 확정한 줄은 세지 않는다(오늘 화면 줄과 같은 기준)"""
+    shop = o.card("2026-11-03 12:00:00", "페이온*모아덴탈몰", 30_000)
+    none = o.card("2026-11-05 12:00:00", "솔밭식당", 50_000)
+    c = o.app()
+    assert {k: expense.sheet(c, DAY)["chips"][k] for k in ("none", "check", "open")} == {
+        "none": 2,  # 둘 다 증빙 없음
+        "check": 1,
+        "open": 2,
+    }
+    expense.confirm(c, "fin_card_expenses", shop, [], "소모품비", by="desk", at=AT)
+    expense.confirm(c, "fin_card_expenses", none, [], "복리후생비", by="desk", at=AT)
+    sheet = expense.sheet(c, DAY)
+    assert {k: sheet["chips"][k] for k in ("none", "check", "open")} == {
+        "none": 0,
+        "check": 0,
+        "open": 0,
+    }
+    assert [r["check"] for r in sheet["rows"]] == [False, False]

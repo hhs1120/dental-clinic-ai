@@ -87,6 +87,14 @@ def _load(conn: sqlite3.Connection, today: date | None) -> dict:
     return {
         "mv": mv,
         "vendors": vendors_by_label(mv["expense_vendors"]),
+        # 품목으로 정하는 거래처의 이름·가맹점명 — 결제대행사가 덧붙은 표기(KCP*…)도 글자 안에 있으면 그 거래처로 본다
+        "by_item_names": [
+            n
+            for v in mv["expense_vendors"]
+            if v["by_item"]
+            for n in (v["name"], v["card_name"])
+            if n
+        ],
         "outflows": outflows,
         "docs": [
             dict(r) for r in conn.execute(f"SELECT {DOC_COLS} FROM source.fin_expense_documents")
@@ -108,7 +116,8 @@ def _row(o: dict, data: dict, by_id: dict) -> dict:
     ids = json.loads(c["document_ids"]) if c else rule_match(o, data["docs"], data["vendors"])
     docs = [by_id[i] for i in ids if i in by_id]
     st = [d for d in docs if d["kind"] == "statement"]
-    by_item = bool(v and v["by_item"])
+    # 품목으로 정하는 거래처 — 기억으로 과목을 채우지 않고 늘 확인 필요. 기본 과목(rule_account)은 표의 글자만 본다
+    by_item = bool(v and v["by_item"]) or any(n in o["label"] for n in data["by_item_names"])
     if c:
         account, source = c["account"], "confirmed"
     elif not by_item and o["label"] in data["memory"]:
@@ -128,7 +137,9 @@ def _row(o: dict, data: dict, by_id: dict) -> dict:
         "diff": o["amount"] - sum(d["amount"] for d in st or docs) if docs else None,
         "account": account,
         "account_from": source,
-        "check": account is None or by_item,
+        "by_item": by_item,
+        # 과목 확인 필요 = 남은 일(확정 전) — 과목이 비었거나 품목으로 정하는 거래처
+        "check": c is None and (account is None or by_item),
         "confirmed": {"by": c["judged_by"], "at": c["judged_at"]} if c else None,
     }
 
@@ -151,7 +162,7 @@ def sheet(conn: sqlite3.Connection, today: date, month: str | None = None) -> di
             "outflows": len(rows),
             "amount": sum(r["amount"] for r in rows),
             "found": sum(bool(r["docs"]) for r in rows),
-            "none": sum(not r["docs"] for r in rows),
+            "none": sum(not r["docs"] and r["confirmed"] is None for r in rows),
             "check": sum(r["check"] for r in rows),
             "open": sum(r["confirmed"] is None for r in rows),
         },
@@ -167,21 +178,20 @@ def _outflow(data: dict, table: str, outflow_id: int) -> dict:
 
 
 def _candidates(o: dict, data: dict) -> list[dict]:
+    """창 안 증빙 + 출금한 달에 발행된 증빙 전부 — 월말 이체의 명세서는 발행처가 별칭((주)…)이거나 적요가 잘려
+    거래처로 가릴 수 없어도 그달 안에 있다(앱 코드라 기준선 rule_match와 무관)"""
     lo, hi = DOC_WINDOW
-    v = data["vendors"].get(o["label"])
-    month_end = v and v["pay"] == "month_end_transfer"
     got = [
         d
         for d in data["docs"]
-        if lo <= _gap(o["at"], d) <= hi
-        or (month_end and d["issuer"] == v["name"] and d["issued_on"][:7] == o["at"][:7])
+        if lo <= _gap(o["at"], d) <= hi or d["issued_on"][:7] == o["at"][:7]
     ]
     got.sort(key=lambda d: (abs(_gap(o["at"], d)), d["id"]))
     return got
 
 
 def candidates(conn: sqlite3.Connection, table: str, outflow_id: int) -> list[dict]:
-    """증빙 바꾸기 후보 — 출금일 기준 DOC_WINDOW 안 증빙 전부(금액 무관), 월말 이체면 그달 그 거래처 증빙도.
+    """증빙 바꾸기 후보 — 출금일 기준 DOC_WINDOW 안 증빙과 출금한 달 발행 증빙 전부(금액 무관).
     날짜 가까운 순. 없는 출금은 ValueError"""
     data = _load(conn, None)
     return [_doc_view(d) for d in _candidates(_outflow(data, table, outflow_id), data)]

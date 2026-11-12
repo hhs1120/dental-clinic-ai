@@ -178,7 +178,9 @@ export interface ExpenseRow {
   diff: number | null;
   account: string | null;
   account_from: "confirmed" | "memory" | "vendor" | null;
-  /** 과목 확인 필요 — 과목이 비었거나 품목으로 정하는 거래처 */
+  /** 품목으로 과목이 정해지는 거래처(쇼핑몰) — 사람 확정을 기본값으로 기억하지 않는다 */
+  by_item: boolean;
+  /** 과목 확인 필요(확정 전) — 과목이 비었거나 품목으로 정하는 거래처 */
   check: boolean;
   confirmed: { by: string; at: string } | null;
 }

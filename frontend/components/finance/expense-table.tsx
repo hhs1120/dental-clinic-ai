@@ -33,14 +33,26 @@ const md = (s: string) => `${s.slice(5, 7)}/${s.slice(8, 10)}`;
 
 const keep: Record<ExpenseChip, (r: ExpenseRow) => boolean> = {
   found: (r) => r.docs.length > 0,
-  none: (r) => r.docs.length === 0,
+  none: (r) => r.docs.length === 0 && !r.confirmed,
   check: (r) => r.check,
   open: (r) => !r.confirmed,
 };
 
 /** 찾은 증빙 — 한 장이면 종류·발행처·일자, 여러 장이면 "거래명세서 n장 합계"(세금계산서는 따로 붙임) */
-function DocsText({ docs }: { docs: ExpenseDoc[] }) {
-  if (docs.length === 0) return <Badge variant="danger">증빙 못 찾음</Badge>;
+function DocsText({
+  docs,
+  confirmed,
+}: {
+  docs: ExpenseDoc[];
+  confirmed: boolean;
+}) {
+  // 증빙 없이 확정한 줄은 남은 일이 아니다 — 중립 표시
+  if (docs.length === 0)
+    return confirmed ? (
+      <Badge variant="muted">증빙 없음</Badge>
+    ) : (
+      <Badge variant="danger">증빙 못 찾음</Badge>
+    );
   if (docs.length === 1) {
     const d = docs[0];
     return (
@@ -158,8 +170,11 @@ function Row({
   accounts: string[];
   onSaved: () => void;
 }) {
-  const [account, setAccount] = useState(row.account ?? "");
-  const [picked, setPicked] = useState(row.docs.map((d) => d.id));
+  // 고른 값이 없으면 줄의 지금 값을 따른다 — 다른 줄 확정으로 기억이 바뀌어도 펼침·고르던 값이 남게
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [pickedState, setPicked] = useState<number[] | null>(null);
+  const account = chosen ?? row.account ?? "";
+  const picked = pickedState ?? row.docs.map((d) => d.id);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,14 +212,14 @@ function Row({
         </td>
         <td className="px-2 py-2 text-right">{won(row.amount)}</td>
         <td className="px-2 py-2">
-          <DocsText docs={row.docs} />
+          <DocsText docs={row.docs} confirmed={!!row.confirmed} />
         </td>
         <td className="px-2 py-2 text-right">
           <Diff n={row.diff} />
         </td>
         <td className="px-2 py-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Select value={account} onValueChange={setAccount} disabled={busy}>
+            <Select value={account} onValueChange={setChosen} disabled={busy}>
               <SelectTrigger aria-label="계정 과목" className="w-32 bg-card">
                 <SelectValue placeholder="고르기" />
               </SelectTrigger>
@@ -259,8 +274,10 @@ function Row({
                 row={row}
                 picked={picked}
                 onToggle={(id) =>
-                  setPicked((p) =>
-                    p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
+                  setPicked(
+                    picked.includes(id)
+                      ? picked.filter((x) => x !== id)
+                      : [...picked, id],
                   )
                 }
               />
@@ -309,9 +326,9 @@ export function ExpenseTable({
             </tr>
           )}
           {rows.map((r) => (
-            // 다시 불러 확정·기본값이 바뀌면 고른 값을 새로 시작한다
+            // 이 줄을 확정하면 고른 값을 새로 시작한다
             <Row
-              key={`${r.table}-${r.id}-${r.confirmed?.at}-${r.account}`}
+              key={`${r.table}-${r.id}-${r.confirmed?.at}`}
               row={r}
               accounts={sheet.accounts}
               onSaved={onSaved}

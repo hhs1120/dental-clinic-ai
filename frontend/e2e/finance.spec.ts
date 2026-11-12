@@ -573,3 +573,57 @@ test("줄을 펼치면 증빙 본문과 후보 — 체크해서 증빙을 바꿔
   await expRow(page, "솔밭식당").getByRole("button", { name: "확정" }).click();
   await expect.poll(() => body?.document_ids).toEqual([12]);
 });
+
+test("증빙 없이 확정한 줄은 중립 표시 증빙 없음", async ({ page }) => {
+  await fakeExpenses(page, () =>
+    EXP({ by: "데스크", at: "2026-12-01 09:10:00" }),
+  );
+  await page.goto("/finance?tab=expense");
+  const kcp = expRow(page, "KCP*낯선가게");
+  await expect(kcp).toContainText("증빙 없음");
+  await expect(kcp).not.toContainText("증빙 못 찾음");
+  await expect(kcp).not.toContainText("과목 확인 필요");
+});
+
+test("같은 출금처의 다른 줄을 확정해도 펼친 줄은 그대로", async ({ page }) => {
+  let remembered = false;
+  const twin = (id: number, day: string) => ({
+    table: "fin_card_expenses",
+    id,
+    at: `2026-11-${day} 12:00:00`,
+    label: "KCP*낯선가게",
+    amount: 9000,
+    vendor: null,
+    by_item: false,
+    docs: [],
+    diff: null,
+    account: remembered ? "소모품비" : null,
+    account_from: remembered ? "memory" : null,
+    check: !remembered,
+    confirmed: null,
+  });
+  await fakeExpenses(page, () => ({
+    ...EXP(),
+    rows: [twin(2, "10"), twin(4, "20")],
+  }));
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/*/candidates",
+    (r) => r.fulfill({ json: { docs: [receipt] } }),
+  );
+  await page.route(
+    "**/api/finance/expenses/fin_card_expenses/4/confirm",
+    (r) => {
+      remembered = true;
+      return r.fulfill({ json: { ok: true } });
+    },
+  );
+  await page.goto("/finance?tab=expense");
+  const rows = page.locator("tr[data-outflow]");
+  await rows.nth(0).getByRole("button", { name: "펼치기" }).click();
+  await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
+  await rows.nth(1).getByRole("combobox", { name: "계정 과목" }).click();
+  await page.getByRole("option", { name: "소모품비" }).click();
+  await rows.nth(1).getByRole("button", { name: "확정" }).click();
+  await expect(rows.nth(0)).toContainText("지난 확정");
+  await expect(page.getByRole("region", { name: /출금 상세/ })).toBeVisible();
+});
