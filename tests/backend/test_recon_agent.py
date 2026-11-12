@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from backend import recon_agent, recon_match
-from backend.harness.store import RunStore, SqliteLlmLog
+from backend.harness.store import RunLocked, RunStore, SqliteLlmLog
 from generator import master
 from shared.llm import FakeGateway
 from tests.backend.test_recon_match import DAY, Books
@@ -29,7 +29,7 @@ def submit(cause="amount_typo", evidence=(1,), runner_up=None):
 
 
 class Script(FakeGateway):
-    """실행마다 같은 대본 — ("tool", 이름, 인자) · ("say", 글, 이름, 인자) · ("text", 글)"""
+    """실행마다 같은 대본 — ("tool", 이름, 인자) · ("say", 글, 이름, 인자) · ("text", 글) · ("fail", 이유)"""
 
     def __init__(self, conn, *steps):
         super().__init__(SqliteLlmLog(conn), scope="runtime")
@@ -43,6 +43,8 @@ class Script(FakeGateway):
         i = self.pos.get(run, 0)
         self.pos[run] = i + 1
         kind, *rest = self.steps[min(i, len(self.steps) - 1)]
+        if kind == "fail":
+            return replace(r, ok=False, error=rest[0], tool_calls=(), content=None)
         if kind == "text":
             return replace(
                 r, text=rest[0], tool_calls=(), content=[{"type": "text", "text": rest[0]}]
@@ -157,6 +159,63 @@ def test_unprefixed_text_is_note_and_limit_gets_conclusion(conn):
     ls = recon_agent.lines(RunStore(conn).steps(r["run_id"]))
     assert ls[0]["kind"] == "note"
     assert ls[-1]["kind"] == "conclusion" and ls[-1]["cause"] == "unknown"
+
+
+def test_failed_run_has_no_conclusion_line(conn):
+    """게이트웨이 실패로 끝난 실행 — 없는 '원인 미정' 결론을 내보내지 않고 결과도 없다(다시 조사할 수 있게)"""
+    got = []
+    r, _ = run(conn, LOOK, ("fail", "refusal"), on_line=got.append)
+    assert r is None
+    assert [x["kind"] for x in got] == ["hypothesis", "lookup"]
+    assert recon_agent.targets(conn, DAY)  # 실패한 건은 다시 대상
+
+
+def test_blocked_bad_args_line_is_short(conn):
+    """인자 검증에 막힌 조회 — 막힘 줄은 첫 오류 문구만, 검증 전 purpose는 줄로 내지 않는다(번호는 다음 조회가 1)"""
+    wide = {"purpose": "넓게", "date_from": "2026-09-01", "date_to": "2026-11-30", "amount": 1}
+    r, _ = run(conn, ("tool", "find_amount", wide), LOOK, submit())
+    ls = recon_agent.lines(RunStore(conn).steps(r["run_id"]))
+    assert [x["kind"] for x in ls] == ["blocked", "hypothesis", "lookup", "conclusion"]
+    assert "0~31일" in ls[0]["text"] and "pydantic" not in ls[0]["text"]
+    assert "\n" not in ls[0]["text"] and ls[2]["lookup_no"] == 1
+
+
+def _stale_run(conn, version=None, beat="2000-01-01 00:00:00"):
+    """끊긴 실행 — running 그대로, 잠금 만료"""
+    store = RunStore(conn)
+    with conn:
+        rid = store.create_run(
+            recon_agent.AGENT, key(conn), version or recon_agent.PROMPT_VERSION, "gone"
+        )
+        conn.execute("UPDATE ax_agent_runs SET heartbeat_at = ? WHERE id = ?", (beat, rid))
+    return rid
+
+
+def test_stale_running_is_not_result_and_reinvestigates(conn):
+    """잠금이 만료된 running은 결과가 아니다 — 화면 조사가 닫고 새로 시작한다"""
+    old = _stale_run(conn)
+    assert recon_agent.result(conn, key(conn)) is None
+    assert recon_agent.results(conn, {key(conn)}) == {}
+    r, _ = run(conn, LOOK, submit())
+    assert r["cause"] == "amount_typo"
+    assert RunStore(conn).run(old)["status"] == "failed"
+
+
+def test_fresh_running_is_result(conn):
+    _stale_run(conn, beat="2999-01-01 00:00:00")
+    assert recon_agent.result(conn, key(conn))["status"] == "running"
+    with pytest.raises(RunLocked):
+        run(conn, LOOK, submit())
+
+
+def test_batch_closes_other_version_running(conn, tmp_path):
+    """버전을 바꾼 뒤 일괄 — 옛 버전의 끊긴 running은 이어 가지 않고 실패로 닫은 뒤 새로"""
+    old = _stale_run(conn, version="v1")
+    out = recon_agent.run_batch(
+        conn, Script(conn, LOOK, submit()), DAY, batch=False, state=tmp_path / "s.json"
+    )
+    assert out["done"] == 1 and RunStore(conn).run(old)["status"] == "failed"
+    assert recon_agent.result(conn, key(conn))["cause"] == "amount_typo"
 
 
 def test_live_lines_match_saved(conn):

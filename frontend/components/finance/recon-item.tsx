@@ -77,7 +77,11 @@ function Line({ line }: { line: ReconLine }) {
   );
 }
 
-/** 조사 과정 — 저장된 줄을 보이고, 조사 전이면 `조사 시작`(누르면 줄이 하나씩). 다시 조사는 없다(설계 §3) */
+/** 다른 곳(다른 탭·일괄)에서 조사 중인 건을 다시 불러오는 간격 */
+const RUNNING_POLL_MS = 3_000;
+
+/** 조사 과정 — 저장된 줄을 보이고, 조사 전이면 `조사 시작`(누르면 줄이 하나씩). 다시 조사는 없다(설계 §3).
+ * 조사가 실패하면 오류와 함께 다시 시작할 수 있고, 다른 곳에서 조사 중이면 끝날 때까지 다시 불러온다 */
 function Investigation({
   item,
   onDone,
@@ -104,9 +108,19 @@ function Investigation({
       ctl.signal,
     ).catch(() => {});
   };
+  const elsewhere = live === null && item.agent?.status === "running";
+  const reload = useRef(onDone);
+  useEffect(() => {
+    reload.current = onDone;
+  });
+  useEffect(() => {
+    if (!elsewhere) return;
+    const t = setInterval(() => reload.current(), RUNNING_POLL_MS);
+    return () => clearInterval(t);
+  }, [elsewhere]);
   const saved = item.agent?.lines;
   const lines = live ?? saved;
-  const running = live !== null && !error && item.agent == null;
+  const running = elsewhere || (live !== null && !error && item.agent == null);
   return (
     <div className="flex flex-col gap-1 rounded-md bg-muted/40 p-2">
       <div className="flex items-center gap-2">
@@ -115,7 +129,7 @@ function Investigation({
           <span className="text-sm text-muted-foreground">조사 중…</span>
         )}
         <span className="flex-1" />
-        {item.agent == null && live === null && (
+        {item.agent == null && (live === null || error !== null) && (
           <Button size="sm" variant="outline" onClick={start}>
             조사 시작
           </Button>

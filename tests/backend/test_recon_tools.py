@@ -128,6 +128,21 @@ def test_purpose_required_checked_optional():
     assert by["oral_care_prices"].args.model_validate({"purpose": "조합"}).checked is None
 
 
+def test_summaries_show_filters(b):
+    """조회 줄 요약에 조건이 보인다 — 카드 승인 금액 범위, 정산 카드사(설계 §3 "조회 도구와 조건")"""
+    conn = b.app()
+    r = call(
+        conn,
+        "card_sales",
+        date_from="2026-11-03",
+        date_to="2026-11-03",
+        amount_min=3_000,
+        amount_max=4_000,
+    )
+    assert "3,000~4,000원" in r["summary"]
+    assert ISSUER in call(conn, "card_deposits", sales_date="2026-11-03", issuer=ISSUER)["summary"]
+
+
 def test_oral_care_combos(b):
     """금액이 구강용품 몇 개의 합으로 정확히 되는지 코드가 계산한다(개수 제한 없이 — 3개 이상 판매도)"""
     conn = b.app()

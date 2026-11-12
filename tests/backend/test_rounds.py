@@ -133,3 +133,28 @@ def test_batch_none_goes_direct_next(conn, tmp_path):
     ids = _start(conn, runner, ["c-0001", "c-0003"])
     out = rounds.run_rounds(runner, gw, ids, tmp_path / "s.json", min_batch=0, poll_seconds=0)
     assert all(o.reason == "submitted" for o in out.values()) and len(gw.batches) == 1
+
+
+def test_batch_wait_keeps_heartbeat(conn, tmp_path):
+    """Batch를 기다리는 동안 하트비트를 갱신한다 — 오래 걸려도 잠금이 만료돼 다른 곳(화면 조사)에 뺏기지 않게"""
+    from datetime import datetime, timedelta
+
+    t = [datetime(2026, 12, 1, 9, 0, 0)]
+    seen = []
+
+    class Slow(BatchScript):
+        def batch_status(self, bid):
+            if not seen:
+                t[0] += timedelta(seconds=RunStore.lock_ttl + 100)  # 기다리는 사이 시간이 흐름
+                seen.append(None)
+                return "in_progress"
+            seen.append(store.run(rid)["heartbeat_at"])
+            return "ended"
+
+    gw = Slow(conn, [("tool", "submit_followup", SUBMIT)])
+    reg, names = followup.registry(CLINIC)
+    store = RunStore(conn, clock=lambda: t[0])
+    runner = Runner(followup.spec(names), gw, store, reg)
+    (rid,) = _start(conn, runner, ["c-0001"])
+    rounds.run_rounds(runner, gw, [rid], tmp_path / "s.json", min_batch=0, poll_seconds=0)
+    assert seen[1] == t[0].isoformat(sep=" ", timespec="seconds")

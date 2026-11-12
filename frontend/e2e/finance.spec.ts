@@ -727,6 +727,56 @@ test("조사 시작 — 줄이 생기고 끝나면 다시 조회", async ({ page
   await expect(item.getByRole("button", { name: "조사 시작" })).toHaveCount(0);
 });
 
+test("조사가 실패하면 오류와 함께 다시 조사 시작", async ({ page }) => {
+  await fakeRecon(page, NOV);
+  const sse = [
+    { event: "line", data: { line: AGENT.lines[0] } },
+    {
+      event: "error",
+      data: { message: "조사 실패 — 다시 시작할 수 있습니다" },
+    },
+  ]
+    .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`)
+    .join("");
+  await page.route("**/api/finance/recon/aaaaaaaaaaaa/investigate", (r) =>
+    r.fulfill({ contentType: "text/event-stream", body: sse }),
+  );
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await item.getByRole("button", { name: "조사 시작" }).click();
+  await expect(item).toContainText("조사 실패 — 다시 시작할 수 있습니다");
+  await expect(item).not.toContainText("조사 중…");
+  await expect(item.getByRole("button", { name: "조사 시작" })).toBeVisible();
+});
+
+test("다른 곳에서 조사 중인 건은 조사 중 표시 뒤 끝나면 결과", async ({
+  page,
+}) => {
+  let first = 0; // 첫 요청 뒤 2초가 지나면 끝난 결과
+  const running = {
+    ...AGENT,
+    status: "running",
+    cause: null,
+    runner_up: null,
+    evidence: [],
+    reason: null,
+    lines: [AGENT.lines[0]],
+  };
+  await fakeRecon(page, () => {
+    first ||= Date.now();
+    return withAgent(Date.now() - first > 2_000 ? AGENT : running)();
+  });
+  await page.goto("/finance?month=2026-11");
+  await row(page, "2026-11-03").click();
+  const item = page.getByRole("region", { name: /불일치 건/ });
+  await expect(item).toContainText("조사 중…");
+  await expect(item.getByRole("button", { name: "조사 시작" })).toHaveCount(0);
+  await expect(item).toContainText("에이전트: 취소 후 재승인", {
+    timeout: 10_000,
+  });
+});
+
 test("자동 마감 건은 배지와 되돌리기", async ({ page }) => {
   await fakeRecon(
     page,

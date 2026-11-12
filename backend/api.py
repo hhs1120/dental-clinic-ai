@@ -41,6 +41,7 @@ from backend import (
 from backend.embeddings import make_embedder
 from backend.harness.auto import revert_auto_action
 from backend.harness.llm import make_gateway
+from backend.harness.store import RunLocked
 from backend.rag_search import (
     DEFAULT_EMBEDDING,
     DEFAULT_RERANKER,
@@ -779,7 +780,12 @@ def _recon_worker(paths, gateway, key: str, today: dt.date, events: queue.Queue)
         )
         recon_auto.refresh(conn, today)
         conn.commit()
-        events.put({"type": "done", "agent": agent})
+        if agent is None:  # 실패로 끝남(게이트웨이 오류·거절) — 결과가 없어 다시 조사할 수 있다
+            events.put({"type": "error", "message": "조사 실패 — 다시 시작할 수 있습니다"})
+        else:
+            events.put({"type": "done", "agent": agent})
+    except RunLocked:  # 사전 확인 뒤 다른 탭이 먼저 시작
+        events.put({"type": "error", "message": "다른 곳에서 조사 중입니다"})
     except Exception as e:  # 화면에는 짧게, 실행 기록은 하네스가 남긴다
         events.put({"type": "error", "message": f"조사 중 오류: {type(e).__name__}"})
     finally:
@@ -795,7 +801,7 @@ def finance_recon_investigate(
     gateway: Annotated[object, Depends(get_recon_gateway)],
 ) -> StreamingResponse:
     """불일치 건 조사(설계 §3) — 조사 과정 줄(line)·결과(done)·오류(error) SSE. 지금 탐지에 없는 건 400,
-    지금 버전으로 이미 조사했거나 조사 중이면 409(다시 조사하지 않는다)"""
+    지금 버전으로 이미 조사했거나 조사 중(잠금이 살아 있음)이면 409(다시 조사하지 않는다). 끊긴 조사·실패는 다시 조사"""
     conn = _open_rw(paths)
     try:
         keys = {i["key"] for i in recon_match.detect(recon_match.load(conn, clinic.today))}

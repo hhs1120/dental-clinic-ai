@@ -145,7 +145,7 @@
 - 금액으로 다른 날 장부·카드 승인·통장 입금 찾기(기간 안) — 며칠 늦게 적은 정산은 이것 없이는 안 풀린다(AI 실험 기록 §24). 탐지(`backend/recon_match.py`)는 그대로 두고(규칙 기준선을 고정했으므로) 갈라진 두 건은 에이전트가 이 도구로 잇는다(사용자 결정)
 - 끝내는 도구 `submit_cause` — `{cause: 9개 enum | unknown, runner_up, evidence: [단계 번호], reason}`. 근거 단계가 그 실행의 도구 호출이 아니면 훅이 막는다(`backend/harness/hooks.py` `Rule`)
 - `request_auto_action`은 주지 않는다(내 판단 — 자동 마감 조건은 "규칙 = 에이전트 원인"이라 코드가 판정. ① 자동 종결처럼 코드 경로로 `apply_auto_action()`. 문서 변경 목록)
-- 단계 상한 8(내 판단 — 끝내는 도구 포함, 시작값. dev 첫 실행의 단계 수 분포를 보고 다시 정한다, 넘으면 `unknown`으로 끝냄), 결과 크기 상한 `AgentSpec.result_limit`
+- 단계 상한 `backend/recon_agent.py` `RECON_MAX_TOOL_CALLS`(끝내는 도구 포함, 넘으면 `unknown`으로 끝냄 — 값을 정한 경위는 [[치과 AX - AI 실험 기록]] §26), 결과 크기 상한 `AgentSpec.result_limit`
 
 **입력에 넣지 않는 것**: 규칙 추정 원인(에이전트가 규칙을 따라 하면 짝 비교의 의미가 없다 — 내 판단), 생성 메타(연동 실패일 등)
 

@@ -162,7 +162,16 @@ def _card_sales(conn, a) -> dict:
         sql += " AND amount <= ?"
         args.append(a["amount_max"])
     rows = _rows(conn, sql + " ORDER BY approved_at, id", *args)
-    return {"summary": f"{a['date_from']}~{a['date_to']} 카드 승인 {len(rows)}건", "rows": rows}
+    lo, hi = a["amount_min"], a["amount_max"]
+    band = (
+        ""
+        if lo is None and hi is None
+        else f" · 금액 {'' if lo is None else f'{lo:,}'}~{'' if hi is None else won(hi)}"
+    )
+    return {
+        "summary": f"{a['date_from']}~{a['date_to']}{band} 카드 승인 {len(rows)}건",
+        "rows": rows,
+    }
 
 
 def _card_deposits(conn, a) -> dict:
@@ -204,7 +213,8 @@ def _card_deposits(conn, a) -> dict:
                 "bank_in": bank is not None,
             }
         )
-    return {"summary": f"{a['sales_date']} 매출 정산 입금 {len(rows)}건", "rows": rows}
+    who = f" {a['issuer']}" if a["issuer"] else ""
+    return {"summary": f"{a['sales_date']}{who} 매출 정산 입금 {len(rows)}건", "rows": rows}
 
 
 def _bank_tx(conn, a) -> dict:

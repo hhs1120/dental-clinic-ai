@@ -3,8 +3,9 @@
 submit_cause, 조회 도구는 backend/recon_tools.py(읽기 전용). 근거 번호가 그 실행의 조회가 아니면 훅이 막는다.
 실행 기록(ax_agent_runs·ax_agent_steps, 대상 = 건 키)만이 상태다 — 화면 줄(lines)·확정·자동 마감(backend/recon_auto.py)·
 채점이 모두 result()와 lines()로 읽는다. 조사 과정 줄은 기록을 나눠 보인다(설계 §3 "조사 과정 줄
-종류"): 조회 도구 인자 checked → 비교·purpose → 가설, 조회 → 조회 번호 + 요약, submit_cause → 결론. 모델 글은
-`가설:`·`비교:` 머리말로 가설·비교(머리말 없으면 생각) — v2 실행과, v3에서 모델이 따로 쓴 글.
+종류"): 조회 도구 인자 checked → 비교·purpose → 가설, 조회 → 조회 번호 + 요약, submit_cause → 결론. 모델이 따로 쓴
+글은 `가설:`·`비교:` 머리말로 가설·비교(머리말 없으면 생각). 잠금이 만료된 running(끊긴 조사)과 failed는 결과가 아니다 —
+화면에서 다시 조사할 수 있다.
 일괄(make recon)은 라운드 배치(backend/harness/rounds.py), 화면 `조사 시작`은 일반 호출(investigate)."""
 
 import argparse
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from backend import db, prompts, recon_match, recon_tools
 from backend.harness import rounds
-from backend.harness.hooks import Rule
+from backend.harness.hooks import BAD_ARGS, Rule
 from backend.harness.loop import AgentSpec, Runner
 from backend.harness.store import RunLocked, RunStore, SqliteLlmLog, parse_step
 from backend.harness.tools import Tool, ToolRegistry
@@ -32,7 +33,7 @@ AGENT, ALIAS, TASK = "recon_cause", "recon", "recon"
 PROMPT_VERSION = "v3"
 SUBMIT = "submit_cause"
 EVIDENCE_RULE = "recon.evidence"
-# 조사 단계 상한(끝내는 도구 포함) — 시작값 8은 dev 시험 5건 중 2건이 걸려(한 턴에 조회 3~4개를 묶어 부름) 12로(설계 §3)
+# 조사 단계 상한(끝내는 도구 포함, 설계 §3) — 시작값 8은 dev 시험 5건 중 2건이 걸려 12로(AI 실험 기록 §26)
 RECON_MAX_TOOL_CALLS = 12
 RECON_MAX_USD = 0.3  # 실행당 비용 상한 — 넘으면 원인 미정으로 끝난다
 EST_USD = 0.08  # 건당 예상 비용(일반 호출, 추정) — 일괄 시작 때 찍는 값
@@ -52,6 +53,7 @@ CAUSES = (
 )
 _PREFIX = re.compile(r"^[\s*#>-]*(가설|비교)\s*[:：]\**\s*")
 _KIND = {"가설": "hypothesis", "비교": "compare"}
+ENDED = ("done", "handed_off")  # 결과가 있는 끝 — failed는 원인 미정이 아니라 다시 조사할 건
 _END_REASON = {
     "call_limit": "조사 상한에 걸려 원인 미정",
     "cost_limit": "비용 상한에 걸려 원인 미정",
@@ -128,11 +130,16 @@ def _submitted(steps: list[dict]) -> dict | None:
     return None
 
 
+_LIVE = (
+    "agent = ? AND prompt_version = ? AND (status IN ('done', 'handed_off')"
+    " OR (status = 'running' AND heartbeat_at >= ?))"
+)  # 결과로 읽는 실행 — 끝났거나 잠금이 살아 있는 running
+
+
 def _latest(conn: sqlite3.Connection, key: str):
     return conn.execute(
-        "SELECT * FROM ax_agent_runs WHERE agent = ? AND target = ? AND prompt_version = ?"
-        " AND status IN ('done', 'handed_off', 'running') ORDER BY id DESC LIMIT 1",
-        (AGENT, key, PROMPT_VERSION),
+        f"SELECT * FROM ax_agent_runs WHERE {_LIVE} AND target = ? ORDER BY id DESC LIMIT 1",
+        (AGENT, PROMPT_VERSION, RunStore(conn).fresh_since(), key),
     ).fetchone()
 
 
@@ -169,9 +176,8 @@ def results(conn: sqlite3.Connection, keys: set[str]) -> dict[str, dict]:
     """result()와 조사 과정 줄(lines)을 여러 건에 — 쿼리 수가 건 수와 무관하다(일계표 화면)"""
     latest = {}
     for run in conn.execute(
-        "SELECT * FROM ax_agent_runs WHERE agent = ? AND prompt_version = ?"
-        " AND status IN ('done', 'handed_off', 'running') ORDER BY id",
-        (AGENT, PROMPT_VERSION),
+        f"SELECT * FROM ax_agent_runs WHERE {_LIVE} ORDER BY id",
+        (AGENT, PROMPT_VERSION, RunStore(conn).fresh_since()),
     ):
         if run["target"] in keys:
             latest[run["target"]] = run
@@ -185,13 +191,24 @@ def results(conn: sqlite3.Connection, keys: set[str]) -> dict[str, dict]:
             steps[row["run_id"]].append(parse_step(row))
     return {
         k: _summary(run, steps[run["id"]])
-        | {"lines": lines(steps[run["id"]], finished=run["status"] != "running")}
+        | {"lines": lines(steps[run["id"]], finished=run["status"] in ENDED)}
         for k, run in latest.items()
     }
 
 
+def _short_block(text: str) -> str:
+    """인자 검증 오류(pydantic 원문) → 첫 오류 문구만 — 화면 막힘 줄"""
+    msgs = [
+        ln.strip().split(" [type=")[0]
+        for ln in text.splitlines()[1:]
+        if ln.startswith("  ") and not ln.strip().startswith("For further")
+    ]
+    return "막힘: " + (" · ".join(msgs) or text)
+
+
 def lines(steps: list[dict], finished: bool = True) -> list[dict]:
-    """조사 과정 줄 — 저장된 단계를 나눠 보인다. finished면 제출이 없을 때 '원인 미정' 결론을 붙인다"""
+    """조사 과정 줄 — 저장된 단계를 나눠 보인다. finished(실행이 done·handed_off로 끝남)면 제출이 없을 때 '원인 미정'
+    결론을 붙인다. 인자 검증에 막힌 조회는 검증 전 purpose·checked를 줄로 내지 않는다"""
     nos = {s["seq"]: i + 1 for i, s in enumerate(recon_tools.lookup_steps(steps, SUBMIT))}
     out = []
     for s in steps:
@@ -203,7 +220,7 @@ def lines(steps: list[dict], finished: bool = True) -> list[dict]:
                 kind = _KIND[m.group(1)] if m else "note"
                 out.append({"kind": kind, "text": para[m.end() :].strip() if m else para})
         elif s["kind"] == "tool":
-            if s["tool"] != SUBMIT:
+            if s["tool"] != SUBMIT and s["rule_id"] != BAD_ARGS:
                 for field, kind in (("checked", "compare"), ("purpose", "hypothesis")):
                     if text := (s["args"] or {}).get(field):
                         out.append({"kind": kind, "text": text})
@@ -229,7 +246,10 @@ def lines(steps: list[dict], finished: bool = True) -> list[dict]:
                     }
                 )
             else:
-                out.append({"kind": "blocked", "tool": s["tool"], "text": str(s["result"])})
+                text = str(s["result"])
+                if s["rule_id"] == BAD_ARGS:
+                    text = _short_block(text.removeprefix("막힘: "))
+                out.append({"kind": "blocked", "tool": s["tool"], "text": text})
     if finished and _submitted(steps) is None:
         out.append(
             {
@@ -279,7 +299,7 @@ def _close_stuck(store: RunStore, runner: Runner, key: str) -> bool:
 
 def investigate(conn: sqlite3.Connection, gw, key: str, today: date, on_line=None) -> dict:
     """화면 `조사 시작` — 건 하나를 일반 호출로 끝까지, 줄은 on_line으로. 지금 탐지에 없는 키 ValueError,
-    지금 버전으로 끝난 실행이 있으면 AlreadyDone, 다른 곳이 돌리는 중이면 RunLocked"""
+    지금 버전으로 끝난 실행이 있으면 AlreadyDone, 다른 곳이 돌리는 중이면 RunLocked. 실패로 끝나면 None"""
     books = recon_match.load(conn, today)
     item = next((i for i in recon_match.detect(books) if i["key"] == key), None)
     if item is None:
@@ -295,7 +315,7 @@ def investigate(conn: sqlite3.Connection, gw, key: str, today: date, on_line=Non
     if not _close_stuck(store, runner, key):
         raise RunLocked(f"{AGENT}/{key} 실행 중")
     out = runner.start(key, recon_tools.input_text(item, books, today))
-    live.flush(out.run_id, finished=True)
+    live.flush(out.run_id, finished=out.status in ENDED)
     return result(conn, key)
 
 
@@ -332,14 +352,16 @@ def run_batch(
     ids = []
     for item in todo:
         row = conn.execute(
-            "SELECT id FROM ax_agent_runs WHERE agent = ? AND target = ? AND status = 'running'",
+            "SELECT id, prompt_version FROM ax_agent_runs WHERE agent = ? AND target = ?"
+            " AND status = 'running'",
             (AGENT, item["key"]),
         ).fetchone()
-        ids.append(
-            row[0]
-            if row
-            else rounds.create(runner, item["key"], recon_tools.input_text(item, books, today))
-        )
+        if row and row["prompt_version"] == PROMPT_VERSION:
+            ids.append(row["id"])  # 끊긴 일괄을 이어 간다
+            continue
+        if row and not _close_stuck(store, runner, item["key"]):
+            continue  # 옛 버전을 다른 곳이 아직 돌리는 중
+        ids.append(rounds.create(runner, item["key"], recon_tools.input_text(item, books, today)))
     rounds.run_rounds(
         runner,
         gw,

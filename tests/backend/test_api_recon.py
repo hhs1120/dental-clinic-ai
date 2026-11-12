@@ -108,6 +108,64 @@ def test_investigate_twice_409(agent_client):
     assert c.post(f"/finance/recon/{key}/investigate").status_code == 409
 
 
+def test_investigate_failure_sends_error(agent_client):
+    """게이트웨이 실패 — 결론 줄 없이 error(다시 시작할 수 있음), 일계표 agent는 비어 있다"""
+    c = agent_client(agent_client.look, ("fail", "refusal"))
+    key = _key(c)
+    r = c.post(f"/finance/recon/{key}/investigate")
+    assert _events(r.text) == ["line", "line", "error"]
+    assert "다시" in r.text and "원인 미정" not in r.text
+    assert c.get("/finance/recon").json()["days"][0]["items"][0]["agent"] is None
+
+
+def _running(tmp_path, key, beat):
+    from backend import db, recon_agent
+    from backend.harness.store import RunStore
+
+    conn = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    with conn:
+        rid = RunStore(conn).create_run(recon_agent.AGENT, key, recon_agent.PROMPT_VERSION, "x")
+        conn.execute("UPDATE ax_agent_runs SET heartbeat_at = ? WHERE id = ?", (beat, rid))
+    conn.close()
+
+
+def test_investigate_while_running_409(agent_client, tmp_path):
+    """다른 탭이 조사 중(잠금 살아 있음) — 409"""
+    c = agent_client(agent_client.look, agent_client.submit())
+    key = _key(c)
+    _running(tmp_path, key, "2999-01-01 00:00:00")
+    r = c.post(f"/finance/recon/{key}/investigate")
+    assert r.status_code == 409 and "조사 중" in r.json()["detail"]
+
+
+def test_investigate_stale_running_restarts(agent_client, tmp_path):
+    """끊긴 조사(잠금 만료) — 409가 아니라 닫고 새로 조사한다"""
+    c = agent_client(agent_client.look, agent_client.submit())
+    key = _key(c)
+    _running(tmp_path, key, "2000-01-01 00:00:00")
+    r = c.post(f"/finance/recon/{key}/investigate")
+    assert _events(r.text)[-1] == "done"
+    assert c.get("/finance/recon").json()["days"][0]["items"][0]["agent"]["cause"] == "amount_typo"
+
+
+def test_worker_run_locked_message(monkeypatch, tmp_path, client):
+    """사전 확인과 실행 시작 사이에 다른 탭이 먼저 시작 — 낯선 예외 이름 대신 '다른 곳에서 조사 중'"""
+    import datetime as dt
+    import queue
+
+    from backend import recon_agent
+    from backend.harness.store import RunLocked
+
+    def locked(*a, **k):
+        raise RunLocked("x")
+
+    monkeypatch.setattr(recon_agent, "investigate", locked)
+    q: queue.Queue = queue.Queue()
+    paths = (tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    api._recon_worker(paths, lambda conn: None, "k", dt.date(2026, 12, 1), q)
+    assert "다른 곳에서 조사 중" in q.get()["message"]
+
+
 def test_investigate_unknown_key_400(agent_client):
     c = agent_client(agent_client.look)
     assert c.post("/finance/recon/000000000000/investigate").status_code == 400
