@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-check-sample claim-check-dev recon expense-ai
+.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-omission-cases claim-check-sample claim-check-dev recon expense-ai
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -90,6 +90,10 @@ claim-check:
 # ⑤-2b 추가 처치 누락(설계 §2b, 과금·이어 돎) — SCOPE=all이면 제출·대기 줄(평가), 기본은 대기 줄(화면)
 claim-omission:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_omission run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑤-2b 평가 전용 합성 사례 — 코드가 정한 명세로 LLM이 차트 문장만(과금, 이어 돎, 설계 §2b)
+claim-omission-cases:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_omission cases
 
 # ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출 — BATCH=1이면 Batch 반값)
 claim-check-sample:
