@@ -43,6 +43,7 @@
 - `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
 - `make dev` — 앱(API 8000 + 화면 3000, 검색은 색인이 있어야). `make e2e` — 화면 Playwright(로컬 전용, 켜 둔 `make dev`와 따로 `.next-e2e`로 띄운다)
 - `make fmt` / `make lint` — 파이썬 ruff, 프론트 ESLint·Prettier·tsc
+- `make eval` — dev 평가 리포트(`evaluation/eval.py`, 저장된 결과로 채점 — 검색 절은 질문 임베딩 API를 부른다). test는 `python -m evaluation.eval --split test --section …`(사람)
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
 - ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
 - ① `make hard-label`(과금, 이어 돎) / `hard-review` — 어려운 통화 정답 라벨(`evaluation/hard_labels.py`, 평가 설계 §2.1)

@@ -1,7 +1,7 @@
 """⑤ 청구 점검 1단계 (기능 정의 §5 ⑤, 설계 docs/superpowers/specs/2026-11-10-claim-review-design.md §1).
 삭감 대응: 확정 월 조정·불능 청구의 재심 신청 기한·칩·사유 유형 규칙 제안(가상 데이터 생성 설계 §2.4)과 사람 판단
 기록(ax_claim_judgments). 청구 전 점검: 대기 청구 줄의 시술 × 차트 상병이 허용 상병 밖이면 경고(§4.3).
-2단계 AI 점검(backend/claim_check.py, 설계 §2)의 저장 결과를 청구 전 AI 칩과 요건 사유 조정 건의 판단 추천에 붙인다.
+2단계 AI 점검(요건 backend/claim_check.py 설계 §2, 추가 처치 누락 backend/claim_omission.py 설계 §2b)의 저장 결과를 청구 전 AI 칩과 요건 사유 조정 건의 판단 추천에 붙인다.
 청구 건마다 DB를 부르지 않고 표마다 한 번 훑는 집합 쿼리로 센다 — 청구 수와 무관하게 쿼리 수가 같다.
 master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(backend/today.py)도 이 함수로 센다."""
 
