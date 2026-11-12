@@ -433,8 +433,8 @@ const S = {
   evalTab:"judge", jIdx:0, jAns:{}, jActive:0, jBuf:"", jSaved:false, jMemo:"", judged:[], bIdx:0, bVotes:[], bRevealed:null,
   emrChart:null, emrTab:"진료기록", emrQ:"", emrMoves:0, emrMode:"desk", emrPanel:"기본", emrDate:null, emrWeek:false,
   claimChip:"all", claimOpen:null, claimJudge:{},
-  finMonth:"2026-11", finOpen:null, finConfirm:{},
-  claimTab:"adjust", claimReviewed:{}, claimSubmitted:{}, preChip:"dx", finTab:"income", expChip:"all", expOpen:null, expAcct:{}, reportMonth:null, reportScope:"monthly", back:"home",
+  finMonth:null, finOpen:null, reconConf:{}, expMonth:null,
+  claimTab:"adjust", claimReviewed:{}, claimSubmitted:{}, preChip:"dx", finTab:"income", expChip:"all", expOpen:null, expAcct:{}, expPick:{}, expConf:{}, expMemory:{}, reportMonth:null, reportScope:"monthly", back:"home",
   followChip:"all", followTop:false, followHideContacted:false, contacted:{}, howOpen:false
 };
 const $ = s => document.querySelector(s);
@@ -468,7 +468,6 @@ const PAY_KIND = { visit:"진료비", settlement:"미수 정산" };
 const PAY_METHOD = { card:"카드", cash:"현금", transfer:"계좌이체" };
 const CLAIM_ST = { paid:"지급", pending:"청구 전", submitted:"심사 중", adjusted:"조정", denied:"불능" };
 const PLAN_ST = { open:"미시행", done:"완료", cancelled:"취소" };
-const RECON_CAUSES = ["분할결제","취소 후 재승인","수수료 차이","입금 지연","진료 외 매출","입력 누락","날짜 밀림","금액 오입력","결제수단 오입력","모르겠음"];
 
 /* ───────── 준비표 칩·제안(규칙 예시) ───────── */
 const ALERT_ACT = {
@@ -669,7 +668,10 @@ R.today = () => {
   const byType = t => rows.filter(r => r.type === t).length;
   const yCalls = d.calls.filter(c => c.at.startsWith("2026-11-30"));
   const appealSoon = d.slots.adjust.filter(a => !isDxError(a) && claimDeadline(a).left <= 30).sort((a, b) => a.reviewed < b.reviewed ? -1 : 1);
-  const lastRecon = d.slots.recon.filter(r => r.card_diff_day).slice(-3).reverse();
+  // 일계표 불일치·지출 증빙 확인 — 앱 오늘 화면과 같은 숫자(backend/recon.py·expense.py open_summary), 와이어프레임 안 확정만큼 뺀다
+  const F = d.slots.finance, reconItems = Object.values(F.ledger).flatMap(x => x.days.flatMap(y => y.items));
+  const reconOpenN = F.recon_open.count - reconItems.filter(i => reconConf(i)).length;
+  const expOpenN = F.expense_open.month ? F.expense[F.expense_open.month].rows.map(expRow).filter(r => !r.confirmed && (!r.docs.length || r.check)).length : 0;
   const tier1 = d.slots.follow.filter(f => f.chips.length >= 4).length;
   const judgedLeft = d.calls.length - S.judged.length;
   const unconf = rows.filter(isUnconfirmed);
@@ -736,7 +738,8 @@ R.today = () => {
         ${appealSoon.slice(0, 2).map(a => { const dl = claimDeadline(a); return todo('<span class="tag t-caut">재심 기한</span>', `${esc(a.name)} · ${esc(a.procedure)} 조정 ${won(a.claimed - a.paid)}`, `기한 ${mdw(dl.d)} · ${dl.left}일 남음`, "go", "claims"); }).join("")}
         ${preDx.length ? todo('<span class="tag t-caut">청구 전 점검</span>', `상병 확인 경고 ${preDx.length}건`, "이번 달 청구 내기 전 확인 · 상병 착오는 재청구 불가", "openPre", "") : ""}
         ${todo('<span class="tag t-fam">후속 관리</span>', `1순위 ${tier1}명`, "예약 없이 놓친 환자 · 칩 4개 이상", "go", "followup")}
-        ${lastRecon.map(r => todo('<span class="tag t-neg">일계표 불일치</span>', `${mdw(r.date)} 카드 합계 차이`, "규칙 묶음은 자동 마감 · 애매한 건만 맞음/아님 확정", "openRecon", r.date)).join("")}
+        ${reconOpenN > 0 ? todo('<span class="tag t-neg">일계표</span>', `일계표 불일치 ${reconOpenN}건`, "장부와 카드·통장 입금이 안 맞는 건 확정", "openRecon", F.recon_open.month || "") : ""}
+        ${expOpenN ? todo('<span class="tag t-caut">지출 증빙</span>', `지출 증빙 확인 ${expOpenN}건`, "지난달 출금 중 증빙 못 찾음·과목 확인 필요", "openExpense", F.expense_open.month) : ""}
       </ul>
     </section>
   </div>`;
@@ -1404,43 +1407,6 @@ function claimExpand(a, id) {
 }
 
 /* ── ⑧ 재무 대조 ── */
-R.finance = () => {
-  const all = S.data.slots.recon, months = [...new Set(all.map(r => r.date.slice(0, 7)))];
-  const rows = all.filter(r => r.date.startsWith(S.finMonth));
-  const mis = rows.filter(r => r.card_diff_day);
-  return head("재무 대조 · 수입 일계표", "장부(수납) 결제수단별 합계와 카드 승인 합계를 코드가 맞춰 봅니다. 불일치 행을 펼치면 AI가 조사한 과정과 원인 후보가 나오고, 맞는지는 사람이 확정합니다. 장부 수정은 사람이 합니다.", `<span class="updated">마지막 대조 12/1 04:20</span>`) + `
-  <div class="row" style="margin-bottom:12px"><div class="seg">${months.map(m => `<button class="${S.finMonth === m ? "on" : ""}" data-act="finMonth" data-arg="${m}">${+m.slice(5)}월</button>`).join("")}</div>
-    <span class="fchip">영업일 <b>${rows.length}</b></span><span class="fchip">카드 합계 차이 있는 날 <b>${mis.length}</b></span>
-    <span class="spacer"></span><span class="caption1 fg3">카드 합계만 대조한 예시 · 현금·이체·정산 대조는 ⑧에서</span></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>날짜</th><th class="num">장부 카드</th><th class="num">장부 현금</th><th class="num">장부 이체</th><th class="num">장부 합계</th><th class="num">카드 승인 합계</th><th class="num">카드 차이</th><th>상태</th></tr></thead><tbody>
-  ${rows.map(r => { const L = r.ledger, tot = (L.card || 0) + (L.cash || 0) + (L.transfer || 0), diff = (L.card || 0) - r.card_approved, open = S.finOpen === r.date, cf = S.finConfirm[r.date];
-    return `<tr class="${r.card_diff_day ? "click" : ""} ${open ? "sel" : ""}" ${r.card_diff_day ? `data-act="finOpen" data-arg="${r.date}"` : ""}>
-      <td class="num">${mdw(r.date)}</td><td class="num">${commas(L.card)}</td><td class="num">${commas(L.cash)}</td><td class="num">${commas(L.transfer)}</td><td class="num"><b>${commas(tot)}</b></td><td class="num">${commas(r.card_approved)}</td>
-      <td class="num ${diff ? "neg" : "fg3"}">${diff ? (diff > 0 ? "+" : "") + commas(diff) : "0"}</td>
-      <td>${r.card_diff_day ? (cf ? `${DONE(esc(cf))}` : `<span class="tag t-neg">카드 합계 차이</span>`) : '<span class="fg3">차이 없음</span>'}</td></tr>
-      ${open ? `<tr class="expand"><td colspan="8">${finExpand(r, diff)}</td></tr>` : ""}`; }).join("")}
-  </tbody></table></div>`;
-};
-function finExpand(r, diff) {
-  const cf = S.finConfirm[r.date];
-  const cand = [["분할결제", "승인 2건 합이 장부 1건과 같음"], ["금액 오입력", "장부 금액과 가장 가까운 승인의 차이가 한 자리 숫자"]];
-  const steps = [
-    ["비교", `장부 카드 ${won(r.ledger.card)} vs 승인 ${won(r.card_approved)} → 차이 ${won(Math.abs(diff))}`],
-    ["가설", "분할결제 또는 취소 후 재승인일 수 있음"],
-    ["조회", `query_card_sales(date=${r.date}) → 승인 건별 금액·시각`],
-    ["조회", `query_payments(date=${r.date}, method=card) → 장부 건별 금액`],
-    ["비교", "승인 2건의 합이 장부 1건과 맞는지 확인 → 결과 자리"]
-  ];
-  return `<div class="grid2" style="gap:24px">
-    <div><div class="row"><h3 class="headline2">조사 과정</h3>${AI}<span class="caption1 fg3">도구 호출 순서 · 조회 조건 · 비교 결과 · 단계 상한 8</span></div>
-      <ol style="margin:8px 0 0;padding-left:20px" class="label1">${steps.map(([k, v]) => `<li style="margin-bottom:6px"><span class="tag">${k}</span> ${esc(v)}</li>`).join("")}</ol></div>
-    <div><div class="row"><h3 class="headline2">원인 후보</h3>${AI}</div>
-      <ul class="list">${cand.map(([c, w], i) => `<li><span class="tag ${i ? "" : "t-brand"}">${i ? "2순위" : "1순위"}</span><div class="main"><b>${c}</b><div class="caption1 fg3">근거: ${w}</div></div></li>`).join("")}</ul>
-      <div class="row mt12"><span class="label2">1순위가 맞나요?</span><button class="btn btn-sm ${cf === cand[0][0] ? "on" : ""}" data-act="finYes" data-arg="${r.date}|${cand[0][0]}">맞음</button>
-        <label class="label2" for="finNo-${r.date}">아님 →</label><select id="finNo-${r.date}" class="input" data-fin="${r.date}"><option value="">원인 고르기</option>${RECON_CAUSES.map(c => `<option ${cf === c ? "selected" : ""}>${c}</option>`).join("")}</select></div>
-      <p class="caption1 fg3" style="margin:8px 0 0">사람 확정은 ax_recon_confirmations에 남습니다. dev 달 확정만 재료로 나눠 프롬프트 개정에 씁니다.</p></div></div>`;
-}
-
 /* ── ⑨ 후속 관리 ── */
 R.followup = () => {
   const CH = ["리콜 연체", "올해 스케일링 급여 미사용", "노쇼 뒤 재예약 없음", "미수 잔액", "진료계획 미예약", "다른 치과 추정"];
@@ -1548,26 +1514,106 @@ R.report = () => {
   </tbody></table></div>`;
 };
 
-/* ── ⑧-2 지출 증빙 ── */
-function expenseView() {
-  const all = S.data.slots.expense, none = all.filter(x => !x.match), rows = all.filter(x => S.expChip === "all" || (S.expChip === "none" ? !x.match : x.match));
-  const KIND = { statement:"거래명세서", tax_invoice:"세금계산서", order_email:"주문 메일", receipt:"영수증", bill:"고지서" };
-  return head("재무 대조 · 지출 증빙", `통장 출금과 병원 카드 사용을 증빙과 맞춥니다. 계정 과목은 AI가 추천하고 사람이 확정합니다. 확정한 거래처는 다음부터 기본값이 됩니다. 급여·공단 입금은 대상이 아닙니다.`, `<span class="updated">${all[0].at.slice(0, 7)} 출금 · 마지막 대조 12/1 04:20</span>`) + `
-  <div class="row" style="margin-bottom:12px">
-    <button class="fchip ${S.expChip === "all" ? "on" : ""}" data-act="expChip" data-arg="all">전체 <b>${all.length}</b></button>
-    <button class="fchip ${S.expChip === "found" ? "on" : ""}" data-act="expChip" data-arg="found">증빙 찾음 <b>${all.length - none.length}</b></button>
-    <button class="fchip ${S.expChip === "none" ? "on" : ""}" data-act="expChip" data-arg="none">증빙 없음 <b>${none.length}</b></button>
-    <span class="spacer"></span><span class="caption1 fg3">찾은 증빙은 금액·날짜 규칙 후보 · 추천 계정은 AI 자리</span></div>
-  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>날짜</th><th>출처</th><th>거래처</th><th class="num">금액</th><th>찾은 증빙</th><th>추천 계정 ${AI}</th><th>사람 확정</th></tr></thead><tbody>
-  ${rows.map(x => { const id = x.at + x.who + x.amount, open = S.expOpen === id;
-    return `<tr class="${x.match ? "click" : ""} ${open ? "sel" : ""}" ${x.match ? `data-act="expOpen" data-arg="${esc(id)}"` : ""}><td class="num">${x.at}</td><td class="nowrap">${x.source}</td><td class="nowrap">${esc(x.who)}</td><td class="num">${commas(x.amount)}</td>
-      <td>${x.match ? `<span class="tag t-brand">${x.match}</span> <span class="label2">${x.docs.length > 1 ? "증빙 " + x.docs.length + "건" : KIND[x.docs[0].kind] + " · " + esc(x.docs[0].issuer)}</span>` : '<span class="tag t-neg">증빙 없음</span>'}</td>
-      <td class="fg3 nowrap">추천 자리</td><td><select data-exp="${esc(id)}" aria-label="계정 과목"><option value="">미정</option>${S.data.slots.accounts.map(a => `<option ${S.expAcct[id] === a ? "selected" : ""}>${a}</option>`).join("")}</select>${S.expAcct[id] ? " " + DONE(esc(S.expAcct[id])) : ""}</td></tr>
-      ${open ? `<tr class="expand"><td colspan="7"><div class="caption1 fg3">${x.docs.map(d => `${KIND[d.kind]} ${d.on} ${commas(d.amount)}`).join(" · ")}</div><pre class="label2" style="white-space:pre-wrap;margin:8px 0 0">${esc(x.body || "")}</pre></td></tr>` : ""}`; }).join("")}
+/* ── ⑧ 재무 대조 — 앱 frontend/components/finance/(finance-view·ledger-table·recon-item)와 같은 구성.
+   데이터는 앱과 같은 backend/recon.py ledger·backend/expense.py sheet(최근 4개월). 조사 에이전트(3단계)·AI 추천(4단계) 칸은 아직 없다 ── */
+const CAUSE_LABEL = { split_payment:"분할결제", cancel_reapprove:"취소 후 재승인", fee_mismatch:"수수료 차이", deposit_delay:"입금 지연", non_clinical_sale:"진료 외 매출", entry_missing:"입력 누락", amount_typo:"금액 오입력", date_shift:"날짜 밀림", method_wrong:"결제수단 오입력" };
+const LEDGER_CAUSES = ["entry_missing", "amount_typo", "date_shift", "method_wrong"];
+const METHOD_KO = { card:"카드", cash:"현금", transfer:"이체" };
+const monthBtn = (m, prev) => `${!prev || prev.slice(0, 4) !== m.slice(0, 4) ? `${m.slice(0, 4)}년 ` : ""}${+m.slice(5)}월`;
+const monthBtns = (months, cur, act) => `<div class="row" style="flex-wrap:wrap;gap:6px">${months.map((m, k) => `<button class="btn btn-sm ${m === cur ? "on" : ""}" data-act="${act}" data-arg="${m}">${monthBtn(m, months[k - 1])}</button>`).join("")}</div>`;
+const atShort = x => `${x.slice(5, 7)}/${x.slice(8, 10)}${x.length > 10 ? " " + x.slice(11, 16) : ""}`;
+const finDiff = n => n === null ? '<span class="fg3">—</span>' : n === 0 ? '<span class="fg3">0</span>' : `<b class="neg">${n > 0 ? "+" : "−"}${commas(Math.abs(n))}</b>`;
+const reconConf = i => S.reconConf[i.key] || i.confirmation;
+function reconStatus(d) {
+  if (d.status === "pending") return '<span class="tag">정산 대기</span>';
+  if (!d.items.length) return '<span class="fg3">차이 없음</span>';
+  const open = d.items.filter(i => !reconConf(i)).length;
+  return open ? `<span class="tag t-neg">불일치 ${open}건</span>` : '<span class="tag t-pos">확인함</span>';
+}
+function reconItem(i) {
+  const c = reconConf(i), ledgerFix = c && LEDGER_CAUSES.includes(c.cause);
+  return `<section class="card" style="margin-top:8px" aria-label="불일치 건 ${atShort(i.date)}"><div class="grid2">
+    <div><h3 class="headline2">장부</h3>${i.ledger_rows.length ? `<ul class="label2" style="margin:6px 0 0;padding-left:16px">${i.ledger_rows.map(r => `<li>${atShort(r.paid_at)} · ${esc(r.name)} · ${METHOD_KO[r.method] || r.method} 받은 돈 ${won(r.amount_paid)} <span class="fg3">(낼 돈 ${won(r.amount_due)}${r.approval_no ? " · 승인 " + r.approval_no : ""})</span></li>`).join("")}</ul>` : '<p class="fg3 mt8">장부에 해당 수납 없음</p>'}</div>
+    <div><h3 class="headline2">카드·통장</h3>${i.fin_rows.length ? `<ul class="label2" style="margin:6px 0 0;padding-left:16px">${i.fin_rows.map(r => `<li>${atShort(r.at)} · ${esc(r.label)} · ${won(r.amount)}${r.detail ? `<div class="fg3">매출 ${won(r.detail.sales_total)} (${atShort(r.detail.sales_date)}) · 수수료 ${won(r.detail.fee)} (기대 ${won(r.detail.expected_fee)}) · 예상 입금 ${atShort(r.detail.expected_on)}</div>` : ""}</li>`).join("")}</ul>` : '<p class="fg3 mt8">카드·통장에 해당 내역 없음</p>'}</div></div>
+    <div class="row mt12" style="flex-wrap:wrap"><span class="label2">규칙 추정: <b>${CAUSE_LABEL[i.rule_cause]}</b></span>${c ? `<span class="tag t-done">${CAUSE_LABEL[c.cause]} · ${esc(c.by)} ${c.at}</span>` : ""}<span class="spacer"></span>
+      <button class="btn btn-sm ${c && c.cause === i.rule_cause ? "on" : ""}" data-act="reconYes" data-arg="${i.key}|${i.rule_cause}">맞음</button>
+      <label class="label2 fg3" for="reconNo-${i.key}">아님 →</label><select id="reconNo-${i.key}" data-recon="${i.key}" aria-label="원인 고르기"><option value="" ${c && c.cause !== i.rule_cause ? "" : "selected"} disabled>원인 고르기</option>${Object.keys(CAUSE_LABEL).map(k => `<option value="${k}" ${c && c.cause !== i.rule_cause && c.cause === k ? "selected" : ""}>${CAUSE_LABEL[k]}</option>`).join("")}</select></div>
+    ${ledgerFix ? '<p class="caption1 fg3 mt8">장부 수정은 전자차트에서 합니다</p>' : ""}</section>`;
+}
+function ledgerView() {
+  const F = S.data.slots.finance, months = Object.keys(F.ledger), m = F.ledger[S.finMonth] ? S.finMonth : months[months.length - 1], sheet = F.ledger[m];
+  const items = Object.values(F.ledger).flatMap(x => x.days.flatMap(d => d.items)), mine = sheet.days.flatMap(d => d.items);
+  const localOpen = list => list.filter(i => !reconConf(i)).length;
+  const sums = s => `<td class="num">${commas(s.ledger)}</td><td class="num">${commas(s.fin)}</td><td class="num">${finDiff(s.diff)}</td>`;
+  return `<div class="row" style="margin-bottom:12px;flex-wrap:wrap">${monthBtns(months, m, "finMonth")}<span class="spacer"></span>
+      <span class="label2 fg3">영업일 ${sheet.chips.days}</span><span class="label2 fg3">불일치 있는 날 ${sheet.chips.mismatch_days}</span>
+      <b class="label2">이 달 확정 안 된 건 ${localOpen(mine)}</b><span class="label2 fg3">전체 확정 안 된 건 ${F.recon_open.count - (items.length - localOpen(items))}</span></div>
+  <div class="tbl-wrap"><table class="tbl"><thead>
+    <tr><th rowspan="2">날짜</th><th colspan="3" style="text-align:center">카드</th><th colspan="3" style="text-align:center">현금</th><th colspan="3" style="text-align:center">이체</th><th rowspan="2">상태</th></tr>
+    <tr>${["승인", "입금", "입금"].map(f => `<th class="num">장부</th><th class="num">${f}</th><th class="num">차이</th>`).join("")}</tr></thead><tbody>
+  ${sheet.days.map(d => { const click = d.status === "ok" && d.items.length, open = S.finOpen === d.date, cash = d.cash;
+    return `<tr class="${click ? "click" : ""} ${open ? "sel" : ""}" ${click ? `data-act="finOpen" data-arg="${d.date}"` : ""}><td class="num nowrap">${mdw(d.date)}</td>${sums(d.card)}
+      <td class="num">${commas(cash.ledger)}</td><td class="num nowrap">${cash.pending ? '<span class="fg3">대조 전</span>' : cash.fin === null || !cash.deposit ? '<span class="fg3">—</span>' : `${commas(cash.fin)}<div class="caption1 fg3">${cash.deposit.days}일 치 합산</div>`}</td><td class="num">${finDiff(cash.diff)}</td>
+      ${sums(d.transfer)}<td>${reconStatus(d)}</td></tr>
+      ${open ? `<tr class="expand"><td colspan="11">${d.items.map(reconItem).join("")}</td></tr>` : ""}`; }).join("")}
   </tbody></table></div>`;
 }
-const financeIncome = R.finance;
-R.finance = () => tabs(S.finTab, "finTab", [["income", "수입 일계표"], ["expense", "지출 증빙"]]) + (S.finTab === "expense" ? expenseView() : financeIncome());
+/* ── ⑧-2 지출 증빙 — 앱 frontend/components/finance/expense-table.tsx와 같은 구성(데이터는 backend/expense.py) ──
+   계정 과목은 이 줄 확정 > 같은 출금처의 최근 확정(품목으로 정하는 거래처는 기억 안 함) > 거래처 기본 과목. AI 칸은 4단계 */
+const EXP_KIND = { statement:"거래명세서", tax_invoice:"세금계산서", order_email:"주문 메일", receipt:"영수증", bill:"고지서" };
+const EXP_FROM = { confirmed:"확정", memory:"지난 확정", vendor:"거래처 기본" };
+const EXP_CHIPS = [["found", "증빙 찾음"], ["none", "증빙 못 찾음"], ["check", "과목 확인 필요"], ["open", "미확정"]];
+const expId = r => `${r.table}-${r.id}`;
+const expFind = id => Object.values(S.data.slots.finance.expense).flatMap(x => x.rows).find(r => expId(r) === id);
+function expRow(r) {
+  const id = expId(r), c = S.expConf[id], byItem = r.check && r.account !== null;
+  let account = r.account, from = r.account_from;
+  if (c) { account = c.account; from = "confirmed"; }
+  else if (!byItem && S.expMemory[r.label]) { account = S.expMemory[r.label]; from = "memory"; }
+  const docs = c ? c.docs.map(i => S.data.slots.finance.expense_docs[i]) : r.docs;
+  const st = docs.filter(d => d.kind === "statement");
+  const diff = docs.length ? r.amount - (st.length ? st : docs).reduce((n, d) => n + d.amount, 0) : null;
+  return { ...r, key: id, byItem, account, from, docs, diff, check: account === null || byItem, confirmed: c || null };
+}
+const EXP_KEEP = { found: r => r.docs.length > 0, none: r => !r.docs.length, check: r => r.check, open: r => !r.confirmed };
+function expDocs(docs) {
+  if (!docs.length) return '<span class="tag t-neg">증빙 못 찾음</span>';
+  if (docs.length === 1) return `${EXP_KIND[docs[0].kind]} · ${esc(docs[0].issuer)} <span class="fg3">${md(docs[0].issued_on)}</span>`;
+  const st = docs.filter(d => d.kind === "statement").length, rest = docs.length - st;
+  return (st ? `거래명세서 ${st}장 합계` : `증빙 ${docs.length}장 합계`) + (st && rest ? ` <span class="fg3">+ 세금계산서 등 ${rest}장</span>` : "");
+}
+const expDiff = n => n === null ? '<span class="fg3">—</span>' : n === 0 ? '<span class="fg3">0</span>' : `<b class="neg">${n > 0 ? "+" : "−"}${won(Math.abs(n))}</b>`;
+function expDetail(r) {
+  const all = S.data.slots.finance.expense_docs, pick = S.expPick[r.key] ?? r.docs.map(d => d.id);
+  return `<tr class="expand"><td colspan="7"><div class="grid2" style="gap:16px">
+    <div><h3 class="headline2">증빙 본문</h3>${r.docs.length ? r.docs.map(d => `<p class="caption1 fg3 mt8">${EXP_KIND[d.kind]} · ${esc(d.issuer)} · ${md(d.issued_on)} · ${won(d.amount)}</p><pre class="label2" style="white-space:pre-wrap;margin:4px 0 0">${esc(d.body)}</pre>`).join("") : '<p class="fg3 mt8">찾은 증빙 없음</p>'}</div>
+    <div><h3 class="headline2">출금일 근처 증빙</h3><p class="caption1 fg3">체크한 증빙으로 확정합니다</p>
+      ${r.candidates.length ? r.candidates.map(i => { const d = all[i]; return `<label class="row label2 mt8"><input type="checkbox" data-exppick="${r.key}" value="${i}" ${pick.includes(i) ? "checked" : ""}> ${md(d.issued_on)} · ${won(d.amount)} · ${EXP_KIND[d.kind]} · ${esc(d.issuer)}</label>`; }).join("") : '<p class="fg3 mt8">근처 증빙 없음</p>'}</div>
+  </div></td></tr>`;
+}
+function expenseView() {
+  const F = S.data.slots.finance, months = Object.keys(F.expense), m = F.expense[S.expMonth] ? S.expMonth : months[months.length - 1], sheet = F.expense[m], all = sheet.rows.map(expRow);
+  const n = k => all.filter(EXP_KEEP[k]).length, amount = all.reduce((t, r) => t + r.amount, 0);
+  const rows = S.expChip === "all" ? all : all.filter(EXP_KEEP[S.expChip]);
+  const on = k => S.expChip === k ? "on" : "";
+  return `<div style="margin-bottom:12px">${monthBtns(months, m, "expMonth")}</div>
+  <div class="row" style="margin-bottom:12px;flex-wrap:wrap">
+    <button class="fchip ${on("all")}" data-act="expChip" data-arg="all">출금 <b>${all.length}</b> · ${won(amount)}</button>
+    ${EXP_CHIPS.map(([k, l]) => `<button class="fchip ${on(k)}" data-act="expChip" data-arg="${k}">${l} <b>${n(k)}</b></button>`).join("")}
+  </div>
+  <div class="tbl-wrap"><table class="tbl"><thead><tr><th>출금일</th><th>출금처</th><th class="num">금액</th><th>찾은 증빙</th><th class="num">금액 차이</th><th>계정 과목</th><th>확정</th></tr></thead><tbody>
+  ${rows.length ? "" : '<tr><td colspan="7" class="fg3" style="text-align:center">해당하는 출금이 없습니다</td></tr>'}
+  ${rows.map(r => { const open = S.expOpen === r.key, sel = S.expAcct[r.key] ?? r.account ?? "";
+    return `<tr class="${open ? "sel" : ""}"><td class="num">${md(r.at.slice(0, 10))}</td>
+      <td>${esc(r.label)}<div class="caption1 fg3">${r.table === "fin_bank_transactions" ? "통장" : "카드"}${r.vendor && r.vendor !== r.label ? " · " + esc(r.vendor) : ""}</div></td>
+      <td class="num">${commas(r.amount)}</td><td>${expDocs(r.docs)}</td><td class="num">${expDiff(r.diff)}</td>
+      <td class="nowrap"><select data-exp="${r.key}" aria-label="계정 과목"><option value="" ${sel ? "" : "selected"} disabled>고르기</option>${sheet.accounts.map(a => `<option ${sel === a ? "selected" : ""}>${a}</option>`).join("")}</select>
+        ${r.from && sel === r.account ? `<span class="caption1 fg3">${EXP_FROM[r.from]}</span>` : ""}${r.check && !r.confirmed ? ' <span class="tag t-caut">과목 확인 필요</span>' : ""}</td>
+      <td class="nowrap">${r.confirmed ? `<span class="tag t-done">확정함 · ${esc(r.confirmed.by)} ${r.confirmed.at}</span> ` : ""}<button class="btn btn-sm" data-act="expConfirm" data-arg="${r.key}" ${sel ? "" : "disabled"}>확정</button> <button class="btn btn-sm" data-act="expOpen" data-arg="${r.key}">${open ? "접기" : "펼치기"}</button></td></tr>
+      ${open ? expDetail(r) : ""}`; }).join("")}
+  </tbody></table></div>`;
+}
+R.finance = () => head("재무 대조", "장부 수납과 카드·통장 입금을 맞춰 봅니다. 장부 수정은 전자차트에서 합니다.") + tabs(S.finTab, "finTab", [["income", "일계표"], ["expense", "지출 증빙"]]) + (S.finTab === "expense" ? expenseView() : ledgerView());
 
 /* ───────── 동작 ───────── */
 function go(s) { if (location.hash === "#" + s) render(); else location.hash = s; }
@@ -1588,6 +1634,13 @@ const A = {
   reportScope: a => { S.reportScope = a; S.reportMonth = null; render(); },
   expChip: a => { S.expChip = a; render(); },
   expOpen: a => { S.expOpen = S.expOpen === a ? null : a; render(); },
+  expConfirm: a => {
+    const r = expRow(expFind(a)), account = S.expAcct[a] ?? r.account;
+    if (!account) return;
+    S.expConf[a] = { account, docs: [...(S.expPick[a] ?? r.docs.map(d => d.id))].sort((x, y) => x - y), by: S.user, at: stamp() };
+    if (!r.byItem) S.expMemory[r.label] = account;
+    delete S.expAcct[a]; delete S.expPick[a]; render();
+  },
   callsTab: a => { S.callsTab = a; render(); },
   callFilter: a => { S.callFilter = a; render(); },
   callSel: a => { S.callSel = a || null; render(); },
@@ -1635,8 +1688,10 @@ const A = {
   claimJudge: a => { const [id, v] = a.split("|"); S.claimJudge[id] = v; render(); },
   finMonth: a => { S.finMonth = a; S.finOpen = null; render(); },
   finOpen: a => { S.finOpen = S.finOpen === a ? null : a; render(); },
-  openRecon: a => { S.finMonth = a.slice(0, 7); S.finOpen = a; go("finance"); },
-  finYes: a => { const [d, c] = a.split("|"); S.finConfirm[d] = c; render(); },
+  openExpense: a => { S.finTab = "expense"; S.expMonth = a; S.expChip = "all"; S.expOpen = null; go("finance"); },
+  openRecon: a => { S.finTab = "income"; S.finMonth = a; S.finOpen = null; go("finance"); },
+  reconYes: a => { const [k, c] = a.split("|"); S.reconConf[k] = { cause: c, by: S.user, at: stamp() }; render(); },
+  expMonth: a => { S.expMonth = a; S.expChip = "all"; S.expOpen = null; render(); },
   followChip: a => { S.followChip = a; render(); },
   followTop: () => { S.followTop = !S.followTop; render(); },
   followHide: () => { S.followHideContacted = !S.followHideContacted; render(); },
@@ -1711,8 +1766,9 @@ document.addEventListener("change", e => {
   else if (el.id === "sFrom") { S.sFrom = el.value; render(); }
   else if (el.id === "sTo") { S.sTo = el.value; render(); }
   else if (el.id === "sChart") { S.sChart = el.value.trim(); render(); }
-  else if (el.dataset.fin) { if (el.value) S.finConfirm[el.dataset.fin] = el.value; render(); }
+  else if (el.dataset.recon) { if (el.value) S.reconConf[el.dataset.recon] = { cause: el.value, by: S.user, at: stamp() }; render(); }
   else if (el.dataset.exp !== undefined) { S.expAcct[el.dataset.exp] = el.value; render(); }
+  else if (el.dataset.exppick) { const k = el.dataset.exppick, r = expRow(expFind(k)), p = new Set(S.expPick[k] ?? r.docs.map(d => d.id)); p[el.checked ? "add" : "delete"](+el.value); S.expPick[k] = [...p]; render(); }
   else if (el.id === "schedPick") { if (el.value) { S.schedDate = el.value; S.schedSel = null; } render(); }
   else if (el.id === "schedAll") { S.schedAll = el.checked; S.schedSel = null; render(); }
   else if (el.id === "userSel") { S.user = el.value; try { localStorage.setItem("ax-user", S.user); } catch (_) {} render(); }

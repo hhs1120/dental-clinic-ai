@@ -4,6 +4,7 @@ JSON 한 파일로. make data 뒤에 make wireframe. 정답 라벨이 들어 있
 import json
 import sqlite3
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
@@ -12,8 +13,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 import yaml  # noqa: E402
 
+from backend import expense as expense_app  # noqa: E402
+from backend import recon as recon_app  # noqa: E402
+from backend.db import connect as db_connect  # noqa: E402
+from backend.db import init_schema  # noqa: E402
 from generator.master import (  # noqa: E402
-    ACCOUNTS,
     ADJUST_REASONS,
     CLINIC_NAME,
     CONDITIONAL_INSURED_MIN_AGE,
@@ -32,7 +36,7 @@ TODAY = date.fromisoformat(str(CONFIG["today"]))
 NEW_FROM = str(CONFIG["range"]["start"])  # 창 시작 이후 등록 = 신환
 SCHEDULE_FROM = (TODAY - timedelta(days=30)).isoformat()  # 일별 예약표 — 최근 30일 + 앞으로의 예약
 CALLS_FROM = (TODAY - timedelta(days=47)).isoformat()  # 통화 목록 — 최근 약 7주
-RECON_FROM = (TODAY - timedelta(days=122)).isoformat()[:8] + "01"  # 재무 대조 — 최근 4개월
+FINANCE_MONTHS = 4  # 재무 대조 — 최근 4개월
 ADJUST_FROM = (TODAY - timedelta(days=183)).isoformat()[:7]  # 청구 점검 — 최근 6개월
 c = sqlite3.connect(f"file:{ROOT}/data/source.sqlite?mode=ro", uri=True)  # 읽기만
 c.row_factory = sqlite3.Row
@@ -528,32 +532,6 @@ adjust = [
     )
 ][:60]
 
-# ── 슬롯 ⑧-1 일계표 (평가 달 8~11월) ──
-ledger = defaultdict(lambda: defaultdict(int))
-for x in rows(
-    "SELECT paid_at, method, amount_paid FROM emr_payments WHERE paid_at >= ? AND paid_at < ?",
-    RECON_FROM,
-    TODAY.isoformat(),
-):
-    ledger[x["paid_at"][:10]][x["method"]] += x["amount_paid"]
-card = defaultdict(int)
-for x in rows(
-    "SELECT approved_at, amount FROM fin_card_sales WHERE approved_at >= ? AND approved_at < ?",
-    RECON_FROM,
-    TODAY.isoformat(),
-):
-    card[x["approved_at"][:10]] += x["amount"]
-recon = [
-    {
-        "date": d,
-        "ledger": dict(v),
-        "card_approved": card.get(d, 0),
-        # 정답이 아니라 카드 합계 대조만(test 달 격리). 이체·정산 대조는 ⑧ 코드 몫
-        "card_diff_day": v.get("card", 0) != card.get(d, 0),
-    }
-    for d, v in sorted(ledger.items())
-]
-
 # ── 슬롯 ⑤-2 청구 전 점검 — 정답 저장소를 쓰지 않는다(⑤ 평가셋 분할 전). 규칙 칸만 실제 값, AI 칸은 자리 ──
 dx_name = {r["code"]: r["name"] for r in rows("SELECT * FROM emr_diagnoses")}
 dx_notes = [r["note"] for r in ADJUST_REASONS.values() if r["type"] == "diagnosis"]
@@ -733,51 +711,30 @@ biz = {
     },
 }
 
-# ── 슬롯 ⑧-2 지출 증빙 — 지난달 출금. 금액·날짜 규칙으로 찾은 후보만(기준선), 계정 과목은 사람·AI 칸 ──
-EXP_MONTH = max(r["month"] for r in report)
-docs_exp = rows(
-    "SELECT * FROM fin_expense_documents WHERE issued_on >= date(? || '-01', '-5 days')"
-    " AND issued_on < date(? || '-01', '+1 month')",
-    EXP_MONTH,
-    EXP_MONTH,
-)
-outflows = [
-    {"at": r["occurred_at"][:10], "source": "통장", "who": r["memo"], "amount": r["amount"]}
-    for r in rows(
-        "SELECT * FROM fin_bank_transactions WHERE direction = 'out' AND substr(occurred_at, 1, 7) = ?"
-        " ORDER BY occurred_at, id",
-        EXP_MONTH,
-    )
-] + [
-    {"at": r["used_at"][:10], "source": "병원 카드", "who": r["merchant"], "amount": r["amount"]}
-    for r in rows(
-        "SELECT * FROM fin_card_expenses WHERE substr(used_at, 1, 7) = ? ORDER BY used_at, id",
-        EXP_MONTH,
-    )
-]
-expense = []
-for o in sorted(outflows, key=lambda x: x["at"]):
-    one = [d for d in docs_exp if d["amount"] == o["amount"] and d["issued_on"] <= o["at"]]
-    one = sorted(one, key=lambda d: d["issued_on"], reverse=True)[:1]
-    same = [d for d in docs_exp if d["issuer"] == o["who"] and d["issued_on"][:7] == EXP_MONTH]
-    sum_ok = not one and len(same) > 1 and sum(d["amount"] for d in same) == o["amount"]
-    found = one or (same if sum_ok else [])
-    expense.append(
-        o
-        | {
-            "match": "1:N 합계" if sum_ok else "1:1" if one else None,
-            "docs": [
-                {
-                    "kind": d["kind"],
-                    "issuer": d["issuer"],
-                    "on": d["issued_on"],
-                    "amount": d["amount"],
-                }
-                for d in found
-            ],
-            "body": found[0]["body"] if found else None,
-        }
-    )
+# ── 슬롯 ⑧ 재무 대조 — 앱과 같은 backend/recon.py ledger·backend/expense.py sheet(사람 확정이 없는 빈 앱 DB).
+# 최근 FINANCE_MONTHS달만(앱은 금융 행이 있는 모든 달). 지출 증빙 후보는 펼친 줄의 "출금일 근처 증빙"(id만 — 본문은
+# expense_docs 한 벌). 오늘 화면 줄 숫자도 같은 함수(recon.open_summary·expense.open_summary) ──
+with tempfile.TemporaryDirectory() as tmp:
+    app = db_connect(Path(tmp) / "app.sqlite", ROOT / "data" / "source.sqlite")
+    init_schema(app)
+    first = recon_app.ledger(app, TODAY)
+    ledger_months = first["months"][-FINANCE_MONTHS:]
+    finance = {
+        "ledger": {m: recon_app.ledger(app, TODAY, m) for m in ledger_months},
+        "recon_open": recon_app.open_summary(app, TODAY),
+        "expense": {},
+        "expense_open": expense_app.open_summary(app, TODAY),
+    }
+    expense_docs = {}
+    for m in expense_app.sheet(app, TODAY)["months"][-FINANCE_MONTHS:]:
+        sheet = expense_app.sheet(app, TODAY, m)
+        for r in sheet["rows"]:
+            cands = expense_app.candidates(app, r["table"], r["id"])
+            r["candidates"] = [d["id"] for d in cands]
+            expense_docs.update({d["id"]: d for d in cands + r["docs"]})
+        finance["expense"][m] = sheet
+    finance["expense_docs"] = expense_docs
+    app.close()
 
 # ── 슬롯 ⑨ 후속 관리 후보 ──
 follow = []
@@ -834,13 +791,11 @@ out = {
     "emr": emr,
     "slots": {
         "adjust": adjust,
-        "recon": recon,
+        "finance": finance,
         "follow": follow,
         "precheck": precheck,
         "report": report,
         "biz": biz,
-        "expense": expense,
-        "accounts": list(ACCOUNTS),
     },
     "enums": {
         "purposes": list(PURPOSE_KO.values()),
