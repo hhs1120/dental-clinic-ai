@@ -399,6 +399,7 @@ tags:
 - [ ] `make nightly`가 돈 뒤 — 야간 1회를 실측해 §7 런타임 비용·하루 상한을 다시 정하고, `ax_settings.daily_usd_limit`을 게이트웨이에 연결한다(지금은 `config/llm.yaml`만 읽는다)
 - [ ] 화면이 2~3개 생긴 뒤 — 스타일 다듬기: `frontend/app/globals.css` 토큰 값·간격·글자 크기를 실제 화면으로 고치고, `components/ui` variant를 정리하고, 화면 코드에 직접 색·모서리 값이 없는지 확인한다
 - [ ] ⑤ 2~4단계 — 다음 단계 계획은 앞 단계 머지 뒤. 2단계 남은 것: 차트 기반 누락을 모든 급여 줄에 묻기·추가 처치 누락 채점, 지금 프롬프트 버전(`backend/claim_check.py` `PROMPT_VERSION`)의 test 채점(사람). ⑤-3 청구 기준 질문(`truth_claim_qa`) AI 초안 → 사람 검토 → 정답 저장소. 채점 범위·분할은 [[치과 AX - 평가 설계]] §5 ⑤
-- [ ] ⑧ 3~4단계 — 다음 단계 계획은 앞 단계 머지 뒤(설계 `docs/superpowers/specs/2026-11-11-finance-recon-design.md`). ⑧-2 확정은 같은 증빙을 두 출금에 확정하는 것과 기준일 이후 출금 확정을 막지 않는다(`backend/expense.py` `confirm`) — 4단계 자동 확정 전에 정한다. ⑧-1 test 채점은 3단계에서 에이전트와 짝 비교로 한 번. 3단계 에이전트에 금액으로 다른 날 장부·통장을 찾는 도구 — 며칠 늦게 적은 정산은 이것 없이는 안 풀리고 탐지 건 둘로 갈라진다([[치과 AX - AI 실험 기록]] §24)
+- [ ] ⑧ 4단계 — 계획은 3단계 머지 뒤(설계 `docs/superpowers/specs/2026-11-11-finance-recon-design.md`). ⑧-2 확정은 같은 증빙을 두 출금에 확정하는 것과 기준일 이후 출금 확정을 막지 않는다(`backend/expense.py` `confirm`) — 4단계 자동 확정 전에 정한다
+- [ ] ⑧-1 조사 에이전트 버전을 정한 뒤(사람) — 전체 달 `make recon`(앱 화면용)과 test 채점 `python -m evaluation.recon score --split test`. 자동 마감 정책(`recon_autoclose`)은 dev 오류율을 보고 사람이 켠다
 - [ ] 에이전트마다 착수 시 — 도구 목록·호출 상한·기준선 정의
 - [ ] 슬롯(시간이 남을 때) — 랭그래프 비교 실험. 기능 에이전트 하나만 랭그래프로 옮겨 같은 입력으로 결과·호출 수·비용·재개 동작을 나란히 잰다. 두 도구를 다 다룬다는 근거를 남기는 실험이라 코어와 다른 에이전트는 옮기지 않는다
