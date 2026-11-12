@@ -2,6 +2,7 @@
 검사·평가 경로에 섞이지 않는지, hard 분할·truth_hard_calls 표"""
 
 import json
+import re
 import sqlite3
 from collections import Counter
 
@@ -236,6 +237,12 @@ def test_checks_calm_urgent_blocks_pain_words_and_needs_sign(t4):
     sign = json.loads(row["used_fact"])["hard_sign"]
     assert list(HARD_URGENT_SIGNS[sign]) in c["must_include"]
     assert any(HARD_CALM_FORBIDDEN in p for p in _found(c, "환자: 이가 너무 아파요\n직원: 네"))
+
+
+def test_calm_forbidden_ignores_careful_words():
+    """ "조심해서 오세요"·"의심해"는 센 낱말이 아니다 — 샘플에서 거짓 실패로 걸림"""
+    assert not re.search(HARD_CALM_FORBIDDEN, "조심해서 오세요. 혹시 의심하시면 조심하세요")
+    assert re.search(HARD_CALM_FORBIDDEN, "붓기가 심해요")
 
 
 def test_checks_pain_not_urgent_needs_pain_word_and_cue(t4):
