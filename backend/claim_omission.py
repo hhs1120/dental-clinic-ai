@@ -74,7 +74,7 @@ def procedure_index(rows: list[dict]) -> dict[str, dict]:
 
 
 def _insured(p: dict, age: int, age_range: dict) -> bool:
-    """그 나이에 급여인지 — is_insured가 no가 아니고 적용 연령 안(generator.master.insured_on과 같은 규칙)"""
+    """그 나이에 급여인지 — is_insured가 no가 아니고 적용 연령 안(가상 데이터 생성 설계 §2.1 급여 조건과 같은 규칙)"""
     if p["is_insured"] == "no":
         return False
     lo, hi = age_range.get(p["age_group"], (0, None))
