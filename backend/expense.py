@@ -5,8 +5,10 @@ dev 채점(평가 설계 §5 ⑧-2)이 이 규칙을 부른다. 동작을 바꾸
 - 과목: 적요·가맹점명(card_name)으로 찾은 거래처의 기본 과목
 거래처 표는 앱이 source.ax_master_values expense_vendors, 평가가 master.VENDORS로 넘긴다.
 화면(지출 증빙 탭)·사람 확정·오늘 화면 줄도 여기 — 과목 기본값은 이 출금의 확정 > 같은 적요·가맹점명의 가장 최근 사람
-확정(품목으로 정하는 거래처는 건너뜀) > 거래처 기본 과목. 채점은 사람 확정 덮어쓰기 없는 rule_*만 부른다"""
+확정(품목으로 정하는 거래처는 건너뜀) > 거래처 기본 과목. 채점은 사람 확정 덮어쓰기 없는 rule_*만 부른다.
+확정 제한(설계 §4): 같은 증빙은 살아 있는 확정(사람 확정 + 되돌리지 않은 자동 확정) 하나에만, 기준일 이후 출금은 막는다"""
 
+import hashlib
 import json
 import sqlite3
 from datetime import date, timedelta
@@ -25,6 +27,15 @@ TABLES = {  # 출금 표 → (시각, 적요·가맹점명) 칸 — 통장은 �
 DOC_COLS = "id, kind, issuer, issued_on, amount, body"
 
 DOC_WINDOW = (-3, 14)  # 증빙일이 출금 3일 뒤 ~ 14일 전 (출금일 − 증빙일, 일)
+AUTO_KIND = (
+    "expense_autoconfirm"  # 자동 확정 종류(backend/expense_auto.py) — 확정 제한이 함께 읽는다
+)
+
+
+def outflow_key(o: dict) -> str:
+    """출금 키 — 표·시각·금액·출금처 글자 해시(앱 설계 §7.3 "출금일·금액·적요"). 실행 대상·자동 확정 키"""
+    raw = f"{o['table']}|{o['at']}|{o['amount']}|{o['label']}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 
 def vendors_by_label(vendors: list[dict]) -> dict:
@@ -197,6 +208,23 @@ def candidates(conn: sqlite3.Connection, table: str, outflow_id: int) -> list[di
     return [_doc_view(d) for d in _candidates(_outflow(data, table, outflow_id), data)]
 
 
+def live_doc_owners(conn: sqlite3.Connection, data: dict) -> dict[int, tuple[str, int]]:
+    """증빙 id → 그 증빙을 가진 살아 있는 확정의 출금(표, id) — 사람 확정과 되돌리지 않은 자동 확정"""
+    owners = {}
+    for (table, oid), r in data["conf"].items():
+        for d in json.loads(r["document_ids"]):
+            owners[d] = (table, oid)
+    by_key = {outflow_key(o): (o["table"], o["id"]) for o in data["outflows"]}
+    for r in conn.execute(
+        "SELECT target, result FROM ax_auto_actions WHERE kind = ? AND reverted_at IS NULL",
+        (AUTO_KIND,),
+    ):
+        if r["target"] in by_key:
+            for d in json.loads(r["result"])["document_ids"]:
+                owners.setdefault(d, by_key[r["target"]])
+    return owners
+
+
 def confirm(
     conn: sqlite3.Connection,
     table: str,
@@ -205,14 +233,24 @@ def confirm(
     account: str,
     by: str,
     at: str,
+    today: date,
 ) -> None:
-    """사람 확정 — 없는 출금·모르는 과목·후보 밖 증빙 id는 ValueError. 덮어씀, 커밋은 부르는 쪽"""
+    """사람 확정 — 없는 출금·모르는 과목·후보 밖 증빙 id·기준일 이후 출금·다른 출금에 이미 확정된 증빙은
+    ValueError(설계 §4 확정 제한). 덮어씀, 커밋은 부르는 쪽"""
     data = _load(conn, None)
     o = _outflow(data, table, outflow_id)
+    if o["at"] >= today.isoformat():
+        raise ValueError(f"기준일 이후 출금: {o['at'][:10]}")
     if account not in data["mv"]["expense_accounts"]:
         raise ValueError(f"모르는 계정 과목: {account}")
     if not set(document_ids) <= {d["id"] for d in _candidates(o, data)}:
         raise ValueError(f"후보 밖 증빙: {document_ids}")
+    owners = live_doc_owners(conn, data)
+    by_id = {(x["table"], x["id"]): x for x in data["outflows"]}
+    for d in document_ids:
+        if (other := owners.get(d)) and other != (table, outflow_id):
+            x = by_id[other]
+            raise ValueError(f"이미 다른 출금에 확정된 증빙: {d} ({x['at'][:10]} {x['label']})")
     conn.execute(
         "INSERT INTO ax_expense_confirmations (outflow_table, outflow_id, label, document_ids,"
         " account, judged_by, judged_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
