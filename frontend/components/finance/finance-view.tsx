@@ -144,7 +144,7 @@ const expenseChips = (s: ExpenseSheet) => [
   { key: "found", text: `증빙 찾음 ${s.chips.found}` },
   { key: "none", text: `증빙 못 찾음 ${s.chips.none}` },
   { key: "check", text: `과목 확인 필요 ${s.chips.check}` },
-  { key: "open", text: `확정 안 된 ${s.chips.open}` },
+  { key: "open", text: `미확정 ${s.chips.open}` },
 ];
 
 /** 지출 증빙 — 출금마다 증빙·계정 과목, 사람 확정(설계 §2). 거름 칩은 URL chip */

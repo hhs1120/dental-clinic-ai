@@ -38,7 +38,7 @@ const keep: Record<ExpenseChip, (r: ExpenseRow) => boolean> = {
   open: (r) => !r.confirmed,
 };
 
-/** 찾은 증빙 — 한 장이면 종류·발행처·일자, 여러 장이면 "명세서 n장 합계"(세금계산서는 따로 붙임) */
+/** 찾은 증빙 — 한 장이면 종류·발행처·일자, 여러 장이면 "거래명세서 n장 합계"(세금계산서는 따로 붙임) */
 function DocsText({ docs }: { docs: ExpenseDoc[] }) {
   if (docs.length === 0) return <Badge variant="danger">증빙 못 찾음</Badge>;
   if (docs.length === 1) {
@@ -54,7 +54,7 @@ function DocsText({ docs }: { docs: ExpenseDoc[] }) {
   const rest = docs.length - st;
   return (
     <span>
-      {st > 0 ? `명세서 ${st}장 합계` : `증빙 ${docs.length}장 합계`}
+      {st > 0 ? `거래명세서 ${st}장 합계` : `증빙 ${docs.length}장 합계`}
       {st > 0 && rest > 0 && (
         <span className="text-muted-foreground"> + 세금계산서 등 {rest}장</span>
       )}

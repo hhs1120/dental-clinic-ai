@@ -490,9 +490,12 @@ test("지출 증빙 탭으로 가면 칩과 줄", async ({ page }) => {
   await page.getByRole("tab", { name: "지출 증빙" }).click();
   await expect(page).toHaveURL(/tab=expense/);
   await expect(page.getByText("출금 3 · 117,000원")).toBeVisible();
+  await expect(page.getByRole("button", { name: "미확정 3" })).toBeVisible();
   await expect(expRow(page, "솔밭식당")).toContainText("영수증 · 솔밭식당");
   await expect(expRow(page, "솔밭식당")).toContainText("거래처 기본");
-  await expect(expRow(page, "바른덴탈상사")).toContainText("명세서 2장 합계");
+  await expect(expRow(page, "바른덴탈상사")).toContainText(
+    "거래명세서 2장 합계",
+  );
   await expect(expRow(page, "KCP*낯선가게")).toContainText("증빙 못 찾음");
   await expect(expRow(page, "KCP*낯선가게")).toContainText("과목 확인 필요");
   await expect(page.getByText("fin_card_expenses")).toHaveCount(0);

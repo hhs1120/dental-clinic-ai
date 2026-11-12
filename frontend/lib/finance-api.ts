@@ -140,7 +140,7 @@ export const postConfirm = (key: string, cause: Cause, part: string) =>
 export type OutflowTable = "fin_bank_transactions" | "fin_card_expenses";
 
 export const DOC_KIND_LABEL: Record<string, string> = {
-  statement: "명세서",
+  statement: "거래명세서",
   tax_invoice: "세금계산서",
   order_email: "주문 메일",
   receipt: "영수증",
