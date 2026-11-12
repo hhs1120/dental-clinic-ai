@@ -166,9 +166,10 @@ async function fakeClaims(
 }
 
 const STD_QUOTE = "매복 정도와 골삭제 여부를 진료기록에 반드시 적는다";
+const OMIT_QUOTE = "이어서 12번 치아 아말감/GI 함께 진행함";
 const PRE_AI = {
   ...PRE,
-  counts: { lines: 2, warning: 1, ai: 1, ai_checked: 2 },
+  counts: { lines: 2, warning: 1, ai: 2, ai_checked: 2 },
   ai_at: "2026-11-11T09:30:00",
   ai_pending: { pre: 3, adjust: 2 },
   rows: [
@@ -182,7 +183,19 @@ const PRE_AI = {
     },
     {
       ...PRE.rows[1],
-      ai: { requirement: "met", evidence: [], omissions: [] },
+      // 요건 대상이 아닌 줄에 2b 누락만(설계 §2b)
+      ai: {
+        requirement: null,
+        evidence: [],
+        omissions: [
+          {
+            procedure_code: "U0006",
+            procedure: "아말감/GI",
+            tooth: "12",
+            quote: OMIT_QUOTE,
+          },
+        ],
+      },
     },
   ],
 };
@@ -392,13 +405,16 @@ test("청구 전 AI 칩 — 점검 결과가 있을 때만", async ({ page }) =>
   await page.route("**/api/claims/pre", (r) => r.fulfill({ json: PRE_AI }));
   await page.goto("/claims?tab=pre");
   await page
-    .getByRole("button", { name: "임상 요건·차트 기반 누락(AI) 1" })
+    .getByRole("button", { name: "임상 요건·차트 기반 누락(AI) 2" })
     .click();
   await expect(page).toHaveURL(/\/claims\?tab=pre&chip=ai$/);
   const rows = table(page).locator("tbody > tr");
-  await expect(rows).toHaveCount(1);
+  await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText("차트에 요건 근거 못 찾음(AI)");
   await expect(rows.first()).toContainText(STD_QUOTE);
+  await expect(rows.nth(1)).toContainText("차트에 있는데 청구에 없음(AI)");
+  await expect(rows.nth(1)).toContainText(`아말감/GI 12번: “${OMIT_QUOTE}”`);
+  await expect(rows.nth(1)).not.toContainText("요건 근거");
   await expect(page.getByText("AI 점검: 11/11 09:30 기준")).toBeVisible();
 });
 

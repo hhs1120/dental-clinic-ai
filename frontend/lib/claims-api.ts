@@ -68,11 +68,19 @@ export interface Evidence {
   quote: string;
 }
 
-/** ⑤-2 AI 점검 한 줄(backend/claim_check.py SCHEMA) */
+/** ⑤-2 AI 점검 한 줄 — 요건(2a backend/claim_check.py, 요건 대상이 아니거나 결과가 없으면 null)과
+ * 추가 처치 누락(2b backend/claim_omission.py, 코드가 급여만 거른 항목) */
 export interface ClaimCheck {
-  requirement: "met" | "missing" | "na";
+  requirement: "met" | "missing" | "na" | null;
   evidence: Evidence[];
-  omissions: { procedure: string; quote: string }[];
+  omissions: Omission[];
+}
+
+export interface Omission {
+  procedure_code: string;
+  procedure: string;
+  tooth: string;
+  quote: string;
 }
 
 export interface AdjustSheet {

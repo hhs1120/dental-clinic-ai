@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import pytest
 
 from backend import claim_check as cc
+from backend import claim_omission as co
 from backend.prep import master_values
 from generator.clinic import master_values_rows
 from generator.master import ADJUST_REASONS, APPEAL_DAYS
@@ -277,6 +278,7 @@ def client(src, monkeypatch):
     src.app().close()
     gw = FakeGw()
     monkeypatch.setattr(cc, "load_config", lambda: gw.config)
+    monkeypatch.setattr(co, "load_config", lambda: gw.config)
     api.app.dependency_overrides[api.get_db_paths] = lambda: (
         src.path.parent / "app.sqlite",
         src.path,
@@ -304,7 +306,18 @@ def test_job_api_builds_app_scope(client, src):
     from backend import db
 
     conn = db.connect(src.path.parent / "app.sqlite", src.path)
-    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+    assert cc.todo_ids(conn, DAY) == set()
+
+
+def test_job_runs_both(client, src):
+    """갱신 작업 하나로 2a·2b 둘 다(설계 §2b) — 끝나면 둘 다 할 일 없음, 줄 수는 합집합"""
+    job = wait(client, client.post("/jobs/claim-check").json()["job_id"])
+    assert job["status"] == "done" and job["total"] == 1
+    from backend import db
+
+    conn = db.connect(src.path.parent / "app.sqlite", src.path)
+    assert co.todo_ids(conn, DAY) == set()
+    assert conn.execute("SELECT COUNT(*) FROM ax_claim_omissions").fetchone()[0] == 1
 
 
 def test_job_api_reuses_running(client, src):
@@ -324,9 +337,9 @@ def test_pending_count(src):
     claim(src, 1)
     claim(src, 2, note_text="")
     conn = src.app()
-    assert cc.pending(conn, DAY) == {"pre": 1, "adjust": 0}
+    assert len(cc.todo_ids(conn, DAY)) == 1
     build(conn, FakeGw(), scope="app")
-    assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+    assert cc.todo_ids(conn, DAY) == set()
 
 
 def test_pending_split_by_tab(src):
@@ -334,7 +347,9 @@ def test_pending_split_by_tab(src):
     claim(src, 1)
     claim(src, 2, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(10))
     claim(src, 3, status="adjusted", note=REQ_NOTE, reviewed=reviewed_for(20))
-    assert cc.pending(src.app(), DAY) == {"pre": 1, "adjust": 2}
+    from backend.claims import _ai_pending
+
+    assert _ai_pending(src.app(), DAY) == {"pre": 1, "adjust": 2}
 
 
 class BatchGw(FakeGw):

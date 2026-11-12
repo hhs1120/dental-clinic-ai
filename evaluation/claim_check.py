@@ -7,7 +7,7 @@
 (b) 요건 사유로 깎인 조정·불능 건의 판단 — 정답 정당(오류 줄) / 다툴 만함(오류 없는 줄)(가상 데이터 생성 설계 §2.4),
 AI 추천(근거 있음 → 다툴 만함, 없음 → 정당)의 정확도(답하지 않은 건도 분모)를 "모두 정당"·"모두 다툴 만함"과 나란히.
 프롬프트는 dev 고정 표본(dev_sample)으로만 고치고, test는 사람이 프롬프트 버전마다 한 번(평가 설계 §2.7).
-추가 처치 누락(omitted_extra)은 2b."""
+추가 처치 누락(omitted_extra)은 2b — evaluation/claim_omission.py."""
 
 import argparse
 import hashlib

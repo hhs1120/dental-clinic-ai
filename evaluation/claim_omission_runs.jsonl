@@ -1,0 +1,48 @@
+{"id": "om-04", "note_hash": "8c4d2adb3fba7101", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "15", "quote": "같은 날 15번 치아 아말감/GI 충전 추가 시행함."}]}}
+{"id": "om-05", "note_hash": "b1bc899ebe5ea56b", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "15", "quote": "15번 치아 때움 시행함"}]}}
+{"id": "om-06", "note_hash": "b3edea4142a91c90", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "34", "quote": "34번 치아는 충치 부위 제거 후 때움 처치 시행함"}]}}
+{"id": "om-07", "note_hash": "ee7547f3ea7d0383", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "37", "quote": "같은 날 37번 치아 때움(충전) 처치도 함."}]}}
+{"id": "om-10", "note_hash": "0de11f4eddc85fbf", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "15", "quote": "15번 치아 아말감/GI 시행함."}]}}
+{"id": "om-11", "note_hash": "482d2b2a7eb8104f", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "17", "quote": "17번 치아 아말감/GI 시행함."}]}}
+{"id": "om-12", "note_hash": "0e3f4f0a8430df83", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "24", "quote": "24번 치아 아말감/GI 시행함."}]}}
+{"id": "om-13", "note_hash": "1aa71a18fdcc70e6", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "24", "quote": "24번은 아말감/GI 충전도 함께 시행함"}]}}
+{"id": "om-17", "note_hash": "3e0e789298b438fb", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아에 실란트(홈메우기) 시행함."}]}}
+{"id": "om-19", "note_hash": "f09cbc4e340e7cb3", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아에 실란트(홈메우기) 당일 시행함"}]}}
+{"id": "om-20", "note_hash": "1be8903f64957767", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "36", "quote": "같은 날 36번 치아에 실란트(홈메우기) 시행함."}]}}
+{"id": "om-26", "note_hash": "ac251087821d9273", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-28", "note_hash": "94574d244c625e15", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-29", "note_hash": "5457ddffd700e22d", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-30", "note_hash": "f054701e01f434d9", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-32", "note_hash": "29fa7f5e47b2c5b4", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-34", "note_hash": "87511240cf66b5d4", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-36", "note_hash": "6cb15cb8cd4271b8", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아 실란트(홈메우기)를 함께 시행함"}]}}
+{"id": "om-38", "note_hash": "9d1d7c1a9305528b", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "46", "quote": "같은 날 46번 치아 실란트(홈메우기) 함께 시행함."}]}}
+{"id": "om-39", "note_hash": "2a364bd7dd6d5a9e", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "14", "quote": "같은 날 14번 치아 우식 부위 제거 후 레진 충전 시행함"}]}}
+{"id": "om-40", "note_hash": "1ec3bbccbc8db162", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "24", "quote": "같은 날 24번 치아 레진 충전도 함께 시행함."}]}}
+{"id": "om-05", "note_hash": "888b56db4993a7fa", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "15", "quote": "15번 치아 교합면 우식 소견 있어 GI 충전 시행함."}]}}
+{"id": "om-06", "note_hash": "f13893de2db86ff8", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "34", "quote": "34번 치아 치경부 우식 있어 글라스아이오노머 충전 시행함"}]}}
+{"id": "om-07", "note_hash": "24ebd1cf728952e4", "prompt_version": "v1", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "37", "quote": "37번 치아 교합면 우식 있어 글라스아이오노머 충전 시행함"}]}}
+{"id": "om-01", "note_hash": "efba144dc8f178fd", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "45", "quote": "같은 날 45번 치아에 아말감/GI 수복을 추가로 시행함"}]}}
+{"id": "om-03", "note_hash": "0dbf5f4392bfd699", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "37", "quote": "같은 날 추가로 37번 치아에 아말감/GI 충전을 함께 시행함."}]}}
+{"id": "om-05", "note_hash": "888b56db4993a7fa", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "15", "quote": "15번 치아 교합면 우식 소견 있어 GI 충전 시행함."}]}}
+{"id": "om-07", "note_hash": "24ebd1cf728952e4", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "37", "quote": "37번 치아 교합면 우식 있어 글라스아이오노머 충전 시행함."}]}}
+{"id": "om-09", "note_hash": "536244e380d4adc8", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "44", "quote": "44번 치아 아말감/GI 시행함."}]}}
+{"id": "om-11", "note_hash": "482d2b2a7eb8104f", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "17", "quote": "17번 치아 아말감/GI 시행함."}]}}
+{"id": "om-13", "note_hash": "1aa71a18fdcc70e6", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "24", "quote": "24번은 아말감/GI 충전도 함께 시행함"}]}}
+{"id": "om-15", "note_hash": "8ab74c745e60442a", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "아말감/GI", "tooth": "25", "quote": "25번은 아말감/GI도 함께 시행함."}]}}
+{"id": "om-17", "note_hash": "3e0e789298b438fb", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아에 실란트(홈메우기) 시행함."}]}}
+{"id": "om-19", "note_hash": "f09cbc4e340e7cb3", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아에 실란트(홈메우기) 당일 시행함"}]}}
+{"id": "om-21", "note_hash": "6725dd2351c10738", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-23", "note_hash": "8b26840fbbd0c0dc", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-24", "note_hash": "b93dd6ce2a457920", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-26", "note_hash": "ac251087821d9273", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-27", "note_hash": "1e7f84a217ef1087", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-29", "note_hash": "5457ddffd700e22d", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-30", "note_hash": "f054701e01f434d9", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-32", "note_hash": "29fa7f5e47b2c5b4", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-33", "note_hash": "b0c1a8d8a80da429", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-35", "note_hash": "2dd4306cd4544a89", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": []}}
+{"id": "om-36", "note_hash": "6cb15cb8cd4271b8", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "26", "quote": "26번 치아 실란트(홈메우기)를 함께 시행함"}]}}
+{"id": "om-38", "note_hash": "9d1d7c1a9305528b", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "실란트", "tooth": "46", "quote": "같은 날 46번 치아 실란트(홈메우기) 함께 시행함."}]}}
+{"id": "om-39", "note_hash": "2a364bd7dd6d5a9e", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "14", "quote": "같은 날 14번 치아 우식 부위 제거 후 레진 충전 시행함."}]}}
+{"id": "om-41", "note_hash": "d26675aac977e49b", "prompt_version": "v2", "model": "claude-sonnet-5-5", "result": {"omissions": [{"procedure": "레진", "tooth": "46", "quote": "같은 날 46번 치아 레진 충전도 함께 시행함."}]}}

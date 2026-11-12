@@ -11,7 +11,6 @@
   이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
-- 준비표(④)·자동 처리(§5 — 앱의 조건 함수를 쓴다)는 해당 기능 착수 때
 """
 
 import argparse
@@ -31,6 +30,7 @@ from evaluation import (
     autoclose,
     call_actions,
     claim_check,
+    claim_omission,
     classification,
     expense,
     followup,
@@ -226,6 +226,7 @@ def run(
         "followup": None,
         "prep": None,
         "claim_check": None,
+        "claim_omission": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -338,6 +339,12 @@ def run(
     if dev and has_checks and conn.execute("SELECT 1 FROM ax_claim_checks LIMIT 1").fetchone():
         # ⑤-2 AI 점검(평가 설계 §5 ⑤) — dev만, test는 python -m evaluation.claim_check run --split test(사람)
         result["claim_check"] = claim_check.score(conn, load_clinic().today, "dev")
+    if dev:
+        # ⑤-2b 추가 처치 누락(설계 §2b) — 과금 없음(합성 dev 기록·저장된 2b 결과로). 실데이터 누락 줄은 dev에서 빼고
+        # 정상 줄의 잘못 잡은 수만, test는 python -m evaluation.claim_omission synth·real --split test(사람)
+        part = _claim_omission(conn)
+        if part:
+            result["claim_omission"] = part
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
@@ -444,6 +451,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_prep(r["prep"])
     if r.get("claim_check") is not None:
         out += _render_claim_check(r["claim_check"])
+    if r.get("claim_omission") is not None:
+        out += _render_claim_omission(r["claim_omission"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
     if r.get("expense") is not None:
@@ -712,6 +721,57 @@ def _render_claim_check(c: dict) -> list[str]:
         f" · 모두 정당 {pct(a['all_justified'])} · 모두 다툴 만함 {pct(a['all_contestable'])}",
         "",
     ]
+    return out
+
+
+def _claim_omission(conn) -> dict | None:
+    """합성 dev 기록이 있으면 합성 채점, 2b 결과가 저장돼 있으면 실데이터 dev — 둘 다 없으면 None"""
+    synth = None
+    if claim_omission.RUNS.exists():
+        runs = claim_omission._read(claim_omission.RUNS)
+        synth = claim_omission.score_synth(claim_omission.load_cases(), runs, "dev")
+    has = (
+        conn.execute(
+            "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_claim_omissions'"
+        ).fetchone()
+        and conn.execute("SELECT 1 FROM ax_claim_omissions LIMIT 1").fetchone()
+    )
+    real = claim_omission.score_real(conn, "dev") if has else None
+    if synth is None and real is None:
+        return None
+    return {"prompt_version": claim_omission.co.PROMPT_VERSION, "synth": synth, "real": real}
+
+
+def _render_claim_omission(c: dict) -> list[str]:
+    def pct(v):
+        return "—" if v is None else f"{v:.1%}"
+
+    out = [f"## ⑤-2b 추가 처치 누락 ({c['prompt_version']})", ""]
+    s = c["synth"]
+    if s:
+        out += [
+            f"합성 사례 dev {s['n']}건 · 후검증 실패 {s['failed']} · 점검 없음 {s['missing']}(항목 단위)",
+            "",
+            "| | 정밀도 | 재현율 | 맞음 | 잘못 잡음 | 놓침 |",
+            "|---|---|---|---|---|---|",
+        ]
+        for label, part in (("AI", s["ai"]), ("키워드", s["keyword"])):
+            out.append(
+                f"| {label} | {pct(part['precision'])} | {pct(part['recall'])}"
+                f" | {part['tp']} | {part['fp']} | {part['fn']} |"
+            )
+        out += ["", "| 모양 | 건 | AI 맞음 | 키워드 맞음 |", "|---|---|---|---|"]
+        for shape, b in s["by_shape"].items():
+            out.append(f"| {shape} | {b['n']} | {b['ai_ok']} | {b['keyword_ok']} |")
+        out.append("")
+    r = c["real"]
+    if r:
+        out += [
+            f"실데이터 dev 정상 줄 {r['lines']}줄(누락 정답 줄 제외, 점검 없음 {r['missing']}"
+            f" · 후검증 실패 {r['failed']}) — 잘못 잡은 줄 AI {r['ai_fp_lines']}"
+            f" · 키워드 {r['keyword_fp_lines']}",
+            "",
+        ]
     return out
 
 

@@ -379,11 +379,62 @@ def test_pre_claim_ai_counts(src):
     assert len([v for v in got.values() if v is None]) == 1
 
 
-def test_pre_claim_ai_omission_counts(src):
+def save_omission(conn, cid: int, omissions=(), *, age: int = 40, tooth=None, at=AT) -> None:
+    """ax_claim_omissions 한 줄(2b AI 원답) — omissions None이면 후검증 실패"""
+    import json
+
+    result = None if omissions is None else json.dumps({"omissions": list(omissions)})
+    facts = json.dumps({"procedure": "x", "tooth": tooth, "age": age, "note": "n"})
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_claim_omissions VALUES (?, ?, 'h', ?, ?, 'v1', 'm', ?)",
+            (cid, facts, result, int(result is not None), at),
+        )
+
+
+AMALGAM = {"procedure": "아말감/GI", "tooth": "12", "quote": "12번 아말감/GI 함께 시행"}
+
+
+def test_pre_claim_uses_2b_omissions(src):
+    """2a 답의 누락은 쓰지 않고 2b 답만(설계 §2b) — 2b 결과가 없으면 누락 없음"""
     cid = add_claim(src, 1, code=EXTRACT, status="pending", day="2026-11-12")
     conn = src.app()
     save_check(conn, cid, "met", [CHART_Q], [{"procedure": "봉합", "quote": "분할 발치함"}])
-    assert claims.pre_claim(conn, DAY)["counts"]["ai"] == 1
+    out = claims.pre_claim(conn, DAY)
+    assert out["counts"]["ai"] == 0 and out["rows"][0]["ai"]["omissions"] == []
+    save_omission(conn, cid, [AMALGAM])
+    out = claims.pre_claim(conn, DAY)
+    assert out["counts"]["ai"] == 1
+    (o,) = out["rows"][0]["ai"]["omissions"]
+    assert (o["procedure_code"], o["procedure"], o["tooth"]) == ("U0006", "아말감/GI", "12")
+
+
+def test_pre_claim_2b_only_line(src):
+    """요건 대상이 아닌 줄(스케일링)에 2b만 — requirement None, 점검한 줄로 센다"""
+    cid = add_claim(src, 1, status="pending", day="2026-11-12")
+    conn = src.app()
+    save_omission(conn, cid, [AMALGAM], at="2026-11-11T10:00:00")
+    out = claims.pre_claim(conn, DAY)
+    ai = out["rows"][0]["ai"]
+    assert ai["requirement"] is None and ai["evidence"] == [] and len(ai["omissions"]) == 1
+    assert (out["counts"]["ai"], out["counts"]["ai_checked"]) == (1, 1)
+    assert out["ai_at"] == "2026-11-11T10:00:00"
+
+
+def test_pre_claim_failed_2b_not_shown(src):
+    cid = add_claim(src, 1, status="pending", day="2026-11-12")
+    conn = src.app()
+    save_omission(conn, cid, None)
+    assert claims.pre_claim(conn, DAY)["rows"][0]["ai"] is None
+
+
+def test_pending_union(src):
+    """2a·2b 둘 다 다시 부를 대기 줄은 갱신 버튼에서 한 줄, 2b만 부를 줄(스케일링)도 센다"""
+    add_claim(src, 1, code=EXTRACT, status="pending", day="2026-11-12")
+    add_claim(src, 2, status="pending", day="2026-11-12")
+    src.conn.execute("UPDATE emr_chart_notes SET note = '38번 매복, 골삭제 후 분할 발치함'")
+    conn = src.app()
+    assert claims.pre_claim(conn, DAY)["ai_pending"] == {"pre": 2, "adjust": 0}
 
 
 def test_pre_claim_without_checks(src):

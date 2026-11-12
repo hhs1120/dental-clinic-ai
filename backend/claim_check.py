@@ -237,14 +237,10 @@ def _plan(conn, rows: list[dict], model: str):
     return todo, skipped, empty
 
 
-def pending(conn: sqlite3.Connection, today: date, model: str | None = None) -> dict[str, int]:
-    """앱 범위에서 다시 불러야 할 줄 수(서술 없는 줄 제외) — 화면 갱신 버튼이 탭별로 적는다
-    {"pre": 청구 전 대기 줄, "adjust": 삭감 대응 요건 사유 건}"""
+def todo_ids(conn: sqlite3.Connection, today: date, model: str | None = None) -> set[int]:
+    """앱 범위에서 다시 불러야 할 줄(서술 없는 줄 제외) — 화면 갱신 버튼 줄 수는 backend/claims.py _ai_pending이 2b와 합쳐 센다"""
     model = model or load_config()["aliases"][ALIAS][0]
-    rows = targets(conn, today, scope="app")
-    todo = {cid for cid, _, _ in _plan(conn, rows, model)[0]}
-    pre = sum(r["claim_id"] in todo and r["status"] == "pending" for r in rows)
-    return {"pre": pre, "adjust": len(todo) - pre}
+    return {cid for cid, _, _ in _plan(conn, targets(conn, today, scope="app"), model)[0]}
 
 
 def build(conn, gw, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30) -> dict:

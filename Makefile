@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-check-sample claim-check-dev recon expense-ai
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -52,6 +52,10 @@ hard-label:
 hard-review:
 	uv run python -m evaluation.hard_labels review
 
+# dev 평가 리포트(evaluation/eval.py) — 저장된 결과로 채점, 검색 절은 질문 임베딩 API를 부른다(색인 모델 키). test는 사람: python -m evaluation.eval --split test --section …
+eval:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.eval --split dev
+
 # 코어 합격 기준(기능 정의 §6) — 무료 검사 먼저, 과금하는 dev 평가(evaluation/gate.py)는 마지막. make dev를 끄고 돌린다
 gate: frontend/node_modules
 	$(MAKE) test
@@ -86,6 +90,18 @@ prep:
 # ⑤-2 청구 AI 점검(기능 정의 §5 ⑤, 과금·이어 돎) — SCOPE=all이면 전 기간(평가), 기본은 화면 범위
 claim-check:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_check run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑤-2b 추가 처치 누락(설계 §2b, 과금·이어 돎) — SCOPE=all이면 제출·대기 줄(평가), 기본은 대기 줄(화면)
+claim-omission:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_omission run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑤-2b 평가 전용 합성 사례 — 코드가 정한 명세로 LLM이 차트 문장만(과금, 이어 돎, 설계 §2b)
+claim-omission-cases:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_omission cases
+
+# ⑤-2b 합성 사례 dev 점검·채점(과금, 이어 돎). test는 사람: python -m evaluation.claim_omission synth·real --split test
+claim-omission-synth:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_omission synth --split dev
 
 # ⑤-2 프롬프트 고칠 때 — dev 고정 표본만 점검하고 그 표본으로 채점(과금, 일반 호출 — BATCH=1이면 Batch 반값)
 claim-check-sample:

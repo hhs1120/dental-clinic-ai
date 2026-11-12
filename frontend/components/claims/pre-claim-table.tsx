@@ -225,7 +225,7 @@ const pendingText = (p: PreSheet["ai_pending"]) =>
     .filter(Boolean)
     .join(" · ");
 
-/** AI 점검 결과 — 사실 문장 딱지와 인용(기준이 요구하는 것·차트에 적힌 다른 처치) */
+/** AI 점검 결과 — 사실 문장 딱지와 인용(기준이 요구하는 것·차트에 있는데 청구에 없는 급여 처치) */
 function AiFinding({ ai }: { ai: ClaimCheck }) {
   return (
     <>
@@ -239,11 +239,19 @@ function AiFinding({ ai }: { ai: ClaimCheck }) {
           ))}
         </>
       )}
-      {ai.omissions.map((o) => (
-        <span key={o.quote} className="text-xs text-muted-foreground">
-          청구에 없는 처치(AI) {o.procedure}: “{o.quote}”
-        </span>
-      ))}
+      {ai.omissions.length > 0 && (
+        <>
+          <Badge variant="warn">차트에 있는데 청구에 없음(AI)</Badge>
+          {ai.omissions.map((o) => (
+            <span
+              key={`${o.procedure_code}-${o.tooth}`}
+              className="text-xs text-muted-foreground"
+            >
+              {o.procedure} {o.tooth}번: “{o.quote}”
+            </span>
+          ))}
+        </>
+      )}
     </>
   );
 }
