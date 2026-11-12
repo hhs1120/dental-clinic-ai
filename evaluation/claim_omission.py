@@ -65,10 +65,10 @@ SHAPE_TEXT = {
     "separated": "추가 처치 문장을 청구된 진료 문장과 떨어뜨려 적는다(사이에 소견·환자 말 등 다른 문장, 추가 처치 문장에는 청구된 시술 이름을 쓰지 않는다)",
     "tooth_first": "추가 처치 문장을 치아 번호로 시작한다(예: 'NN번은 …도 함께 시행함')",
     "child_sealant": "소아 구강검진 뒤 그날 어금니에 실란트(홈메우기)를 시행했다고 적는다",
-    "planned": "추가 처치는 그날 하지 않고 다음 내원 때 하기로 '예정'이라고만 적는다",
-    "declined": "추가 처치를 권했으나 환자가 거절하거나 미뤘다고 적는다(그날 하지 않음)",
-    "elsewhere": "그 치아의 처치는 다른 병원(다른 치과)에서 받았다고 환자가 말한 것으로 적는다(그날 하지 않음)",
-    "past_visit": "그 치아의 처치는 지난 내원(이전 진료) 때 했다고 적는다(그날 하지 않음)",
+    "planned": "추가 처치는 다음 내원 때 할 계획으로 '예정'이라고만 적는다(그날 안 했다는 말은 쓰지 않는다)",
+    "declined": "추가 처치를 권했으나 환자가 거절하거나 미뤘다고만 적는다(그날 안 했다는 말은 쓰지 않는다)",
+    "elsewhere": "그 치아의 처치는 다른 병원(다른 치과)에서 받았다고 환자가 말한 것으로만 적는다(그날 안 했다는 말은 쓰지 않는다)",
+    "past_visit": "그 치아의 처치는 지난 내원(이전 진료) 때 했다고만 적는다(그날 안 했다는 말은 쓰지 않는다)",
     "claimed_again": "청구된 시술을 청구된 치아에 시행한 사실만 다른 표현으로 한 번 더 적는다(다른 처치 없음)",
     "adult_sealant": "성인 환자에게 그날 실란트(홈메우기)를 함께 시행했다고 적는다",
     "uninsured": "그날 다른 치아에 레진 충전을 함께 시행했다고 적는다",
@@ -90,6 +90,26 @@ _MARKERS = {
     "child_sealant": ("실란트", "홈메우기", "홈 메우기"),
     "adult_sealant": ("실란트", "홈메우기", "홈 메우기"),
 }
+
+
+# 그날 하지 않은 디코이는 맥락(_MARKERS)으로만 드러낸다 — 직접 부정을 쓰면 정답을 문장에 써 주는 셈(실데이터 계획 문장도
+# "남은 치료는 46번 치아 인레이"처럼 부정 없이 쓴다)
+NOT_DONE = ("planned", "declined", "elsewhere", "past_visit")
+NEGATION = (
+    "하지 않",
+    "시행하지",
+    "안 함",
+    "안함",
+    "안 했",
+    "않았",
+    "않음",
+    "이번에는",
+    "이번엔",
+    "오늘은",
+    "금일",
+    "처치 없음",
+    "시행 안",
+)
 
 
 def _seed() -> int:
@@ -178,6 +198,10 @@ def check_note(spec: dict, note: str) -> list[str]:
         w in s for s in with_tooth for w in _words(spec["claimed"]["procedure"])
     ):
         problems.append("추가 처치 문장에 청구된 시술 이름이 있다")
+    if shape in NOT_DONE:
+        problems += [
+            f"'{w}'처럼 그날 하지 않았다고 직접 쓰지 않는다" for w in NEGATION if w in note
+        ]
     for w in CHART_FORBIDDEN_WORDS:
         if w in note:
             problems.append(f"'{w}'를 쓰지 않는다")
@@ -209,15 +233,17 @@ def _read(path: Path) -> list[dict]:
 
 
 def write_cases(gw, path: Path = CASES, *, specs: list[dict] | None = None) -> dict:
-    """명세 해시가 같은 줄이 path에 있으면 건너뛰고(이어 돎), 아니면 문장을 쓰고 check_note를 통과할 때까지 최대
+    """명세 해시가 같고 지금 검사를 통과한 줄이 path에 있으면 건너뛰고(이어 돎), 아니면 문장을 쓰고 check_note를 통과할 때까지 최대
     WRITE_ATTEMPTS번(다시 쓸 때 문제 목록을 알려 준다). 통과한 사례만 한 줄씩 덧붙인다"""
     specs = case_specs() if specs is None else specs
-    have = {(r["id"], r["spec_hash"]) for r in _read(path)}
+    have = {
+        c["id"] for c in load_cases(path, specs=specs)
+    }  # 명세 해시가 같고 지금 검사를 통과한 줄만
     system = WRITE_PROMPT.read_text(encoding="utf-8")
     out = {"written": 0, "skipped": 0, "failed": []}
     for spec in specs:
         h = _spec_hash(spec)
-        if (spec["id"], h) in have:
+        if spec["id"] in have:
             out["skipped"] += 1
             continue
         problems, note = [], None
@@ -248,14 +274,16 @@ def write_cases(gw, path: Path = CASES, *, specs: list[dict] | None = None) -> d
 
 
 def load_cases(path: Path = CASES, *, specs: list[dict] | None = None) -> list[dict]:
-    """명세 + 쓴 문장 — 지금 명세 해시와 맞는 줄만(명세가 바뀌면 그 사례는 다시 쓴다)"""
+    """명세 + 쓴 문장 — 지금 명세 해시와 맞고 지금 검사(check_note)를 통과한 줄만, 같은 사례는 마지막 줄(명세나 검사
+    규칙이 바뀌면 그 사례는 다시 쓴다)"""
     specs = case_specs() if specs is None else specs
     notes = {(r["id"], r["spec_hash"]): r["note"] for r in _read(path)}
-    return [
-        s | {"note": notes[(s["id"], _spec_hash(s))]}
-        for s in specs
-        if (s["id"], _spec_hash(s)) in notes
-    ]
+    out = []
+    for s in specs:
+        note = notes.get((s["id"], _spec_hash(s)))
+        if note is not None and not check_note(s, note):
+            out.append(s | {"note": note})
+    return out
 
 
 # ── 채점 ──────────────────────────────────────────────────────────

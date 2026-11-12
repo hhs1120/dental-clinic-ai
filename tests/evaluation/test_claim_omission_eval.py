@@ -95,6 +95,28 @@ def test_check_note_shape_layout():
     assert ev.check_note(sep, note_for(sep, "{c} 시행하고 {t}번 아말감/GI 진행함."))
 
 
+def test_check_note_no_direct_negation():
+    """그날 하지 않은 디코이는 맥락(예정·거절·다른 치과·지난)으로만 — '하지 않음' 같은 직접 부정은 정답을 써 주는 셈"""
+    for shape, body in (
+        ("planned", "{c} 시행함. {t}번 치아 아말감/GI는 이번에 하지 않았고 다음 내원 때 예정."),
+        ("declined", "{c} 시행함. {t}번 충전 권했으나 환자 거절, 시행하지 않음."),
+        (
+            "elsewhere",
+            "{c} 시행함. {t}번은 다른 치과에서 아말감/GI 받았다고 함, 오늘은 처치 없음.",
+        ),
+        ("past_visit", "{c} 시행함. {t}번 아말감/GI는 지난 내원 때 함, 금일 안 함."),
+    ):
+        s = spec(shape)
+        assert ev.check_note(s, note_for(s, body)), shape
+    s = spec("planned")
+    assert ev.check_note(s, note_for(s, "{c} 시행함. {t}번 아말감/GI 다음 내원 시 예정.")) == []
+
+
+def test_negation_rule_only_for_not_done_decoys():
+    s = spec("adult_sealant")
+    assert ev.check_note(s, note_for(s, "{c} 시행함. 오늘 {t}번 실란트 함께 시행함.")) == []
+
+
 # ── 문장 쓰기 ─────────────────────────────────────────────────────
 
 
@@ -120,6 +142,23 @@ def test_write_cases_retries_and_resumes(tmp_path):
     assert case["note"] == good and case["id"] == s["id"]
     gw2 = FakeGw()
     assert ev.write_cases(gw2, path, specs=[s])["skipped"] == 1 and gw2.calls == []
+
+
+def test_write_cases_rewrites_failing_saved(tmp_path):
+    """저장된 문장이 지금 검사에 걸리면(검사 규칙을 더한 뒤) 그 사례만 다시 쓴다 — 걸린 줄은 읽지 않는다"""
+    s = spec("planned")
+    path = tmp_path / "cases.jsonl"
+    old = note_for(s, "{c} 시행함. {t}번 아말감/GI는 이번에 하지 않았고 다음 내원 때 예정.")
+    path.write_text(
+        json.dumps({"id": s["id"], "spec_hash": ev._spec_hash(s), "note": old}, ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    assert ev.load_cases(path, specs=[s]) == []
+    good = note_for(s, "{c} 시행함. {t}번 아말감/GI 다음 내원 시 예정.")
+    assert ev.write_cases(FakeGw(good), path, specs=[s])["written"] == 1
+    (case,) = ev.load_cases(path, specs=[s])
+    assert case["note"] == good
 
 
 def test_write_cases_gives_up(tmp_path):
