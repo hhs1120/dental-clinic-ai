@@ -12,7 +12,7 @@ from generator import master
 from shared.llm import FakeGateway
 from tests.backend.test_recon_match import DAY, Books
 
-LOOK = ("tool", "ledger_day", {"day": "2026-11-03"})
+LOOK = ("tool", "ledger_day", {"day": "2026-11-03", "purpose": "그날 장부"})
 
 
 def submit(cause="amount_typo", evidence=(1,), runner_up=None):
@@ -110,9 +110,46 @@ def test_call_limit_reads_unknown(conn):
 def test_lines_kinds(conn):
     r, _ = run(conn, ("say", "가설: 금액 오입력\n\n비교: 10배 차이", *LOOK[1:]), submit())
     ls = recon_agent.lines(RunStore(conn).steps(r["run_id"]))
-    assert [x["kind"] for x in ls] == ["hypothesis", "compare", "lookup", "conclusion"]
-    assert ls[0]["text"] == "금액 오입력" and ls[2]["lookup_no"] == 1
-    assert ls[3]["cause"] == "amount_typo"
+    assert [x["kind"] for x in ls] == [
+        "hypothesis",
+        "compare",
+        "hypothesis",
+        "lookup",
+        "conclusion",
+    ]  # 모델 글 머리말 줄 다음 조회 인자 purpose 줄
+    assert ls[0]["text"] == "금액 오입력" and ls[2]["text"] == "그날 장부"
+    assert ls[3]["lookup_no"] == 1 and ls[4]["cause"] == "amount_typo"
+
+
+def test_lines_from_tool_args(conn):
+    """v3 — 조회마다 checked → 비교, purpose → 가설, 그다음 조회 줄(모델 글 없이)"""
+    first = ("tool", "ledger_day", {"day": "2026-11-03", "purpose": "장부 금액 확인"})
+    second = (
+        "tool",
+        "card_sales",
+        {
+            "date_from": "2026-11-03",
+            "date_to": "2026-11-03",
+            "purpose": "승인 금액 확인",
+            "checked": "장부가 10배 작음",
+        },
+    )
+    r, _ = run(conn, first, second, submit(evidence=[1, 2]))
+    ls = recon_agent.lines(RunStore(conn).steps(r["run_id"]))
+    assert [(x["kind"], x["text"]) for x in ls[:5]] == [
+        ("hypothesis", "장부 금액 확인"),
+        ("lookup", ls[1]["text"]),
+        ("compare", "장부가 10배 작음"),
+        ("hypothesis", "승인 금액 확인"),
+        ("lookup", ls[4]["text"]),
+    ]
+    assert ls[4]["lookup_no"] == 2 and ls[5]["kind"] == "conclusion"
+
+
+def test_prompt_asks_tool_args_not_written_reasoning():
+    """v3 프롬프트 — 도구 전에 글을 쓰라는 지시 대신 purpose·checked(v2는 reasoning_extraction 거절, AI 실험 기록)"""
+    text = recon_agent.spec(recon_agent.registry()[1]).system(recon_agent.PROMPT_VERSION)
+    assert "`purpose`" in text and "`checked`" in text and "`가설:`" not in text
 
 
 def test_unprefixed_text_is_note_and_limit_gets_conclusion(conn):

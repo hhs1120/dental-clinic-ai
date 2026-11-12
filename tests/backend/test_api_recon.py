@@ -85,7 +85,7 @@ def _events(text: str) -> list[str]:
 
 
 def test_item_has_agent_after_investigate(agent_client):
-    c = agent_client(("say", "가설: 금액 오입력", *agent_client.look[1:]), agent_client.submit())
+    c = agent_client(agent_client.look, agent_client.submit())  # 가설 줄 = 조회 인자 purpose
     key = _key(c)
     r = c.post(f"/finance/recon/{key}/investigate")
     assert r.status_code == 200

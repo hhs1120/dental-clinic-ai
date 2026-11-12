@@ -3,7 +3,8 @@
 submit_cause, 조회 도구는 backend/recon_tools.py(읽기 전용). 근거 번호가 그 실행의 조회가 아니면 훅이 막는다.
 실행 기록(ax_agent_runs·ax_agent_steps, 대상 = 건 키)만이 상태다 — 화면 줄(lines)·확정·자동 마감(backend/recon_auto.py)·
 채점이 모두 result()와 lines()로 읽는다. 조사 과정 줄은 기록을 나눠 보인다(설계 §3 "조사 과정 줄
-종류"): 모델 글 `가설:`·`비교:` → 가설·비교(머리말 없으면 생각), 조회 → 조회 번호 + 요약, submit_cause → 결론.
+종류"): 조회 도구 인자 checked → 비교·purpose → 가설, 조회 → 조회 번호 + 요약, submit_cause → 결론. 모델 글은
+`가설:`·`비교:` 머리말로 가설·비교(머리말 없으면 생각) — v2 실행과, v3에서 모델이 따로 쓴 글.
 일괄(make recon)은 라운드 배치(backend/harness/rounds.py), 화면 `조사 시작`은 일반 호출(investigate)."""
 
 import argparse
@@ -26,7 +27,9 @@ from shared.llm import Gateway, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT, ALIAS, TASK = "recon_cause", "recon", "recon"
-PROMPT_VERSION = "v2"  # v2: 상한 12, 구강용품 조합은 도구가 계산(조합이 없으면 진료 외 매출 아님)
+# v2: 상한 12, 구강용품 조합은 도구가 계산(조합이 없으면 진료 외 매출 아님)
+# v3: 가설·비교를 모델 글 대신 조회 인자 purpose·checked로(v2 지시는 reasoning_extraction 거절, AI 실험 기록)
+PROMPT_VERSION = "v3"
 SUBMIT = "submit_cause"
 EVIDENCE_RULE = "recon.evidence"
 # 조사 단계 상한(끝내는 도구 포함) — 시작값 8은 dev 시험 5건 중 2건이 걸려(한 턴에 조회 3~4개를 묶어 부름) 12로(설계 §3)
@@ -200,6 +203,10 @@ def lines(steps: list[dict], finished: bool = True) -> list[dict]:
                 kind = _KIND[m.group(1)] if m else "note"
                 out.append({"kind": kind, "text": para[m.end() :].strip() if m else para})
         elif s["kind"] == "tool":
+            if s["tool"] != SUBMIT:
+                for field, kind in (("checked", "compare"), ("purpose", "hypothesis")):
+                    if text := (s["args"] or {}).get(field):
+                        out.append({"kind": kind, "text": text})
             if s["seq"] in nos:
                 out.append(
                     {

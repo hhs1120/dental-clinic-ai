@@ -27,7 +27,7 @@ def call(conn, name: str, **args):
         n = conn.execute("SELECT count(*) FROM ax_agent_runs").fetchone()[0]
         run_id = store.create_run("recon_cause", f"k{n}", "v1", "me")
     tool = {t.name: t for t in recon_tools.tools(SUBMIT)}[name]
-    norm = tool.args.model_validate(args).model_dump(mode="json")
+    norm = tool.args.model_validate({"purpose": "확인"} | args).model_dump(mode="json")
     return tool.fn(ToolContext(run_id, "recon_cause", "k", store), norm)
 
 
@@ -92,21 +92,40 @@ def test_range_limits():
     by = {t.name: t for t in recon_tools.tools(SUBMIT)}
     with pytest.raises(ValidationError):
         by["find_amount"].args.model_validate(
-            {"amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-03"}
+            {"purpose": "p", "amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-03"}
         )
     with pytest.raises(ValidationError):
-        by["card_sales"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-09"})
+        by["card_sales"].args.model_validate(
+            {"purpose": "p", "date_from": "2026-11-01", "date_to": "2026-11-09"}
+        )
     with pytest.raises(ValidationError):
-        by["bank_tx"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-16"})
+        by["bank_tx"].args.model_validate(
+            {"purpose": "p", "date_from": "2026-11-01", "date_to": "2026-11-16"}
+        )
 
 
 def test_range_limit_is_inclusive():
     """상한 = 날짜 차이 N일까지 — 모델이 ±15일(차이 30)·31일 차이로 부르는 흔한 꼴이 막히지 않게"""
     by = {t.name: t for t in recon_tools.tools(SUBMIT)}
     by["find_amount"].args.model_validate(
-        {"amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-02"}
+        {"purpose": "p", "amount": 1, "date_from": "2026-11-01", "date_to": "2026-12-02"}
     )
-    by["card_sales"].args.model_validate({"date_from": "2026-11-01", "date_to": "2026-11-08"})
+    by["card_sales"].args.model_validate(
+        {"purpose": "p", "date_from": "2026-11-01", "date_to": "2026-11-08"}
+    )
+
+
+def test_purpose_required_checked_optional():
+    """조회마다 purpose(확인하려는 것)는 필수, checked(직전 결과가 맞았는지)는 선택 — 조사 과정 줄의 가설·비교(설계 §3)"""
+    for t in recon_tools.tools(SUBMIT):
+        with pytest.raises(ValidationError):
+            t.args.model_validate({"day": "2026-11-03"})
+        with pytest.raises(ValidationError):
+            t.args.model_validate({"purpose": "x" * (recon_tools.NOTE_MAX + 1)})
+    by = {t.name: t for t in recon_tools.tools(SUBMIT)}
+    a = by["oral_care_prices"].args.model_validate({"purpose": "조합", "checked": "맞음"})
+    assert a.purpose == "조합" and a.checked == "맞음"
+    assert by["oral_care_prices"].args.model_validate({"purpose": "조합"}).checked is None
 
 
 def test_oral_care_combos(b):

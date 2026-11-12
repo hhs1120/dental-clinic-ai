@@ -34,6 +34,7 @@ FIND_AMOUNT_DAYS = 31
 BALANCE_ROWS = 10
 ORAL_MAX_ITEMS = 10  # 구강용품 조합 — 한 번 판매의 개수 상한
 ORAL_MAX_COMBOS = 5
+NOTE_MAX = 120  # purpose·checked 한 줄 길이 상한(자)
 
 
 def won(n: int) -> str:
@@ -56,11 +57,24 @@ def _rows(conn, sql: str, *args) -> list[dict]:
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
-class _Day(BaseModel):
+class _Note(BaseModel):
+    """조회마다 받는 조사 과정 칸 — 결과 계산에는 쓰지 않고 화면 줄(가설·비교)로만 보인다(설계 §3 "조사 과정 줄 종류")"""
+
+    purpose: str = Field(
+        min_length=1, max_length=NOTE_MAX, description="이 조회로 확인하려는 것 한 줄"
+    )
+    checked: str | None = Field(
+        default=None,
+        max_length=NOTE_MAX,
+        description="직전 조회 결과가 의심한 것과 맞았는지 한 줄(첫 조회는 비움)",
+    )
+
+
+class _Day(_Note):
     day: date
 
 
-class _Range(BaseModel):
+class _Range(_Note):
     date_from: date
     date_to: date
     max_days: ClassVar[int] = 0
@@ -79,7 +93,7 @@ class _CardSales(_Range):
     amount_max: int | None = None
 
 
-class _Deposits(BaseModel):
+class _Deposits(_Note):
     sales_date: date
     issuer: str | None = None
 
@@ -89,7 +103,7 @@ class _BankTx(_Range):
     direction: Literal["in", "out"] = "in"
 
 
-class _Patient(BaseModel):
+class _Patient(_Note):
     patient_id: int
 
 
@@ -97,7 +111,7 @@ class _Balance(_Patient):
     before: date
 
 
-class _Oral(BaseModel):
+class _Oral(_Note):
     amount: int | None = Field(default=None, gt=0)
 
 
