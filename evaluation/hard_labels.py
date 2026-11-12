@@ -17,6 +17,7 @@ from pathlib import Path
 from backend import classify, prompts
 from backend.classify import REASONING_MAX_TOKENS
 from evaluation.metrics import HARD_AGREED_SAMPLE
+from generator.hard_calls import sample_items
 from generator.paths import output_paths
 from shared.call_labels import (
     COUNTERPART_KO,
@@ -176,9 +177,11 @@ def compare(records: list[dict]) -> dict[str, list[str]]:
 
 
 def sample(records: list[dict], n: int = HARD_AGREED_SAMPLE) -> list[str]:
-    """일치해서 확정된 통화의 고정 표본 — call_uid 해시순 앞 n(설계 §4)"""
+    """일치해서 확정된 통화의 고정 표본 — call_uid 해시순 앞 n(설계 §4). 프롬프트를 고칠 때 읽은 녹취 샘플
+    (generator.hard_calls.sample_items — 같은 해시순이라 겹친다)은 빼서 독립 확인이 되게"""
     diff = compare(records)
-    agreed = [r["call_uid"] for r in records if r["call_uid"] not in diff]
+    seen = set(sample_items([(r["call_uid"], r["hard_type"], r["half"]) for r in records]))
+    agreed = [r["call_uid"] for r in records if r["call_uid"] not in set(diff) | seen]
     return sorted(agreed, key=_sha)[:n]
 
 

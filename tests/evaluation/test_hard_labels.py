@@ -23,7 +23,9 @@ OPUS = {  # hc-0001은 할 일이 엇갈림, hc-0002는 normal·low(같음), hc-
 
 
 @pytest.fixture
-def conn(tmp_path):
+def conn(tmp_path, monkeypatch):
+    # 3통화 픽스처는 녹취 샘플(종류마다 4건)보다 작아 전부 빠진다 — 표본 제외는 test_sample_skips_transcript_sample
+    monkeypatch.setattr(hl, "sample_items", lambda rows: [])
     truth = sqlite3.connect(tmp_path / "truth.sqlite")
     truth.executescript(TRUTH_SCHEMA)
     for uid, g in GEN.items():
@@ -122,3 +124,32 @@ def test_finalize_writes_final_labels(conn, tmp_path):
     assert rows["hc-0001"]["label_source"] == "human"
     assert rows["hc-0003"]["labels"]["price_inquiry"] == 1
     assert report["agreed_calls"] == 2 and report["n"] == 3
+
+
+def test_sample_skips_transcript_sample():
+    """일치 표본은 프롬프트를 고칠 때 읽은 녹취 샘플(generator.hard_calls.sample_items)과 겹치지 않는다 — 독립 확인"""
+    from generator.hard_calls import sample_items
+    from generator.master import HARD_CALL_TYPES
+
+    records, k = [], 0
+    for t in HARD_CALL_TYPES:
+        for i in range(50):
+            k += 1
+            half = (
+                ("calm_urgent" if i % 2 else "pain_not_urgent")
+                if t == "urgency_inverted"
+                else None
+            )
+            g = labels("book")
+            records.append(
+                {
+                    "call_uid": f"hc-{k:04d}",
+                    "hard_type": t,
+                    "half": half,
+                    "generated": g,
+                    "opus": g,
+                }
+            )
+    seen = set(sample_items([(r["call_uid"], r["hard_type"], r["half"]) for r in records]))
+    picks = hl.sample(records)
+    assert len(picks) == hl.HARD_AGREED_SAMPLE and not seen & set(picks)
