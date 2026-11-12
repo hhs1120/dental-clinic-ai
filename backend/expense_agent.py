@@ -24,7 +24,8 @@ from shared.llm import Gateway, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT, ALIAS, TASK = "expense_match", "expense", "expense"
-PROMPT_VERSION = "v1"
+# v2: 도구 사이에 따로 쓴 글은 한국어 한 줄(v1 시험에서 영어 글이 조사 과정 줄에 섞임)
+PROMPT_VERSION = "v2"
 SUBMIT = "submit_match"
 EVIDENCE_RULE = "expense.evidence"
 EXPENSE_MAX_TOOL_CALLS = 10  # 조사 상한(끝내는 도구 포함) — 시작값, dev 분포로 다시 본다(설계 §4)

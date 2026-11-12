@@ -125,3 +125,10 @@ def test_input_has_no_rule_answer(o, tmp_path):
     gw = Script(c, LOOK, submit([d]))
     expense_agent.run_batch(c, gw, DAY, batch=False, state=tmp_path / "s.json")
     assert "하늘치재" in gw.first and "재료비" not in gw.first and "세금계산서" not in gw.first
+
+
+def test_prompt_asks_korean_and_no_written_reasoning():
+    """v2 — 따로 쓴 글은 한국어 한 줄(화면 조사 과정 줄), 도구 전에 생각 글을 시키지 않는다(AI 실험 기록 §26)"""
+    text = expense_agent.spec(expense_agent.registry()[1]).system(expense_agent.PROMPT_VERSION)
+    assert expense_agent.PROMPT_VERSION == "v2"
+    assert "한국어" in text and "`purpose`" in text and "`가설:`" not in text
