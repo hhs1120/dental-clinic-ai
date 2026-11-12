@@ -177,10 +177,10 @@ def test_child_sealant_kept():
 
 **Interfaces:**
 - Produces:
-  - `SHAPES_HIT = ("plain", "everyday_word", "separated", "tooth_first", "child_sealant")`, `SHAPES_DECOY = ("planned", "declined", "elsewhere", "past_visit", "claimed_again", "adult_sealant", "uninsured")`
+  - `SHAPES_HIT = ("plain", "other_name", "separated", "tooth_first", "child_sealant")`, `SHAPES_DECOY = ("planned", "declined", "elsewhere", "past_visit", "claimed_again", "adult_sealant", "uninsured")`
   - `case_specs() -> list[dict]` — 누락 모양마다 4건, 디코이마다 3건(41건), `random.Random(f"{seed}-claim_omission")`(`config/generator.yaml` seed). 사례: `{id: "om-01"…, shape, claimed: {procedure_code, procedure, tooth, age}, extra: {procedure_code, procedure, tooth}, truth: [(code, tooth)] | []}`. 청구 시술은 급여 줄(스케일링·신경치료·단순발치·잇몸치료, 소아는 구강검진), 추가 처치는 누락 모양이 아말감/GI(`child_sealant`만 실란트, 나이 6~12), 디코이 `adult_sealant`는 실란트·나이 19 이상(했다고 적혀도 정답 없음), `uninsured`는 레진, `claimed_again`은 청구 시술·치아 그대로. 추가 처치 치아는 청구 치아와 다름
   - `split_of(case_id: str) -> "dev"|"test"` — sha256 반반
-  - `check_note(spec, note) -> list[str]` — 문제 목록(빈 목록 = 통과): `extra.tooth`의 `NN번`과 청구 시술 이름(또는 별칭)이 있음, 모양 표지(`everyday_word`: "때움"·"때웠"·"충전" 중 하나 있고 "아말감" 없음 / `planned`: "예정"·"다음" / `declined`: "거절"·"원치"·"보류"·"미루" / `elsewhere`: "다른 병원"·"타 병원"·"다른 치과" / `past_visit`: "지난"·"이전" / `uninsured`: "레진" / 실란트 모양: "실란트"·"홈메우기"·"홈 메우기"), `generator.master.CHART_FORBIDDEN_WORDS` 없음
+  - `check_note(spec, note) -> list[str]` — 문제 목록(빈 목록 = 통과): `extra.tooth`의 `NN번`과 청구 시술 이름(또는 별칭)이 있음, 모양 표지(`other_name`: "GI"·"글라스아이오노머" 중 하나 있고 "아말감"·"때움" 없음 / `planned`: "예정"·"다음" / `declined`: "거절"·"원치"·"보류"·"미루" / `elsewhere`: "다른 병원"·"타 병원"·"다른 치과" / `past_visit`: "지난"·"이전" / `uninsured`: "레진" / 실란트 모양: "실란트"·"홈메우기"·"홈 메우기"), `generator.master.CHART_FORBIDDEN_WORDS` 없음
   - `write_cases(gw, path, *, attempts=3) -> dict` — 명세 해시가 같은 줄이 `path`(기본 `evaluation/claim_omission_cases.jsonl`)에 있으면 건너뜀, 아니면 별칭 `gen`으로 한 단락을 쓰고 `check_note` 통과할 때까지 최대 3번(다시 쓸 때 문제 목록을 알려 줌), 통과만 한 줄씩 덧붙임. 반환 `{written, skipped, failed: [id]}`
   - `load_cases(path) -> list[dict]` — 명세 + `note`, 지금 명세 해시와 맞는 줄만
 - 문장 프롬프트(`prompts/gen_claim_omission.md`) 요지: 실데이터 말투(소견·환자 말·시행·다음 계획 1~4문장), 모양 설명은 코드가 사례마다 한국어 한 줄로 넘김, "삭감·요건·청구" 같은 말 금지
@@ -189,7 +189,7 @@ def test_child_sealant_kept():
   - `test_specs_fixed_and_counts` — 두 번 부른 결과가 같고 41건, 누락 모양 20건만 `truth`가 있음, 모든 `extra.tooth != claimed.tooth`
   - `test_specs_age_rules` — `child_sealant` 나이 6~12, `adult_sealant` 19 이상
   - `test_split_half` — 41건 중 dev 15~26건
-  - `test_check_note_markers` — `everyday_word`에 "아말감"이 있으면 문제, `planned`에 "예정" 없으면 문제, 금지어 있으면 문제, 맞는 문장은 `[]`
+  - `test_check_note_markers` — `other_name`에 "아말감"·"때움"이 있으면 문제, `planned`에 "예정" 없으면 문제, 금지어 있으면 문제, 맞는 문장은 `[]`
   - `test_write_cases_retries_and_resumes` — 가짜 게이트웨이가 첫 답은 검사 실패·둘째 통과 → 파일에 1줄, 다시 부르면 호출 0
 - [ ] **Step 2: Run** `uv run pytest tests/evaluation/test_claim_omission_eval.py -q` — Expected: FAIL(모듈 없음)
 - [ ] **Step 3: Implement**(모듈 독스트링: 하는 일·설계 §2b·정답이 붙은 입력이라 기록은 `evaluation/`에만)

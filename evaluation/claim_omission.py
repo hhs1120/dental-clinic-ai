@@ -48,7 +48,7 @@ WRITE_SCHEMA = {
 }
 
 # 모양(설계 §2b) — 누락 있음은 실데이터에 없는 모양, 디코이는 그날 하지 않았거나 급여가 아닌 처치
-SHAPES_HIT = ("plain", "everyday_word", "separated", "tooth_first", "child_sealant")
+SHAPES_HIT = ("plain", "other_name", "separated", "tooth_first", "child_sealant")
 SHAPES_DECOY = (
     "planned",
     "declined",
@@ -61,7 +61,7 @@ SHAPES_DECOY = (
 PER_HIT, PER_DECOY = 4, 3
 SHAPE_TEXT = {
     "plain": "청구된 진료에 이어 그날 추가 처치를 함께 시행했다고 한 문장으로 적는다",
-    "everyday_word": "추가 처치를 시술 이름 대신 '때움'·'충전' 같은 일상어로 적는다('아말감'이라는 말을 쓰지 않는다)",
+    "other_name": "추가 처치를 시술 이름 대신 'GI 충전'·'글라스아이오노머 충전' 같은 다른 표기로 적는다('아말감'이라는 말과 '때움'은 쓰지 않는다)",
     "separated": "추가 처치 문장을 청구된 진료 문장과 떨어뜨려 적는다(사이에 소견·환자 말 등 다른 문장, 추가 처치 문장에는 청구된 시술 이름을 쓰지 않는다)",
     "tooth_first": "추가 처치 문장을 치아 번호로 시작한다(예: 'NN번은 …도 함께 시행함')",
     "child_sealant": "소아 구강검진 뒤 그날 어금니에 실란트(홈메우기)를 시행했다고 적는다",
@@ -81,7 +81,7 @@ CHILD_EXAM = "U0002"  # 구강검진
 _PROC = {p["code"]: p for p in PROCEDURES}
 _CODE = {p["name"]: p["code"] for p in PROCEDURES}
 _MARKERS = {
-    "everyday_word": ("때움", "때웠", "충전"),
+    "other_name": ("GI", "글라스아이오노머", "글래스아이오노머"),
     "planned": ("예정", "다음"),
     "declined": ("거절", "원치", "보류", "미루"),
     "elsewhere": ("다른 병원", "타 병원", "다른 치과"),
@@ -187,8 +187,10 @@ def check_note(spec: dict, note: str) -> list[str]:
         problems.append(f"청구된 시술 '{spec['claimed']['procedure']}'이 없다")
     if shape in _MARKERS and not any(w in note for w in _MARKERS[shape]):
         problems.append(f"'{'·'.join(_MARKERS[shape])}' 중 하나가 있어야 한다")
-    if shape == "everyday_word" and "아말감" in note:
-        problems.append("'아말감'이라는 말을 쓰지 않는다")
+    if shape == "other_name":  # '때움'은 레진과 갈리지 않아 정답을 하나로 못 정한다
+        problems += [
+            f"'{w}'라는 말을 쓰지 않는다" for w in ("아말감", "때움", "때웠") if w in note
+        ]
     if shape in ("plain", "separated", "tooth_first") and "아말감" not in note:
         problems.append("'아말감'이 없다")
     with_tooth = [s for s in _sentences(note) if mark in s]

@@ -75,9 +75,12 @@ def test_check_note_ok():
 
 
 def test_check_note_markers():
-    s = spec("everyday_word")
-    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 치아 때움.")) == []
-    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 치아 아말감으로 때움."))
+    """다른 표기 — 아말감/GI로만 읽히는 말(GI·글라스아이오노머), '때움'처럼 레진과 갈리지 않는 말은 정답을 못 정해 안 쓴다"""
+    s = spec("other_name")
+    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 치아 GI 충전함.")) == []
+    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 글라스아이오노머 충전함.")) == []
+    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 치아 아말감으로 충전."))
+    assert ev.check_note(s, note_for(s, "{c} 시행하고 {t}번 치아 때움."))
     p = spec("planned")
     assert ev.check_note(p, note_for(p, "{c} 시행함. {t}번 치아 아말감 진행."))
     assert ev.check_note(p, note_for(p, "{c} 시행함. {t}번 아말감 다음 예정. 삭감 주의"))
