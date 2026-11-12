@@ -8,7 +8,7 @@ master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(
 import sqlite3
 from datetime import date, timedelta
 
-from backend import claim_check
+from backend import claim_check, claim_omission
 from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
@@ -131,6 +131,16 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     }
 
 
+def _ai_pending(conn, today: date) -> dict[str, int]:
+    """갱신 버튼 줄 수 — 청구 전은 대기 줄 중 2a·2b 어느 쪽이든 다시 부를 줄(합집합), 삭감 대응은 2a만"""
+    req = claim_check.todo_ids(conn, today)
+    pending = {
+        r[0] for r in conn.execute("SELECT id FROM source.emr_claims WHERE status = 'pending'")
+    }
+    pre = (req | claim_omission.todo_ids(conn, today)) & pending
+    return {"pre": len(pre), "adjust": len(req - pending)}
+
+
 def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
     """대기(pending) 청구 줄과 상병 확인 경고 — 시술 × 차트 상병이 허용 상병 밖이면 경고, 지난 조정(통보일이 today
     전)에서 같은 조합이 상병 착오로 깎인 건수·못 받은 돈. 정렬: 경고 먼저 → 진료일 → 청구 id"""
@@ -184,13 +194,23 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
                 "warning": warning,
             }
         )
-    ai = claim_check.results(conn)
-    saved = [ai[x["claim_id"]]["at"] for x in rows if x["claim_id"] in ai]
+    # 요건(2a)과 추가 처치 누락(2b)은 따로 저장한다 — 누락은 2b 답만 쓴다(2a 답의 omissions는 보지 않음, 설계 §2b)
+    req, om = claim_check.results(conn), claim_omission.results(conn)
+    saved = [
+        max(d[x["claim_id"]]["at"] for d in (req, om) if x["claim_id"] in d)
+        for x in rows
+        if x["claim_id"] in req or x["claim_id"] in om
+    ]
     for x in rows:
-        check = ai.get(x["claim_id"])
+        check, miss = req.get(x["claim_id"]), om.get(x["claim_id"])
+        ok, has = bool(check and check["valid"]), bool(miss and miss["valid"])
         x["ai"] = (
-            {k: check[k] for k in ("requirement", "evidence", "omissions")}
-            if check and check["valid"]
+            {
+                "requirement": check["requirement"] if ok else None,
+                "evidence": check["evidence"] if ok else [],
+                "omissions": miss["omissions"] if has else [],
+            }
+            if ok or has
             else None
         )
     rows.sort(key=lambda x: (x["warning"] is None, x["service_date"], x["claim_id"]))
@@ -208,7 +228,7 @@ def pre_claim(conn: sqlite3.Connection, today: date) -> dict:
             "ai_checked": len(saved),
         },
         "ai_at": max(saved, default=None),
-        "ai_pending": claim_check.pending(conn, today),
+        "ai_pending": _ai_pending(conn, today),
         "rows": rows,
     }
 

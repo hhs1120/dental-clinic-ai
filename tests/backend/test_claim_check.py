@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import pytest
 
 from backend import claim_check as cc
+from backend import claim_omission as co
 from backend.prep import master_values
 from generator.clinic import master_values_rows
 from generator.master import ADJUST_REASONS, APPEAL_DAYS
@@ -277,6 +278,7 @@ def client(src, monkeypatch):
     src.app().close()
     gw = FakeGw()
     monkeypatch.setattr(cc, "load_config", lambda: gw.config)
+    monkeypatch.setattr(co, "load_config", lambda: gw.config)
     api.app.dependency_overrides[api.get_db_paths] = lambda: (
         src.path.parent / "app.sqlite",
         src.path,
@@ -305,6 +307,17 @@ def test_job_api_builds_app_scope(client, src):
 
     conn = db.connect(src.path.parent / "app.sqlite", src.path)
     assert cc.pending(conn, DAY) == {"pre": 0, "adjust": 0}
+
+
+def test_job_runs_both(client, src):
+    """갱신 작업 하나로 2a·2b 둘 다(설계 §2b) — 끝나면 둘 다 할 일 없음, 줄 수는 합집합"""
+    job = wait(client, client.post("/jobs/claim-check").json()["job_id"])
+    assert job["status"] == "done" and job["total"] == 1
+    from backend import db
+
+    conn = db.connect(src.path.parent / "app.sqlite", src.path)
+    assert co.todo_ids(conn, DAY) == set()
+    assert conn.execute("SELECT COUNT(*) FROM ax_claim_omissions").fetchone()[0] == 1
 
 
 def test_job_api_reuses_running(client, src):
