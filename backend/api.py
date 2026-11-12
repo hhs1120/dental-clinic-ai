@@ -26,6 +26,7 @@ from backend import (
     db,
     documents,
     emr,
+    expense,
     judge_queue,
     metrics,
     missed,
@@ -721,7 +722,7 @@ def claim_judgment(
         conn.close()
 
 
-# ── ⑧ 재무 대조 (설계 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1) ───────────
+# ── ⑧ 재무 대조 (설계 docs/superpowers/specs/2026-11-11-finance-recon-design.md §1·§2) ─────────
 
 
 @app.get("/finance/recon")
@@ -749,6 +750,54 @@ def finance_recon_confirm(
     conn = _open_rw(paths)
     try:
         recon.confirm(conn, key, body.cause, by=body.part, at=_stamp(now), today=clinic.today)
+        conn.commit()
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.get("/finance/expenses")
+def finance_expenses(paths: Paths, clinic: ClinicDep, month: str | None = None) -> dict:
+    """지출 증빙 — 그 달(없으면 가장 최근 달) 출금별 증빙·과목(backend/expense.py, 설계 §2). 모르는 달 400"""
+    conn = _open_rw(paths)
+    try:
+        return expense.sheet(conn, clinic.today, month)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.get("/finance/expenses/{table}/{outflow_id}/candidates")
+def finance_expense_candidates(table: str, outflow_id: int, paths: Paths) -> dict:
+    """증빙 바꾸기 후보 — 출금일 근처 증빙(금액 무관), 날짜 가까운 순. 모르는 표·없는 출금 400"""
+    conn = _open_rw(paths)
+    try:
+        return {"docs": expense.candidates(conn, table, outflow_id)}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+class ExpenseConfirm(BaseModel):
+    document_ids: list[int]
+    account: str
+    part: str
+
+
+@app.post("/finance/expenses/{table}/{outflow_id}/confirm")
+def finance_expense_confirm(
+    table: str, outflow_id: int, body: ExpenseConfirm, paths: Paths, now: Now
+) -> dict:
+    """출금 사람 확정(덮어씀) — 기록 시각은 실제 시계. 없는 출금·모르는 과목·후보 밖 증빙은 400"""
+    conn = _open_rw(paths)
+    try:
+        expense.confirm(
+            conn, table, outflow_id, body.document_ids, body.account, by=body.part, at=_stamp(now)
+        )
         conn.commit()
         return {"ok": True}
     except ValueError as e:
