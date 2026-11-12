@@ -55,6 +55,9 @@ tags:
   - **순번**: 각 split 안에서 고정 셔플(층화 순서대로 두면 카테고리가 드러남)하고 **dev 전부 → test** 순으로 매긴다. `ax_calls`에는 `in_eval_pool`·`eval_sort_order`만 — 카테고리 정보 없음
 - **블라인드 풀**: 판정 풀 안에서 고정 시드로 추출, `in_blind_pool` — 분류 배치 대상에 이미 포함
 - 비풀 = `silver` (골드만 있음). 자동 개선에서 재료·검증으로 나눠 쓴다(§2.7)
+- **`hard`**(어려운 통화 `hc-`, [[치과 AX - 가상 데이터 생성 설계]] §4.4): 채점 전용 분할. 판정·블라인드 풀, silver 재료·검증, 관문·자동 개선·few-shot·파인튜닝 재료, 골드 점검, dev 모집단 가중·자동 종결 평가 어디에도 들어가지 않는다(`evaluation/classification.py` `_calls`가 기본으로 뺀다). 앱은 분할을 모르고 평소처럼 분류·판정·검색한다
+  - **정답 라벨**: 생성 라벨과 Opus 독립 라벨(`make hard-label` — 녹취·방향만, 정의는 분류기 라벨 프롬프트 그대로, 기록은 `evaluation/`)을 항목마다 비교(급함은 urgent 여부만)해, 모두 같으면 확정. 엇갈린 통화 전부와 확정 통화 표본 `metrics.HARD_AGREED_SAMPLE`건은 사람 검토(`make hard-review` — 출처를 가린 가/나 선택, 둘 다 틀릴 때만 직접 입력, 표본은 맞음/틀림). 최종 라벨은 `ground_truth/hard_call_labels.json`이고 빌드가 생성 라벨 행을 덮어쓴다
+  - **채점**: 같은 `hard` 통화에서 학습 없는 규칙·글자 n-gram(silver 재료로만 학습한 그대로)·분류기 활성 버전을 나란히, 전체와 어려움 종류별(`urgency_inverted`는 절반별)로 `eval.py --split dev` 리포트에. 결과를 보고 셋을 다시 만들지 않는다
 
 ### 2.2 지표
 
@@ -249,7 +252,8 @@ tags:
 
 | 테이블 | 채우는 쪽 | 내용 |
 |---|---|---|
-| `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver) |
+| `truth_call_labels` | 생성기 | `call_uid` → `primary_purpose`, `accepted_purposes[]`, `counterpart`, `urgency`, flags 6, `noise_type`, `used_fact` json, `split`(dev/test/silver/hard) |
+| `truth_hard_calls` | 생성기(9d단계) + 최종 라벨 JSON | `hc-` → 어려움 종류, 절반(`urgency_inverted`만), 라벨 출처(`generated`/`agreed`/`human`). 최종 라벨은 `hard_call_labels.json`(사람 검토 결과, `make data`가 적재), 같은 내용의 `hard_calls.json`도 커밋 |
 | `truth_rag_qa` | 사람(생성 후, `make data`가 `rag_qa.json`을 적재) | 질문·정답 출처(통화는 `call_uid`)·기대 도구·인자·split·정답 재계산 쿼리 — 칸·출처 id 형식은 `ground_truth/schema.sql` |
 | `truth_doc_meta` | 생성기(9단계 문서 계획) | 문서별 방해 여부·종류·짝·대체한 옛 버전·심은 사실(사람이 ③ 질문을 쓰는 재료, 청구 기준은 사유 → 절). 컬럼은 `ground_truth/schema.sql` |
 | `truth_gen_meta` | 생성기 | `key → value` — 시드·생성 기간·건수(키는 `generator/build.py`). verify가 검사하는 DB의 기간·건수를 읽음. 생성 시각은 넣지 않음(해시 비교) |
