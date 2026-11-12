@@ -547,7 +547,7 @@ def fill_api(
     out = paths["llm_results"] / f"{task}.api-{batch_id}.jsonl"
     _write_jsonl(out, rows)
     state.unlink()
-    print(f"{task}: 결과 {len(rows)}건 → {out} (처리 안 됨 {len(results) - len(rows)}건)")
+    print(f"{task}: 결과 {len(rows)}건 → {out} (처리 안 됨 {len(keys) - len(rows)}건)")
     return out
 
 

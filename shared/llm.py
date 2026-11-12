@@ -751,6 +751,8 @@ class Gateway(_Base):
         """OpenAI 배치 결과 — 출력 파일의 200 줄만 결과, 오류 파일·200 아닌 줄(만료·취소·서버 오류)은 None"""
         client = self._openai()
         batch = client.batches.retrieve(batch_id)
+        if batch.status == "failed":  # 입력 검증 실패 등 — 결과 파일이 없다
+            print(f"OpenAI 배치 {batch_id} 실패: {batch.errors}")
         price = self._price(model, model)
         out = {}
         for file_id in (batch.output_file_id, batch.error_file_id):

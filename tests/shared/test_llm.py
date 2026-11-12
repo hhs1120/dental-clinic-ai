@@ -1034,7 +1034,10 @@ class _OaBatches:
 
     def retrieve(self, batch_id):
         return types.SimpleNamespace(
-            status=self.status, output_file_id=self.out, error_file_id=self.err
+            status=self.status,
+            output_file_id=self.out,
+            error_file_id=self.err,
+            errors=getattr(self, "errors", None),
         )
 
 
@@ -1072,3 +1075,14 @@ def test_openai_batch_submit_and_partial_results(tmp_path):
 def test_openai_batch_status_in_progress(tmp_path):
     oa = types.SimpleNamespace(files=None, batches=_OaBatches("in_progress", None, None))
     assert _oa_gateway(tmp_path, oa).batch_status("batch_1", "oa") == "in_progress"
+
+
+def test_openai_batch_failed_shows_reason(tmp_path, capsys):
+    """입력 검증 실패 등으로 배치가 failed면 결과 파일이 없다 — 사유(batch.errors)를 보여 주고 빈 결과(다시 돌면 재제출)"""
+    batches = _OaBatches("failed", None, None)
+    batches.errors = types.SimpleNamespace(
+        data=[types.SimpleNamespace(code="invalid_json", message="line 3")]
+    )
+    oa = types.SimpleNamespace(files=_OaFiles({}), batches=batches)
+    r = _oa_gateway(tmp_path, oa).batch_results("batch_1", "oa", task="hard_transcript")
+    assert r == {} and "invalid_json" in capsys.readouterr().out

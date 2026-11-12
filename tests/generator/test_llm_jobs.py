@@ -632,3 +632,10 @@ def test_fill_api_items_without_batch(paths):
     assert out.exists()  # 들여오면 결과 파일은 옮겨진다
     assert llm_jobs.import_results(paths)["toy"]["ok"] == 2
     assert [j["item"] for j in llm_jobs.pending(paths, "toy")] == ["b"]
+
+
+def test_fill_api_counts_missing_results(paths, capsys):
+    """배치가 통째로 실패해 결과가 비면 보낸 건 전부가 '처리 안 됨' — 결과 dict 크기로 세면 0건으로 보인다"""
+    _export(paths, items=("a", "b"))
+    llm_jobs.fill_api(paths, "toy", StubBatchGateway(lambda reqs: {}), sleep=lambda s: None)
+    assert "처리 안 됨 2건" in capsys.readouterr().out
