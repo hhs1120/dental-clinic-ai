@@ -11,7 +11,7 @@ from collections import defaultdict
 from datetime import date
 from itertools import combinations_with_replacement
 
-from backend import recon_match
+from backend import recon_auto, recon_match
 
 
 def _oral_sums(prices: dict) -> set[int]:
@@ -261,6 +261,10 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
             }
         )
     in_month = [i for i in found if i["date"].startswith(month or "")]
+    closed = recon_auto.active(
+        conn, {i["key"] for i in found}
+    )  # 자동 마감은 확정 안 된 건에서 뺀다
+    done = conf.keys() | closed.keys()
     return {
         "months": months,
         "month": month,
@@ -268,8 +272,8 @@ def ledger(conn: sqlite3.Connection, today: date, month: str | None = None) -> d
         "chips": {
             "days": len([d for d in books["open_days"] if d.strftime("%Y-%m") == month]),
             "mismatch_days": len({i["date"] for i in in_month}),
-            "open_items": sum(i["key"] not in conf for i in in_month),
-            "open_all": sum(i["key"] not in conf for i in found),
+            "open_items": sum(i["key"] not in done for i in in_month),
+            "open_all": sum(i["key"] not in done for i in found),
         },
         "days": rows,
     }
@@ -304,10 +308,11 @@ def confirm(conn: sqlite3.Connection, key: str, cause: str, by: str, at: str, to
 
 
 def open_summary(conn: sqlite3.Connection, today: date) -> dict:
-    """확정 안 된 불일치 건 수(전 기간)와 그런 건이 있는 가장 이른 달 — 오늘 화면 '일계표 불일치' 줄과 링크.
+    """확정·자동 마감 안 된 불일치 건 수(전 기간)와 그런 건이 있는 가장 이른 달 — 오늘 화면 '일계표 불일치' 줄과 링크.
     수는 /finance 칩 open_all과 같다"""
-    conf = _confirmations(conn)
-    open_ = [i for i in recon_match.detect(recon_match.load(conn, today)) if i["key"] not in conf]
+    found = recon_match.detect(recon_match.load(conn, today))
+    done = _confirmations(conn).keys() | recon_auto.active(conn, {i["key"] for i in found}).keys()
+    open_ = [i for i in found if i["key"] not in done]
     return {"count": len(open_), "month": min((i["date"][:7] for i in open_), default=None)}
 
 
