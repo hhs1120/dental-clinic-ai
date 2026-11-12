@@ -10,12 +10,17 @@ from generator.calls import next_open_day
 from generator.hard_calls import excluded_patients
 from generator.master import (
     BOOKING_PURPOSES,
+    CALL_COUNTERPARTS,
+    CALL_FLAGS,
+    CALL_PURPOSE_SHARE,
     HARD_CALL_TYPES,
     HARD_CALLS_PER_TYPE,
     HARD_HALF_PURPOSES,
     HARD_TYPE_PURPOSES,
     HARD_URGENCY_HALVES,
     HARD_WINDOW_DAYS,
+    IMPLIED_FLAG,
+    URGENCIES,
 )
 from generator.verify.calls import _booking_problem
 from generator.verify.common import HARD_PREFIX, _dt, _rows
@@ -24,7 +29,8 @@ from generator.verify.common import HARD_PREFIX, _dt, _rows
 def _hard(conn) -> list[dict]:
     rows = _rows(
         conn,
-        "SELECT c.*, l.primary_purpose, l.accepted_purposes, l.urgency, l.emergency, l.appt_confirmed,"
+        "SELECT c.*, l.primary_purpose, l.accepted_purposes, l.counterpart, l.urgency, l.emergency,"
+        f" {', '.join(f'l.{f}' for f in CALL_FLAGS if f != 'emergency')},"
         " l.used_fact, l.split, h.hard_type, h.half, h.label_source FROM ax_calls c"
         " JOIN truth.truth_call_labels l USING (call_uid)"
         " LEFT JOIN truth.truth_hard_calls h USING (call_uid)"
@@ -36,9 +42,9 @@ def _hard(conn) -> list[dict]:
 
 
 def _generated(conn) -> list[dict]:
-    """생성 라벨 그대로인 hc- — 사람이 녹취를 읽고 정한 최종 라벨(label_source agreed·human)은 생성 규칙 검사에서 뺀다
-    (설계 §4 — 최종 라벨이 정답)"""
-    return [r for r in _hard(conn) if r["label_source"] == "generated"]
+    """생성 라벨 그대로인 hc-(generated, Opus와 일치한 agreed) — 사람이 녹취를 읽고 바꾼 최종 라벨(human)만 생성 규칙
+    검사에서 뺀다(설계 §4 — 최종 라벨이 정답)"""
+    return [r for r in _hard(conn) if r["label_source"] != "human"]
 
 
 def check_hard_counts(conn, ctx):
@@ -223,3 +229,51 @@ def check_hard_urgency_labels(conn, ctx):
         if not ok:
             bad.append({"call_uid": r["call_uid"], "half": r["half"], "urgency": r["urgency"]})
     return bad
+
+
+def check_hard_label_values(conn, ctx):
+    """hc- 라벨 값(출처 무관 — 손으로 고친 최종 라벨 JSON도): 목적·상대·급함 enum, 플래그 0/1, accepted 첫째 = 주 목적,
+    주 목적이 함의하는 플래그(master.IMPLIED_FLAG) 켜짐, 응급 → urgent"""
+    bad = []
+    for r in _hard(conn):
+        accepted = json.loads(r["accepted_purposes"])
+        implied = IMPLIED_FLAG.get(r["primary_purpose"])
+        if (
+            r["primary_purpose"] not in CALL_PURPOSE_SHARE
+            or r["counterpart"] not in CALL_COUNTERPARTS
+            or r["urgency"] not in URGENCIES
+            or any(r[f] not in (0, 1) for f in CALL_FLAGS)
+        ):
+            problem = "enum 밖"
+        elif accepted[:1] != [r["primary_purpose"]] or not set(accepted) <= set(
+            CALL_PURPOSE_SHARE
+        ):
+            problem = "accepted_purposes 첫째 ≠ 주 목적"
+        elif implied and not r[implied]:
+            problem = "주 목적이 함의하는 플래그 꺼짐"
+        elif r["emergency"] and r["urgency"] != "urgent":
+            problem = "응급인데 urgent 아님"
+        else:
+            continue
+        bad.append({"call_uid": r["call_uid"], "problem": problem})
+    return bad
+
+
+def check_hard_orphans(conn, ctx):
+    """truth_hard_calls 행은 ax_calls에 있는 통화, split hard는 hc-만"""
+    return _rows(
+        conn,
+        "SELECT h.call_uid, 'ax_calls에 없음' AS problem FROM truth.truth_hard_calls h"
+        " WHERE h.call_uid NOT IN (SELECT call_uid FROM ax_calls)"
+        " UNION ALL SELECT call_uid, 'hc-가 아닌 hard' FROM truth.truth_call_labels"
+        f" WHERE split = 'hard' AND call_uid NOT LIKE '{HARD_PREFIX}%'",
+    )
+
+
+def check_hard_label_state(conn, ctx):
+    """최종 라벨을 적재했으면(generated 아닌 행이 있으면) 모든 hc-가 최종 라벨 — 남은 generated는 녹취가 바뀌었거나
+    JSON에 빠진 통화라 다시 라벨한다(make hard-label → make hard-review → make data, build.apply_hard_labels)"""
+    rows = _hard(conn)
+    if all(r["label_source"] == "generated" for r in rows):
+        return []
+    return [{"call_uid": r["call_uid"]} for r in rows if r["label_source"] == "generated"]

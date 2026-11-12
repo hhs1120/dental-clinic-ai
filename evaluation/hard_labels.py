@@ -318,6 +318,7 @@ def finalize(conn, path: Path, out: Path, sample_size: int = HARD_AGREED_SAMPLE)
     rows = [
         {
             "call_uid": r["call_uid"],
+            "transcript_sha": r["transcript_sha"],
             "labels": final_labels(r),
             "label_source": "human" if r.get("human") else "agreed",
         }

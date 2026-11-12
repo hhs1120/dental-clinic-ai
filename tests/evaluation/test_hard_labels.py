@@ -153,3 +153,13 @@ def test_sample_skips_transcript_sample():
     seen = set(sample_items([(r["call_uid"], r["hard_type"], r["half"]) for r in records]))
     picks = hl.sample(records)
     assert len(picks) == hl.HARD_AGREED_SAMPLE and not seen & set(picks)
+
+
+def test_finalize_writes_transcript_sha(conn, tmp_path):
+    """최종 라벨마다 Opus가 읽은 녹취 해시 — 빌드가 녹취 변경을 알아챈다"""
+    _, path = _labelled(conn, tmp_path)
+    hl.review(conn, path, read=lambda prompt: "1", write=lambda *_: None, sample_size=1)
+    hl.finalize(conn, path, tmp_path / "final.json", sample_size=1)
+    rows = json.loads((tmp_path / "final.json").read_text())
+    want = {r["call_uid"]: r["transcript_sha"] for r in hl.load(path)}
+    assert {r["call_uid"]: r["transcript_sha"] for r in rows} == want

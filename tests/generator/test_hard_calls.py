@@ -1,6 +1,7 @@
 """① 어려운 통화 평가셋(어려운 통화 설계 docs/superpowers/specs/2026-11-11-hard-calls-design.md) — hc- 통화가 기존 c- 통화
 검사·평가 경로에 섞이지 않는지, hard 분할·truth_hard_calls 표"""
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -80,6 +81,9 @@ HARD_CHECKS = [
     verify.check_hard_excluded,
     verify.check_hard_not_pooled,
     verify.check_hard_urgency_labels,
+    verify.check_hard_label_values,
+    verify.check_hard_orphans,
+    verify.check_hard_label_state,
 ]
 
 
@@ -319,8 +323,9 @@ def _final(uid, **labels):
 
 def test_final_labels_survive_rebuild(tmp_path):
     """최종 라벨 JSON이 있으면 빌드마다 생성 라벨을 덮어쓴다 — 다시 생성해도 사람이 정한 값 그대로"""
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
     final = tmp_path / "hard_call_labels.json"
-    final.write_text(json.dumps([_final("hc-0001", has_todo=0)]), encoding="utf-8")
+    final.write_text(json.dumps([_sha_final(tmp_path, "hc-0001", has_todo=0)]), encoding="utf-8")
     for _ in range(2):
         build.generate(
             tmp_path / "source.sqlite",
@@ -367,3 +372,86 @@ def test_label_checks_skip_final_labels(generated):
     )
     assert verify.check_hard_urgency_labels(conn, ctx) == []
     assert verify.check_hard_purposes(conn, ctx) == []
+
+
+# ── 리뷰 반영: 최종 라벨 적재 뒤에도 검사가 돈다 ─────────────────────────────────
+
+
+def test_label_checks_cover_agreed(generated):
+    """Opus와 일치해 확정된 행(agreed)은 생성 라벨 그대로라 생성 규칙 검사를 받는다 — 사람이 바꾼 행(human)만 뺀다"""
+    conn, ctx = _open(generated("hard_agreed")[0])
+    conn.execute("UPDATE truth.truth_hard_calls SET label_source = 'agreed'")
+    conn.execute(BROKEN["check_hard_urgency_labels"][0])
+    assert verify.check_hard_urgency_labels(conn, ctx)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE truth.truth_call_labels SET primary_purpose = 'bok' WHERE call_uid = 'hc-0006'",
+        "UPDATE truth.truth_call_labels SET urgency = 'urgnt' WHERE call_uid = 'hc-0006'",
+        "UPDATE truth.truth_call_labels SET has_todo = 2 WHERE call_uid = 'hc-0006'",
+        "UPDATE truth.truth_call_labels SET accepted_purposes = '[\"other\"]'"
+        " WHERE call_uid = 'hc-0006' AND primary_purpose != 'other'",
+        "UPDATE truth.truth_call_labels SET emergency = 0 WHERE call_uid IN"
+        " (SELECT call_uid FROM truth.truth_hard_calls WHERE half = 'calm_urgent' LIMIT 1)",
+    ],
+)
+def test_hard_label_values_any_source(generated, sql):
+    """hc- 라벨 값(enum·플래그 0/1·accepted 첫째 = 주 목적·주 목적이 함의하는 플래그)은 출처와 상관없이 본다 — 손으로 고친 최종 라벨 JSON도"""
+    conn, ctx = _open(generated("hard_values")[0])
+    conn.execute("UPDATE truth.truth_hard_calls SET label_source = 'human'")
+    assert verify.check_hard_label_values(conn, ctx) == []
+    conn.execute(sql)
+    assert verify.check_hard_label_values(conn, ctx)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "INSERT INTO truth.truth_hard_calls VALUES ('hc-0999', 'indirect', NULL, 'generated')",
+        "UPDATE truth.truth_call_labels SET split = 'hard' WHERE call_uid = 'c-0001'",
+    ],
+)
+def test_hard_orphans(generated, sql):
+    conn, ctx = _open(generated("hard_orphans")[0])
+    assert verify.check_hard_orphans(conn, ctx) == []
+    conn.execute(sql)
+    assert verify.check_hard_orphans(conn, ctx)
+
+
+def test_hard_label_state_not_mixed(generated):
+    """최종 라벨을 적재했는데 생성 라벨 그대로인 hc-가 남으면(녹취가 바뀌었거나 JSON에 빠짐) 다시 라벨해야 한다"""
+    conn, ctx = _open(generated("hard_state")[0])
+    assert verify.check_hard_label_state(conn, ctx) == []
+    conn.execute(
+        "UPDATE truth.truth_hard_calls SET label_source = 'agreed' WHERE call_uid != 'hc-0001'"
+    )
+    assert verify.check_hard_label_state(conn, ctx) == [{"call_uid": "hc-0001"}]
+
+
+def _sha_final(out, uid, **labels):
+    conn, _ = _open(out)
+    text = conn.execute("SELECT transcript FROM ax_calls WHERE call_uid = ?", (uid,)).fetchone()[0]
+    return _final(uid, **labels) | {"transcript_sha": hashlib.sha256(text.encode()).hexdigest()}
+
+
+def test_final_labels_skip_changed_transcript(tmp_path):
+    """녹취 해시가 다르거나 JSON에 없는 hc-는 최종 라벨을 덮지 않고 생성 라벨로 둔다 — 옛 정답이 새 녹취에 붙지 않게"""
+    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+    good = _sha_final(tmp_path, "hc-0001", has_todo=0)
+    stale = _sha_final(tmp_path, "hc-0002", has_todo=0) | {"transcript_sha": "0" * 64}
+    final = tmp_path / "hard_call_labels.json"
+    final.write_text(json.dumps([good, stale]), encoding="utf-8")
+    build.generate(
+        tmp_path / "source.sqlite",
+        tmp_path / "truth.sqlite",
+        CONFIG,
+        fake_llm=True,
+        hard_labels_path=final,
+    )
+    conn, _ = _open(tmp_path)
+    src = dict(conn.execute("SELECT call_uid, label_source FROM truth.truth_hard_calls"))
+    assert src["hc-0001"] == "human"
+    assert src["hc-0002"] == "generated"  # 녹취가 바뀜
+    assert src["hc-0003"] == "generated"  # JSON에 없음

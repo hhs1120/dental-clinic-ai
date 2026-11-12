@@ -1,6 +1,7 @@
 """생성 실행 — 스키마 적용, truth_gen_meta, 단계 순서대로 실행, 다 쓴 뒤 교체, 정답 JSON. 단계는 가상 데이터 생성 설계 §5.1.
 LLM 단계(7·9·9b)는 캐시만 읽는다 — 빈 건이 있으면 끝까지 돌아 작업을 내보내고 DB를 바꾸지 않은 채 LLMMissing(generator/llm_jobs.py)."""
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -177,7 +178,13 @@ def generate(
         for name, stage in STAGES:
             stage(run, stage_rng(run.seed, name), stage_faker(run.seed, name))
         if hard_labels_path and hard_labels_path.exists():
-            apply_hard_labels(conn, json.loads(hard_labels_path.read_text(encoding="utf-8")))
+            if redo := apply_hard_labels(
+                conn, json.loads(hard_labels_path.read_text(encoding="utf-8"))
+            ):
+                print(
+                    f"어려운 통화 최종 라벨 다시: {len(redo)}통화(녹취가 바뀌었거나 JSON에 없음) —"
+                    " make hard-label → make hard-review → make data"
+                )
         if rag_qa_path and rag_qa_path.exists():
             insert_rag_qa(
                 conn, json.loads(rag_qa_path.read_text(encoding="utf-8")), schema="truth"
@@ -211,13 +218,22 @@ HARD_LABEL_COLS = (
 )
 
 
-def apply_hard_labels(conn: sqlite3.Connection, rows: list[dict]) -> None:
+def apply_hard_labels(conn: sqlite3.Connection, rows: list[dict]) -> list[str]:
     """hard_call_labels.json 행 → hc- 생성 라벨을 최종 라벨로, truth_hard_calls.label_source(어려운 통화 설계 §4 저장).
-    DB에 없는 call_uid가 있으면 옛 파일이라 멈춘다"""
+    DB에 없는 call_uid가 있으면 옛 파일이라 멈춘다. 라벨한 녹취의 해시(transcript_sha)가 지금 녹취와 다르거나 JSON에 없는
+    hc-는 덮지 않고 생성 라벨로 둔다 — 그 call_uid 목록을 돌려준다(다시 라벨: make hard-label → make hard-review)"""
     have = {r[0] for r in conn.execute("SELECT call_uid FROM truth.truth_hard_calls")}
     if stale := sorted({r["call_uid"] for r in rows} - have):
         raise ValueError(f"최종 라벨의 hc- 통화가 DB에 없음(옛 파일): {stale[:5]}")
-    for r in rows:
+    sha = {
+        uid: hashlib.sha256((text or "").encode()).hexdigest()
+        for uid, text in conn.execute(
+            "SELECT h.call_uid, c.transcript FROM truth.truth_hard_calls h"
+            " JOIN ax_calls c USING (call_uid)"
+        )
+    }
+    keep = [r for r in rows if r.get("transcript_sha") == sha.get(r["call_uid"])]
+    for r in keep:
         labels = r["labels"]
         conn.execute(
             f"UPDATE truth.truth_call_labels SET {', '.join(f'{c} = ?' for c in HARD_LABEL_COLS)}"
@@ -232,6 +248,7 @@ def apply_hard_labels(conn: sqlite3.Connection, rows: list[dict]) -> None:
             "UPDATE truth.truth_hard_calls SET label_source = ? WHERE call_uid = ?",
             (r["label_source"], r["call_uid"]),
         )
+    return sorted(have - {r["call_uid"] for r in keep})
 
 
 RAG_QA_JSON_COLS = ("answer_doc_ids", "expected_tools", "expected_args")
