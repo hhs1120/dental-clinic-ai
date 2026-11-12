@@ -32,6 +32,7 @@ from evaluation import (
     call_actions,
     claim_check,
     classification,
+    expense,
     followup,
     gold_audit,
     prep,
@@ -340,6 +341,9 @@ def run(
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
+    if dev and _has_expense(conn):
+        # ⑧-2 규칙 기준선 vs 증빙 탐색 에이전트(평가 설계 §5) — 과금 없음(실행은 make expense-ai). test는 python -m evaluation.expense score --split test(사람)
+        result["expense"] = expense.score_agent(conn, split)
     if parts and app is not None:
         r = rag.evaluate(conn, app, split, condition, parts)
         if condition and dev:
@@ -442,6 +446,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_claim_check(r["claim_check"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
+    if r.get("expense") is not None:
+        out += _render_expense(r["expense"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"
@@ -715,6 +721,65 @@ def _has_recon(conn) -> bool:
         return bool(conn.execute("SELECT 1 FROM truth.truth_recon_mismatches LIMIT 1").fetchone())
     except sqlite3.OperationalError:
         return False
+
+
+def _has_expense(conn) -> bool:
+    """⑧-2 채점을 넣을지 — 정답 DB에 지출 정답이 있고 앱 DB에 실행 기록 표가 있을 때(테스트용 작은 DB는 건너뜀)"""
+    try:
+        return bool(
+            conn.execute("SELECT 1 FROM truth.truth_expense_matches LIMIT 1").fetchone()
+            and conn.execute(
+                "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_agent_runs'"
+            ).fetchone()
+        )
+    except sqlite3.OperationalError:
+        return False
+
+
+_EXPENSE_GROUP = {"passed": "규칙 통과", "none": "증빙 못 찾음", "check": "과목 확인 필요"}
+_CONFIDENCE = {"high": "높음", "mid": "중간", "low": "낮음"}
+
+
+def _render_expense(r: dict) -> list[str]:
+    pm, pa = r["pair_match"], r["pair_account"]
+    out = [
+        "## ⑧-2 매칭·과목 정확도 — 규칙 기준선 vs 증빙 탐색 에이전트",
+        "",
+        f"지출 정답 {r['n']}건 · 에이전트 프롬프트 {r['prompt_version']}",
+        "",
+        "| 묶음 | 규칙 매칭 | AI 매칭 | 규칙 과목 | AI 과목 |",
+        "|---|---|---|---|---|",
+        f"| 전체 | {_kn(r['rule']['match'])} | {_kn(r['agent']['match'])}"
+        f" | {_kn(r['rule']['account'])} | {_kn(r['agent']['account'])} |",
+    ]
+    out += [
+        f"| {_EXPENSE_GROUP[g]} | {_kn(x['rule_match'])} | {_kn(x['agent_match'])}"
+        f" | {_kn(x['rule_account'])} | {_kn(x['agent_account'])} |"
+        for g, x in r["by_group"].items()
+    ]
+    out += [
+        "",
+        f"짝 비교(매칭): 구제 {pm['rescued']} · 손실 {pm['lost']} · 둘 다 맞음 {pm['both']} · 둘 다 틀림 {pm['neither']}",
+        f"짝 비교(과목): 구제 {pa['rescued']} · 손실 {pa['lost']} · 둘 다 맞음 {pa['both']} · 둘 다 틀림 {pa['neither']}",
+        "확신도별 AI 매칭: "
+        + " · ".join(f"{_CONFIDENCE[c]} {_kn(x['match'])}" for c, x in r["by_confidence"].items()),
+        f"자동 확정 오류(조건을 넘은 줄 중 틀림): {_kn(r['auto'])}",
+        "",
+    ]
+    if r["missing"]:
+        out += [
+            f"주의: 지금 버전 실행이 없는 정답 {r['missing']}건(오답으로 셈) — make expense-ai",
+            "",
+        ]
+    if r["rows"]:
+        out += ["규칙이나 AI가 틀린 줄(dev):", ""]
+        out += [
+            f"- {x['at']} {x['label']} {x['amount']:,}원 · {_EXPENSE_GROUP[x['group']]} · 매칭 {x['match']}"
+            f" · 과목 {x['account']}(정답 {x['truth_account']}, AI {x['agent_account']})"
+            for x in r["rows"]
+        ]
+        out.append("")
+    return out
 
 
 _RECON_GROUP = {"rule": "규칙으로 되는 원인", "ambiguous": "애매한 원인"}
