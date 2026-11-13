@@ -29,6 +29,7 @@ from generator import (
     schedule,
     transcripts,
 )
+from generator.doc_catalog import CLAIM_HEADINGS
 from generator.llm_jobs import LLMContext
 from generator.master import (
     HARD_CALL_TYPES,
@@ -129,11 +130,13 @@ def generate(
     llm_paths: dict | None = None,
     rag_qa_path: Path | None = None,
     hard_labels_path: Path | None = None,
+    claim_qa_path: Path | None = None,
 ) -> Run:
     """임시 파일에 전부 쓴 뒤 교체 — 단계 실행 중에 실패하면 기존 DB는 그대로. 단계 상태(run.state)를 보려고 Run을 돌려준다.
     fake_llm: LLM 단계를 가짜 게이트웨이로(테스트). llm_paths: 캐시·작업 폴더(기본 generator/paths.py).
     rag_qa_path: 사람이 쓴 RAG 질문 JSON — 있으면 truth_rag_qa에 적재(make data만 준다. 테스트 생성은 문서·전사가 달라 넣지 않음)
-    hard_labels_path: 어려운 통화 최종 라벨 JSON(evaluation/hard_labels.py finalize) — 있으면 hc- 생성 라벨을 덮어쓴다"""
+    hard_labels_path: 어려운 통화 최종 라벨 JSON(evaluation/hard_labels.py finalize) — 있으면 hc- 생성 라벨을 덮어쓴다
+    claim_qa_path: ⑤-3 청구 기준 질문 승인 JSON(evaluation/claim_qa.py review) — 있으면 truth_claim_qa에 적재"""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     tmp_src, tmp_truth = (p.with_name(p.name + ".tmp") for p in (source_path, truth_path))
     for p in (tmp_src, tmp_truth):
@@ -189,6 +192,7 @@ def generate(
             insert_rag_qa(
                 conn, json.loads(rag_qa_path.read_text(encoding="utf-8")), schema="truth"
             )
+        load_claim_qa(conn, claim_qa_path)
         missing, exhausted = run.state["llm"].finish(), dict(run.state["llm"].exhausted)
         if not missing and not exhausted:
             conn.commit()
@@ -216,6 +220,32 @@ HARD_LABEL_COLS = (
     "appt_confirmed",
     "has_todo",
 )
+
+
+def load_claim_qa(conn: sqlite3.Connection, path: Path | None) -> int:
+    """⑤-3 청구 기준 질문 승인 JSON → truth.truth_claim_qa, 넣은 수(파일이 없으면 0). 정답 절이 청구 기준 절
+    (doc_catalog.CLAIM_HEADINGS 값)이 아니면 옛 파일이라 멈춘다"""
+    if path is None or not path.exists():
+        return 0
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    headings = set(CLAIM_HEADINGS.values())
+    if bad := sorted({r["answer_heading"] for r in rows} - headings):
+        raise ValueError(f"청구 기준 질문의 정답 절이 기준 문서에 없음(옛 파일): {bad}")
+    conn.executemany(
+        "INSERT INTO truth.truth_claim_qa VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (
+                r["id"],
+                r["reason"],
+                r["question"],
+                r["answer_heading"],
+                json.dumps(r["warnings"], ensure_ascii=False),
+                r["split"],
+            )
+            for r in rows
+        ],
+    )
+    return len(rows)
 
 
 def apply_hard_labels(conn: sqlite3.Connection, rows: list[dict]) -> list[str]:
