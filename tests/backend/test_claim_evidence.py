@@ -126,3 +126,43 @@ def test_todo_ids_app(src):
     assert ce.todo_ids(conn, DAY, MODEL) == {cid}
     build(conn, FakeGw(), scope="app")
     assert ce.todo_ids(conn, DAY, MODEL) == set()
+
+
+@pytest.fixture
+def client(src, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend import api, claim_check, claim_omission
+    from shared.clinic import Clinic
+
+    claim(src, 1)
+    src.app().close()
+    gw = FakeGw()
+    for m in (claim_check, claim_omission, ce):
+        monkeypatch.setattr(m, "load_config", lambda: gw.config)
+    api.app.dependency_overrides[api.get_db_paths] = lambda: (
+        src.path.parent / "app.sqlite",
+        src.path,
+    )
+    api.app.dependency_overrides[api.get_clinic] = lambda: Clinic(DAY, date(2026, 1, 1), 4)
+    api.app.dependency_overrides[api.get_gateway_factory] = lambda: lambda conn: gw
+    yield TestClient(api.app)
+    api.app.dependency_overrides.clear()
+
+
+def test_job_runs_evidence(client, src):
+    """갱신 작업 하나가 2a·2b 뒤 서류 사유 차트 문장도 — 줄 수는 세 대상의 합집합"""
+    import time
+
+    from backend import db
+
+    job_id = client.post("/jobs/claim-check").json()["job_id"]
+    for _ in range(100):
+        job = client.get(f"/jobs/{job_id}").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.05)
+    assert job["status"] == "done" and job["total"] == job["done"] == 1
+    conn = db.connect(src.path.parent / "app.sqlite", src.path)
+    assert ce.todo_ids(conn, DAY) == set()
+    assert conn.execute("SELECT COUNT(*) FROM ax_claim_evidence").fetchone()[0] == 1

@@ -8,8 +8,9 @@ master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(
 import sqlite3
 from datetime import date, timedelta
 
-from backend import claim_check, claim_omission
+from backend import claim_check, claim_evidence, claim_omission
 from backend.prep import master_values
+from backend.rag_index import _sections
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
 CHIPS = ("all", "diagnosis", "soon", "denied", "adjusted", "expired")
@@ -53,6 +54,18 @@ def _chips(status: str, type_: str, days_left: int) -> list[str]:
     return [*chips, status]
 
 
+def standard_cards(conn: sqlite3.Connection) -> dict[str, dict]:
+    """절 제목 → 조항 카드 {doc_title, heading, body} — 청구 기준 문서(ax_documents claim_standard)의 절(설계 §3)"""
+    out = {}
+    for d in conn.execute(
+        "SELECT title, body FROM source.ax_documents WHERE type = 'claim_standard' ORDER BY id"
+    ):
+        for heading, body in _sections(d["title"], d["body"]):
+            if heading != d["title"]:  # 머리말은 절이 아니다
+                out[heading] = {"doc_title": d["title"], "heading": heading, "body": body.strip()}
+    return out
+
+
 def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     """기준일까지 통보된 조정·불능 청구 전부(기한 지난 건 포함) — 행과 칩 집계(건수·못 받은 돈), 화면 꼬리표 경계.
     정렬: 기한 남은 행은 기한 이른 순, 지난 행은 그 뒤에 기한 늦은 순(최근에 지난 것 먼저)"""
@@ -60,6 +73,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     days, types, headings = mv["appeal_days"], mv["adjust_note_types"], mv["adjust_note_headings"]
     rows = []
     ai = claim_check.results(conn)
+    cards = standard_cards(conn)
+    quotes = claim_evidence.results(conn)
     for r in conn.execute(
         "SELECT c.id, c.chart_no, p.name, c.service_date, c.tooth_no, pr.name AS procedure_name,"
         " c.status, c.claim_amount, COALESCE(c.paid_amount, 0) AS paid_amount, c.adjust_note,"
@@ -102,6 +117,11 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
                 "ai_evidence": evidence,
                 "reason": SUGGEST_REASON[type_],
                 "fill_item": headings[r["adjust_note"]] if suggestion == "resubmit" else None,
+                "standard": cards.get(headings[r["adjust_note"]]),
+                # 서류 사유만 — 통과한 결과가 있으면 목록(빈 답은 []), 없거나 실패면 None
+                "chart_quotes": (quotes.get(r["id"]) or {}).get("quotes")
+                if type_ == "documentation"
+                else None,
                 "judgment": (
                     {"value": r["judgment"], "by": r["judged_by"], "at": r["judged_at"]}
                     if r["judgment"]
@@ -132,13 +152,14 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
 
 
 def _ai_pending(conn, today: date) -> dict[str, int]:
-    """갱신 버튼 줄 수 — 청구 전은 대기 줄 중 2a·2b 어느 쪽이든 다시 부를 줄(합집합), 삭감 대응은 2a만"""
+    """갱신 버튼 줄 수 — 청구 전은 대기 줄 중 2a·2b 어느 쪽이든 다시 부를 줄, 삭감 대응은 2a·⑤-3 차트 문장(합집합)"""
     req = claim_check.todo_ids(conn, today)
     pending = {
         r[0] for r in conn.execute("SELECT id FROM source.emr_claims WHERE status = 'pending'")
     }
     pre = (req | claim_omission.todo_ids(conn, today)) & pending
-    return {"pre": len(pre), "adjust": len(req - pending)}
+    adjust = (req | claim_evidence.todo_ids(conn, today)) - pending
+    return {"pre": len(pre), "adjust": len(adjust)}
 
 
 def pre_claim(conn: sqlite3.Connection, today: date) -> dict:

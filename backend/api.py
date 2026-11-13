@@ -22,6 +22,7 @@ from backend import (
     calls,
     chat,
     claim_check,
+    claim_evidence,
     claim_omission,
     claims,
     db,
@@ -1107,7 +1108,7 @@ def prep_regenerate(paths: Paths, clinic: ClinicDep, gw: GatewayFactory, date: s
 
 
 def _run_claim_check_job(paths, gw_factory, job_id: int, today: dt.date) -> None:
-    """작업 스레드 — 앱 범위 줄을 2a·2b 차례로 일반 호출로 점검(사람이 기다린다). 어디서 실패해도 작업 행을 끝낸다"""
+    """작업 스레드 — 앱 범위 줄을 2a·2b·⑤-3 차례로 일반 호출로 점검(사람이 기다린다). 어디서 실패해도 작업 행을 끝낸다"""
     status, error, done = "failed", None, 0
     conn = None
     try:
@@ -1117,7 +1118,9 @@ def _run_claim_check_job(paths, gw_factory, job_id: int, today: dt.date) -> None
         claim_check.build(conn, gw, rows, use_batch=False)
         more = claim_omission.targets(conn, today, scope="app")  # 2b(설계 §2b) — 같은 버튼으로
         claim_omission.build(conn, gw, more, use_batch=False)
-        status, done = "done", len({r["claim_id"] for r in rows + more})
+        docs = claim_evidence.targets(conn, today, scope="app")  # ⑤-3 서류 사유 차트 문장(설계 §3)
+        claim_evidence.build(conn, gw, docs, use_batch=False)
+        status, done = "done", len({r["claim_id"] for r in rows + more + docs})
     except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
         error = f"{type(e).__name__}: {e}"
     finally:
@@ -1144,6 +1147,7 @@ def claim_check_run(paths: Paths, clinic: ClinicDep, gw: GatewayFactory) -> dict
         total = len(
             {r["claim_id"] for r in claim_check.targets(conn, clinic.today, scope="app")}
             | {r["claim_id"] for r in claim_omission.targets(conn, clinic.today, scope="app")}
+            | {r["claim_id"] for r in claim_evidence.targets(conn, clinic.today, scope="app")}
         )
         job_id = conn.execute(
             "INSERT INTO ax_jobs (kind, arg, status, total, started_at)"
