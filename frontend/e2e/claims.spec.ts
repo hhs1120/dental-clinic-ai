@@ -21,7 +21,8 @@ const base = {
 const DOC_STANDARD = {
   doc_title: "공통 분야 청구 기준",
   heading: "내역설명 기재",
-  body: "- 요건을 충족했음을 보여 주는 근거를 내역설명란에 적는다.\n- 근거는 간결하게 적는다.",
+  // 실제 고시 발췌 절 모양(generator/claim_standards.py) — 인용 블록 + 출처 줄 + 병원 내부 보충 줄
+  body: '> 제24조(특정내역 등 기재) … 해당 구분코드 및 내역을 "특정내역기재란"에 기재한다.\n\n출처: 청구방법 2016 제24조\n\n병원 내부 보충: 근거는 간결하게 적는다.',
 };
 const DOC_QUOTE = "치주낭 5mm, 출혈 있음";
 
@@ -393,6 +394,10 @@ test("펼친 곳 — 기준 조항 카드와 서류 사유 차트 문장(AI)", a
   await bodyRows(page).filter({ hasText: "김하나" }).click();
   const detail = page.getByRole("region", { name: "김하나 청구 상세" });
   await expect(detail).toContainText("공통 분야 청구 기준 › 내역설명 기재");
+  // 절 본문은 마크다운으로 — 인용은 인용 블록, 기호(>)는 보이지 않는다
+  await expect(detail.locator("blockquote")).toContainText("특정내역기재란");
+  await expect(detail).toContainText("출처: 청구방법 2016 제24조");
+  await expect(detail).not.toContainText("> 제24조");
   await expect(detail).toContainText("근거는 간결하게 적는다");
   await expect(detail).toContainText("차트에서 옮겨 적을 문장(AI)");
   await expect(detail).toContainText(`“${DOC_QUOTE}”`);

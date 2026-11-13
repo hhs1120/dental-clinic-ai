@@ -24,6 +24,7 @@ import {
 } from "@/lib/claims-api";
 import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
+import { DocBody } from "@/components/ask/doc-body";
 import { AppealDraft } from "@/components/claims/appeal-draft";
 
 type Sort = "deadline" | "amount";
@@ -358,7 +359,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
   );
 }
 
-/** 기준 조항 카드 — 그 사유의 청구 기준 절 전문(설계 §3), 머리는 `문서 › 절` */
+/** 기준 조항 카드 — 그 사유의 청구 기준 절 전문(설계 §3), 머리는 `문서 › 절`. 본문은 문서함과 같은 마크다운(고시 발췌는 인용 블록) */
 export function StandardBox({
   card,
 }: {
@@ -369,7 +370,7 @@ export function StandardBox({
       <p className="text-xs text-muted-foreground">
         {card.doc_title} › {card.heading}
       </p>
-      <p className="whitespace-pre-line">{card.body}</p>
+      <DocBody markdown={card.body} className="" />
     </div>
   );
 }
