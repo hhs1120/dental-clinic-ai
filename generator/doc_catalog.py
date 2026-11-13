@@ -132,7 +132,7 @@ def _claim_rule(r: str) -> Fact:
     if r in VIRTUAL:
         text, words = VIRTUAL[r][0], _VIRTUAL_WORDS[r]
     else:
-        text, words = " ".join(q.replace("\n> ", " ") for q in REAL[r].quote), REAL[r].words
+        text, words = " ".join(REAL[r].quote), REAL[r].words
     return F(f"claim.{r}", text.rstrip("."), *words, reason=r, same=_SAME.get(r))
 
 

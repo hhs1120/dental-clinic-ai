@@ -194,6 +194,33 @@ def test_verify_near_miss_keeps_no_bleeding(generated):
     assert verify.check_chart_evidence_words(c, ctx)
 
 
+def test_verify_r05_near_miss(generated):
+    """R05 부분 소견은 출혈 검사 대상이 아니고(R03만), X-선 말이 들어가면 위반이다"""
+    from generator import verify
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("verify_near_miss")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    tid = next(
+        t
+        for t, f in c.execute(
+            "SELECT treatment_id, facts FROM truth.truth_chart_notes WHERE requirement = 'R05'"
+        )
+        if (json.loads(f).get("requirement") or {}).get("style") == "near_miss"
+    )
+
+    def bad_for(note):
+        c.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (note, tid))
+        return [b for b in verify.check_chart_evidence_words(c, ctx) if b["treatment_id"] == tid]
+
+    assert bad_for("부분 매복 상태로 골삭제 후 38번 치아 사랑니 발치 시행함.") == []
+    assert bad_for("X-선 촬영으로 부분 매복 확인, 골삭제 후 38번 치아 사랑니 발치 시행함.")
+
+
 # ── R05 사랑니 — 실제 기준의 근거는 X-선 촬영(설계 docs/superpowers/specs/2026-11-13-real-claim-standards-design.md) ──
 def _r05(conn):
     return [

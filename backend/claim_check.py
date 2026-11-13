@@ -97,7 +97,8 @@ def claim_facts(row: dict, mv: dict, secs: dict[str, str]) -> dict:
 
 
 def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip()
+    """줄 머리의 마크다운 인용 표시('>')를 떼고 공백을 접는다 — 청구 기준 원문 발췌는 인용 블록이고 표시는 내용이 아니다"""
+    return re.sub(r"\s+", " ", re.sub(r"(?m)^[ \t]*>[ \t]?", "", s)).strip()
 
 
 def found(quote: str, text: str) -> bool:
