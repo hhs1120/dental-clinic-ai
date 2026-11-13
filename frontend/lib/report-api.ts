@@ -32,21 +32,8 @@ export interface ReportSheet {
   metrics: Metrics;
   interpretation: Interpretation | null;
   trend: ({ period: string } & Record<string, number | null>)[];
-  labor: {
-    wage: Record<string, number>;
-    headcount: Record<string, number>;
-  } | null;
   dx_top: { name: string; n: number; lost: number } | null;
 }
-
-/** 인건비 가정값이 들어간 [추정] 키 — backend/report.py is_est와 같은 판별 */
-export const isEst = (key: string) => key.includes("est.");
-
-export const ROLE_LABEL: Record<string, string> = {
-  hygienist: "위생사",
-  desk: "데스크",
-  consultant: "상담실장",
-};
 
 export const fetchReport = (
   scope: Scope,
@@ -82,9 +69,6 @@ const BASE: Record<string, [string, Unit]> = {
   profit_ex_labor: ["인건비 제외 손익", "원"],
   dx_errors: ["상병 착오", "건"],
   dx_lost: ["상병 착오 못 받은 금액", "원"],
-  "est.labor": ["인건비 가정값", "원"],
-  "est.profit": ["추정 손익", "원"],
-  "est.bep": ["손익분기 매출", "원"],
 };
 
 // 시술 분류(emr_procedures.category) — sales.<분류>

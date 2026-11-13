@@ -29,9 +29,6 @@ const monthlyMetrics = {
   profit_ex_labor: 44_105_940,
   dx_errors: 5,
   dx_lost: 261_990,
-  "est.labor": 21_200_000,
-  "est.profit": 22_905_940,
-  "est.bep": 32_690_953,
 };
 
 const POINTS = [
@@ -57,12 +54,7 @@ function monthly(period: string, interpretation: unknown) {
       new_patients: 50,
       material: 1,
       profit_ex_labor: 1,
-      "est.profit": 1,
     })),
-    labor: {
-      wage: { hygienist: 3_800_000, desk: 3_000_000, consultant: 3_800_000 },
-      headcount: { hygienist: 4, desk: 2, consultant: 1 },
-    },
     dx_top: { name: "임플란트 1차 × 만성 치은염", n: 1, lost: 206_850 },
   };
 }
@@ -81,7 +73,6 @@ const weekly = {
     noshow_rate: 6,
     new_patients: 5,
   })),
-  labor: null,
   dx_top: null,
 };
 
@@ -95,7 +86,9 @@ async function fakeReport(page: Page, interpretation: unknown) {
   });
 }
 
-test("월간 — 숫자 카드·[추정]·AI 해석 점", async ({ page }) => {
+test("월간 — AI 주목할 점이 맨 위, 숫자 카드, 가정값 숫자 없음", async ({
+  page,
+}) => {
   await fakeReport(page, {
     points: POINTS,
     values: { sales: 65_495_000, "diff.sales": 17_995_000, "pct.sales": 38 },
@@ -107,7 +100,12 @@ test("월간 — 숫자 카드·[추정]·AI 해석 점", async ({ page }) => {
   await expect(page.getByText("65,495,000원", { exact: true })).toBeVisible();
   await expect(page.getByText("과목 없는 출금 93,300원 제외")).toBeVisible();
   await expect(page.getByText("미확정 3건 포함")).toBeVisible();
-  await expect(page.getByTestId("stat-est")).toHaveCount(2);
+  await expect(page.getByText("[추정]")).toHaveCount(0);
+  const ai = await page
+    .getByRole("heading", { name: "AI가 고른 주목할 점" })
+    .boundingBox();
+  const stat = await page.getByText("매출(진료 생산)").boundingBox();
+  expect(ai!.y).toBeLessThan(stat!.y);
   await expect(page.getByText(POINTS[0].text)).toBeVisible();
   // 근거는 접혀 있다가 펼치면 한국어 이름·단위로(코드 키를 보이지 않는다)
   await expect(page.getByText("매출 증감 +17,995,000원")).toBeHidden();

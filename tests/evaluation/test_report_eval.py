@@ -11,7 +11,7 @@ from tests.backend.test_report import make_source
 
 TODAY = date(2026, 12, 1)
 GOOD = {"text": "11월 매출은 67만 원입니다.", "used": ["sales"]}
-NO_MARK = {"text": "손익은 1원입니다.", "used": ["est.profit"]}
+NO_NUMBER = {"text": "매출은 1원입니다.", "used": ["sales"]}
 
 
 @pytest.fixture
@@ -39,15 +39,15 @@ def _put(conn, period, points, valid=True, stale=False):
 
 
 def test_score(conn):
-    _put(conn, "2026-11", [GOOD, NO_MARK])  # 후검증을 거치지 않고 넣은 행 — 채점이 다시 잰다
+    _put(conn, "2026-11", [GOOD, NO_NUMBER])  # 후검증을 거치지 않고 넣은 행 — 채점이 다시 잰다
     _put(conn, "2026-10", [], stale=True)
     _put(conn, "2026-09", None, valid=False)
     s = report_eval.score(conn, TODAY)
     assert s["periods"] == sum(len(report.periods(conn, TODAY, x)) for x in report.SCOPES)
     assert (s["saved"], s["valid"], s["empty"], s["stale"]) == (3, 2, 1, 1)
     assert s["points"] == 2
-    assert s["numbers_ok"] == {"k": 1, "n": 2}  # "1원"은 손익 값이 아님
-    assert s["est_missing"] == 1
+    assert s["numbers_ok"] == {"k": 1, "n": 2}  # "1원"은 매출 값이 아님
+    assert "est_missing" not in s
 
 
 def test_score_only_screen_periods(conn):
@@ -69,6 +69,6 @@ def test_score_empty(conn):
 def test_render(conn):
     from evaluation.eval import _render_report
 
-    _put(conn, "2026-11", [GOOD, NO_MARK])
+    _put(conn, "2026-11", [GOOD, NO_NUMBER])
     text = "\n".join(_render_report(report_eval.score(conn, TODAY)))
-    assert "## ⑥ 경영 리포트 해석" in text and "| [추정] 표시 어긋남 | 1 |" in text
+    assert "## ⑥ 경영 리포트 해석" in text and "[추정]" not in text

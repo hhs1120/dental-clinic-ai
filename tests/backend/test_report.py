@@ -171,16 +171,8 @@ def test_monthly_numbers(conn):
     assert m["material_unconfirmed"] == 1  # 사람 확정한 기공비는 빼고
     assert m["outflow"] == 950_000
     assert m["profit_ex_labor"] == 562_000 - 950_000
-    assert m["est.labor"] == 2 * 3_800_000 + 3_000_000
-    assert m["est.profit"] == m["profit_ex_labor"] - m["est.labor"]
-    assert "est.bep" not in m  # 재료비·기공비가 매출보다 많음
+    assert not any("est." in k for k in m)  # 인건비 가정값으로 만든 숫자는 두지 않는다
     assert (m["dx_errors"], m["dx_lost"]) == (3, 72_000)
-
-
-def test_bep(conn):
-    m = report.metrics(conn, TODAY, "monthly", "2026-10")
-    fixed = m["outflow"] - m["material"] - m["lab"] + m["est.labor"]
-    assert m["est.bep"] == round(fixed / (1 - (m["material"] + m["lab"]) / m["sales"]))
 
 
 def test_category_diffs_sum_to_sales_diff(conn):
@@ -203,16 +195,9 @@ def test_empty_prev_period(conn):
     assert m["material"] == 0 and m["account_none"] == 0  # 출금이 없는 달
 
 
-def test_labor_setting_overrides(conn):
-    db.set_setting(conn, "labor_cost_assumed", {"desk": 2_500_000})
-    got = report.labor(conn)
-    assert got["wage"] == {"hygienist": 3_800_000, "desk": 2_500_000, "consultant": 3_800_000}
-    assert got["headcount"] == {"hygienist": 2, "desk": 1, "consultant": 0}
-
-
 def test_weekly_has_no_monthly_keys(conn):
     m = report.metrics(conn, TODAY, "weekly", "2026-11-23")
-    assert "material" not in m and not any(report.is_est(k) for k in m)
+    assert "material" not in m
     assert m["sales"] == 60_000 and m["prev.sales"] == 0  # 11/16 주는 비어 있음
 
 
@@ -229,11 +214,6 @@ def test_dx_top_by_amount(conn):
     top = report.dx_top(conn, "2026-11")
     assert top == {"name": f"스케일링 × {DIAGNOSES['D04']}", "n": 1, "lost": 42_000}
     assert report.dx_top(conn, "2026-10") is None
-
-
-def test_is_est():
-    assert report.is_est("est.labor") and report.is_est("prev.est.profit")
-    assert not report.is_est("sales")
 
 
 def test_account_names_in_master(conn):
@@ -257,9 +237,8 @@ def test_pct_sign_follows_direction_when_prev_negative(conn):
 
 
 # ── 후검증(설계 §4) ──
-M = {"sales": 48_213_000, "diff.sales": -3_204_000, "pct.sales": -6, "est.profit": 5_120_000}
+M = {"sales": 48_213_000, "diff.sales": -3_204_000, "pct.sales": -6}
 X = report.label_numbers("monthly", "2026-11", "2026-10")
-EST = "대표 원장 보수·세금 전"
 
 
 def _out(text: str, used: list[str]) -> dict:
@@ -288,15 +267,6 @@ def test_check_rejects_number_not_in_used():
 
 def test_check_rejects_eok():
     assert not report.check_report(M, _out("매출 4억 8천만 원", ["sales"]), X)
-
-
-def test_check_est_needs_marks():
-    assert not report.check_report(M, _out("[추정] 손익 512만 원", ["est.profit"]), X)
-    assert report.check_report(M, _out(f"[추정] 손익 512만 원({EST})", ["est.profit"]), X)
-
-
-def test_check_no_est_no_mark():
-    assert not report.check_report(M, _out("[추정] 매출 4,821만 원", ["sales"]), X)
 
 
 def test_check_empty_points():
@@ -449,14 +419,14 @@ def test_sheet_default_last_period(conn):
     assert s["prev_period"] == "2026-10" and s["metrics"]["sales"] == 670_000
     assert s["interpretation"] is None
     assert [t["period"] for t in s["trend"]] == s["periods"]
-    assert s["trend"][-1]["est.profit"] == s["metrics"]["est.profit"]
-    assert s["labor"]["headcount"]["hygienist"] == 2
+    assert s["trend"][-1]["profit_ex_labor"] == s["metrics"]["profit_ex_labor"]
+    assert "labor" not in s
     assert s["dx_top"]["lost"] == 42_000
 
 
 def test_sheet_weekly_has_no_monthly_parts(conn):
     s = report.sheet(conn, TODAY, "weekly")
-    assert s["labor"] is None and s["dx_top"] is None and "material" not in s["trend"][-1]
+    assert s["dx_top"] is None and "material" not in s["trend"][-1]
 
 
 def test_sheet_interpretation(conn):

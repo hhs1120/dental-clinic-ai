@@ -18,16 +18,9 @@ ALIAS, TASK, PROMPT_VERSION = "chat", "report", "v2"  # config/llm.yaml "③ 챗
 ROOT = Path(__file__).resolve().parents[1]
 SCOPES = ("monthly", "weekly", "daily")
 COUNTS = {"monthly": 6, "weekly": 8, "daily": 10}  # 화면 기간 수(설계 §1)
-# 역할별 월 인건비 가정값(원, 4대보험 포함) — 실제 급여가 아니다. ax_settings labor_cost_assumed가 역할별로 덮어쓴다.
-# 대표 원장(doctor)은 넣지 않는다(기능 정의 §5 ⑥)
-LABOR_DEFAULT = {"hygienist": 3_800_000, "desk": 3_000_000, "consultant": 3_800_000}
 MATERIAL, LAB = "재료비", "외주가공비"  # ⑧-2 계정 과목 이름(master ACCOUNTS)
 NO_PCT = ("noshow_rate",)  # 이미 %인 값 — 증감률 없이 증감(%p)만
 MAX_POINTS = 3
-EST_MARK, EST_NOTE = (
-    "[추정]",
-    "대표 원장 보수·세금 전",
-)  # 추정 값을 쓴 점에 글자 그대로(기능 정의 §5 ⑥)
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -48,11 +41,6 @@ SCHEMA = {
     "required": ["points"],
     "additionalProperties": False,
 }
-
-
-def is_est(key: str) -> bool:
-    """인건비 가정값이 들어간 [추정] 키 — 이전 기간·증감 키(prev.est.…)도"""
-    return "est." in key
 
 
 def _days(conn: sqlite3.Connection, today: date) -> list[str]:
@@ -112,18 +100,6 @@ def _range(scope: str, label: str) -> tuple[str, str]:
 
 def _sum(conn, sql: str, *params) -> int:
     return conn.execute(sql, params).fetchone()[0] or 0
-
-
-def labor(conn: sqlite3.Connection) -> dict:
-    """인건비 가정값과 재직 인원 — {"wage": {역할: 원}, "headcount": {역할: 명}}"""
-    over = db.get_setting(conn, "labor_cost_assumed", {}) or {}
-    wage = {r: int(over.get(r, v)) for r, v in LABOR_DEFAULT.items()}
-    count = dict(
-        conn.execute(
-            "SELECT role, COUNT(*) FROM source.emr_staff WHERE active = 1 GROUP BY role"
-        ).fetchall()
-    )
-    return {"wage": wage, "headcount": {r: count.get(r, 0) for r in LABOR_DEFAULT}}
 
 
 def _dx_notes(conn) -> list[str]:
@@ -235,13 +211,6 @@ def _base(conn, today: date, scope: str, label: str) -> dict[str, int]:
         (*notes, label),
     ).fetchone()
     m["dx_errors"], m["dx_lost"] = n, lost
-    lab = labor(conn)
-    m["est.labor"] = sum(lab["wage"][r] * lab["headcount"][r] for r in LABOR_DEFAULT)
-    m["est.profit"] = m["profit_ex_labor"] - m["est.labor"]
-    variable = m["material"] + m["lab"]
-    if m["sales"] and variable < m["sales"]:
-        fixed = m["outflow"] - variable + m["est.labor"]
-        m["est.bep"] = round(fixed / (1 - variable / m["sales"]))
     return m
 
 
@@ -296,15 +265,8 @@ def point_numbers_ok(metrics: dict, point: dict, extra: set[int]) -> bool:
     return numbers(text) <= _allowed(metrics[k] for k in point["used"])
 
 
-def point_est_ok(metrics: dict, point: dict) -> bool:
-    """추정 키를 쓰면 [추정]과 "대표 원장 보수·세금 전", 안 쓰면 [추정] 없음"""
-    if any(is_est(k) for k in point["used"]):
-        return EST_MARK in point["text"] and EST_NOTE in point["text"]
-    return EST_MARK not in point["text"]
-
-
 def check_report(metrics: dict, out: dict, extra: set[int]) -> bool:
-    """후검증(설계 §4, 평가 설계 §4 단위 정규화) — 점 0~3개, 쓴 키가 모두 metrics에 있고 숫자·추정 표시가 맞다"""
+    """후검증(설계 §4, 평가 설계 §4 단위 정규화) — 점 0~3개, 쓴 키가 모두 metrics에 있고 숫자가 맞다"""
     try:
         points = out["points"]
         if len(points) > MAX_POINTS:
@@ -313,7 +275,7 @@ def check_report(metrics: dict, out: dict, extra: set[int]) -> bool:
             # 기댄 키가 없는 점 = metrics에 없는 원인(설계 "하면 실패인 것")
             if not p["text"].strip() or not p["used"] or any(k not in metrics for k in p["used"]):
                 return False
-            if not point_numbers_ok(metrics, p, extra) or not point_est_ok(metrics, p):
+            if not point_numbers_ok(metrics, p, extra):
                 return False
     except (KeyError, TypeError, AttributeError):  # 칸이 빠진 답
         return False
@@ -439,7 +401,7 @@ def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> 
 
 
 TREND = ("sales", "collected", "noshow_rate", "new_patients")
-TREND_MONTHLY = ("material", "profit_ex_labor", "est.profit")
+TREND_MONTHLY = ("material", "profit_ex_labor")
 
 
 def sheet(conn: sqlite3.Connection, today: date, scope: str, period: str | None = None) -> dict:
@@ -480,7 +442,6 @@ def sheet(conn: sqlite3.Connection, today: date, scope: str, period: str | None 
         "metrics": m,
         "interpretation": interp,
         "trend": [{"period": p} | {k: by[p].get(k) for k in keys} for p in labels],
-        "labor": labor(conn) if monthly else None,
         "dx_top": dx_top(conn, period) if monthly else None,
     }
 
