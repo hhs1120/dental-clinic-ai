@@ -60,13 +60,13 @@ export function AppealDraft({
   const sentences = appeal?.sentences ?? null;
   const reviewed = !!appeal?.reviewed;
   const submitted = appeal?.submitted ?? null;
-  const copy = () => {
-    if (!sentences) return;
-    navigator.clipboard.writeText(sentences.map((s) => s.text).join("\n")).then(
+  // 사유서 본문 = 번호·꼬리표 없이 문장을 한 문단으로 — 화면 상자와 복사하는 글이 같다
+  const body = sentences?.map((s) => s.text).join(" ") ?? "";
+  const copy = () =>
+    navigator.clipboard.writeText(body).then(
       () => setCopied(true),
       () => setError("복사하지 못했습니다"),
     );
-  };
   return (
     <section aria-label="재심 사유서" className="flex flex-col gap-2">
       <h3 className="font-bold">재심 사유서</h3>
@@ -80,6 +80,29 @@ export function AppealDraft({
         </p>
       ) : (
         <>
+          <section
+            aria-label="사유서 본문"
+            className="flex flex-col gap-1.5 rounded-lg border bg-card p-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-bold">사유서 본문</p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!reviewed}
+                onClick={copy}
+              >
+                {copied ? "복사함" : "복사"}
+              </Button>
+            </div>
+            <p className="text-sm">{body}</p>
+            <p className="text-xs text-muted-foreground">
+              [복사]하면 이 글이 그대로 복사됩니다
+            </p>
+          </section>
+          <p className="text-xs font-bold text-muted-foreground">
+            문장별 근거 (확인용)
+          </p>
           <ol className="flex list-decimal flex-col gap-1 pl-5 text-sm">
             {sentences.map((s, i) => (
               <li key={i}>
@@ -118,14 +141,6 @@ export function AppealDraft({
             검토했고 정확함
           </label>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!reviewed}
-              onClick={copy}
-            >
-              {copied ? "복사함" : "복사"}
-            </Button>
             {submitted ? (
               <Badge variant="muted">제출 결정 · {submitted.by}</Badge>
             ) : (

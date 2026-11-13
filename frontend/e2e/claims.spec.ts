@@ -522,6 +522,15 @@ test("재심 사유서 — 초안 쓰기, 꼬리표·추측, 검토 확인 뒤 �
   await expect(draft).toContainText(
     "AI가 추측한 부분 — 여기만 확인하면 됩니다",
   );
+  // 사유서 본문 — 번호·꼬리표 없이 복사될 글 그대로 한 문단, 복사 버튼은 본문 상자에 하나뿐
+  const body = draft.getByRole("region", { name: "사유서 본문" });
+  await expect(body).toContainText(
+    "조정 사유는 '치주치료 산정 기준 소견 미확인'입니다. 청구 기준은",
+  );
+  await expect(body).not.toContainText("기준 절 인용");
+  await expect(body).toContainText("[복사]하면 이 글이 그대로 복사됩니다");
+  await expect(draft).toContainText("문장별 근거 (확인용)");
+  await expect(draft.getByRole("button", { name: "복사" })).toHaveCount(1);
   await expect(draft.getByRole("button", { name: "복사" })).toBeDisabled();
   await expect(draft.getByRole("button", { name: "제출 결정" })).toBeDisabled();
   // 체크는 서버에 저장한 뒤 다시 조회한 값으로 그린다 — check()가 아니라 눌러 놓고 상태를 기다린다
