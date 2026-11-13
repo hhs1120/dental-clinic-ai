@@ -30,7 +30,9 @@ from evaluation import (
     autoclose,
     call_actions,
     claim_check,
+    claim_evidence,
     claim_omission,
+    claim_qa,
     classification,
     expense,
     followup,
@@ -227,6 +229,7 @@ def run(
         "prep": None,
         "claim_check": None,
         "claim_omission": None,
+        "claim_basis": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -345,6 +348,12 @@ def run(
         part = _claim_omission(conn)
         if part:
             result["claim_omission"] = part
+    if dev:
+        # ⑤-3 근거 찾기(설계 §3) — 청구 기준 질문 Hit@5·MRR(질문 임베딩·리랭커 호출)과 서류 사유 차트 문장 실재율(과금 없음).
+        # test는 python -m evaluation.claim_qa score --split test(사람)
+        part = _claim_basis(conn, app, condition)
+        if part:
+            result["claim_basis"] = part
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
@@ -453,6 +462,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_claim_check(r["claim_check"])
     if r.get("claim_omission") is not None:
         out += _render_claim_omission(r["claim_omission"])
+    if r.get("claim_basis") is not None:
+        out += _render_claim_basis(r["claim_basis"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
     if r.get("expense") is not None:
@@ -770,6 +781,52 @@ def _render_claim_omission(c: dict) -> list[str]:
             f"실데이터 dev 정상 줄 {r['lines']}줄(누락 정답 줄 제외, 점검 없음 {r['missing']}"
             f" · 후검증 실패 {r['failed']}) — 잘못 잡은 줄 AI {r['ai_fp_lines']}"
             f" · 키워드 {r['keyword_fp_lines']}",
+            "",
+        ]
+    return out
+
+
+def _has_table_rows(conn, table: str, schema: str = "main") -> bool:
+    return bool(
+        conn.execute(f"SELECT 1 FROM {schema}.sqlite_master WHERE name = ?", (table,)).fetchone()
+        and conn.execute(f"SELECT 1 FROM {schema}.{table} LIMIT 1").fetchone()
+    )
+
+
+def _claim_basis(conn, app, condition) -> dict | None:
+    """질문 정답(truth_claim_qa)과 검색 앱·색인이 있으면 Hit@5·MRR, 차트 문장이 저장돼 있으면 실재율 — 둘 다 없으면 None"""
+    qa = None
+    if (
+        app is not None
+        and callable(getattr(app, "claim_search", None))
+        and _has_table_rows(conn, "truth_claim_qa", "truth")
+        and _has_table_rows(conn, "ax_chunks")
+    ):
+        qa = claim_qa.score(conn, app, "dev", condition)
+    evidence = (
+        claim_evidence.score(conn, load_clinic().today)
+        if _has_table_rows(conn, "ax_claim_evidence")
+        else None
+    )
+    return None if qa is None and evidence is None else {"qa": qa, "evidence": evidence}
+
+
+def _render_claim_basis(c: dict) -> list[str]:
+    def pct(v):
+        return "—" if v is None else f"{v:.1%}"
+
+    out = ["## ⑤-3 근거 찾기", ""]
+    if q := c["qa"]:
+        out += [
+            f"청구 기준 질문 dev {q['n']}문항 — Hit@5 {pct(q['hit5'])} · MRR "
+            + ("—" if q["mrr"] is None else f"{q['mrr']:.2f}")
+            + f"(절 단위, 후보 절 {q['candidates']}개뿐이라 쉬운 편)",
+            "",
+        ]
+    if e := c["evidence"]:
+        out += [
+            f"서류 사유 차트 문장 — 대상 {e['n']}건 · 점검 {e['checked']} · 인용 실재 통과 {e['valid']}"
+            f" · 인용 있음 {e['answered']} · 옮겨 적을 문장 없음 {e['empty']}",
             "",
         ]
     return out

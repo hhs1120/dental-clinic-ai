@@ -144,3 +144,71 @@ def test_review_server_roundtrip(tmp_path):
         assert [r["id"] for r in json.loads(out.read_text("utf-8"))] == ["cq-R02-1", "cq-R02-2"]
     finally:
         server.shutdown()
+
+
+# ── 채점 ──────────────────────────────────────────────────────────
+
+
+class FakeApp:
+    """질문 → 절 제목 순위(backend/eval_hooks.py App.claim_search 꼴)"""
+
+    def __init__(self, ranked: dict):
+        self.ranked = ranked
+
+    def claim_search(self, question, condition=None):
+        return self.ranked[question]
+
+
+def qa_conn(rows):
+    import sqlite3
+
+    c = sqlite3.connect(":memory:")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ':memory:' AS truth")
+    c.execute(
+        "CREATE TABLE truth.truth_claim_qa (id, reason, question, answer_heading, warnings, split)"
+    )
+    c.executemany("INSERT INTO truth.truth_claim_qa VALUES (?, ?, ?, ?, '[]', ?)", rows)
+    c.execute("CREATE TABLE ax_chunks (id, doc_type, text)")
+    c.executemany(
+        "INSERT INTO ax_chunks VALUES (?, 'claim_standard', ?)",
+        [
+            ("doc:1:0", "치주 분야 청구 기준\n머리말"),
+            ("doc:1:1", "치주 분야 청구 기준 > 치주치료 산정 소견\n- …"),
+        ],
+    )
+    return c
+
+
+def test_score_section_level():
+    """같은 문서의 다른 절이 1위여도 맞음이 아니다 — 절 단위(문서 단위로 세면 거의 저절로 맞는다)"""
+    h = CLAIM_HEADINGS
+    conn = qa_conn(
+        [("q1", "R02", "질문1", h["R02"], "dev"), ("q2", "R03", "질문2", h["R03"], "dev")]
+    )
+    app = FakeApp({"질문1": [h["R03"], h["E01"]], "질문2": [h["R03"]]})
+    out = cq.score(conn, app, "dev")
+    assert (out["n"], out["hit5"], out["mrr"]) == (2, 0.5, 0.5)
+    assert out["by_reason"]["R02"] == {"n": 1, "hit": 0} and out["candidates"] == 1
+    assert [r["rank"] for r in out["rows"]] == [None, 1]
+
+
+def test_score_mrr_and_test_hides_rows():
+    h = CLAIM_HEADINGS
+    conn = qa_conn([("q1", "R02", "질문1", h["R02"], "test")])
+    out = cq.score(conn, FakeApp({"질문1": [h["R03"], h["R02"]]}), "test")
+    assert (out["hit5"], out["mrr"], out["rows"]) == (1.0, 0.5, None)
+
+
+def test_render():
+    from evaluation.eval import _render_claim_basis
+
+    text = "\n".join(
+        _render_claim_basis(
+            {
+                "qa": {"n": 2, "candidates": 11, "hit5": 0.5, "mrr": 0.5, "by_reason": {}},
+                "evidence": {"n": 3, "checked": 3, "valid": 3, "answered": 2, "empty": 1},
+            }
+        )
+    )
+    assert "⑤-3" in text and "Hit@5" in text and "11" in text

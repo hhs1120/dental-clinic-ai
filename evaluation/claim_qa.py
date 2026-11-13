@@ -4,7 +4,8 @@
 ground_truth/claim_qa.json, make data가 truth_claim_qa에 적재한다. dev/test는 사유 단위(사유 키 정렬 순서로 번갈아).
 정답이 붙은 입력이라 초안·호출 기록은 evaluation/ 파일에만 쓴다(app.sqlite에 쓰지 않는다).
 uv run --env-file .env python -m evaluation.claim_qa draft   (과금, 이어 돎 — make claim-qa-draft)
-uv run python -m evaluation.claim_qa review                  (사람 — make claim-qa-review, 끝나면 make data)"""
+uv run python -m evaluation.claim_qa review                  (사람 — make claim-qa-review, 끝나면 make data)
+uv run --env-file .env python -m evaluation.claim_qa score --split test   (사람 — 실행마다 reports/claim_qa_runs.jsonl)"""
 
 import argparse
 import json
@@ -142,6 +143,46 @@ def draft(gw, path: Path = DRAFTS, *, reasons: list[dict], per_reason: int = PER
     return out
 
 
+# ── 채점 ──────────────────────────────────────────────────────────
+
+TOP_K = 5  # 화면 결과 수와 같다(backend/claim_search.py TOP_K)
+
+
+def _candidates(conn) -> int:
+    """검색 후보 = 색인의 청구 기준 절 청크 수(머리말 청크 빼고) — 후보가 적어 Hit@5가 쉬운 편이라 함께 보고"""
+    return sum(
+        " > " in text.partition("\n")[0]
+        for (text,) in conn.execute("SELECT text FROM ax_chunks WHERE doc_type = 'claim_standard'")
+    )
+
+
+def score(conn, app, split: str, condition: str | None = None) -> dict:
+    """Hit@5·MRR — 맞음은 절 단위(정답 절 제목이 상위 TOP_K 안), app은 backend/eval_hooks.py App(claim_search).
+    conn은 앱 DB(ax_chunks)에 truth를 붙인 연결. rows는 dev만"""
+    rows, by_reason = [], {}
+    for q in conn.execute(
+        "SELECT * FROM truth.truth_claim_qa WHERE split = ? ORDER BY id", (split,)
+    ).fetchall():
+        ranked = app.claim_search(q["question"], condition)[:TOP_K]
+        rank = ranked.index(q["answer_heading"]) + 1 if q["answer_heading"] in ranked else None
+        rows.append(
+            {"id": q["id"], "reason": q["reason"], "question": q["question"], "rank": rank}
+        )
+        b = by_reason.setdefault(q["reason"], {"n": 0, "hit": 0})
+        b["n"] += 1
+        b["hit"] += rank is not None
+    n = len(rows)
+    return {
+        "split": split,
+        "n": n,
+        "candidates": _candidates(conn),
+        "hit5": sum(r["rank"] is not None for r in rows) / n if n else None,
+        "mrr": sum(1 / r["rank"] for r in rows if r["rank"]) / n if n else None,
+        "by_reason": by_reason,
+        "rows": rows if split == "dev" else None,
+    }
+
+
 # ── 검토(로컬 페이지 — 앱과 따로, 정답이 앱으로 새지 않게) ─────────────────────
 
 
@@ -260,12 +301,35 @@ def main(argv=None) -> None:
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("draft", help="질문 초안(과금, 이어 돎)")
     sub.add_parser("review", help="검토 페이지(사람) — 승인 JSON을 쓴다")
+    sc = sub.add_parser("score", help="Hit@5·MRR(질문 임베딩·리랭커 호출) — test는 사람")
+    sc.add_argument("--split", choices=("dev", "test"), required=True)
     args = p.parse_args(argv)
     if args.command == "draft":
         gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
         print(draft(gw, reasons=reasons(_source())))
     elif args.command == "review":
         review()
+    elif args.command == "score":
+        from datetime import datetime
+
+        from backend.eval_hooks import App
+        from evaluation.claim_check import _connect
+
+        conn = _connect()
+        out = score(conn, App(conn), args.split)
+        print(json.dumps(out, ensure_ascii=False, indent=1))
+        if args.split == "test":
+            runs = ROOT / "reports" / "claim_qa_runs.jsonl"
+            runs.parent.mkdir(parents=True, exist_ok=True)
+            with runs.open("a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {k: out[k] for k in ("split", "n", "hit5", "mrr")}
+                        | {"at": datetime.now().isoformat()},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
 
 
 if __name__ == "__main__":
