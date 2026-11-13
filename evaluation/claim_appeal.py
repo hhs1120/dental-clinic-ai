@@ -19,6 +19,9 @@ from shared.llm import Gateway, JsonlLog, load_config
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "evaluation" / "claim_appeal_runs.jsonl"
 LLM_LOG = ROOT / "evaluation" / "claim_appeal_llm.jsonl"  # ax_llm_calls에 쓰지 않는다
+LLM_LOG_TEST = (
+    ROOT / "evaluation" / "claim_appeal_test_llm.jsonl"
+)  # test 호출은 dev 비용 기록과 섞지 않는다
 
 
 class AlreadyRun(Exception):
@@ -41,7 +44,8 @@ def targets(conn, split: str) -> list[dict]:
     return [ca.row(conn, cid) for cid in ids]
 
 
-def _read(path: Path) -> list[dict]:
+def read_runs(path: Path) -> list[dict]:
+    """실행 기록 한 줄씩(없으면 빈 목록) — make eval이 읽는다"""
     if not path.exists():
         return []
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
@@ -53,7 +57,7 @@ def run(gw, rows: list[dict], path: Path = RUNS) -> dict:
     model = gw.config["aliases"][ca.ALIAS][0]
     done = {
         (r["claim_id"], r["facts_hash"], r["prompt_version"], r["model"])
-        for r in _read(path)
+        for r in read_runs(path)
         if r["final"] is not None
     }
     out = {"called": 0, "skipped": 0, "failed": 0}
@@ -135,14 +139,15 @@ def main(argv=None) -> None:
     p.add_argument("--force", action="store_true")
     args = p.parse_args(argv)
     if args.split == "test" and not args.force:
-        if any(r["prompt_version"] == ca.PROMPT_VERSION for r in _read(_test_runs())):
+        if any(r["prompt_version"] == ca.PROMPT_VERSION for r in read_runs(_test_runs())):
             raise AlreadyRun(f"test claim_appeal({ca.PROMPT_VERSION})은 이미 돌렸다 — --force")
     conn = _connect()
     rows = targets(conn, args.split)
-    gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
+    log = LLM_LOG if args.split == "dev" else LLM_LOG_TEST
+    gw = Gateway(load_config(), JsonlLog(log), scope="generator")
     path = RUNS if args.split == "dev" else ROOT / "evaluation" / "claim_appeal_test.jsonl"
     print(run(gw, rows, path))
-    out = score(rows, _read(path)) | {"split": args.split}
+    out = score(rows, read_runs(path)) | {"split": args.split}
     print(json.dumps(out, ensure_ascii=False, indent=1))
     if args.split == "test":
         _test_runs().parent.mkdir(parents=True, exist_ok=True)

@@ -80,7 +80,7 @@ def test_score(world, monkeypatch, tmp_path):
     two["sentences"][2]["text"] += " 그러므로 요건을 갖추었습니다."
     path = tmp_path / "runs.jsonl"
     ev.run(FakeGw(llm(two), llm(good())), rows, path)
-    out = ev.score(rows, ev._read(path))
+    out = ev.score(rows, ev.read_runs(path))
     assert (out["n"], out["run"], out["first_valid"], out["final_valid"]) == (1, 1, 0, 1)
     assert (out["sentences"], out["unbacked"]) == (5, 1) and out["unbacked_rate"] == 0.2
 

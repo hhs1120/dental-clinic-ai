@@ -206,7 +206,7 @@ def test_draft_saves_and_redraft_resets_review(src):
     judged(conn, cid)
     got = ca.draft(conn, FakeGw(), cid, DAY)
     assert got["valid"] and len(got["sentences"]) == 4 and got["reviewed"] is None
-    ca.review(conn, cid, "데스크", AT, True)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
     assert ca.appeal(conn, cid)["reviewed"] == {"by": "데스크", "at": AT}
     again = ca.draft(conn, FakeGw(), cid, DAY)  # 다시 쓰기 — 검토 확인이 풀린다(Review Focus 2)
     assert again["valid"] and again["reviewed"] is None
@@ -225,7 +225,7 @@ def test_draft_failed_twice_none(src):
     got = ca.draft(conn, FakeGw(bad, bad), cid, DAY)
     assert got["valid"] is False and got["sentences"] is None
     with pytest.raises(ValueError):
-        ca.review(conn, cid, "데스크", AT, True)
+        ca.review(conn, cid, "데스크", AT, True, DAY)
 
 
 def test_review_requires_valid_draft(src):
@@ -233,10 +233,10 @@ def test_review_requires_valid_draft(src):
     conn = src.app()
     judged(conn, cid)
     with pytest.raises(ValueError):
-        ca.review(conn, cid, "데스크", AT, True)  # 초안 없음
+        ca.review(conn, cid, "데스크", AT, True, DAY)  # 초안 없음
     ca.draft(conn, FakeGw(), cid, DAY)
-    ca.review(conn, cid, "데스크", AT, True)
-    ca.review(conn, cid, "데스크", AT, False)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
+    ca.review(conn, cid, "데스크", AT, False, DAY)
     assert ca.appeal(conn, cid)["reviewed"] is None
 
 
@@ -247,7 +247,7 @@ def test_submit_requires_review(src):
     ca.draft(conn, FakeGw(), cid, DAY)
     with pytest.raises(ValueError, match="검토"):
         ca.submit(conn, cid, "데스크", AT, DAY)
-    ca.review(conn, cid, "데스크", AT, True)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
     ca.submit(conn, cid, "원장", AT, DAY)
     assert ca.appeal(conn, cid)["submitted"] == {"by": "원장", "at": AT}
 
@@ -257,14 +257,14 @@ def test_submitted_locks_redraft_and_judgment(src):
     conn = src.app()
     judged(conn, cid)
     ca.draft(conn, FakeGw(), cid, DAY)
-    ca.review(conn, cid, "데스크", AT, True)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
     ca.submit(conn, cid, "데스크", AT, DAY)
     with pytest.raises(ValueError, match="제출"):
         ca.draft(conn, FakeGw(), cid, DAY)
     with pytest.raises(ValueError, match="제출"):
         judged(conn, cid, "justified")
     with pytest.raises(ValueError):
-        ca.review(conn, cid, "데스크", AT, False)
+        ca.review(conn, cid, "데스크", AT, False, DAY)
 
 
 def test_empty_chart_still_drafts(src):
@@ -359,3 +359,51 @@ def test_adjusted_row_has_appeal(src):
     ca.draft(conn, FakeGw(), cid, DAY)
     rows = {r["claim_id"]: r for r in claims.adjusted(conn, DAY)["rows"]}
     assert rows[cid]["appeal"]["valid"] and rows[other]["appeal"] is None
+
+
+# ── 리뷰 반영 ─────────────────────────────────────────────────────
+
+
+class BoomGw(FakeGw):
+    """하루 상한 같은 예외를 던지는 게이트웨이"""
+
+    def complete(self, alias, **kw):
+        from shared.llm import BudgetExceeded
+
+        raise BudgetExceeded("하루 상한")
+
+
+def test_redraft_failure_keeps_reviewed_draft(src):
+    """다시 쓰기 도중 예외가 나도 검토까지 끝낸 초안은 남는다(옛 초안을 먼저 지우지 않는다)"""
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
+    from shared.llm import BudgetExceeded
+
+    with pytest.raises(BudgetExceeded):
+        ca.draft(conn, BoomGw(), cid, DAY)
+    got = ca.appeal(conn, cid)
+    assert got["valid"] and got["reviewed"] == {"by": "데스크", "at": AT}
+
+
+def test_redraft_calls_again_with_same_input(src):
+    """같은 입력이어도 다시 쓰기는 새로 부른다(저장된 결과를 재사용하지 않음)"""
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    gw = FakeGw()
+    ca.draft(conn, gw, cid, DAY)
+    assert len(gw.calls) == 1
+
+
+def test_review_requires_contestable(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    judged(conn, cid, "justified")
+    with pytest.raises(ValueError, match="재심 신청"):
+        ca.review(conn, cid, "데스크", AT, True, DAY)

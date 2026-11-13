@@ -359,7 +359,7 @@ def run(
     if dev and claim_appeal.RUNS.exists() and _has_table_rows(conn, "truth_claim_errors", "truth"):
         # ⑤-4 재심 사유서(설계 §4) — 과금 없음(기록은 make claim-appeal-dev). test는 python -m evaluation.claim_appeal run --split test(사람)
         result["claim_appeal"] = claim_appeal.score(
-            claim_appeal.targets(conn, "dev"), claim_appeal._read(claim_appeal.RUNS)
+            claim_appeal.targets(conn, "dev"), claim_appeal.read_runs(claim_appeal.RUNS)
         )
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)

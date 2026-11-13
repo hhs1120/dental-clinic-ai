@@ -789,11 +789,13 @@ def claim_appeal_draft(claim_id: int, paths: Paths, clinic: ClinicDep, gw: Gatew
 
 
 @app.post("/claims/{claim_id}/appeal/review")
-def claim_appeal_review(claim_id: int, body: AppealReview, paths: Paths, now: Now) -> dict:
+def claim_appeal_review(
+    claim_id: int, body: AppealReview, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
     """검토 확인 체크·해제 — 통과한 초안만, 제출 결정 뒤에는 400"""
     conn = _open_rw(paths)
     try:
-        claim_appeal.review(conn, claim_id, body.part, _stamp(now), body.checked)
+        claim_appeal.review(conn, claim_id, body.part, _stamp(now), body.checked, clinic.today)
         return {"ok": True}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

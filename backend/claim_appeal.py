@@ -184,19 +184,25 @@ def submitted(conn: sqlite3.Connection, claim_id: int) -> bool:
 
 
 def draft(conn: sqlite3.Connection, gw, claim_id: int, today: date) -> dict:
-    """초안 쓰기·다시 쓰기 — 일반 호출(사람이 기다림), 후검증 실패면 한 번 더(claim_store). 있던 초안과 검토 확인은
-    지운다. 제출 결정한 건은 ValueError"""
+    """초안 쓰기·다시 쓰기 — 일반 호출(사람이 기다림), 후검증 실패면 한 번 더(claim_store). 새 답을 저장한 뒤에 검토
+    확인을 푼다 — 부르는 도중 예외(하루 상한 등)가 나면 있던 초안·검토 확인은 그대로. 제출 결정한 건은 ValueError"""
     r = target(conn, claim_id, today)
     if submitted(conn, claim_id):
         raise ValueError("재심 사유서를 제출 결정한 건은 다시 쓸 수 없습니다")
+    claim_store.build(conn, gw, KIND, [r], use_batch=False, force=True)
     with conn:
-        conn.execute("DELETE FROM ax_claim_appeals WHERE claim_id = ?", (claim_id,))
-    claim_store.build(conn, gw, KIND, [r], use_batch=False)
+        conn.execute(
+            "UPDATE ax_claim_appeals SET reviewed_by = NULL, reviewed_at = NULL WHERE claim_id = ?",
+            (claim_id,),
+        )
     return appeal(conn, claim_id)
 
 
-def review(conn: sqlite3.Connection, claim_id: int, by: str, at: str, checked: bool) -> None:
-    """검토 확인(체크·해제) — 통과한 초안만, 제출 결정 뒤에는 바꿀 수 없다"""
+def review(
+    conn: sqlite3.Connection, claim_id: int, by: str, at: str, checked: bool, today: date
+) -> None:
+    """검토 확인(체크·해제) — 재심 신청 판단·기한 안(submit과 같은 규칙)의 통과한 초안만, 제출 결정 뒤에는 바꿀 수 없다"""
+    target(conn, claim_id, today)
     a = appeal(conn, claim_id)
     if a is None or not a["valid"]:
         raise ValueError("검토할 초안이 없습니다")
