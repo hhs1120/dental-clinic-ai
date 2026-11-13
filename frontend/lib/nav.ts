@@ -24,6 +24,7 @@ const BUILT = [
   "/missed",
   "/claims",
   "/finance",
+  "/report",
 ];
 
 /** 아직 화면이 없는 라우트 조각 → 화면 이름 (/emr은 화면이 있다) */
