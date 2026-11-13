@@ -39,6 +39,7 @@ from generator.master import (
     PERIO_QUALITATIVE_SHARE,
     PROCEDURE_DIAGNOSES,
     PROCEDURES,
+    R05_NEAR_MISS_SHARE,
     RECALL_CYCLE_MONTHS,
     REQUIREMENT_CUT_ERROR_SHARE,
     REQUIREMENT_ERROR_RATE,
@@ -180,7 +181,11 @@ EVIDENCE_WORDS = {
     "R01": ("파절", "2차 우식"),
     "R02": ("재평가",),
     "R04": ("소와열구",),
-    "R05": ("매복", "골삭제"),
+    "R05": (
+        "X-선",
+        "방사선",
+        "파노라마",
+    ),  # 실제 기준(난발치·매복발치는 X-선 촬영 후) — 매복·골삭제는 보충
     "R06": ("무치악",),
 }
 R01_REASON_WORD = {"기존 충전물 파절": "파절", "2차 우식": "2차 우식"}
@@ -193,13 +198,14 @@ PARAPHRASE = {  # 받침이 원래 낱말과 같은 말 — 초안의 조사가 
     "부분 매복": "부분 매몰",
     "완전 매복": "완전 매몰",
     "골삭제": "뼈 다듬기",
+    "X-선": "엑스레이",
     "무치악": "치아 결손",
 }
 NEGATION = {
     "R01": "파절·2차 우식 소견 없음",
     "R02": "재평가 예정",
     "R04": "소와열구 얕음",
-    "R05": "매복 없음",
+    "R05": "X-선 촬영 없이 발치",
     "R06": "무치악 기간 확인 안 됨",
 }
 PERIO_PD = (
@@ -322,6 +328,7 @@ def _requirement_facts(
     elif key == "R05":
         f["impaction"] = _pick(rng, ("부분 매복", "완전 매복")) if evidence else None
         f["bone_removal"] = evidence
+        f["xray"] = "X-선" if evidence else None
     elif key == "R06" and evidence:
         pulled = extracted[r["patient_id"]].get(r["tooth"])
         if pulled:
@@ -613,7 +620,8 @@ def _form(key, salt: str, options: tuple):
 
 def _style(rng, f: dict) -> None:
     """요건 줄의 근거 표현 방식(데이터 재설계 설계 §3) — 정답(근거 있음·없음)은 그대로, 쓰는 말만 고른다.
-    R03 부분 소견은 치주낭을 기준 이상으로 올리고 출혈을 없앤다(복합 기준 — 깊이 + 염증 소견)"""
+    R03 부분 소견은 치주낭을 기준 이상으로 올리고 출혈을 없앤다(복합 기준 — 깊이 + 염증 소견). R05 부분 소견은 매복·골삭제를
+    적고 X-선 촬영은 없다(실제 기준은 촬영 확인)"""
     req = f["requirement"]
     if req["key"] == "R03":
         if req["evidence"]:
@@ -634,6 +642,12 @@ def _style(rng, f: dict) -> None:
             if req["key"] in NEGATION and rng.random() < EVIDENCE_NEGATED_SHARE
             else "plain"
         )
+        if req["key"] == "R05" and req["style"] == "plain" and rng.random() < R05_NEAR_MISS_SHARE:
+            req |= {  # 매복·골삭제는 적었는데 X-선 촬영이 없다 — 실제 기준으로는 근거 없음
+                "style": "near_miss",
+                "impaction": _pick(rng, ("부분 매복", "완전 매복")),
+                "bone_removal": True,
+            }
 
 
 def style_note(f: dict, note: str) -> str:
@@ -715,6 +729,8 @@ def draft_note(f, key) -> str:
         out.append(done + (" 재평가 후 치주치료 이어서 진행." if req["linked"] else ""))
     elif req and req["key"] == "R04":
         out.append(f"대상 치아 {req['surface']} 확인.")
+    elif req and req["key"] == "R05" and req["xray"]:
+        out.append(f"{req['xray']} 촬영으로 {req['impaction']} 확인, 골삭제 후 발치.")
     elif req and req["key"] == "R05" and req["impaction"]:
         out.append(f"{req['impaction']} 상태로 골삭제 후 발치.")
     elif req and req["key"] == "R06" and req.get("extracted_days_ago"):
@@ -872,7 +888,7 @@ def _plain_requirement_words(req: dict) -> list[str]:
     if key == "R04":
         return ["소와열구" if req["evidence"] else "충전물"]
     if key == "R05" and req["impaction"]:
-        return [req["impaction"], "골삭제"]
+        return ([req["xray"]] if req.get("xray") else []) + [req["impaction"], "골삭제"]
     if key == "R06" and req.get("extracted_days_ago"):
         return [_period(req["extracted_days_ago"]), "무치악"]
     if key == "R06" and req.get("other_clinic"):

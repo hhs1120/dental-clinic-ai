@@ -3,20 +3,20 @@
 - doc_plan(코드): doc_catalog 표로 문서·정답을 쓰고, 본문에는 사실을 그대로 옮긴 초안을 넣는다(가짜 게이트웨이면 남음).
   문서 번호는 시드 셔플, 경로는 번호 — 표 순서(핵심 → 방해)나 표 이름(sim-·old-)이 source.sqlite에 드러나지 않게.
   나중에 더한 문서(APPENDED)는 셔플에서 빼고 뒤 번호를 붙인다 — 기존 번호(캐시·③ 질문 정답)를 그대로 둔다
-- documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실·청구 기준 소제목 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
-  건 id는 문서 번호(작업 파일에도 표 이름이 없게)
+- documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
+  건 id는 문서 번호(작업 파일에도 표 이름이 없게). 청구 기준은 계획 단계 본문이 최종(generator/claim_standards.py — LLM에 안 보냄)
 """
 
 import json
 
 from generator import llm_jobs
+from generator.claim_standards import INTRO_NOTE, section_body
 from generator.doc_catalog import BY_KEY, CATALOG, CLAIM_HEADINGS, Doc
 from generator.llm_jobs import Task
 from generator.master import CLINIC_NAME
 
-# 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧고, 청구 기준은 절 수에 비례(기준을 지어내 길이를 채우지 않게)
+# 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧게
 DOC_LENGTH_CHARS = {"notice": (150, 1500), "default": (400, 3000)}
-CLAIM_CHARS_PER_SECTION = 120
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -39,8 +39,6 @@ def path(d: Doc, doc_id: int) -> str:
 
 
 def length(d: Doc) -> list[int]:
-    if d.type == "claim_standard":
-        return [CLAIM_CHARS_PER_SECTION * len(d.sections), DOC_LENGTH_CHARS["default"][1]]
     return list(DOC_LENGTH_CHARS.get(d.type, DOC_LENGTH_CHARS["default"]))
 
 
@@ -48,25 +46,19 @@ def _words(d: Doc) -> list[str]:
     return [w for f in d.facts for w in f.words]
 
 
-def _rules(d: Doc, reason: str) -> list[str]:
-    return [f.text for f in d.facts if f.reason == reason and not f.id.endswith(".heading")]
-
-
 def draft(d: Doc) -> str:
-    """초안 — 사실 문장을 그대로. 청구 기준은 사유마다 소제목 한 절"""
+    """초안 — 사실 문장을 그대로. 청구 기준은 사유마다 소제목 한 절의 최종 본문(generator/claim_standards.py)"""
+    if (
+        d.type == "claim_standard"
+    ):  # 최종 본문 — 원문 발췌를 글자 그대로 두려고 LLM에 보내지 않는다(stage_bodies)
+        lines = [f"# {d.title}", "", f"{d.topic}. {INTRO_NOTE}"]
+        for r in d.sections:
+            lines += ["", f"## {CLAIM_HEADINGS[r]}", "", section_body(r)]
+        return "\n".join(lines)
     lines = [f"# {d.title}", "", f"{d.topic}."]
     if d.effective:
         lines.append(f"시행일: {d.effective}")
-    if d.type == "claim_standard":
-        for r in d.sections:
-            lines += [
-                "",
-                f"## {CLAIM_HEADINGS[r]}",
-                "",
-                *(f"- {t}." for t in _rules(d, r) or ["기록 기준을 지킨다"]),
-            ]
-    else:
-        lines += [""] + [f"- {f.text}." for f in d.facts]
+    lines += [""] + [f"- {f.text}." for f in d.facts]
     return "\n".join(lines)
 
 
@@ -75,10 +67,7 @@ def payload(d: Doc) -> dict:
     p = {"type": d.type, "title": d.title, "topic": d.topic, "draft": draft(d)}
     if d.effective:
         p["effective_date"] = d.effective
-    if d.type == "claim_standard":
-        p["sections"] = [{"heading": CLAIM_HEADINGS[r], "rules": _rules(d, r)} for r in d.sections]
-    else:
-        p["facts"] = [f.text for f in d.facts]
+    p["facts"] = [f.text for f in d.facts]
     if d.kind == "similar":
         p["skip_topic"] = d.skip
     old = next((o for o in CATALOG if o.kind == "old_version" and o.pair == d.key), None)
@@ -106,21 +95,6 @@ def checks(d: Doc) -> dict:
         "forbidden_patterns": llm_jobs.forbidden_patterns(),
         "length": length(d),
     }
-    if (
-        d.type == "claim_standard"
-    ):  # 사유마다 소제목 한 번, 그 기준 말은 그 절 안 (verify check_claim_sections와 같은 기준)
-        c["sections"] = [
-            [
-                f"## {CLAIM_HEADINGS[r]}",
-                [
-                    w
-                    for f in d.facts
-                    if f.reason == r and not f.id.endswith(".heading")
-                    for w in f.words
-                ],
-            ]
-            for r in d.sections
-        ]
     return c
 
 
@@ -170,6 +144,8 @@ def stage_bodies(run, rng, fake) -> None:
         "SELECT doc_id, doc_key FROM truth.truth_doc_meta ORDER BY doc_id"
     ).fetchall():
         d = BY_KEY[key]
+        if d.type == "claim_standard":  # 본문은 계획 단계 초안 그대로(draft)
+            continue
         out = ctx.resolve(TASK, str(doc_id), payload(d), checks(d))
         if out is not None:
             run.conn.execute(

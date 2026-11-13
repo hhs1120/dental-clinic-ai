@@ -38,7 +38,7 @@ _WORD = re.compile(r"[0-9A-Za-z가-힣/·]+")
 
 def reasons(conn) -> list[dict]:
     """상세 사유 11개 — {reason, heading, note, body}. body는 source의 청구 기준 문서(ax_documents claim_standard)
-    에서 그 절 본문(LLM이 쓴 문서라 코드에 없다)"""
+    에서 그 절 본문(생성기가 generator/claim_standards.py로 쓴 것 — 앱이 읽는 본문 그대로)"""
     from backend.rag_index import _sections
 
     bodies = {}

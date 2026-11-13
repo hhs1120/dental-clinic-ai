@@ -192,3 +192,89 @@ def test_verify_near_miss_keeps_no_bleeding(generated):
         (tid,),
     )
     assert verify.check_chart_evidence_words(c, ctx)
+
+
+def test_verify_r05_near_miss(generated):
+    """R05 부분 소견은 출혈 검사 대상이 아니고(R03만), X-선 말이 들어가면 위반이다"""
+    from generator import verify
+    from generator.paths import ROOT
+    from generator.verify.common import load_ctx
+
+    out, _ = generated("verify_near_miss")
+    c = sqlite3.connect(out / "source.sqlite")
+    c.row_factory = sqlite3.Row
+    c.execute("ATTACH DATABASE ? AS truth", (str(out / "truth.sqlite"),))
+    ctx = load_ctx(ROOT / "config" / "generator.yaml", c)
+    tid = next(
+        t
+        for t, f in c.execute(
+            "SELECT treatment_id, facts FROM truth.truth_chart_notes WHERE requirement = 'R05'"
+        )
+        if (json.loads(f).get("requirement") or {}).get("style") == "near_miss"
+    )
+
+    def bad_for(note):
+        c.execute("UPDATE emr_chart_notes SET note = ? WHERE treatment_id = ?", (note, tid))
+        return [b for b in verify.check_chart_evidence_words(c, ctx) if b["treatment_id"] == tid]
+
+    assert bad_for("부분 매복 상태로 골삭제 후 38번 치아 사랑니 발치 시행함.") == []
+    assert bad_for("X-선 촬영으로 부분 매복 확인, 골삭제 후 38번 치아 사랑니 발치 시행함.")
+
+
+# ── R05 사랑니 — 실제 기준의 근거는 X-선 촬영(설계 docs/superpowers/specs/2026-11-13-real-claim-standards-design.md) ──
+def _r05(conn):
+    return [
+        json.loads(f)
+        for (f,) in conn.execute(
+            "select facts from truth.truth_chart_notes where requirement = 'R05' and kind = 'narrative'"
+        )
+    ]
+
+
+def test_r05_evidence_needs_xray(conn):
+    rows = [f for f in _r05(conn) if f["requirement"]["evidence"]]
+    assert rows and all(f["requirement"]["xray"] == "X-선" for f in rows)
+    explicit = next(f for f in rows if f["requirement"]["style"] == "explicit")
+    assert ["X-선"] in chart.narrative_must_include(explicit)
+
+
+def test_r05_near_miss_has_impaction_no_xray(conn):
+    near = [f for f in _r05(conn) if f["requirement"]["style"] == "near_miss"]
+    assert near
+    for f in near:
+        req = f["requirement"]
+        assert req["evidence"] is False and req["impaction"] and req["bone_removal"]
+        assert req["xray"] is None
+        assert {"X-선", "방사선", "파노라마"} <= set(chart.evidence_forbidden(f))
+        assert [req["impaction"]] in chart.narrative_must_include(f)
+
+
+def test_r05_styles_present(conn):
+    styles = {f["requirement"]["style"] for f in _r05(conn)}
+    assert {"explicit", "near_miss", "negated", "plain"} <= styles
+
+
+def _r05_facts(**req):
+    return {
+        "tooth": "38",
+        "procedure": "사랑니 발치",
+        "findings": None,
+        "alerts": [],
+        "discovered": [],
+        "plan": None,
+        "requirement": {"key": "R05", **req},
+    }
+
+
+def test_r05_paraphrase_forbids_xray_words():
+    f = _r05_facts(
+        evidence=True, style="paraphrase", impaction="완전 매복", bone_removal=True, xray="X-선"
+    )
+    assert {"X-선", "방사선", "파노라마"} <= set(chart.evidence_forbidden(f))
+    assert ["엑스레이"] in chart.narrative_must_include(f)
+
+
+def test_r05_negated_says_no_xray():
+    f = _r05_facts(evidence=False, style="negated", impaction=None, bone_removal=False, xray=None)
+    assert [chart.NEGATION["R05"]] in chart.narrative_must_include(f)
+    assert "X-선" in chart.NEGATION["R05"]

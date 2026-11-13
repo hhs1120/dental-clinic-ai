@@ -119,8 +119,6 @@ def test_payload_hides_distractor_status():
 def test_checks():
     sim = documents.checks(BY_KEY["sim-booking-basics"])
     assert sim["must_include"] == [] and {"3회", "3개월"} <= set(sim["forbidden_words"])
-    claim = documents.checks(BY_KEY["claim-치주"])
-    assert ["## 치석제거 뒤 치주치료 연결"] in claim["must_include"]
     assert documents.checks(BY_KEY["ext-noshow"])["forbidden_words"] == ["클로드치과"]
     assert documents.checks(BY_KEY["edu-brushing"])["length"] == list(
         documents.DOC_LENGTH_CHARS["default"]
@@ -134,7 +132,10 @@ def test_bodies_export_then_apply(conn, tmp_path):
     paths = _paths(tmp_path)
     ctx = LLMContext(paths, fake=False)
     documents.stage_bodies(SimpleNamespace(conn=conn, state={"llm": ctx}), None, None)
-    assert ctx.finish() == {"document": len(CATALOG)}
+    claim = [d for d in CATALOG if d.type == "claim_standard"]
+    assert claim and ctx.finish() == {
+        "document": len(CATALOG) - len(claim)
+    }  # 청구 기준은 LLM에 안 보냄
     jobs = {
         j["item"]: j
         for j in (

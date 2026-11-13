@@ -12,6 +12,12 @@ const COMPONENTS: Components = {
   ul: ({ children }) => <ul className="my-2 list-disc pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal pl-5">{children}</ol>,
   li: ({ children }) => <li className="my-1 leading-relaxed">{children}</li>,
+  // 청구 기준의 실제 고시 발췌(generator/claim_standards.py)
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-border pl-3 text-muted-foreground">
+      {children}
+    </blockquote>
+  ),
   table: ({ children }) => (
     <div className="my-3 overflow-x-auto">
       <table className="w-full border-collapse text-sm">{children}</table>
@@ -27,9 +33,15 @@ const COMPONENTS: Components = {
   ),
 };
 
-export function DocBody({ markdown }: { markdown: string }) {
+export function DocBody({
+  markdown,
+  className = "max-w-prose",
+}: {
+  markdown: string;
+  className?: string;
+}) {
   return (
-    <div className="max-w-prose">
+    <div className={className}>
       <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
         {markdown}
       </Markdown>

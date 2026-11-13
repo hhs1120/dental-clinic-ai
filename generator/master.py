@@ -552,6 +552,7 @@ PERIO_QUALITATIVE_SHARE = (
     0.05  # R03 근거 있는 줄 중 치주낭 깊이를 약어 표기로("PD 5mm" — chart.PERIO_PD)
 )
 PERIO_NEAR_MISS_SHARE = 0.33  # R03 근거 없는 줄 중 깊이는 기준 이상인데 출혈이 없는 부분 소견
+R05_NEAR_MISS_SHARE = PERIO_NEAR_MISS_SHARE  # R05 근거 없는(부정 아닌) 줄 중 매복·골삭제는 적고 X-선 촬영이 없는 부분 소견. 추정값
 _REASON_ROWS = [
     # (key, category, type, note, 맞는 시술 이름 — None은 급여 시술 전부)
     ("R01", "C", "requirement", "동일 부위 재시행 간격 기준 미충족", ("아말감/GI", "신경치료")),

@@ -179,9 +179,10 @@ class SqliteLlmLog:
         return cur.lastrowid
 
     def spent(self, day: date, scope: str) -> float:
-        """앱 DB에는 한 범위(runtime)만 쓴다"""
+        """앱 DB에는 한 범위(runtime)만 쓴다. 배치 결과(ref_type 'batch')는 세지 않는다 — 상한은 즉시 호출에만"""
         row = self.conn.execute(
-            "SELECT COALESCE(SUM(cost_usd), 0) FROM ax_llm_calls WHERE substr(created_at, 1, 10) = ?",
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM ax_llm_calls"
+            " WHERE substr(created_at, 1, 10) = ? AND COALESCE(ref_type, '') != 'batch'",
             (day.isoformat(),),
         ).fetchone()
         return row[0]
