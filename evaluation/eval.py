@@ -41,6 +41,7 @@ from evaluation import (
     prep,
     rag,
     recon,
+    report,
 )
 from evaluation.metrics import fraction
 from generator.paths import ROOT, output_paths
@@ -228,6 +229,7 @@ def run(
         "autoclose": None,
         "followup": None,
         "prep": None,
+        "report": None,
         "claim_check": None,
         "claim_omission": None,
         "claim_basis": None,
@@ -338,6 +340,12 @@ def run(
         result["prep"] = {"days": [days[0].isoformat(), days[-1].isoformat()]} | prep.score(
             conn, days
         )
+    has_report = conn.execute(
+        "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_reports'"
+    ).fetchone()
+    if dev and has_report:
+        # ⑥ 경영 리포트 해석(평가 설계 §5) — 정답 없는 코드 채점, 범위는 화면 기간 전부
+        result["report"] = report.score(conn, load_clinic().today)
     has_checks = conn.execute(
         "SELECT 1 FROM main.sqlite_master WHERE name = 'ax_claim_checks'"
     ).fetchone()
@@ -465,6 +473,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_followup(r["followup"])
     if r.get("prep") is not None:
         out += _render_prep(r["prep"])
+    if r.get("report") is not None:
+        out += _render_report(r["report"])
     if r.get("claim_check") is not None:
         out += _render_claim_check(r["claim_check"])
     if r.get("claim_omission") is not None:
@@ -678,6 +688,21 @@ def _render_autoclose(a: dict) -> list[str]:
         f"오류(골드가 할 일·응급·불만·급함) {_kn(e)}"
         + (f" · 95% 구간 {_pct(ci[0])}~{_pct(ci[1])}" if ci else ""),
         "항목별 — " + " · ".join(f"{names[i]} {k}" for i, k in a["by_item"].items()),
+        "",
+    ]
+
+
+def _render_report(p: dict) -> list[str]:
+    return [
+        "## ⑥ 경영 리포트 해석",
+        "",
+        f"화면 기간 {p['periods']} · 저장 {p['saved']} · 후검증 통과 {p['valid']}"
+        f" (빈 해석 {p['empty']}, 숫자가 바뀐 해석 {p['stale']}) · 점 {p['points']}개",
+        "",
+        "| 지표 | 값 |",
+        "|---|---|",
+        f"| 본문 숫자 metrics 존재(점 단위) | {_kn(p['numbers_ok'])} |",
+        f"| [추정] 표시 어긋남 | {p['est_missing']} |",
         "",
     ]
 
