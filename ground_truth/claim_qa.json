@@ -1,0 +1,178 @@
+[
+ {
+  "id": "cq-C01-1",
+  "reason": "C01",
+  "question": "잇몸병으로 적어놓고 실제론 신경치료만 했어. 왜 삭감됐어?",
+  "answer_heading": "상병과 시행 행위의 일치",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-C01-2",
+  "reason": "C01",
+  "question": "충치 진단인데 스케일링만 청구하면 심사에서 걸려?",
+  "answer_heading": "상병과 시행 행위의 일치",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-D01-1",
+  "reason": "D01",
+  "question": "요건 있는 시술인데 청구할 때 따로 적은 게 없으면 심사에서 인정 안 해주는 거야?",
+  "answer_heading": "내역설명 기재",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-D01-2",
+  "reason": "D01",
+  "question": "명세서 빈칸에 시술한 이유를 안 써서 보냈더니 깎였는데 어떻게 적어야 했던 거지?",
+  "answer_heading": "내역설명 기재",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-D02-1",
+  "reason": "D02",
+  "question": "어금니 신경치료 청구했는데 엑스레이 안 찍어놨으면 삭감될 수 있어?",
+  "answer_heading": "방사선 등 증빙자료",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-D02-2",
+  "reason": "D02",
+  "question": "사랑니 뺀 환자 사진을 따로 안 남겼는데 심사에서 문제 삼을 수 있나?",
+  "answer_heading": "방사선 등 증빙자료",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-D03-1",
+  "reason": "D03",
+  "question": "어금니 레진 충전했는데 어느 치아인지 안 적고 보냈더니 심사에서 깎였어, 왜 그래?",
+  "answer_heading": "부위·산정 내역 기재",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-D03-2",
+  "reason": "D03",
+  "question": "발치 청구하면서 금액이 어떻게 나온 건지 내역을 안 써서 조정됐다는데 이유가 뭐야?",
+  "answer_heading": "부위·산정 내역 기재",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-E01-1",
+  "reason": "E01",
+  "question": "환자가 올해 다른 치과에서 치석 제거 받았다는데 우리가 모르고 시술 진행했는데 왜 삭감됐어?",
+  "answer_heading": "스케일링 연간 산정 횟수",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-E01-2",
+  "reason": "E01",
+  "question": "접수할 때 스케일링 받은 적 있는지 따로 확인 안 하고 청구하면 문제 생겨?",
+  "answer_heading": "스케일링 연간 산정 횟수",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R01-1",
+  "reason": "R01",
+  "question": "지난달에 레진 때운 어금니를 이번에 또 레진으로 때웠는데 차트에 뭘 안 적어서 깎인 걸까?",
+  "answer_heading": "같은 부위 재시행 간격",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R01-2",
+  "reason": "R01",
+  "question": "같은 치아에 신경치료를 다시 했는데 왜 다시 했는지 '불편함'이라고만 써놨거든, 이래도 심사에서 문제 돼?",
+  "answer_heading": "같은 부위 재시행 간격",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R02-1",
+  "reason": "R02",
+  "question": "스케일링하고 두 달쯤 뒤에 잇몸치료를 했는데 차트에 상태 다시 본 내용만 써놨거든, 이러면 왜 깎이는 거야?",
+  "answer_heading": "치석제거 뒤 치주치료 연결",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R02-2",
+  "reason": "R02",
+  "question": "잇몸치료 차트에 앞에서 한 스케일링이랑 이어진 치료라고 안 적었으면 심사에서 문제 삼아?",
+  "answer_heading": "치석제거 뒤 치주치료 연결",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R03-1",
+  "reason": "R03",
+  "question": "잇몸 주머니 깊이는 5mm로 적어놨는데 피 나는 건 안 적었으면 잇몸치료 청구해도 돼?",
+  "answer_heading": "치주치료 산정 소견",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R03-2",
+  "reason": "R03",
+  "question": "잇몸치료 했는데 차트에 probing 수치랑 출혈 여부를 아예 안 남겼으면 청구 전에 어떻게 해야 돼?",
+  "answer_heading": "치주치료 산정 소견",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R04-1",
+  "reason": "R04",
+  "question": "열세 살 아이 어금니에 실란트 해주고 청구했는데 심사에서 깎였어, 나이가 지나면 안 되는 거야?",
+  "answer_heading": "실란트 대상 치아",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R04-2",
+  "reason": "R04",
+  "question": "씹는 면에 충치가 이미 생긴 어금니에 실란트 해서 청구하면 인정 안 해줘?",
+  "answer_heading": "실란트 대상 치아",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R05-1",
+  "reason": "R05",
+  "question": "사랑니 어렵게 뽑았다고 청구했는데 차트에 이유를 안 적어두면 어떻게 인정돼?",
+  "answer_heading": "발치 난이도 산정 근거",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R05-2",
+  "reason": "R05",
+  "question": "아래턱 사랑니 뽑을 때 뼈를 깎았는데 차트에 그 얘기를 빼먹으면 심사에서 문제 돼?",
+  "answer_heading": "발치 난이도 산정 근거",
+  "warnings": [],
+  "split": "test"
+ },
+ {
+  "id": "cq-R06-1",
+  "reason": "R06",
+  "question": "예순여덟 되신 어르신인데 뽑은 지 얼마 안 돼서 잇몸이 아직 안 아문 자리에 임플란트 심으면 급여로 청구해도 돼?",
+  "answer_heading": "임플란트 급여 대상 부위",
+  "warnings": [],
+  "split": "dev"
+ },
+ {
+  "id": "cq-R06-2",
+  "reason": "R06",
+  "question": "환자가 쉰 넘었는데 어금니가 오래전부터 없는 자리라서 임플란트 급여 청구했다가 조정됐어, 이게 왜 안 되는 거야?",
+  "answer_heading": "임플란트 급여 대상 부위",
+  "warnings": [],
+  "split": "dev"
+ }
+]
