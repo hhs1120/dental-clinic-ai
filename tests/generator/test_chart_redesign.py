@@ -192,3 +192,62 @@ def test_verify_near_miss_keeps_no_bleeding(generated):
         (tid,),
     )
     assert verify.check_chart_evidence_words(c, ctx)
+
+
+# ── R05 사랑니 — 실제 기준의 근거는 X-선 촬영(설계 docs/superpowers/specs/2026-11-13-real-claim-standards-design.md) ──
+def _r05(conn):
+    return [
+        json.loads(f)
+        for (f,) in conn.execute(
+            "select facts from truth.truth_chart_notes where requirement = 'R05' and kind = 'narrative'"
+        )
+    ]
+
+
+def test_r05_evidence_needs_xray(conn):
+    rows = [f for f in _r05(conn) if f["requirement"]["evidence"]]
+    assert rows and all(f["requirement"]["xray"] == "X-선" for f in rows)
+    explicit = next(f for f in rows if f["requirement"]["style"] == "explicit")
+    assert ["X-선"] in chart.narrative_must_include(explicit)
+
+
+def test_r05_near_miss_has_impaction_no_xray(conn):
+    near = [f for f in _r05(conn) if f["requirement"]["style"] == "near_miss"]
+    assert near
+    for f in near:
+        req = f["requirement"]
+        assert req["evidence"] is False and req["impaction"] and req["bone_removal"]
+        assert req["xray"] is None
+        assert {"X-선", "방사선", "파노라마"} <= set(chart.evidence_forbidden(f))
+        assert [req["impaction"]] in chart.narrative_must_include(f)
+
+
+def test_r05_styles_present(conn):
+    styles = {f["requirement"]["style"] for f in _r05(conn)}
+    assert {"explicit", "near_miss", "negated", "plain"} <= styles
+
+
+def _r05_facts(**req):
+    return {
+        "tooth": "38",
+        "procedure": "사랑니 발치",
+        "findings": None,
+        "alerts": [],
+        "discovered": [],
+        "plan": None,
+        "requirement": {"key": "R05", **req},
+    }
+
+
+def test_r05_paraphrase_forbids_xray_words():
+    f = _r05_facts(
+        evidence=True, style="paraphrase", impaction="완전 매복", bone_removal=True, xray="X-선"
+    )
+    assert {"X-선", "방사선", "파노라마"} <= set(chart.evidence_forbidden(f))
+    assert ["엑스레이"] in chart.narrative_must_include(f)
+
+
+def test_r05_negated_says_no_xray():
+    f = _r05_facts(evidence=False, style="negated", impaction=None, bone_removal=False, xray=None)
+    assert [chart.NEGATION["R05"]] in chart.narrative_must_include(f)
+    assert "X-선" in chart.NEGATION["R05"]
