@@ -221,7 +221,7 @@ tags:
 | 코어 ①② 통화 분류·판정·자동 개선 | `ax_calls` | `truth_call_labels` + 처리 정답 라벨·골드 점검 표본 | 에이전트 하네스를 함께 씀 |
 | 코어 ③ 물어보기 | `ax_documents`·`ax_calls`·`emr_messages`·`emr_chart_notes`, 조회 도구용 `emr_*` | `truth_rag_qa` | 검색 구조를 ⑤-3이 다시 씀 |
 | 코어 ④ 준비표 (+⑦ 브리핑) | 환자·예약·수납·청구·주의사항 `emr_*` | 코드 채점(후검증) | 후검증 함수를 ⑤-4·⑥·⑦·⑨가 다시 씀 |
-| ⑤ 청구 점검·삭감 대응 | `emr_claims`·`emr_chart_notes`·청구 기준 문서 | `truth_claim_errors`·`truth_doc_meta`(기준 절)·`truth_claim_qa` | ③ 검색 구조, ④ 후검증 |
+| ⑤ 청구 점검·삭감 대응 | `emr_claims`·`emr_chart_notes`·청구 기준 문서(11절 중 8절은 실제 고시 발췌, 3절은 병원 내부 점검 기준) | `truth_claim_errors`·`truth_doc_meta`(기준 절)·`truth_claim_qa` | ③ 검색 구조, ④ 후검증 |
 | ⑥ 리포트 | `emr_treatments`·`emr_payments`·`emr_claims`·`emr_appointments`·`emr_staff`·`fin_*`, ⑧-2 확정 계정 | 코드 채점(본문 숫자 후검증), `truth_scenarios` | ④ 후검증 |
 | ⑧ 재무 대조 | `fin_*`·`emr_payments` | `truth_recon_mismatches`·`truth_ledger_errors`·`truth_expense_matches` | 오늘 화면에 불일치 칸만 |
 | ⑨ 미예약 환자 | 예약·치료계획·문자 `emr_*` | `truth_patient_churn` | 문자 초안을 넣으면 ④ 후검증 |
