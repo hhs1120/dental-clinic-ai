@@ -52,9 +52,27 @@ function Stat({
   );
 }
 
-function Stats({ m, monthly }: { m: Metrics; monthly: boolean }) {
+/** 비교한 이전 기간 — 월 "10월", 주 "11/16 주", 일 "지난주 같은 요일(11/23)"(백엔드 prev_period) */
+function prevLabel(scope: Scope, prev: string) {
+  if (scope === "monthly") return `${Number(prev.slice(5))}월`;
+  const md = periodLabel("daily", prev);
+  return scope === "weekly" ? `${md} 주` : `지난주 같은 요일(${md})`;
+}
+
+function Stats({
+  m,
+  scope,
+  prev,
+}: {
+  m: Metrics;
+  scope: Scope;
+  prev: string | null;
+}) {
+  const monthly = scope === "monthly";
   const prevSub = (k: string) =>
-    pct(m[`pct.${k}`]) && `이전 대비 ${pct(m[`pct.${k}`])}`;
+    prev && pct(m[`pct.${k}`])
+      ? `${prevLabel(scope, prev)} 대비 ${pct(m[`pct.${k}`])}`
+      : null;
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -142,9 +160,7 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
               <li key={k} className="flex flex-col gap-1">
                 <p>{p.text}</p>
                 <details className="text-xs text-muted-foreground">
-                  <summary className="w-fit cursor-pointer" role="button">
-                    근거 보기
-                  </summary>
+                  <summary className="w-fit cursor-pointer">근거 보기</summary>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {p.used.map((u) => (
                       <span
@@ -328,7 +344,11 @@ export function ReportView() {
             ))}
           </div>
           <Interpretation sheet={sheet} />
-          <Stats m={sheet.metrics} monthly={sheet.scope === "monthly"} />
+          <Stats
+            m={sheet.metrics}
+            scope={sheet.scope}
+            prev={sheet.prev_period}
+          />
           <DxCard sheet={sheet} />
           <Trend sheet={sheet} onPick={(p) => go({ period: p })} />
         </>

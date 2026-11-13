@@ -46,8 +46,8 @@ export const fetchReport = (
     signal,
   );
 
-// ── 근거 꼬리표 — metrics 키를 한국어 이름·단위로(키 규칙은 backend/report.py metrics) ──
-type Unit = "원" | "건" | "명" | "일" | "%";
+// ── 근거 꼬리표 — metrics 키를 한국어 이름·단위로(키 규칙은 backend/report.py metrics — 키를 더하면 BASE도) ──
+type Unit = "원" | "건" | "명" | "일" | "%" | "";
 
 const BASE: Record<string, [string, Unit]> = {
   sales: ["매출", "원"],
@@ -93,11 +93,11 @@ function split(key: string) {
   const cat = base.startsWith("sales.") ? base.slice(6) : null;
   const [name, unit]: [string, Unit] = cat
     ? [`${CATEGORY[cat] ?? cat} 매출`, "원"]
-    : (BASE[base] ?? [base, "원"]);
+    : (BASE[base] ?? [base, ""]); // 모르는 키(옛 버전 행 등)는 단위를 짐작하지 않는다
   return { prefix, name, unit };
 }
 
-/** 꼬리표 한 줄 — "임플란트 매출 증감 −1,300,000원", "매출 증감률 −10%", "이전 노쇼 0건" */
+/** 꼬리표 한 줄 — "임플란트 매출 증감 -1,300,000원", "매출 증감률 -10%", "이전 노쇼 0건", "노쇼율 증감 -2%p" */
 export function metricTag(key: string, value: number | null): string {
   const { prefix, name, unit } = split(key);
   const label =

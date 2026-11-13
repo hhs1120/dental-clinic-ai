@@ -76,10 +76,44 @@ const weekly = {
   dx_top: null,
 };
 
+// 일간 — 지난주 같은 요일(11/23)과 비교, 근거에 음수 증감·%p
+const daily = {
+  ...weekly,
+  scope: "daily",
+  periods: ["2026-11-27", "2026-11-30"],
+  period: "2026-11-30",
+  prev_period: "2026-11-23",
+  metrics: { ...base, "pct.sales": -66 },
+  interpretation: {
+    points: [
+      {
+        text: "11월 30일 매출은 지난주 같은 요일보다 393만 원 줄었습니다.",
+        used: ["diff.sales", "diff.noshow_rate", "diff.sales.implant"],
+      },
+    ],
+    values: {
+      "diff.sales": -3_935_000,
+      "diff.noshow_rate": -12,
+      "diff.sales.implant": -1_300_000,
+    },
+    model: "m",
+    created_at: "2026-12-01T05:00:00",
+    stale: false,
+  },
+  trend: ["2026-11-27", "2026-11-30"].map((p) => ({
+    period: p,
+    sales: 1,
+    collected: 1,
+    noshow_rate: 6,
+    new_patients: 5,
+  })),
+};
+
 async function fakeReport(page: Page, interpretation: unknown) {
   await page.route("**/api/report**", (r) => {
     const q = new URL(r.request().url()).searchParams;
     if (q.get("scope") === "weekly") return r.fulfill({ json: weekly });
+    if (q.get("scope") === "daily") return r.fulfill({ json: daily });
     return r.fulfill({
       json: monthly(q.get("period") ?? "2026-11", interpretation),
     });
@@ -109,9 +143,10 @@ test("월간 — AI 주목할 점이 맨 위, 숫자 카드, 가정값 숫자 �
   await expect(page.getByText(POINTS[0].text)).toBeVisible();
   // 근거는 접혀 있다가 펼치면 한국어 이름·단위로(코드 키를 보이지 않는다)
   await expect(page.getByText("매출 증감 +17,995,000원")).toBeHidden();
-  await page.getByRole("button", { name: "근거 보기" }).click();
+  await page.getByText("근거 보기", { exact: true }).click();
   await expect(page.getByText("매출 증감 +17,995,000원")).toBeVisible();
   await expect(page.getByText("매출 증감률 +38%")).toBeVisible();
+  await expect(page.getByText("10월 대비 +38%")).toBeVisible();
   await expect(page.getByText(/diff\.sales/)).toHaveCount(0);
   await expect(page.getByText("다시 만들기 필요")).toHaveCount(0);
   await expect(page.getByText("임플란트 1차 × 만성 치은염")).toBeVisible();
@@ -144,4 +179,16 @@ test("주간 탭에는 월간 카드가 없고, 추이 표 행을 누르면 그 
   await page.getByRole("tab", { name: "월간" }).click();
   await page.getByRole("row", { name: /9월/ }).click();
   await expect(page).toHaveURL(/period=2026-09/);
+});
+
+test("일간 — 지난주 같은 요일과 비교, 음수·%p 근거", async ({ page }) => {
+  await fakeReport(page, null);
+  await page.goto("/report?scope=daily");
+  await expect(
+    page.getByText("지난주 같은 요일(11/23) 대비 -66%"),
+  ).toBeVisible();
+  await page.getByText("근거 보기", { exact: true }).click();
+  await expect(page.getByText("매출 증감 -3,935,000원")).toBeVisible();
+  await expect(page.getByText("노쇼율 증감 -12%p")).toBeVisible();
+  await expect(page.getByText("임플란트 매출 증감 -1,300,000원")).toBeVisible();
 });

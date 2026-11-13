@@ -173,7 +173,7 @@ tags:
 
 ### ⑥ 리포트 · ⑦ 아침 브리핑 — 숫자는 쿼리, 글은 LLM
 
-- **AI가 하는 일**: 쿼리가 계산한 숫자(월간·주간·일간 매출·수금·노쇼·신환, 상병 착오, 오늘 예약·몰리는 시간대)를 읽기 쉬운 문장으로. ⑥은 코드가 이전 기간 대비 변화를 분해하면 LLM이 주목할 점 0~3개를 골라 잇고, 크게 움직인 숫자의 원인은 에이전트가 조사
+- **AI가 하는 일**: 쿼리가 계산한 숫자(월간·주간·일간 매출·수금·노쇼·신환, 상병 착오, 오늘 예약·몰리는 시간대)를 읽기 쉬운 문장으로. ⑥은 코드가 이전 기간 대비 변화를 분해하면 LLM이 주목할 점 0~3개를 골라 잇고, 크게 움직인 숫자의 원인은 에이전트가 조사(예정)
 - **왜 이 방식인가**: 리포트에서 숫자 하나가 틀리면 리포트 전체를 못 믿는다. 계산을 LLM에서 완전히 빼고 해석만 맡겼다
 - **어떻게 믿나**: 본문 숫자가 전부 계산값에 있는지 코드로 확인(④ 후검증 재사용). 원인 조사는 이상을 심은 시나리오 DB로 잰다
 
@@ -222,7 +222,7 @@ tags:
 | 코어 ③ 물어보기 | `ax_documents`·`ax_calls`·`emr_messages`·`emr_chart_notes`, 조회 도구용 `emr_*` | `truth_rag_qa` | 검색 구조를 ⑤-3이 다시 씀 |
 | 코어 ④ 준비표 (+⑦ 브리핑) | 환자·예약·수납·청구·주의사항 `emr_*` | 코드 채점(후검증) | 후검증 함수를 ⑤-4·⑥·⑦·⑨가 다시 씀 |
 | ⑤ 청구 점검·삭감 대응 | `emr_claims`·`emr_chart_notes`·청구 기준 문서(11절 중 8절은 실제 고시 발췌, 3절은 병원 내부 점검 기준) | `truth_claim_errors`·`truth_doc_meta`(기준 절)·`truth_claim_qa` | ③ 검색 구조, ④ 후검증 |
-| ⑥ 리포트 | `emr_treatments`·`emr_payments`·`emr_claims`·`emr_appointments`·`emr_staff`·`fin_*`, ⑧-2 지출 증빙 과목 | 코드 채점(본문 숫자 후검증), `truth_scenarios` | ④ 후검증 |
+| ⑥ 리포트 | `emr_treatments`·`emr_payments`·`emr_claims`·`emr_appointments`·`fin_*`, ⑧-2 지출 증빙 과목 | 코드 채점(본문 숫자 후검증), `truth_scenarios` | ④ 후검증 |
 | ⑧ 재무 대조 | `fin_*`·`emr_payments` | `truth_recon_mismatches`·`truth_ledger_errors`·`truth_expense_matches` | 오늘 화면에 불일치 칸만 |
 | ⑨ 미예약 환자 | 예약·치료계획·문자 `emr_*` | `truth_patient_churn` | 문자 초안을 넣으면 ④ 후검증 |
 | 운영 에이전트 | 기능 에이전트 결과 | `truth_scenarios` | 기능 에이전트를 모두 부름. 마지막에 착수 |
