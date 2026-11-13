@@ -118,3 +118,173 @@ def test_unbacked_counts_split_pieces():
     }
     assert ca.unbacked(F, r) == (3, 2)
     assert ca.unbacked(F, GOOD) == (4, 0)
+
+
+# ── 저장·초안·검토·제출 ───────────────────────────────────────────
+
+from datetime import date, timedelta  # noqa: E402
+
+import pytest  # noqa: E402
+
+from backend import claims  # noqa: E402
+from generator.master import ADJUST_REASONS, APPEAL_DAYS  # noqa: E402
+from shared.llm import LLMResult  # noqa: E402
+from tests.backend.test_claims import add_claim  # noqa: E402
+from tests.backend.test_missed import Source  # noqa: E402
+
+DAY = date(2026, 12, 1)
+MODEL = "claude-sonnet-5-5"
+R02 = ADJUST_REASONS["R02"]["note"]
+STD = "# 치주 분야 청구 기준\n\n머리말.\n\n## 치석제거 뒤 치주치료 연결\n\n" + ROW["body"] + "\n"
+AT = "2026-11-13 10:00:00"
+
+
+def llm(data):
+    return LLMResult(True, "", data, MODEL, False, 1, 1, 0.001, 1)
+
+
+class FakeGw:
+    config = {"aliases": {"chat": [MODEL]}, "models": {MODEL: {}}}
+
+    def __init__(self, *turns):
+        self.turns, self.calls = list(turns), []
+
+    def complete(self, alias, **kw):
+        self.calls.append(kw)
+        return self.turns.pop(0) if self.turns else llm(good())
+
+
+def good():
+    g = json.loads(json.dumps(GOOD))
+    g["sentences"][0] = s(f"조정 사유는 '{R02}'입니다.", "adjustment", R02)
+    return g
+
+
+@pytest.fixture
+def src(tmp_path):
+    s_ = Source(tmp_path / "source.sqlite")
+    s_.conn.execute(
+        "INSERT INTO ax_documents (id, type, title, version, effective_date, path, body)"
+        " VALUES (1, 'claim_standard', '치주 분야 청구 기준', '1', '2024-01-01', 'x.md', ?)",
+        (STD,),
+    )
+    return s_
+
+
+def reviewed_for(days_left: int) -> str:
+    return (DAY + timedelta(days=days_left) - timedelta(days=APPEAL_DAYS)).isoformat()
+
+
+def contested(src, pid=1, note=ROW["note"], judge="contestable"):
+    cid = add_claim(src, pid, code="U0018", note=R02, reviewed=reviewed_for(10))
+    src.conn.execute(
+        "UPDATE emr_chart_notes SET note = ? WHERE treatment_id ="
+        " (SELECT treatment_id FROM emr_claims WHERE id = ?)",
+        (note, cid),
+    )
+    return cid
+
+
+def judged(conn, cid, judgment="contestable"):
+    with conn:
+        claims.record_judgment(conn, cid, judgment, "데스크", AT, DAY)
+
+
+def test_draft_only_contestable(src):
+    cid = contested(src)
+    conn = src.app()
+    with pytest.raises(ValueError, match="재심 신청"):
+        ca.draft(conn, FakeGw(), cid, DAY)
+    judged(conn, cid, "justified")
+    with pytest.raises(ValueError):
+        ca.draft(conn, FakeGw(), cid, DAY)
+
+
+def test_draft_saves_and_redraft_resets_review(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    got = ca.draft(conn, FakeGw(), cid, DAY)
+    assert got["valid"] and len(got["sentences"]) == 4 and got["reviewed"] is None
+    ca.review(conn, cid, "데스크", AT, True)
+    assert ca.appeal(conn, cid)["reviewed"] == {"by": "데스크", "at": AT}
+    again = ca.draft(conn, FakeGw(), cid, DAY)  # 다시 쓰기 — 검토 확인이 풀린다(Review Focus 2)
+    assert again["valid"] and again["reviewed"] is None
+
+
+def test_draft_failed_twice_none(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    bad = llm(
+        {
+            "sentences": [s("근거 없는 문장입니다.", "chart", "차트에 없는 문장입니다")],
+            "assumptions": [],
+        }
+    )
+    got = ca.draft(conn, FakeGw(bad, bad), cid, DAY)
+    assert got["valid"] is False and got["sentences"] is None
+    with pytest.raises(ValueError):
+        ca.review(conn, cid, "데스크", AT, True)
+
+
+def test_review_requires_valid_draft(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    with pytest.raises(ValueError):
+        ca.review(conn, cid, "데스크", AT, True)  # 초안 없음
+    ca.draft(conn, FakeGw(), cid, DAY)
+    ca.review(conn, cid, "데스크", AT, True)
+    ca.review(conn, cid, "데스크", AT, False)
+    assert ca.appeal(conn, cid)["reviewed"] is None
+
+
+def test_submit_requires_review(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    with pytest.raises(ValueError, match="검토"):
+        ca.submit(conn, cid, "데스크", AT, DAY)
+    ca.review(conn, cid, "데스크", AT, True)
+    ca.submit(conn, cid, "원장", AT, DAY)
+    assert ca.appeal(conn, cid)["submitted"] == {"by": "원장", "at": AT}
+
+
+def test_submitted_locks_redraft_and_judgment(src):
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    ca.review(conn, cid, "데스크", AT, True)
+    ca.submit(conn, cid, "데스크", AT, DAY)
+    with pytest.raises(ValueError, match="제출"):
+        ca.draft(conn, FakeGw(), cid, DAY)
+    with pytest.raises(ValueError, match="제출"):
+        judged(conn, cid, "justified")
+    with pytest.raises(ValueError):
+        ca.review(conn, cid, "데스크", AT, False)
+
+
+def test_empty_chart_still_drafts(src):
+    """차트 서술이 빈 건 — 초안은 쓴다(조정 사유가 늘 있어 부른다), 차트 인용은 후검증이 막는다"""
+    cid = contested(src, note="")
+    conn = src.app()
+    judged(conn, cid)
+    no_chart = good()
+    del no_chart["sentences"][2]
+    gw = FakeGw(llm(no_chart))
+    got = ca.draft(conn, gw, cid, DAY)
+    assert len(gw.calls) == 1 and got["valid"]
+    assert '"note": ""' in gw.calls[0]["messages"][0]["content"]
+
+
+def test_judgment_change_keeps_draft(src):
+    """초안 뒤 판단을 바꿔도 초안은 남는다(화면이 재심 신청일 때만 보인다 — Review Focus 1)"""
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    judged(conn, cid, "justified")
+    assert ca.appeal(conn, cid)["valid"]

@@ -3,9 +3,14 @@
 docs/superpowers/specs/2026-11-10-claim-review-design.md §4). 청구 금액·판단 기록은 입력에 넣지 않는다. 사람이 검토
 확인한 뒤에만 제출 결정(기록만 — AI는 제출하지 않는다)."""
 
+import json
 import re
+import sqlite3
+from datetime import date, timedelta
 
-from backend.claim_check import found
+from backend import claim_store
+from backend.claim_check import CUT, found, section_cards
+from backend.prep import master_values
 
 TASK, ALIAS, PROMPT_VERSION = "claim_appeal", "chat", "v1"
 BASES = ("adjustment", "standard", "chart", "assumption")
@@ -90,3 +95,116 @@ def unbacked(facts: dict, r: dict) -> tuple[int, int]:
             total += 1
             bad += not (s.get("basis") in BASES and _backed(facts, s, piece, n))
     return total, bad
+
+
+KIND = claim_store.Kind(
+    table="ax_claim_appeals",
+    task=TASK,
+    alias=ALIAS,
+    version=PROMPT_VERSION,
+    facts=appeal_facts,
+    schema=lambda conn: SCHEMA,
+    check=check_result,
+    empty={"sentences": [], "assumptions": []},  # 조정 사유는 늘 있어 쓰지 않는다
+    text_key="adjust_note",
+)
+
+
+# ── 대상·저장·초안·검토·제출 ──────────────────────────────────────
+
+
+def target(conn: sqlite3.Connection, claim_id: int, today: date) -> dict:
+    """초안을 쓸 행 — 사람이 재심 신청(contestable)을 기록했고 재심 신청 기한이 남은 조정·불능 건, 아니면 ValueError.
+    그 사유의 기준 절(heading·body)을 붙인다"""
+    r = conn.execute(
+        "SELECT c.id AS claim_id, c.status, c.adjust_note, c.reviewed_at, c.tooth_no,"
+        " pr.name AS procedure_name, n.note, j.judgment"
+        " FROM source.emr_claims c"
+        " JOIN source.emr_procedures pr ON pr.code = c.procedure_code"
+        " LEFT JOIN source.emr_chart_notes n ON n.treatment_id = c.treatment_id"
+        " LEFT JOIN ax_claim_judgments j ON j.claim_id = c.id WHERE c.id = ?",
+        (claim_id,),
+    ).fetchone()
+    if r is None or r["status"] not in CUT or r["judgment"] != "contestable":
+        raise ValueError("재심 신청을 기록한 조정 건만 사유서 초안을 쓸 수 있습니다")
+    mv = master_values(conn)
+    deadline = date.fromisoformat(r["reviewed_at"][:10]) + timedelta(days=mv["appeal_days"])
+    if r["reviewed_at"] > today.isoformat() or deadline < today:
+        raise ValueError("재심 신청 기한이 지났습니다")
+    row = dict(r)
+    row["heading"] = mv["adjust_note_headings"][row["adjust_note"]]
+    card = section_cards(conn).get(row["heading"])
+    row["body"] = card["body"] if card else ""
+    return row
+
+
+def _row(conn, claim_id: int):
+    return conn.execute(
+        "SELECT * FROM ax_claim_appeals WHERE claim_id = ?", (claim_id,)
+    ).fetchone()
+
+
+def appeal(conn: sqlite3.Connection, claim_id: int) -> dict | None:
+    """저장된 초안 — {sentences, assumptions, valid, reviewed, submitted, at}, 후검증 실패는 sentences None, 없으면 None"""
+    r = _row(conn, claim_id)
+    if r is None:
+        return None
+    got = json.loads(r["result"]) if r["result"] else None
+    return {
+        "sentences": got["sentences"] if got else None,
+        "assumptions": got["assumptions"] if got else None,
+        "valid": got is not None,
+        "reviewed": {"by": r["reviewed_by"], "at": r["reviewed_at"]} if r["reviewed_by"] else None,
+        "submitted": {"by": r["submitted_by"], "at": r["submitted_at"]}
+        if r["submitted_by"]
+        else None,
+        "at": r["created_at"],
+    }
+
+
+def submitted(conn: sqlite3.Connection, claim_id: int) -> bool:
+    r = _row(conn, claim_id)
+    return bool(r and r["submitted_by"])
+
+
+def draft(conn: sqlite3.Connection, gw, claim_id: int, today: date) -> dict:
+    """초안 쓰기·다시 쓰기 — 일반 호출(사람이 기다림), 후검증 실패면 한 번 더(claim_store). 있던 초안과 검토 확인은
+    지운다. 제출 결정한 건은 ValueError"""
+    row = target(conn, claim_id, today)
+    if submitted(conn, claim_id):
+        raise ValueError("재심 사유서를 제출 결정한 건은 다시 쓸 수 없습니다")
+    with conn:
+        conn.execute("DELETE FROM ax_claim_appeals WHERE claim_id = ?", (claim_id,))
+    claim_store.build(conn, gw, KIND, [row], use_batch=False)
+    return appeal(conn, claim_id)
+
+
+def review(conn: sqlite3.Connection, claim_id: int, by: str, at: str, checked: bool) -> None:
+    """검토 확인(체크·해제) — 통과한 초안만, 제출 결정 뒤에는 바꿀 수 없다"""
+    a = appeal(conn, claim_id)
+    if a is None or not a["valid"]:
+        raise ValueError("검토할 초안이 없습니다")
+    if a["submitted"]:
+        raise ValueError("제출 결정한 사유서의 검토 확인은 바꿀 수 없습니다")
+    with conn:
+        conn.execute(
+            "UPDATE ax_claim_appeals SET reviewed_by = ?, reviewed_at = ? WHERE claim_id = ?",
+            (by if checked else None, at if checked else None, claim_id),
+        )
+
+
+def submit(conn: sqlite3.Connection, claim_id: int, by: str, at: str, today: date) -> None:
+    """제출 결정 기록(AI는 제출하지 않는다) — 재심 신청 판단·통과한 초안·검토 확인이 있어야"""
+    target(conn, claim_id, today)
+    a = appeal(conn, claim_id)
+    if a is None or not a["valid"]:
+        raise ValueError("제출할 초안이 없습니다")
+    if not a["reviewed"]:
+        raise ValueError("검토 확인 전에는 제출 결정을 할 수 없습니다")
+    if a["submitted"]:
+        raise ValueError("이미 제출 결정한 사유서입니다")
+    with conn:
+        conn.execute(
+            "UPDATE ax_claim_appeals SET submitted_by = ?, submitted_at = ? WHERE claim_id = ?",
+            (by, at, claim_id),
+        )

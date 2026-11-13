@@ -260,6 +260,11 @@ def record_judgment(
         raise ValueError(f"재심 신청 기한 지남: {claim_id}")
     if mv["adjust_note_types"][c["adjust_note"]] == "diagnosis" and judgment != "justified":
         raise ValueError("상병 착오는 재청구할 수 없어 삭감 수용만 기록한다")
+    if conn.execute(
+        "SELECT 1 FROM ax_claim_appeals WHERE claim_id = ? AND submitted_by IS NOT NULL",
+        (claim_id,),
+    ).fetchone():
+        raise ValueError("재심 사유서를 제출 결정한 건은 판단을 바꿀 수 없습니다")
     conn.execute(
         "INSERT INTO ax_claim_judgments (claim_id, judgment, judged_by, judged_at)"
         " VALUES (?, ?, ?, ?) ON CONFLICT(claim_id) DO UPDATE SET"
