@@ -323,10 +323,14 @@ EMPTY = {"points": []}
 BAD = {"points": [{"text": "매출 1원", "used": ["nope"]}]}
 
 
-def _gw(batch, *turns):
+def _gw(batch, *turns, only: str | None = None):
+    """batch 답을 모든 기간에(only면 그 custom_id에만, 나머지는 빈 점 목록)"""
     from tests.backend.test_prep import FakeGw, res
 
-    return FakeGw(*[res(t) for t in turns], batch=lambda cid: res(batch))
+    return FakeGw(
+        *[res(t) for t in turns],
+        batch=lambda cid: res(batch if only in (None, cid) else EMPTY),
+    )
 
 
 def _n(conn) -> int:
@@ -387,3 +391,53 @@ def test_build_input_has_periods_and_metrics(conn):
     sent = json.loads(req["messages"][0]["content"].split("\n", 1)[1])
     assert sent["period"] == "2026-11" and sent["prev_period"] == "2026-10"
     assert sent["metrics"]["sales"] == 670_000
+
+
+# ── 화면 응답(설계 §5·§6) ──
+GOOD = {"points": [{"text": "11월 매출은 67만 원입니다.", "used": ["sales"]}]}
+
+
+def test_sheet_default_last_period(conn):
+    s = report.sheet(conn, TODAY, "monthly")
+    assert s["periods"] == ["2026-09", "2026-10", "2026-11"] and s["period"] == "2026-11"
+    assert s["prev_period"] == "2026-10" and s["metrics"]["sales"] == 670_000
+    assert s["interpretation"] is None
+    assert [t["period"] for t in s["trend"]] == s["periods"]
+    assert s["trend"][-1]["est.profit"] == s["metrics"]["est.profit"]
+    assert s["labor"]["headcount"]["hygienist"] == 2
+    assert s["dx_top"]["lost"] == 42_000
+
+
+def test_sheet_weekly_has_no_monthly_parts(conn):
+    s = report.sheet(conn, TODAY, "weekly")
+    assert s["labor"] is None and s["dx_top"] is None and "material" not in s["trend"][-1]
+
+
+def test_sheet_interpretation(conn):
+    report.build(conn, _gw(GOOD, only="monthly_2026-11"), TODAY, use_batch=True, poll_seconds=0)
+    got = report.sheet(conn, TODAY, "monthly", "2026-11")["interpretation"]
+    assert got["points"] == GOOD["points"] and got["stale"] is False
+
+
+def test_sheet_stale(conn):
+    report.build(conn, _gw(GOOD, only="monthly_2026-11"), TODAY, use_batch=True, poll_seconds=0)
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_expense_confirmations VALUES ('fin_bank_transactions', 3,"
+            " '하늘치', '[]', '재료비', 'desk', '2026-11-30 10:00:00')"
+        )
+    got = report.sheet(conn, TODAY, "monthly", "2026-11")["interpretation"]
+    assert got["stale"] is True and got["points"] == GOOD["points"]
+
+
+def test_sheet_invalid_is_none(conn):
+    n = _n(conn)
+    report.build(conn, _gw(BAD, *[BAD] * n), TODAY, use_batch=True, poll_seconds=0)
+    assert report.sheet(conn, TODAY, "monthly")["interpretation"] is None
+
+
+def test_sheet_unknown(conn):
+    with pytest.raises(ValueError):
+        report.sheet(conn, TODAY, "monthly", "1999-01")
+    with pytest.raises(ValueError):
+        report.sheet(conn, TODAY, "yearly")

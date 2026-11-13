@@ -40,6 +40,7 @@ from backend import (
     recon_agent,
     recon_auto,
     recon_match,
+    report,
     search_summary,
     today,
 )
@@ -1099,6 +1100,23 @@ def accuracy(paths: Paths, clinic: ClinicDep) -> dict:
             "human_share": metrics.human_share(conn, a, b),
             "versions": {"classify": versions, "active": a, "judge": b, "blind": pair},
         }
+    finally:
+        conn.close()
+
+
+# ── ⑥ 경영 리포트 (기능 정의 §5 ⑥) ──────────────────────────────────
+
+
+@app.get("/report")
+def report_sheet(
+    paths: Paths, clinic: ClinicDep, scope: str = "monthly", period: str | None = None
+) -> dict:
+    """기간 숫자·변화 분해·저장된 해석(backend/report.py sheet, 설계 2026-11-13 리포트 §5). 모르는 기간 400"""
+    conn = _open_rw(paths)
+    try:
+        return report.sheet(conn, clinic.today, scope, period)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     finally:
         conn.close()
 

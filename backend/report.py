@@ -429,6 +429,50 @@ def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> 
     return out
 
 
+TREND = ("sales", "collected", "noshow_rate", "new_patients")
+TREND_MONTHLY = ("material", "profit_ex_labor", "est.profit")
+
+
+def sheet(conn: sqlite3.Connection, today: date, scope: str, period: str | None = None) -> dict:
+    """화면 응답(설계 §5·§6) — LLM을 부르지 않는다. 해석은 저장된 것만, 지금 숫자와 해시가 다르면 stale.
+    모르는 기간 종류·기간은 ValueError"""
+    labels = periods(conn, today, scope)
+    if period is None:
+        if not labels:
+            raise ValueError("끝난 기간이 없음")
+        period = labels[-1]
+    elif period not in labels:
+        raise ValueError(f"모르는 기간: {period}")
+    by = {p: metrics(conn, today, scope, p) for p in labels}
+    m = by[period]
+    row = conn.execute(
+        "SELECT points, valid, metrics_hash, model, created_at FROM ax_reports"
+        " WHERE scope = ? AND period = ?",
+        (scope, period),
+    ).fetchone()
+    interp = None
+    if row and row["valid"]:
+        interp = {
+            "points": json.loads(row["points"]),
+            "model": row["model"],
+            "created_at": row["created_at"],
+            "stale": row["metrics_hash"] != metrics_hash(m),
+        }
+    keys = TREND + (TREND_MONTHLY if scope == "monthly" else ())
+    monthly = scope == "monthly"
+    return {
+        "scope": scope,
+        "periods": labels,
+        "period": period,
+        "prev_period": prev_period(conn, today, scope, period),
+        "metrics": m,
+        "interpretation": interp,
+        "trend": [{"period": p} | {k: by[p].get(k) for k in keys} for p in labels],
+        "labor": labor(conn) if monthly else None,
+        "dx_top": dx_top(conn, period) if monthly else None,
+    }
+
+
 def main(argv=None) -> None:
     from backend.harness.llm import make_gateway
     from shared.clinic import load_clinic
