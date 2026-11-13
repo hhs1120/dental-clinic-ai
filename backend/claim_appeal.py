@@ -144,11 +144,7 @@ def _row(conn, claim_id: int):
     ).fetchone()
 
 
-def appeal(conn: sqlite3.Connection, claim_id: int) -> dict | None:
-    """저장된 초안 — {sentences, assumptions, valid, reviewed, submitted, at}, 후검증 실패는 sentences None, 없으면 None"""
-    r = _row(conn, claim_id)
-    if r is None:
-        return None
+def _view(r) -> dict:
     got = json.loads(r["result"]) if r["result"] else None
     return {
         "sentences": got["sentences"] if got else None,
@@ -160,6 +156,17 @@ def appeal(conn: sqlite3.Connection, claim_id: int) -> dict | None:
         else None,
         "at": r["created_at"],
     }
+
+
+def appeal(conn: sqlite3.Connection, claim_id: int) -> dict | None:
+    """저장된 초안 — {sentences, assumptions, valid, reviewed, submitted, at}, 후검증 실패는 sentences None, 없으면 None"""
+    r = _row(conn, claim_id)
+    return None if r is None else _view(r)
+
+
+def appeals(conn: sqlite3.Connection) -> dict[int, dict]:
+    """저장된 초안 전부 {claim_id: appeal} — 조정 목록이 표마다 한 번 읽는다"""
+    return {r["claim_id"]: _view(r) for r in conn.execute("SELECT * FROM ax_claim_appeals")}
 
 
 def submitted(conn: sqlite3.Connection, claim_id: int) -> bool:

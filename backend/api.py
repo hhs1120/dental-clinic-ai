@@ -21,6 +21,7 @@ from backend import (
     blind,
     calls,
     chat,
+    claim_appeal,
     claim_check,
     claim_evidence,
     claim_omission,
@@ -759,6 +760,55 @@ def claim_judgment(
             conn, claim_id, body.judgment, by=body.part, at=_stamp(now), today=clinic.today
         )
         conn.commit()
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+class AppealReview(BaseModel):
+    part: str
+    checked: bool
+
+
+class AppealSubmit(BaseModel):
+    part: str
+
+
+@app.post("/claims/{claim_id}/appeal")
+def claim_appeal_draft(claim_id: int, paths: Paths, clinic: ClinicDep, gw: GatewayFactory) -> dict:
+    """⑤-4 재심 사유서 초안 쓰기·다시 쓰기 — 일반 호출(사람이 기다림, 설계 §4). 재심 신청이 아니거나 제출 결정한 건은 400"""
+    conn = _open_rw(paths)
+    try:
+        return claim_appeal.draft(conn, gw(conn), claim_id, clinic.today)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.post("/claims/{claim_id}/appeal/review")
+def claim_appeal_review(claim_id: int, body: AppealReview, paths: Paths, now: Now) -> dict:
+    """검토 확인 체크·해제 — 통과한 초안만, 제출 결정 뒤에는 400"""
+    conn = _open_rw(paths)
+    try:
+        claim_appeal.review(conn, claim_id, body.part, _stamp(now), body.checked)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.post("/claims/{claim_id}/appeal/submit")
+def claim_appeal_submit(
+    claim_id: int, body: AppealSubmit, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """제출 결정 기록(AI는 제출하지 않는다) — 검토 확인이 없으면 400"""
+    conn = _open_rw(paths)
+    try:
+        claim_appeal.submit(conn, claim_id, body.part, _stamp(now), clinic.today)
         return {"ok": True}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

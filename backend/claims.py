@@ -8,7 +8,7 @@ master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(
 import sqlite3
 from datetime import date, timedelta
 
-from backend import claim_check, claim_evidence, claim_omission
+from backend import claim_appeal, claim_check, claim_evidence, claim_omission
 from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
@@ -62,6 +62,7 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     ai = claim_check.results(conn)
     cards = claim_check.section_cards(conn)
     quotes = claim_evidence.results(conn)
+    drafts = claim_appeal.appeals(conn)
     for r in conn.execute(
         "SELECT c.id, c.chart_no, p.name, c.service_date, c.tooth_no, pr.name AS procedure_name,"
         " c.status, c.claim_amount, COALESCE(c.paid_amount, 0) AS paid_amount, c.adjust_note,"
@@ -109,6 +110,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
                 "chart_quotes": (quotes.get(r["id"]) or {}).get("quotes")
                 if type_ == "documentation"
                 else None,
+                # ⑤-4 재심 사유서 초안 — 판단과 무관하게 내리고 화면이 재심 신청일 때만 보인다(설계 §4)
+                "appeal": drafts.get(r["id"]),
                 "judgment": (
                     {"value": r["judgment"], "by": r["judged_by"], "at": r["judged_at"]}
                     if r["judgment"]

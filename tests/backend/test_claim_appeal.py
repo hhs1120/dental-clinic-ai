@@ -288,3 +288,74 @@ def test_judgment_change_keeps_draft(src):
     ca.draft(conn, FakeGw(), cid, DAY)
     judged(conn, cid, "justified")
     assert ca.appeal(conn, cid)["valid"]
+
+
+# ── API·조정 목록 행 ──────────────────────────────────────────────
+
+
+@pytest.fixture
+def api_client(src):
+    from fastapi.testclient import TestClient
+
+    from backend import api
+    from shared.clinic import Clinic
+
+    cid = contested(src)
+    src.app().close()
+    gw = FakeGw()
+    api.app.dependency_overrides[api.get_db_paths] = lambda: (
+        src.path.parent / "app.sqlite",
+        src.path,
+    )
+    api.app.dependency_overrides[api.get_clinic] = lambda: Clinic(DAY, date(2026, 1, 1), 4)
+    api.app.dependency_overrides[api.get_gateway_factory] = lambda: lambda conn: gw
+    yield TestClient(api.app), cid
+    api.app.dependency_overrides.clear()
+
+
+def test_api_draft_review_submit_flow(api_client):
+    client, cid = api_client
+    assert (
+        client.post(
+            f"/claims/{cid}/judgment", json={"judgment": "contestable", "part": "데스크"}
+        ).status_code
+        == 200
+    )
+    r = client.post(f"/claims/{cid}/appeal")
+    assert r.status_code == 200 and r.json()["valid"] and len(r.json()["sentences"]) == 4
+    assert (
+        client.post(
+            f"/claims/{cid}/appeal/review", json={"part": "데스크", "checked": True}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"/claims/{cid}/appeal/submit", json={"part": "원장"}).status_code == 200
+    row = next(x for x in client.get("/claims").json()["rows"] if x["claim_id"] == cid)
+    assert (
+        row["appeal"]["submitted"]["by"] == "원장" and row["appeal"]["reviewed"]["by"] == "데스크"
+    )
+
+
+def test_api_400s(api_client):
+    client, cid = api_client
+    assert client.post(f"/claims/{cid}/appeal").status_code == 400  # 판단 없음
+    client.post(f"/claims/{cid}/judgment", json={"judgment": "contestable", "part": "데스크"})
+    client.post(f"/claims/{cid}/appeal")
+    assert (
+        client.post(f"/claims/{cid}/appeal/submit", json={"part": "원장"}).status_code == 400
+    )  # 검토 없음
+    client.post(f"/claims/{cid}/appeal/review", json={"part": "데스크", "checked": True})
+    client.post(f"/claims/{cid}/appeal/submit", json={"part": "원장"})
+    assert client.post(f"/claims/{cid}/appeal").status_code == 400  # 제출 뒤 다시 쓰기
+    r = client.post(f"/claims/{cid}/judgment", json={"judgment": "justified", "part": "데스크"})
+    assert r.status_code == 400 and "제출" in r.json()["detail"]
+
+
+def test_adjusted_row_has_appeal(src):
+    cid = contested(src)
+    other = add_claim(src, 2, code="U0018", note=R02, reviewed=reviewed_for(10))
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    rows = {r["claim_id"]: r for r in claims.adjusted(conn, DAY)["rows"]}
+    assert rows[cid]["appeal"]["valid"] and rows[other]["appeal"] is None
