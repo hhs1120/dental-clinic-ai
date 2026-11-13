@@ -41,7 +41,12 @@ export function AppealDraft({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // 어느 초안·검토 상태를 복사했는지 — 초안이 바뀌거나 검토 확인이 풀리면 "복사함"이 저절로 사라진다
+  // (옛 글을 복사한 줄 알고 붙여 넣지 않게)
+  const copyKey = `${appeal?.at}|${appeal?.reviewed?.at ?? ""}`;
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const copied = copiedFor === copyKey;
+  const [confirming, setConfirming] = useState(false);
   const run = (label: string, call: () => Promise<unknown>) => {
     setBusy(label);
     setError(null);
@@ -53,10 +58,14 @@ export function AppealDraft({
       (e) => {
         setBusy(null);
         setError(errorText(e));
+        onSaved(); // 실패해도 서버 상태로 다시 그린다
       },
     );
   };
-  const draft = () => run("draft", () => draftAppeal(claimId));
+  const draft = () => {
+    setConfirming(false);
+    run("draft", () => draftAppeal(claimId));
+  };
   const sentences = appeal?.sentences ?? null;
   const reviewed = !!appeal?.reviewed;
   const submitted = appeal?.submitted ?? null;
@@ -64,7 +73,7 @@ export function AppealDraft({
   const body = sentences?.map((s) => s.text).join(" ") ?? "";
   const copy = () =>
     navigator.clipboard.writeText(body).then(
-      () => setCopied(true),
+      () => setCopiedFor(copyKey),
       () => setError("복사하지 못했습니다"),
     );
   return (
@@ -162,8 +171,29 @@ export function AppealDraft({
           )}
         </>
       )}
-      {appeal && !submitted && (
-        <Button size="sm" variant="ghost" disabled={!!busy} onClick={draft}>
+      {appeal && !submitted && confirming && (
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          검토한 초안을 버리고 새로 쓸까요?
+          <Button size="sm" variant="outline" disabled={!!busy} onClick={draft}>
+            새로 쓰기
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setConfirming(false)}
+          >
+            취소
+          </Button>
+        </div>
+      )}
+      {appeal && !submitted && !confirming && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!!busy}
+          // 검토 확인한 초안은 한 번 묻고 버린다
+          onClick={() => (reviewed ? setConfirming(true) : draft())}
+        >
           {busy === "draft" ? "쓰는 중…" : "다시 쓰기"}
         </Button>
       )}

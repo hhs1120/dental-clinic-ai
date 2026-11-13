@@ -546,6 +546,57 @@ test("재심 사유서 — 초안 쓰기, 꼬리표·추측, 검토 확인 뒤 �
   await expect(
     detail.getByRole("button", { name: "삭감 수용" }),
   ).toBeDisabled();
+  await expect(detail).toContainText(
+    "재심 사유서를 제출 결정해 판단을 바꿀 수 없습니다",
+  );
+});
+
+test("재심 사유서 — 다시 쓰기는 확인 뒤, 복사함 표시는 새 초안에서 풀림", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const reviewed = { by: "데스크", at: "2026-11-13 10:01:00" };
+  let appeal = { ...APPEAL, reviewed };
+  await fakeClaims(page, () => sheet([{ ...CONTESTED, appeal }]));
+  await page.route("**/api/claims/12/appeal", (r) => {
+    appeal = { ...APPEAL, at: "2026-11-13T11:00:00", reviewed: null as never };
+    return r.fulfill({ json: appeal });
+  });
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await draft.getByRole("button", { name: "복사" }).click();
+  await expect(draft.getByRole("button", { name: "복사함" })).toBeVisible();
+  await draft.getByRole("button", { name: "다시 쓰기" }).click();
+  await expect(draft).toContainText("검토한 초안을 버리고 새로 쓸까요?");
+  await draft.getByRole("button", { name: "새로 쓰기" }).click();
+  await expect(
+    draft.getByRole("button", { name: "복사", exact: true }),
+  ).toBeDisabled();
+  await expect(draft.getByRole("button", { name: "복사함" })).toHaveCount(0);
+});
+
+test("재심 사유서 — 제출한 건은 기한이 지나도 읽기 전용으로", async ({
+  page,
+}) => {
+  const submitted = { by: "데스크", at: "2026-11-13 10:02:00" };
+  await fakeClaims(page, () =>
+    sheet([
+      {
+        ...CONTESTED,
+        expired: true,
+        days_left: -3,
+        chips: ["expired"],
+        appeal: { ...APPEAL, reviewed: submitted, submitted },
+      },
+    ]),
+  );
+  await page.goto("/claims?chip=expired");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await expect(draft).toContainText("제출 결정 · 데스크");
+  await expect(draft.getByRole("button", { name: "다시 쓰기" })).toHaveCount(0);
 });
 
 test("재심 사유서 — 실패 안내, 재심 신청이 아니면 숨김", async ({ page }) => {

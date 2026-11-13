@@ -284,7 +284,10 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
       },
     );
   };
-  const contested = r.judgment?.value === "contestable" && !r.expired;
+  // 재심 신청 건 — 기한이 지나면 초안을 쓸 수 없지만 제출 결정한 사유서는 읽기 전용으로 남긴다
+  const contested =
+    r.judgment?.value === "contestable" &&
+    (!r.expired || !!r.appeal?.submitted);
   const locked = !!r.appeal?.submitted; // 제출 결정한 건은 판단을 바꾸지 않는다(설계 §4)
   return (
     <section
@@ -340,6 +343,11 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
               </Button>
             ))}
           </div>
+        )}
+        {locked && (
+          <p className="text-xs text-muted-foreground">
+            재심 사유서를 제출 결정해 판단을 바꿀 수 없습니다
+          </p>
         )}
         {error && <ErrorBand text={error} />}
       </div>
