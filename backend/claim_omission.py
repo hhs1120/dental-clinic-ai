@@ -159,7 +159,7 @@ KIND = claim_store.Kind(
 
 
 def _request(facts: dict, names: list[str]) -> dict:
-    """평가 합성 사례가 앱과 같은 요청을 쓴다(evaluation/claim_omission.py)"""
+    """평가 쪽 합성 사례가 앱과 같은 요청을 쓴다(설계 §2b)"""
     return claim_store.request(KIND, facts, schema(names))
 
 
