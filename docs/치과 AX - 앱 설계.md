@@ -38,7 +38,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 2. LLM 로그
 
-**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 사용량은 검색기(요청)마다 모아 챗과 기록 검색이 각각 남긴다. 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
+**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`과 `batch`(배치 결과 — `ref_id`는 배치 요청 id, 하루 상한에 세지 않는다)만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 사용량은 검색기(요청)마다 모아 챗과 기록 검색이 각각 남긴다. 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
 
 ## 3. 검색
 

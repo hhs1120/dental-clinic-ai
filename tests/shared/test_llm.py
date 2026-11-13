@@ -1086,3 +1086,15 @@ def test_openai_batch_failed_shows_reason(tmp_path, capsys):
     oa = types.SimpleNamespace(files=_OaFiles({}), batches=batches)
     r = _oa_gateway(tmp_path, oa).batch_results("batch_1", "oa", task="hard_transcript")
     assert r == {} and "invalid_json" in capsys.readouterr().out
+
+
+def test_jsonl_spent_skips_batch(tmp_path):
+    """배치 결과(ref_type 'batch')는 하루 상한에 세지 않는다 — 상한은 즉시 호출에만(기능 정의 §7)"""
+    log = llm.JsonlLog(tmp_path / "calls.jsonl")
+    at = NOW.isoformat(timespec="seconds")
+    log.write({"at": at, "scope": "runtime", "cost_usd": 9.0, "ref_type": "batch"})
+    log.write({"at": at, "scope": "runtime", "cost_usd": 0.5, "ref_type": None})
+    assert log.spent(NOW.date(), "runtime") == pytest.approx(0.5)
+    assert llm.JsonlLog(tmp_path / "calls.jsonl").spent(NOW.date(), "runtime") == pytest.approx(
+        0.5
+    )  # 파일에서 다시 읽어도

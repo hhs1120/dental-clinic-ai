@@ -197,7 +197,8 @@ def _constrainable(schema: dict) -> bool:
 
 
 class JsonlLog:
-    """호출 기록 — 한 줄에 한 호출. 일일 상한용 (날짜, 범위)별 합은 처음 한 번 파일에서 읽고 이후 write로 더한다"""
+    """호출 기록 — 한 줄에 한 호출. 일일 상한용 (날짜, 범위)별 합은 처음 한 번 파일에서 읽고 이후 write로 더한다.
+    배치 결과(ref_type 'batch')는 합에 넣지 않는다 — 상한은 즉시 호출에만(배치 제출은 상한 밖)"""
 
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -210,7 +211,8 @@ class JsonlLog:
             for line in self.path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     r = json.loads(line)
-                    totals[(r["at"][:10], r.get("scope"))] += r.get("cost_usd", 0.0)
+                    if r.get("ref_type") != "batch":
+                        totals[(r["at"][:10], r.get("scope"))] += r.get("cost_usd", 0.0)
         return totals
 
     def write(self, record: dict) -> None:
@@ -220,7 +222,10 @@ class JsonlLog:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
-            self._spent[(record["at"][:10], record.get("scope"))] += record.get("cost_usd", 0.0)
+            if record.get("ref_type") != "batch":
+                self._spent[(record["at"][:10], record.get("scope"))] += record.get(
+                    "cost_usd", 0.0
+                )
 
     def spent(self, day: date, scope: str) -> float:
         with self._lock:

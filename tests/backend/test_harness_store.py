@@ -173,3 +173,29 @@ def test_log_id_from_sqlite_log(conn):
     )
     r = gw.complete("a", task="t", messages=[{"role": "user", "content": "c"}])
     assert r.log_id == conn.execute("SELECT MAX(id) FROM ax_llm_calls").fetchone()[0]
+
+
+def test_llm_log_spent_skips_batch(conn):
+    """배치 결과(ref_type 'batch')는 하루 상한에 세지 않는다 — 상한은 즉시 호출에만(기능 정의 §7)"""
+    log = SqliteLlmLog(conn)
+    for ref_type, cost in (("batch", 9.0), (None, 0.5)):
+        log.write(
+            {
+                "at": "2026-11-02T01:00:00",
+                "scope": "runtime",
+                "task": "t",
+                "alias": "chat",
+                "model": "m",
+                "prompt_version": "v1",
+                "fallback_used": False,
+                "input_tokens": 1,
+                "output_tokens": 2,
+                "cost_usd": cost,
+                "latency_ms": 0,
+                "ok": True,
+                "error": None,
+                "ref_type": ref_type,
+                "ref_id": "x",
+            }
+        )
+    assert log.spent(date(2026, 11, 2), "runtime") == 0.5
