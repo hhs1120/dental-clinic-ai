@@ -57,6 +57,10 @@ export interface AdjustRow {
   suggestion: Judgment | null;
   reason: string;
   fill_item: string | null;
+  /** 그 사유의 청구 기준 절(설계 §3) — 문서가 없으면 null */
+  standard: StandardCard | null;
+  /** 서류 사유 차트 문장(AI, backend/claim_evidence.py) — 결과 없으면 null, 빈 답은 [] */
+  chart_quotes: string[] | null;
   judgment: { value: Judgment; by: string; at: string } | null;
   /** 추천을 낸 쪽 — 사유 유형 규칙, 요건 사유는 AI 점검(backend/claims.py AI_SUGGEST), 없으면 null */
   suggest_by: "rule" | "ai" | null;
@@ -119,6 +123,26 @@ export interface PreSheet {
   ai_pending: { pre: number; adjust: number };
   rows: PreRow[];
 }
+
+export interface StandardCard {
+  doc_title: string;
+  heading: string;
+  body: string;
+}
+
+/** 청구 기준 찾기 결과 한 절(backend/claim_search.py) */
+export interface StandardHit {
+  chunk_id: string;
+  doc_title: string;
+  heading: string;
+  text: string;
+}
+
+export const searchStandards = (q: string) =>
+  getJson<{ results: StandardHit[] }>(
+    "/claims/standards",
+    new URLSearchParams({ q }),
+  );
 
 export const fetchClaims = (signal?: AbortSignal) =>
   getJson<AdjustSheet>("/claims", undefined, signal);

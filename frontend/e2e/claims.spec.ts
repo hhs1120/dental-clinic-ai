@@ -13,7 +13,16 @@ const base = {
   judgment: null as Judgment,
   suggest_by: null as string | null,
   ai_evidence: null as { source: string; quote: string }[] | null,
+  standard: null as { doc_title: string; heading: string; body: string } | null,
+  chart_quotes: null as string[] | null,
 };
+
+const DOC_STANDARD = {
+  doc_title: "공통 분야 청구 기준",
+  heading: "내역설명 기재",
+  body: "- 요건을 충족했음을 보여 주는 근거를 내역설명란에 적는다.\n- 근거는 간결하게 적는다.",
+};
+const DOC_QUOTE = "치주낭 5mm, 출혈 있음";
 
 const DOC = {
   ...base,
@@ -36,6 +45,8 @@ const DOC = {
   suggest_by: "rule",
   reason: "빠진 기재·증빙을 채워 다시 청구할 수 있습니다",
   fill_item: "내역설명 기재",
+  standard: DOC_STANDARD,
+  chart_quotes: [DOC_QUOTE],
 };
 const DX = {
   ...base,
@@ -373,6 +384,75 @@ test("보완 후 재청구 추천은 채울 항목", async ({ page }) => {
   await expect(detail).toContainText("채울 항목: 내역설명 기재");
   await expect(detail).toContainText("청구 12,340원 → 지급 0원");
   await expect(detail).toContainText("전액 불능");
+});
+
+test("펼친 곳 — 기준 조항 카드와 서류 사유 차트 문장(AI)", async ({ page }) => {
+  await fakeClaims(page, () => sheet(ALL));
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "김하나" }).click();
+  const detail = page.getByRole("region", { name: "김하나 청구 상세" });
+  await expect(detail).toContainText("공통 분야 청구 기준 › 내역설명 기재");
+  await expect(detail).toContainText("근거는 간결하게 적는다");
+  await expect(detail).toContainText("차트에서 옮겨 적을 문장(AI)");
+  await expect(detail).toContainText(`“${DOC_QUOTE}”`);
+});
+
+test("서류 사유 빈 답은 '없음', 결과 없는 행은 아무 줄도", async ({ page }) => {
+  await fakeClaims(page, () =>
+    sheet([
+      { ...DOC, chart_quotes: [] },
+      { ...DX, claim_id: 15, chart_quotes: null },
+    ]),
+  );
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "김하나" }).click();
+  const doc = page.getByRole("region", { name: "김하나 청구 상세" });
+  await expect(doc).toContainText("차트에 옮겨 적을 문장 없음");
+  await bodyRows(page).filter({ hasText: "박세나" }).click();
+  const dx = page.getByRole("region", { name: "박세나 청구 상세" });
+  await expect(dx).not.toContainText("옮겨 적을");
+});
+
+test("청구 기준 찾기 — 찾은 조항, 닫기, 색인 없음", async ({ page }) => {
+  await fakeClaims(page, () => sheet(ALL));
+  let status = 200;
+  await page.route("**/api/claims/standards?**", (r) =>
+    status === 200
+      ? r.fulfill({
+          json: {
+            results: [
+              {
+                chunk_id: "doc:2:1",
+                doc_title: "치주 분야 청구 기준",
+                heading: "치석제거 뒤 치주치료 연결",
+                text: "- 치석제거를 시행한 날부터 90일 이내에 이어서 치주치료를 하면 재평가 소견을 적는다.",
+              },
+            ],
+          },
+        })
+      : r.fulfill({
+          status: 503,
+          json: {
+            detail:
+              "검색 색인이 없습니다 — make index EMBEDDING=voyage-4을 먼저 실행하세요",
+          },
+        }),
+  );
+  await page.goto("/claims");
+  const box = page.getByRole("searchbox", { name: "청구 기준 찾기" });
+  await box.fill("치석제거 다음 달로 넘어가면 왜 깎여?");
+  await box.press("Enter");
+  const found = page.getByRole("region", { name: "찾은 조항" });
+  await expect(found).toContainText(
+    "치주 분야 청구 기준 › 치석제거 뒤 치주치료 연결",
+  );
+  await expect(found).toContainText("90일 이내");
+  await expect(bodyRows(page)).toHaveCount(3); // 목록은 그대로
+  await found.getByRole("button", { name: "닫기" }).click();
+  await expect(found).toHaveCount(0);
+  status = 503;
+  await box.press("Enter");
+  await expect(page.getByText("검색 색인이 없습니다")).toBeVisible();
 });
 
 test("청구 전 점검 — 경고 칩 기본, 과거 이력 문구", async ({ page }) => {
