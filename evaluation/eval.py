@@ -356,7 +356,7 @@ def run(
         part = _claim_basis(conn, app, condition)
         if part:
             result["claim_basis"] = part
-    if dev and claim_appeal.RUNS.exists():
+    if dev and claim_appeal.RUNS.exists() and _has_table_rows(conn, "truth_claim_errors", "truth"):
         # ⑤-4 재심 사유서(설계 §4) — 과금 없음(기록은 make claim-appeal-dev). test는 python -m evaluation.claim_appeal run --split test(사람)
         result["claim_appeal"] = claim_appeal.score(
             claim_appeal.targets(conn, "dev"), claim_appeal._read(claim_appeal.RUNS)
