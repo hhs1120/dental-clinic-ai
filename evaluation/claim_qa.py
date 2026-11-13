@@ -12,8 +12,12 @@ import json
 import re
 from pathlib import Path
 
+from backend.claim_search import TOP_K
 from generator.doc_catalog import CLAIM_HEADINGS
 from generator.master import ADJUST_REASONS
+from generator.verify.rag_qa import (
+    QA_COPY_RUN as COPY_WORDS,
+)  # 베끼기 연속 어절 수(평가 설계 §3.1)
 from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +27,6 @@ LLM_LOG = ROOT / "evaluation" / "claim_qa_llm.jsonl"  # ax_llm_calls에 쓰지 �
 DRAFT_ALIAS, DRAFT_TASK = "gen", "claim-qa-draft"
 DRAFT_PROMPT = ROOT / "prompts" / "gen_claim_qa.md"
 PER_REASON, DRAFT_ATTEMPTS = 2, 3
-COPY_WORDS = 4  # 베끼기 — 정답 절 본문과 연속 어절 수(평가 설계 §3.1)
 DRAFT_SCHEMA = {
     "type": "object",
     "properties": {"questions": {"type": "array", "items": {"type": "string"}}},
@@ -145,8 +148,6 @@ def draft(gw, path: Path = DRAFTS, *, reasons: list[dict], per_reason: int = PER
 
 # ── 채점 ──────────────────────────────────────────────────────────
 
-TOP_K = 5  # 화면 결과 수와 같다(backend/claim_search.py TOP_K)
-
 
 def _candidates(conn) -> int:
     """검색 후보 = 색인의 청구 기준 절 청크 수(머리말 청크 빼고) — 후보가 적어 Hit@5가 쉬운 편이라 함께 보고"""
@@ -196,6 +197,8 @@ def decide(drafts: list[dict], decisions: list[dict], reasons: list[dict]) -> li
         if d["id"] not in chosen:
             continue
         question = chosen[d["id"]]["question"].strip()
+        if not question:  # 문장을 다 지운 승인 — 빈 질의로 검색하지 않게 뺀다
+            continue
         reason = by_reason[d["reason"]]
         out.append(
             {
@@ -279,7 +282,7 @@ def review(port: int = 0) -> None:
     out = output_paths()["claim_qa"]
     server = make_server(DRAFTS, out, reasons(_source()), port)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"검토 페이지 {url} — 저장하면 {out}, 끝나면 Ctrl+C 뒤 make data")
+    print(f"검토 페이지 {url} — 저장하면 {out}, 끝나면 Ctrl+C 뒤 make data", flush=True)
     webbrowser.open(url)
     try:
         server.serve_forever()

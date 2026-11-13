@@ -212,3 +212,9 @@ def test_render():
         )
     )
     assert "⑤-3" in text and "Hit@5" in text and "11" in text
+
+
+def test_decide_drops_empty_question():
+    """문장을 다 지우고 승인하면 정답에 넣지 않는다 — 빈 질의로 검색하지 않게"""
+    rows = cq.decide(DRAFT, [{"id": "cq-R02-1", "status": "edited", "question": "  "}], [R02])
+    assert rows == []

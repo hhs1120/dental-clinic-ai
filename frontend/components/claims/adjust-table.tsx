@@ -371,8 +371,8 @@ function ChartQuotes({ quotes }: { quotes: string[] }) {
   return (
     <div className="rounded-lg border border-status-warn-border bg-status-warn-bg p-2.5 text-sm text-status-warn-fg">
       <p className="text-xs font-bold">차트에서 옮겨 적을 문장(AI)</p>
-      {quotes.map((q) => (
-        <p key={q}>“{q}”</p>
+      {quotes.map((q, i) => (
+        <p key={`${i}-${q}`}>“{q}”</p>
       ))}
     </div>
   );

@@ -187,6 +187,8 @@ def results(conn: sqlite3.Connection, claim_ids: list[int] | None = None) -> dic
     out = {}
     claims = {r[0]: r[1] for r in conn.execute("SELECT id, procedure_code FROM source.emr_claims")}
     for cid, r in claim_store.saved(conn, KIND, claim_ids).items():
+        if cid not in claims:  # 청구가 없어진 옛 행(재설계 뒤) — 건너뛴다
+            continue
         got = json.loads(r["result"]) if r["result"] else None
         out[cid] = {
             "omissions": None

@@ -60,15 +60,22 @@ MIN_QUOTE = (
 _EDGE = "\"'“”‘’「」『』.,·…:;!? "  # 인용 앞뒤에 붙기 쉬운 따옴표·문장부호
 
 
-def sections(conn: sqlite3.Connection) -> dict[str, str]:
-    """청구 기준 문서(ax_documents claim_standard)의 절 소제목 → 본문"""
+def section_cards(conn: sqlite3.Connection) -> dict[str, dict]:
+    """청구 기준 문서(ax_documents claim_standard)의 절 제목 → {doc_title, heading, body} — 머리말은 절이 아니라 뺀다.
+    ⑤-3 조항 카드(backend/claims.py)도 쓴다(설계 §3)"""
     out = {}
     for d in conn.execute(
         "SELECT title, body FROM source.ax_documents WHERE type = 'claim_standard' ORDER BY id"
     ):
         for heading, body in _sections(d["title"], d["body"]):
-            out[heading] = body.strip()
+            if heading != d["title"]:
+                out[heading] = {"doc_title": d["title"], "heading": heading, "body": body.strip()}
     return out
+
+
+def sections(conn: sqlite3.Connection) -> dict[str, str]:
+    """청구 기준 절 제목 → 본문"""
+    return {h: c["body"] for h, c in section_cards(conn).items()}
 
 
 def claim_facts(row: dict, mv: dict, secs: dict[str, str]) -> dict:

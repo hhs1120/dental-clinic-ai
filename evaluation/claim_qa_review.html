@@ -59,7 +59,17 @@ function render(item) {
   const text = box.querySelector("textarea");
   const warn = box.querySelector(".warn");
   text.value = item.saved ?? item.question;
-  const s = (state[item.id] = { id: item.id, status: item.saved ? "approved" : null, question: text.value });
+  const edited = item.saved != null && item.saved !== item.question;
+  const s = (state[item.id] = {
+    id: item.id,
+    status: item.saved == null ? null : edited ? "edited" : "approved",
+    question: text.value,
+  });
+  const check = () =>
+    post("/check", { reason: item.reason, question: s.question }).then((r) => {
+      warn.hidden = !r.warnings.length;
+      warn.textContent = "베끼기 경고: " + r.warnings.join(", ");
+    });
   const paint = () => {
     box.classList.toggle("approved", s.status === "approved" || s.status === "edited");
     box.classList.toggle("dropped", s.status === "dropped");
@@ -69,10 +79,7 @@ function render(item) {
   text.addEventListener("change", () => {
     s.question = text.value.trim();
     if (s.question !== item.question && s.status !== "dropped") s.status = "edited";
-    post("/check", { reason: item.reason, question: s.question }).then((r) => {
-      warn.hidden = !r.warnings.length;
-      warn.textContent = "베끼기 경고: " + r.warnings.join(", ");
-    });
+    check();
     paint();
   });
   for (const b of box.querySelectorAll("button"))
@@ -80,6 +87,7 @@ function render(item) {
       s.status = b.dataset.s === "approved" && s.question !== item.question ? "edited" : b.dataset.s;
       paint();
     });
+  if (edited) check(); // 다시 열 때 고친 문장의 경고를 다시 보인다
   paint();
   list.appendChild(box);
 }
