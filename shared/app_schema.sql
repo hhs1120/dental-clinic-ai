@@ -325,6 +325,23 @@ CREATE TABLE ax_claim_evidence (
     created_at     TEXT NOT NULL
 );
 
+-- ⑤-4 재심 사유서 초안(backend/claim_appeal.py) — 재심 신청을 기록한 청구 하나에 한 행. 앞 칸은 ax_claim_omissions와
+-- 같다(result = {sentences[{text,basis,quote,assumption}], assumptions[]}), 검토 확인·제출 결정은 파트·실제 시각(기록만)
+CREATE TABLE ax_claim_appeals (
+    claim_id       INTEGER PRIMARY KEY,
+    facts          TEXT NOT NULL,
+    facts_hash     TEXT NOT NULL,
+    result         TEXT,
+    valid          INTEGER NOT NULL DEFAULT 0,
+    prompt_version TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    reviewed_by    TEXT,
+    reviewed_at    TEXT,
+    submitted_by   TEXT,
+    submitted_at   TEXT
+);
+
 -- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜)·⑤-2 AI 점검(kind 'claim_check'). 화면이 GET /jobs/{id}로 폴링
 CREATE TABLE ax_jobs (
     id          INTEGER PRIMARY KEY,

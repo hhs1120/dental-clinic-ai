@@ -8,7 +8,7 @@ master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(
 import sqlite3
 from datetime import date, timedelta
 
-from backend import claim_check, claim_evidence, claim_omission
+from backend import claim_appeal, claim_check, claim_evidence, claim_omission
 from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
@@ -62,6 +62,7 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     ai = claim_check.results(conn)
     cards = claim_check.section_cards(conn)
     quotes = claim_evidence.results(conn)
+    drafts = claim_appeal.appeals(conn)
     for r in conn.execute(
         "SELECT c.id, c.chart_no, p.name, c.service_date, c.tooth_no, pr.name AS procedure_name,"
         " c.status, c.claim_amount, COALESCE(c.paid_amount, 0) AS paid_amount, c.adjust_note,"
@@ -109,6 +110,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
                 "chart_quotes": (quotes.get(r["id"]) or {}).get("quotes")
                 if type_ == "documentation"
                 else None,
+                # ⑤-4 재심 사유서 초안 — 판단과 무관하게 내리고 화면이 재심 신청일 때만 보인다(설계 §4)
+                "appeal": drafts.get(r["id"]),
                 "judgment": (
                     {"value": r["judgment"], "by": r["judged_by"], "at": r["judged_at"]}
                     if r["judgment"]
@@ -260,6 +263,11 @@ def record_judgment(
         raise ValueError(f"재심 신청 기한 지남: {claim_id}")
     if mv["adjust_note_types"][c["adjust_note"]] == "diagnosis" and judgment != "justified":
         raise ValueError("상병 착오는 재청구할 수 없어 삭감 수용만 기록한다")
+    if conn.execute(
+        "SELECT 1 FROM ax_claim_appeals WHERE claim_id = ? AND submitted_by IS NOT NULL",
+        (claim_id,),
+    ).fetchone():
+        raise ValueError("재심 사유서를 제출 결정한 건은 판단을 바꿀 수 없습니다")
     conn.execute(
         "INSERT INTO ax_claim_judgments (claim_id, judgment, judged_by, judged_at)"
         " VALUES (?, ?, ?, ?) ON CONFLICT(claim_id) DO UPDATE SET"

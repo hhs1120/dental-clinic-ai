@@ -76,8 +76,8 @@ def save(conn, kind: Kind, claim_id: int, facts: dict, h: str, result, model: st
         )
 
 
-def plan(conn, kind: Kind, rows: list[dict], model: str):
-    """(부를 줄, 건너뛸 수, 서술 없는 줄) — 줄은 (claim_id, facts, hash)"""
+def plan(conn, kind: Kind, rows: list[dict], model: str, force: bool = False):
+    """(부를 줄, 건너뛸 수, 서술 없는 줄) — 줄은 (claim_id, facts, hash). force면 저장된 결과를 재사용하지 않는다"""
     old_rows = {
         r["claim_id"]: r
         for r in conn.execute(
@@ -92,7 +92,8 @@ def plan(conn, kind: Kind, rows: list[dict], model: str):
         if not facts[kind.text_key].strip():
             empty.append((row["claim_id"], facts, h))
         elif (
-            old
+            not force
+            and old
             and old["valid"]
             and (old["facts_hash"], old["prompt_version"], old["model"])
             == (h, kind.version, model)
@@ -109,12 +110,19 @@ def todo_ids(conn, kind: Kind, rows: list[dict], model: str) -> set[int]:
 
 
 def build(
-    conn, gw, kind: Kind, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30
+    conn,
+    gw,
+    kind: Kind,
+    rows: list[dict],
+    *,
+    use_batch: bool,
+    poll_seconds: int = 30,
+    force: bool = False,
 ) -> dict:
     """줄마다 묻고 저장한다. 일반 호출은 차례로 — 게이트웨이 기록이 앱 연결 하나에 쓴다"""
     model = gw.config["aliases"][kind.alias][0]
     schema = kind.schema(conn)
-    todo, skipped, empty = plan(conn, kind, rows, model)
+    todo, skipped, empty = plan(conn, kind, rows, model, force)
     for cid, facts, h in empty:
         save(conn, kind, cid, facts, h, kind.empty, model)
     out = {"rows": len(rows), "called": 0, "skipped": skipped, "failed": 0, "empty": len(empty)}
