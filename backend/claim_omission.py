@@ -7,14 +7,12 @@ import argparse
 import json
 import re
 import sqlite3
-import sys
-import time
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
-from backend import db, prompts
-from backend.claim_check import _hash, found
-from backend.prep import _age, _batchable, master_values
+from backend import claim_store, db
+from backend.claim_check import found
+from backend.prep import _age, master_values
 from shared.llm import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,125 +146,37 @@ def _names(conn) -> list[str]:
     return [r[0] for r in conn.execute("SELECT name FROM source.emr_procedures ORDER BY code")]
 
 
+KIND = claim_store.Kind(
+    table="ax_claim_omissions",
+    task=TASK,
+    alias=ALIAS,
+    version=PROMPT_VERSION,
+    facts=omission_facts,
+    schema=lambda conn: schema(_names(conn)),
+    check=check_result,
+    empty={"omissions": []},
+)
+
+
 def _request(facts: dict, names: list[str]) -> dict:
-    return {
-        "system": prompts.load(TASK, PROMPT_VERSION)["system"],
-        "messages": [
-            {"role": "user", "content": "청구 줄:\n" + json.dumps(facts, ensure_ascii=False)}
-        ],
-        "schema": schema(names),
-    }
+    """평가 합성 사례가 앱과 같은 요청을 쓴다(evaluation/claim_omission.py)"""
+    return claim_store.request(KIND, facts, schema(names))
 
 
 def _valid(result, facts: dict):
     """통과한 결과 dict, 아니면 None"""
-    if result is None or not result.ok or not isinstance(result.data, dict):
-        return None
-    try:
-        return result.data if check_result(facts, result.data) else None
-    except (KeyError, TypeError, AttributeError):  # 칸이 빠진 답 — 그 줄만 실패
-        return None
-
-
-def _save(conn, claim_id: int, facts: dict, h: str, result, model: str) -> None:
-    with conn:  # 줄마다 커밋 — 다시 부르는 동안 쓰기 잠금을 쥐지 않는다
-        conn.execute(
-            "INSERT INTO ax_claim_omissions (claim_id, facts, facts_hash, result, valid,"
-            " prompt_version, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            " ON CONFLICT (claim_id) DO UPDATE SET facts = excluded.facts,"
-            " facts_hash = excluded.facts_hash, result = excluded.result, valid = excluded.valid,"
-            " prompt_version = excluded.prompt_version, model = excluded.model,"
-            " created_at = excluded.created_at",
-            (
-                claim_id,
-                json.dumps(facts, ensure_ascii=False),
-                h,
-                None if result is None else json.dumps(result, ensure_ascii=False),
-                int(result is not None),
-                PROMPT_VERSION,
-                model,
-                datetime.now().isoformat(timespec="seconds"),
-            ),
-        )
-
-
-def _plan(conn, rows: list[dict], model: str):
-    """(부를 줄, 건너뛸 수, 서술 없는 줄) — 줄은 (claim_id, facts, hash). 다시 쓰는 규칙은 2a _reusable과 같다"""
-    saved = {
-        r["claim_id"]: r
-        for r in conn.execute(
-            "SELECT claim_id, facts_hash, prompt_version, model, valid FROM ax_claim_omissions"
-        )
-    }
-    todo, skipped, empty = [], 0, []
-    for row in rows:
-        facts = omission_facts(row)
-        h = _hash(facts)
-        old = saved.get(row["claim_id"])
-        if not facts["note"].strip():
-            empty.append((row["claim_id"], facts, h))
-        elif (
-            old
-            and old["valid"]
-            and (old["facts_hash"], old["prompt_version"], old["model"])
-            == (h, PROMPT_VERSION, model)
-        ):
-            skipped += 1
-        else:
-            todo.append((row["claim_id"], facts, h))
-    return todo, skipped, empty
+    return claim_store.valid(KIND, result, facts)
 
 
 def todo_ids(conn: sqlite3.Connection, today: date, model: str | None = None) -> set[int]:
     """앱 범위에서 다시 불러야 할 줄(서술 없는 줄 제외) — 화면 갱신 버튼이 2a 할 일과 합쳐 센다"""
     model = model or load_config()["aliases"][ALIAS][0]
-    return {cid for cid, _, _ in _plan(conn, targets(conn, today, scope="app"), model)[0]}
+    return claim_store.todo_ids(conn, KIND, targets(conn, today, scope="app"), model)
 
 
 def build(conn, gw, rows: list[dict], *, use_batch: bool, poll_seconds: int = 30) -> dict:
-    """줄마다 묻고 저장한다(2a backend/claim_check.py build와 같은 흐름). 서술 없는 줄은 부르지 않고 빈 목록으로, 해시·
-    버전·모델이 같고 통과한 줄은 건너뛴다. 후검증 실패·Batch에서 빠진 줄만 일반 호출로 한 번 더, 또 실패면 결과 NULL"""
-    model = gw.config["aliases"][ALIAS][0]
-    names = _names(conn)
-    todo, skipped, empty = _plan(conn, rows, model)
-    for cid, facts, h in empty:
-        _save(conn, cid, facts, h, {"omissions": []}, model)
-    out = {"rows": len(rows), "called": 0, "skipped": skipped, "failed": 0, "empty": len(empty)}
-    first = {}
-    if todo and use_batch and _batchable(gw):
-        bid = gw.submit_batch(
-            ALIAS,
-            [{"custom_id": str(cid), **_request(facts, names)} for cid, facts, _ in todo],
-            task=TASK,
-            prompt_version=PROMPT_VERSION,
-        )
-        # 기다리다 끊기면 이 id로 결과를 받아 온다 — 다시 제출하면 비용이 두 번
-        print(f"batch {bid} ({len(todo)}줄)", file=sys.stderr, flush=True)
-        while gw.batch_status(bid) != "ended":
-            time.sleep(poll_seconds)
-        first = gw.batch_results(
-            bid, ALIAS, task=TASK, prompt_version=PROMPT_VERSION, schema=schema(names)
-        )
-
-    def plain(cid, facts):
-        return gw.complete(
-            ALIAS,
-            task=TASK,
-            prompt_version=PROMPT_VERSION,
-            ref=("claim", cid),
-            **_request(facts, names),
-        )
-
-    for cid, facts, h in todo:
-        out["called"] += 1
-        used = first.get(str(cid)) or plain(cid, facts)
-        got = _valid(used, facts)
-        if got is None:
-            used = plain(cid, facts)
-            got = _valid(used, facts)
-        out["failed"] += got is None
-        _save(conn, cid, facts, h, got, used.model if used else model)  # 실제로 답한 모델
-    return out
+    """줄마다 묻고 저장한다(backend/claim_store.py build). 서술 없는 줄은 부르지 않고 빈 목록으로"""
+    return claim_store.build(conn, gw, KIND, rows, use_batch=use_batch, poll_seconds=poll_seconds)
 
 
 def results(conn: sqlite3.Connection, claim_ids: list[int] | None = None) -> dict[int, dict]:
@@ -274,20 +184,15 @@ def results(conn: sqlite3.Connection, claim_ids: list[int] | None = None) -> dic
     claim_ids가 없으면 저장된 줄 전부"""
     index = procedure_index([dict(r) for r in conn.execute("SELECT * FROM source.emr_procedures")])
     age_range = master_values(conn)["age_group_range"]
-    sql = (
-        "SELECT o.claim_id, o.facts, o.result, o.created_at, o.prompt_version, c.procedure_code"
-        " FROM ax_claim_omissions o JOIN source.emr_claims c ON c.id = o.claim_id"
-    )
-    if claim_ids is not None:
-        sql += f" WHERE o.claim_id IN ({', '.join('?' * len(claim_ids))})"
     out = {}
-    for r in conn.execute(sql, claim_ids or []):
+    claims = {r[0]: r[1] for r in conn.execute("SELECT id, procedure_code FROM source.emr_claims")}
+    for cid, r in claim_store.saved(conn, KIND, claim_ids).items():
         got = json.loads(r["result"]) if r["result"] else None
-        out[r["claim_id"]] = {
+        out[cid] = {
             "omissions": None
             if got is None
             else insured_items(
-                got["omissions"], r["procedure_code"], json.loads(r["facts"]), index, age_range
+                got["omissions"], claims[cid], json.loads(r["facts"]), index, age_range
             ),
             "valid": got is not None,
             "at": r["created_at"],
