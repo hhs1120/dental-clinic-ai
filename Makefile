@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -98,6 +98,12 @@ claim-omission:
 # ⑤-3 서류 사유 조정 건의 차트 문장(설계 §3, 과금·이어 돎) — SCOPE=all이면 서류 사유 전부(평가), 기본은 기한 남은 건(화면)
 claim-evidence:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.claim_evidence run $(if $(SCOPE),--scope $(SCOPE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑤-3 청구 기준 질문 초안(과금, 이어 돎) → 검토 페이지(사람, 승인 JSON) → make data(설계 §3)
+claim-qa-draft:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_qa draft
+claim-qa-review:
+	uv run python -m evaluation.claim_qa review
 
 # ⑤-2b 평가 전용 합성 사례 — 코드가 정한 명세로 LLM이 차트 문장만(과금, 이어 돎, 설계 §2b)
 claim-omission-cases:

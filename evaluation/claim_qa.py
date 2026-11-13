@@ -3,7 +3,8 @@
 절 제목·사유 코드·사유 문구)가 없는 것만 사람 검토에 올린다. 검토는 evaluation/ 안의 로컬 페이지(review) — 승인 JSON은
 ground_truth/claim_qa.json, make data가 truth_claim_qa에 적재한다. dev/test는 사유 단위(사유 키 정렬 순서로 번갈아).
 정답이 붙은 입력이라 초안·호출 기록은 evaluation/ 파일에만 쓴다(app.sqlite에 쓰지 않는다).
-uv run --env-file .env python -m evaluation.claim_qa draft   (과금, 이어 돎 — make claim-qa-draft)"""
+uv run --env-file .env python -m evaluation.claim_qa draft   (과금, 이어 돎 — make claim-qa-draft)
+uv run python -m evaluation.claim_qa review                  (사람 — make claim-qa-review, 끝나면 make data)"""
 
 import argparse
 import json
@@ -16,6 +17,7 @@ from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 DRAFTS = ROOT / "evaluation" / "claim_qa_drafts.jsonl"
+REVIEW_PAGE = ROOT / "evaluation" / "claim_qa_review.html"
 LLM_LOG = ROOT / "evaluation" / "claim_qa_llm.jsonl"  # ax_llm_calls에 쓰지 않는다
 DRAFT_ALIAS, DRAFT_TASK = "gen", "claim-qa-draft"
 DRAFT_PROMPT = ROOT / "prompts" / "gen_claim_qa.md"
@@ -140,6 +142,110 @@ def draft(gw, path: Path = DRAFTS, *, reasons: list[dict], per_reason: int = PER
     return out
 
 
+# ── 검토(로컬 페이지 — 앱과 따로, 정답이 앱으로 새지 않게) ─────────────────────
+
+
+def decide(drafts: list[dict], decisions: list[dict], reasons: list[dict]) -> list[dict]:
+    """검토 결정 → 정답 JSON 행. approved·edited만 남기고, 고친 문장은 베끼기 검사를 다시 돌려 warnings에 적는다
+    (막지 않고 사람이 정한다 — 평가 설계 §3.1). 순서는 초안 순서"""
+    by_reason = {r["reason"]: r for r in reasons}
+    chosen = {d["id"]: d for d in decisions if d["status"] in ("approved", "edited")}
+    out = []
+    for d in drafts:
+        if d["id"] not in chosen:
+            continue
+        question = chosen[d["id"]]["question"].strip()
+        reason = by_reason[d["reason"]]
+        out.append(
+            {
+                "id": d["id"],
+                "reason": d["reason"],
+                "question": question,
+                "answer_heading": reason["heading"],
+                "warnings": copy_warnings(question, reason),
+                "split": split_of(d["reason"]),
+            }
+        )
+    return out
+
+
+def make_server(drafts_path: Path, out_path: Path, reasons: list[dict], port: int = 0):
+    """127.0.0.1에 검토 페이지 — GET / (HTML), GET /drafts(초안 + 사유·절·본문, 저장한 결정이 있으면 그 문장),
+    POST /check {reason, question} → 경고, POST /save {decisions} → out_path에 쓰고 요약"""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    by_reason = {r["reason"]: r for r in reasons}
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, body: bytes, kind: str = "application/json; charset=utf-8"):
+            self.send_response(200)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _json(self, data):
+            self._send(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+        def log_message(self, *args):  # 터미널을 조용히
+            pass
+
+        def do_GET(self):
+            if self.path == "/":
+                return self._send(REVIEW_PAGE.read_bytes(), "text/html; charset=utf-8")
+            if self.path == "/drafts":
+                saved = {}
+                if out_path.exists():
+                    saved = {r["id"]: r for r in json.loads(out_path.read_text(encoding="utf-8"))}
+                items = []
+                for d in _read(drafts_path):
+                    r = by_reason[d["reason"]]
+                    items.append(
+                        d
+                        | {k: r[k] for k in ("heading", "note", "body")}
+                        | {
+                            "saved": saved.get(d["id"], {}).get("question"),
+                            "split": split_of(d["reason"]),
+                        }
+                    )
+                return self._json({"items": items})
+            self.send_error(404)
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
+            if self.path == "/check":
+                return self._json(
+                    {"warnings": copy_warnings(body["question"], by_reason[body["reason"]])}
+                )
+            if self.path == "/save":
+                rows = decide(_read(drafts_path), body["decisions"], reasons)
+                out_path.write_text(
+                    json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
+                )
+                return self._json(
+                    {"saved": len(rows), "warned": sum(bool(r["warnings"]) for r in rows)}
+                )
+            self.send_error(404)
+
+    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+
+
+def review(port: int = 0) -> None:
+    import webbrowser
+
+    from generator.paths import output_paths
+
+    out = output_paths()["claim_qa"]
+    server = make_server(DRAFTS, out, reasons(_source()), port)
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    print(f"검토 페이지 {url} — 저장하면 {out}, 끝나면 Ctrl+C 뒤 make data")
+    webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
 def _source():
     import sqlite3
 
@@ -153,10 +259,13 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m evaluation.claim_qa")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("draft", help="질문 초안(과금, 이어 돎)")
+    sub.add_parser("review", help="검토 페이지(사람) — 승인 JSON을 쓴다")
     args = p.parse_args(argv)
     if args.command == "draft":
         gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
         print(draft(gw, reasons=reasons(_source())))
+    elif args.command == "review":
+        review()
 
 
 if __name__ == "__main__":

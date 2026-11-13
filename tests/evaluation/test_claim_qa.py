@@ -64,3 +64,83 @@ def test_draft_gives_up_short(tmp_path):
     bad = ["치석제거 뒤 치주치료 연결이 뭐야?"]
     out = cq.draft(FakeGw(bad, bad, bad), tmp_path / "d.jsonl", reasons=[R02])
     assert out["short"] == ["R02"] and out["written"] == 0
+
+
+# ── 검토(로컬 페이지) ─────────────────────────────────────────────
+
+DRAFT = [
+    {"id": "cq-R02-1", "reason": "R02", "question": "치석제거 다음 달로 넘어가면 왜 깎여?"},
+    {"id": "cq-R02-2", "reason": "R02", "question": "스케일링하고 한참 뒤 잇몸치료 하면 문제야?"},
+]
+
+
+def test_decide_edit_rechecks():
+    """고친 문장은 베끼기 검사를 다시 — 경고가 있어도 행은 남고 warnings에 적힌다(막지 않음)"""
+    rows = cq.decide(
+        DRAFT,
+        [
+            {"id": "cq-R02-1", "status": "approved", "question": DRAFT[0]["question"]},
+            {
+                "id": "cq-R02-2",
+                "status": "edited",
+                "question": "치석제거 뒤 치주치료 연결이 뭐야?",
+            },
+        ],
+        [R02],
+    )
+    assert [r["id"] for r in rows] == ["cq-R02-1", "cq-R02-2"]
+    assert rows[0] | {} == {
+        "id": "cq-R02-1",
+        "reason": "R02",
+        "question": DRAFT[0]["question"],
+        "answer_heading": CLAIM_HEADINGS["R02"],
+        "warnings": [],
+        "split": cq.split_of("R02"),
+    }
+    assert rows[1]["warnings"] and rows[1]["question"] == "치석제거 뒤 치주치료 연결이 뭐야?"
+
+
+def test_decide_drops():
+    rows = cq.decide(
+        DRAFT,
+        [
+            {"id": "cq-R02-1", "status": "dropped", "question": DRAFT[0]["question"]},
+            {"id": "cq-R02-2", "status": "approved", "question": DRAFT[1]["question"]},
+        ],
+        [R02],
+    )
+    assert [r["id"] for r in rows] == ["cq-R02-2"]
+
+
+def test_review_server_roundtrip(tmp_path):
+    import threading
+    import urllib.request
+
+    drafts, out = tmp_path / "drafts.jsonl", tmp_path / "claim_qa.json"
+    drafts.write_text("".join(json.dumps(d, ensure_ascii=False) + "\n" for d in DRAFT), "utf-8")
+    server = cq.make_server(drafts, out, [R02], port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        page = urllib.request.urlopen(base + "/").read().decode("utf-8")
+        assert "청구 기준 질문 검토" in page
+        items = json.loads(urllib.request.urlopen(base + "/drafts").read())["items"]
+        assert [i["id"] for i in items] == ["cq-R02-1", "cq-R02-2"]
+        assert items[0]["heading"] == CLAIM_HEADINGS["R02"] and items[0]["body"]
+
+        def post(path, body):
+            req = urllib.request.Request(
+                base + path,
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            return json.loads(urllib.request.urlopen(req).read())
+
+        assert post("/check", {"reason": "R02", "question": "R02가 뭐야?"})["warnings"]
+        decisions = [
+            {"id": d["id"], "status": "approved", "question": d["question"]} for d in DRAFT
+        ]
+        assert post("/save", {"decisions": decisions})["saved"] == 2
+        assert [r["id"] for r in json.loads(out.read_text("utf-8"))] == ["cq-R02-1", "cq-R02-2"]
+    finally:
+        server.shutdown()
