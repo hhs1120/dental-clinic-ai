@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -86,6 +86,10 @@ followup-eval:
 # ④ 진료 준비표(backend/prep.py) — 기준일 포함 최근 8일(과금), Batch(NO_BATCH=1이면 일반 호출). 사실·버전·모델이 같고 통과한 행은 건너뜀
 prep:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.prep run $(if $(DATE),--date $(DATE)) $(if $(NO_BATCH),--no-batch)
+
+# ⑥ 경영 리포트 해석(backend/report.py) — 화면 기간 전부(과금), Batch(NO_BATCH=1이면 일반 호출). 숫자·버전·모델이 같고 통과한 기간은 건너뜀
+report:
+	uv run $(if $(wildcard .env),--env-file .env) python -m backend.report run $(if $(NO_BATCH),--no-batch)
 
 # ⑤-2 청구 AI 점검(기능 정의 §5 ⑤, 과금·이어 돎) — SCOPE=all이면 전 기간(평가), 기본은 화면 범위
 claim-check:

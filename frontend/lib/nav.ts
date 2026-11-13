@@ -15,23 +15,3 @@ export const SPACES: Record<string, string> = {
   eval: "AI 평가",
   emr: "전환 전 EMR",
 };
-
-const BUILT = [
-  "/today",
-  "/schedule",
-  "/calls",
-  "/prep",
-  "/missed",
-  "/claims",
-  "/finance",
-];
-
-/** 아직 화면이 없는 라우트 조각 → 화면 이름 (/emr은 화면이 있다) */
-export const COMING_SOON: Record<string, string> = {
-  ...Object.fromEntries(
-    MENU.filter((m) => !BUILT.includes(m.href)).map((m) => [
-      m.href.slice(1),
-      m.label,
-    ]),
-  ),
-};
