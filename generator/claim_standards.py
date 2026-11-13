@@ -20,9 +20,8 @@ _CLAIM_RULES = "청구방법 2016"  # 「요양급여비용 청구방법, 심사
 
 @dataclass(frozen=True)
 class Real:
-    quote: tuple[
-        str, ...
-    ]  # 원문 한 줄(문단) = 원소 하나 = '> ' 한 줄, 원소 사이는 빈 '>' 줄(목록 번호가 원문대로 보이게)
+    # 원문 한 줄(문단) = 원소 하나 = '> ' 한 줄, 원소 사이는 빈 '>' 줄(목록 번호가 원문대로 보이게)
+    quote: tuple[str, ...]
     source: str
     supplement: str | None  # 병원 내부 보충 — 데이터 사유가 기대지만 원문에 없는 말
     words: tuple[str, ...]  # 절 안에 꼭 있어야 할 말(verify check_claim_sections)

@@ -72,3 +72,8 @@ def test_found_quote_across_quote_lines():
     """두 인용 줄에 걸친 원문 인용도 후검증을 통과한다(인용 표시 '>'는 내용이 아님)"""
     assert found("1. 급여대상 가. 부분 무치악 환자에 대하여", section_body("R06"))
     assert found("일치하여야 한다. ○ 요양급여비용 명세서에", section_body("C01"))
+
+
+def test_found_quote_with_folded_quote_marker():
+    """모델이 여러 인용 줄을 한 줄로 접어 줄 중간에 남긴 단독 '>'도 표시로 본다"""
+    assert found("요양급여를 인정함. > 다만, 탈락 또는 파절 등으로", section_body("R04"))

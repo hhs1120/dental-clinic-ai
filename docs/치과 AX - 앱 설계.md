@@ -38,7 +38,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 2. LLM 로그
 
-**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`과 `batch`(배치 결과 — `ref_id`는 배치 요청 id, 하루 상한에 세지 않는다)만 쓰고 그 밖(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 사용량은 검색기(요청)마다 모아 챗과 기록 검색이 각각 남긴다. 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
+**`ax_llm_calls`**: 게이트웨이 호출 1건 = 1행. 칸은 `shared/app_schema.sql`, 쓰는 곳은 `backend/harness/store.py` `SqliteLlmLog`. `ref_type/ref_id`는 다형 참조이고 타입별 조인 검사는 [[치과 AX - 가상 데이터 생성 설계]] §5.3 '참조'다. 입력 덤프 칸은 두지 않는다 — 에이전트 실행의 입력·모델 응답·도구 결과는 `ax_agent_steps`에 남고 `ref_type='agent_run'`(`ref_id` = `ax_agent_runs.id`)이 그 실행을 가리킨다. `ref_type`은 `agent_run`, `claim`(⑤ 일반 호출 — `ref_id` = 청구 id), `batch`(배치 결과 — `ref_id`는 배치 안 요청의 `custom_id`, 하루 상한 밖은 [[치과 AX - 기능 정의]] §7)를 쓰고 그 밖의 일반 호출(분류·판정 — 결과 행의 `llm_call_id`가 거꾸로 가리킴, 단순 RAG 기준선)은 비운다. Voyage 검색 호출(질의 임베딩·리랭커)도 1행씩 남겨(`model_alias` `voyage`, `backend/usage.py`, 단가는 `config/llm.yaml`) 하루 상한이 센다 — 사용량은 검색기(요청)마다 모아 챗과 기록 검색이 각각 남긴다. 색인(`make index`) 임베딩은 넣지 않고 실행 끝에 비용만 출력한다. `fallback_used` 건의 집계 제외는 [[치과 AX - 평가 설계]] §1.
 
 ## 3. 검색
 
@@ -164,7 +164,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 ### 7.1 LLM (원본은 여기)
 
 - **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b·9e단계의 API 채우기도 경유). 프로바이더마다 공식 SDK를 직접 쓴다 — Anthropic, Upstage·OpenAI(둘 다 openai SDK — Upstage는 OpenAI 호환 API), 로컬 MLX(파인튜닝 판정기 — `mlx-lm`, `finetune` 그룹이라 `make judge`·`make dev`가 `uv run --group finetune`으로 띄운다. 그룹 없이 띄우면 판정만 실패로 남는다). 모델의 프로바이더는 `config/llm.yaml` 모델 항목의 `provider`. 넷뿐이라 LiteLLM 같은 변환 계층을 두지 않는다
-- **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 일시 오류(재시도 소진)·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch 제출은 보지 않는다 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
+- **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 일시 오류(재시도 소진)·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch는 상한 밖 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
 - **구조화 출력**: JSON 스키마(Anthropic `output_config.format`, Upstage·OpenAI `response_format` `json_schema` strict). 로컬 MLX는 구조화 출력이 없어 출력의 첫 JSON 객체를 읽고, 판정기는 라벨로 맞는 객체를 다시 찾는다(`backend/classify.py` `first_labels`)
 - **로컬 모델(MLX) 보기 강제**: 로컬 생성은 구조화 출력을 강제하지 못해, 결과가 스키마(보기·불)에 맞지 않으면 같은 입력을 다시 생성하지 않고 칸마다 허용 값 중 모델 확률이 가장 높은 것을 고르는 제약 디코딩으로 다시 낸다(`shared/llm.py` `_mlx_constrain`). 맞게 나온 결과는 그대로라 판정기 수치가 바뀌지 않는다. 보기 밖 값은 막지만 보기 중 틀린 값은 막지 못한다
 - **기록**: 호출 1건 = 기록 1행 — 생성기와 골드가 든 `evaluation/` 호출(평가 설계 §2.3·§2.7)은 jsonl, 앱은 `ax_llm_calls`

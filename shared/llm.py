@@ -6,7 +6,7 @@ Anthropic, OpenAI(Chat Completions — 어려운 통화 녹취, 어려운 통화
   잘린 응답(stop_reason이 end_turn 아님, Upstage는 finish_reason이 stop 아님), JSON 파싱 실패는 다른 모델로 가도
   같아 거기서 실패
 - 호출 1건 = 기록 1행(시도한 모델 전부의 토큰·비용 합, 예외가 나도 남김). 생성기는 JsonlLog, 앱은 ax_llm_calls(backend/harness/store.py SqliteLlmLog)
-- 그날 쓴 돈이 범위(generator/runtime)의 상한 이상이면 호출하지 않고 BudgetExceeded. 확인과 호출 사이 시차로
+- 그날 쓴 돈이 범위(generator/runtime)의 상한 이상이면 호출하지 않고 BudgetExceeded(배치 결과 비용은 세지 않음). 확인과 호출 사이 시차로
   동시 호출 수 × 1건 비용만큼 넘을 수 있다(허용)
 - FakeGateway는 같은 인터페이스로 입력 해시에서 결정적 응답 — 테스트·CI·fixture용(과금 없음)
 - 결과의 log_id = 그 호출의 기록 행 id(SqliteLlmLog면 ax_llm_calls.id, JsonlLog면 None)
