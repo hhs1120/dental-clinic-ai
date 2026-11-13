@@ -104,12 +104,17 @@ test("월간 — 숫자 카드·[추정]·AI 해석 점", async ({ page }) => {
     stale: false,
   });
   await page.goto("/report");
-  await expect(page.getByText("65,495,000원")).toBeVisible();
+  await expect(page.getByText("65,495,000원", { exact: true })).toBeVisible();
   await expect(page.getByText("과목 없는 출금 93,300원 제외")).toBeVisible();
   await expect(page.getByText("미확정 3건 포함")).toBeVisible();
   await expect(page.getByTestId("stat-est")).toHaveCount(2);
   await expect(page.getByText(POINTS[0].text)).toBeVisible();
-  await expect(page.getByText("diff.sales 17,995,000")).toBeVisible();
+  // 근거는 접혀 있다가 펼치면 한국어 이름·단위로(코드 키를 보이지 않는다)
+  await expect(page.getByText("매출 증감 +17,995,000원")).toBeHidden();
+  await page.getByRole("button", { name: "근거 보기" }).click();
+  await expect(page.getByText("매출 증감 +17,995,000원")).toBeVisible();
+  await expect(page.getByText("매출 증감률 +38%")).toBeVisible();
+  await expect(page.getByText(/diff\.sales/)).toHaveCount(0);
   await expect(page.getByText("다시 만들기 필요")).toHaveCount(0);
   await expect(page.getByText("임플란트 1차 × 만성 치은염")).toBeVisible();
 });

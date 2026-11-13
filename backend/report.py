@@ -14,7 +14,7 @@ from pathlib import Path
 from backend import db, expense, prompts
 from backend.prep import numbers
 
-ALIAS, TASK, PROMPT_VERSION = "chat", "report", "v1"  # config/llm.yaml "③ 챗·④ 제안" 별칭
+ALIAS, TASK, PROMPT_VERSION = "chat", "report", "v2"  # config/llm.yaml "③ 챗·④ 제안" 별칭
 ROOT = Path(__file__).resolve().parents[1]
 SCOPES = ("monthly", "weekly", "daily")
 COUNTS = {"monthly": 6, "weekly": 8, "daily": 10}  # 화면 기간 수(설계 §1)
@@ -89,13 +89,14 @@ def periods(conn: sqlite3.Connection, today: date, scope: str) -> list[str]:
 
 
 def prev_period(conn: sqlite3.Connection, today: date, scope: str, label: str) -> str | None:
-    """바로 앞 같은 종류 기간 — 월은 앞 달, 주는 7일 전 월요일, 일은 그 전 진료일(없으면 None)"""
+    """비교할 이전 기간 — 월은 앞 달, 주는 7일 전 월요일, 일은 지난주 같은 요일(그날 진료가 없으면 None).
+    일간을 바로 앞 진료일과 견주면 요일(토요일 반나절 등)이 달라 잡음이다"""
     if scope == "monthly":
         return (date.fromisoformat(label + "-01") - timedelta(days=1)).isoformat()[:7]
+    week_ago = (date.fromisoformat(label) - timedelta(days=7)).isoformat()
     if scope == "weekly":
-        return (date.fromisoformat(label) - timedelta(days=7)).isoformat()
-    before = [d for d in _days(conn, today) if d < label]
-    return before[-1] if before else None
+        return week_ago
+    return week_ago if week_ago in _days(conn, today) else None
 
 
 def _range(scope: str, label: str) -> tuple[str, str]:

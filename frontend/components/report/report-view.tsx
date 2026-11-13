@@ -13,6 +13,7 @@ import { won } from "@/lib/format";
 import {
   fetchReport,
   isEst,
+  metricTag,
   type Metrics,
   type ReportSheet,
   ROLE_LABEL,
@@ -141,7 +142,7 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
           <h2 className="text-lg font-bold">주목할 점</h2>
           <Badge variant="kind">AI</Badge>
           <span className="text-xs text-muted-foreground">
-            문장의 숫자는 점마다 아래 꼬리표 값에서 — 후검증을 통과한 해석만
+            문장의 숫자는 점마다 근거 보기의 값에서 — 후검증을 통과한 해석만
             보입니다
           </span>
           {it?.stale && (
@@ -163,16 +164,21 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
             {it.points.map((p, k) => (
               <li key={k} className="flex flex-col gap-1">
                 <p>{p.text}</p>
-                <div className="flex flex-wrap gap-1">
-                  {p.used.map((u) => (
-                    <code
-                      key={u}
-                      className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {u} {it.values[u]?.toLocaleString("ko-KR") ?? "—"}
-                    </code>
-                  ))}
-                </div>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="w-fit cursor-pointer" role="button">
+                    근거 보기
+                  </summary>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {p.used.map((u) => (
+                      <span
+                        key={u}
+                        className="rounded-sm bg-muted px-1.5 py-0.5"
+                      >
+                        {metricTag(u, it.values[u] ?? null)}
+                      </span>
+                    ))}
+                  </div>
+                </details>
               </li>
             ))}
           </ol>

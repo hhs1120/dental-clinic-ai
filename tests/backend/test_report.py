@@ -216,11 +216,13 @@ def test_weekly_has_no_monthly_keys(conn):
     assert m["sales"] == 60_000 and m["prev.sales"] == 0  # 11/16 주는 비어 있음
 
 
-def test_daily_prev_is_previous_treatment_day(conn):
-    assert report.prev_period(conn, TODAY, "daily", "2026-11-03") == "2026-10-06"
-    assert report.prev_period(conn, TODAY, "daily", "2026-09-15") is None
-    m = report.metrics(conn, TODAY, "daily", "2026-11-03")
-    assert m["prev.sales"] == 610_000
+def test_daily_prev_is_same_weekday_last_week(conn):
+    """일간은 지난주 같은 요일과 비교 — 바로 앞 진료일은 요일(토요일 반나절 등)이 달라 잡음"""
+    assert report.prev_period(conn, TODAY, "daily", "2026-11-10") == "2026-11-03"
+    assert report.prev_period(conn, TODAY, "daily", "2026-11-03") is None  # 10/27은 진료 없음
+    m = report.metrics(conn, TODAY, "daily", "2026-11-10")
+    assert m["prev.sales"] == 550_000
+    assert "prev.sales" not in report.metrics(conn, TODAY, "daily", "2026-11-24")
 
 
 def test_dx_top_by_amount(conn):
