@@ -238,7 +238,7 @@ tags:
 - ⑤-3: 상세 사유 → 절과 사유 유형 판단 제안(상병 착오·외부 이력 = 정당, 서류 = 보완 후 재청구 — 헷갈리기 쉬운 '내역설명 누락'과 '상병 착오' 쌍 포함)은 규칙이라 테스트. Hit@5·MRR은 `truth_claim_qa`(상세 사유마다 2문항, **코드를 말하지 않는 질문** — 예: "치석제거 다음 달로 넘어가면 왜 깎여?", 질문 작성 규칙(베끼기 경고)은 §3.1, 정답 = 그 사유의 절, 맞음은 **절 단위**(정답 절이 `evaluation/claim_qa.py` `TOP_K` 안 — ③의 문서 단위로 세면 청구 기준 문서가 5개뿐이라 거의 저절로 맞는다), 검색 대상 절 수를 함께 보고, dev/test는 사유 단위(`split_of`) — 같은 문서의 다른 절이 양쪽에 걸친다, dev는 `make eval`, test는 `python -m evaluation.claim_qa score --split test`(사람)). 서류 사유 차트 문장은 인용 실재 후검증 통과율과 답 분포(`evaluation/claim_evidence.py` — 정답이 없어 정확도는 재지 않는다). 조정 목록·재심 기한은 테스트(통보일 + `master.APPEAL_DAYS`)
 - ⑤-4 사유서 초안: 정답 기준 다툴 만함(요건 사유 조정 중 임상 요건형 오류가 없는 건) dev 쪽(`claim_split`)에 앱과 같은 입력·후검증으로 초안을 써(`evaluation/claim_appeal.py` — 기록은 `evaluation/`에만, 초안이 있는 건 = 정답상 다툴 만함이라 앱 DB에 쓰지 않는다) 후검증 통과율(첫 답·다시 부른 뒤) + **첫 답 원출력**의 근거 없는 문장 비율(코드 — 최종 답은 후검증을 통과해 0). 문장은 마침표·물음표·느낌표 뒤 공백과 줄바꿈으로 나누고(`backend/claim_appeal.py` `split_sentences`), 칸을 나눈 문장마다 그 칸의 근거(인용 구절이 원문과 그 문장에 있음 / 추측 번호가 목록 안)를 본다. dev 초안은 `make claim-appeal-dev`(과금), 채점은 `make eval`, test는 `python -m evaluation.claim_appeal run --split test`(사람)
 
-**⑥ 리포트**: 본문 숫자 전부 `metrics`에 존재, 가정값 `[추정]` 누락 0(코드). 튄 숫자 원인은 위 시나리오 평가
+**⑥ 리포트**: 저장된 해석(`ax_reports`, 화면 기간 전부 — 분할 없음)을 만든 때의 `metrics`로 다시 잰다(`evaluation/report.py`, `make eval`) — 후검증 통과율, 점 단위 본문 숫자 `metrics` 존재율(값 그대로·절댓값·만 원 반올림·기간 라벨 숫자), `[추정]` 표시 어긋남 0, 빈 해석·숫자가 바뀐 해석 수(코드). 튄 숫자 원인은 위 시나리오 평가
 
 **⑦ 아침 브리핑**: 본문 숫자 전부 입력에 존재(④ 후검증 재사용)
 
