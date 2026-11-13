@@ -29,6 +29,7 @@ from evaluation import (
     EvalRefused,
     autoclose,
     call_actions,
+    claim_appeal,
     claim_check,
     claim_evidence,
     claim_omission,
@@ -230,6 +231,7 @@ def run(
         "claim_check": None,
         "claim_omission": None,
         "claim_basis": None,
+        "claim_appeal": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -354,6 +356,11 @@ def run(
         part = _claim_basis(conn, app, condition)
         if part:
             result["claim_basis"] = part
+    if dev and claim_appeal.RUNS.exists():
+        # ⑤-4 재심 사유서(설계 §4) — 과금 없음(기록은 make claim-appeal-dev). test는 python -m evaluation.claim_appeal run --split test(사람)
+        result["claim_appeal"] = claim_appeal.score(
+            claim_appeal.targets(conn, "dev"), claim_appeal._read(claim_appeal.RUNS)
+        )
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
@@ -464,6 +471,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_claim_omission(r["claim_omission"])
     if r.get("claim_basis") is not None:
         out += _render_claim_basis(r["claim_basis"])
+    if r.get("claim_appeal") is not None:
+        out += _render_claim_appeal(r["claim_appeal"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
     if r.get("expense") is not None:
@@ -830,6 +839,18 @@ def _render_claim_basis(c: dict) -> list[str]:
             "",
         ]
     return out
+
+
+def _render_claim_appeal(c: dict) -> list[str]:
+    rate = "—" if c["unbacked_rate"] is None else f"{c['unbacked_rate']:.1%}"
+    return [
+        f"## ⑤-4 재심 사유서 초안 ({c['prompt_version']})",
+        "",
+        f"정답 다툴 만함 dev {c['n']}건 · 초안 {c['run']} — 후검증 통과 첫 답 {c['first_valid']}/{c['run']}"
+        f" · 다시 부른 뒤 {c['final_valid']}/{c['run']}",
+        f"첫 답 근거 없는 문장 {c['unbacked']}/{c['sentences']}({rate})",
+        "",
+    ]
 
 
 def _has_recon(conn) -> bool:

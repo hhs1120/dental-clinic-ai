@@ -113,9 +113,9 @@ KIND = claim_store.Kind(
 # ── 대상·저장·초안·검토·제출 ──────────────────────────────────────
 
 
-def target(conn: sqlite3.Connection, claim_id: int, today: date) -> dict:
-    """초안을 쓸 행 — 사람이 재심 신청(contestable)을 기록했고 재심 신청 기한이 남은 조정·불능 건, 아니면 ValueError.
-    그 사유의 기준 절(heading·body)을 붙인다"""
+def row(conn: sqlite3.Connection, claim_id: int) -> dict | None:
+    """조정·불능 청구 한 줄 + 그 사유의 기준 절(heading·body) — 없거나 조정·불능이 아니면 None. 판단·기한은 보지 않는다
+    (평가가 정답 다툴 만함 건에 같은 입력을 쓴다)"""
     r = conn.execute(
         "SELECT c.id AS claim_id, c.status, c.adjust_note, c.reviewed_at, c.tooth_no,"
         " pr.name AS procedure_name, n.note, j.judgment"
@@ -125,17 +125,26 @@ def target(conn: sqlite3.Connection, claim_id: int, today: date) -> dict:
         " LEFT JOIN ax_claim_judgments j ON j.claim_id = c.id WHERE c.id = ?",
         (claim_id,),
     ).fetchone()
-    if r is None or r["status"] not in CUT or r["judgment"] != "contestable":
+    if r is None or r["status"] not in CUT:
+        return None
+    out = dict(r)
+    out["heading"] = master_values(conn)["adjust_note_headings"][out["adjust_note"]]
+    card = section_cards(conn).get(out["heading"])
+    out["body"] = card["body"] if card else ""
+    return out
+
+
+def target(conn: sqlite3.Connection, claim_id: int, today: date) -> dict:
+    """초안을 쓸 행 — 사람이 재심 신청(contestable)을 기록했고 재심 신청 기한이 남은 조정·불능 건, 아니면 ValueError"""
+    r = row(conn, claim_id)
+    if r is None or r["judgment"] != "contestable":
         raise ValueError("재심 신청을 기록한 조정 건만 사유서 초안을 쓸 수 있습니다")
-    mv = master_values(conn)
-    deadline = date.fromisoformat(r["reviewed_at"][:10]) + timedelta(days=mv["appeal_days"])
+    deadline = date.fromisoformat(r["reviewed_at"][:10]) + timedelta(
+        days=master_values(conn)["appeal_days"]
+    )
     if r["reviewed_at"] > today.isoformat() or deadline < today:
         raise ValueError("재심 신청 기한이 지났습니다")
-    row = dict(r)
-    row["heading"] = mv["adjust_note_headings"][row["adjust_note"]]
-    card = section_cards(conn).get(row["heading"])
-    row["body"] = card["body"] if card else ""
-    return row
+    return r
 
 
 def _row(conn, claim_id: int):
@@ -177,12 +186,12 @@ def submitted(conn: sqlite3.Connection, claim_id: int) -> bool:
 def draft(conn: sqlite3.Connection, gw, claim_id: int, today: date) -> dict:
     """초안 쓰기·다시 쓰기 — 일반 호출(사람이 기다림), 후검증 실패면 한 번 더(claim_store). 있던 초안과 검토 확인은
     지운다. 제출 결정한 건은 ValueError"""
-    row = target(conn, claim_id, today)
+    r = target(conn, claim_id, today)
     if submitted(conn, claim_id):
         raise ValueError("재심 사유서를 제출 결정한 건은 다시 쓸 수 없습니다")
     with conn:
         conn.execute("DELETE FROM ax_claim_appeals WHERE claim_id = ?", (claim_id,))
-    claim_store.build(conn, gw, KIND, [row], use_batch=False)
+    claim_store.build(conn, gw, KIND, [r], use_batch=False)
     return appeal(conn, claim_id)
 
 
