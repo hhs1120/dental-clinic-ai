@@ -122,7 +122,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 **`ax_prep_sheets`**: 날짜·환자·예약별 준비표 행 — 칸은 `shared/app_schema.sql`. `facts`는 `backend/prep.py` `prep_facts` 행 그대로, `facts_hash`는 제안 입력(`llm_facts`)의 해시 — 해시·`prompt_version`·`model`이 같고 `suggestion_valid`면 다시 부르지 않는다. 예약당 1행이라 새 버전으로 만들면 덮어쓴다. 준비표·체어 보기가 같은 행을 쓴다
 
 **오늘 화면**(`GET /today`, `backend/today.py` `sheet`): 쿼리로 모으고 LLM을 부르지 않는다. 숫자마다 그 화면과 같은 함수로 센다 — 예약·신환·주의·내원 확인 전은 `backend/prep.py` `prep_facts` 칩, 할 일·급한 통화는 `backend/calls.py` `today_board`, 확인할 통화는 같은 모듈 `review_calls`, 판정 대기는 `backend/judge_queue.py` `pending_count`(다음 건과 같은 대상), 재심 신청 기한 임박·청구 전 상병 경고·청구 전 AI 줄은 `backend/claims.py` `adjusted`(`soon` 칩)·`pre_claim`(경고 줄·`counts.ai_missing`), 일계표 불일치는 `backend/recon.py` `open_summary`(확정·자동 마감 안 된 건), 지출 증빙 확인은 `backend/expense.py` `open_summary`(기준일의 지난달). 미예약 환자 줄은 숫자 없는 고정 링크라 세지 않는다. 기준은 앱 기준일, 근거 없는 질문(`ax_search_logs`)만 실제 시계. 자동 처리·환자 묶음은 §3b 테이블을 읽는다(항목은 [[치과 AX - 기능 정의]] §4 앱 구성). **⑦ 브리핑**은 `ax_briefings`(날짜, 문장, 쓴 숫자, 후검증 통과 여부 — ④와 같은 틀), 슬롯 착수 시 추가.
-**⑥ 리포트**(`backend/report.py`): 끝난 기간(월 6·주 8·진료일 10)마다 숫자와 이전 기간 대비 변화 분해를 `metrics`(키 → 정수)로 모은다 — 재료비 과목은 `backend/expense.py` `sheet` 줄 과목. 인건비가 들어간 키는 `est.`를 포함하고(`is_est`) 화면이 `[추정]`을 붙인다. `ax_reports`(기간 종류·기간당 1행, 칸은 `shared/app_schema.sql`)는 해석을 만든 때의 `metrics`·해시와 점 목록을 저장한다 — 해시·버전·모델이 같고 통과한 기간은 다시 부르지 않고(`make report`), 지금 숫자와 해시가 다르면 `stale`. API `GET /report?scope=&period=`(모르는 기간 400, LLM을 부르지 않음). 튄 숫자 조사 결과는 3단계에서 근거 쿼리·실행 id와 함께 저장한다. 항목은 [[치과 AX - 기능 정의]] §5 ⑥.
+**⑥ 리포트**(`backend/report.py`): 끝난 기간(종류별 수는 `backend/report.py` `COUNTS`, 진료일은 취소 뺀 예약이 있는 날)마다 숫자와 이전 기간 대비 변화 분해를 `metrics`(키 → 정수)로 모은다 — 재료비 과목은 `backend/expense.py` `sheet` 줄 과목. 인건비가 들어간 키는 `est.`를 포함하고(`is_est`) 화면이 `[추정]`을 붙인다. `ax_reports`(기간 종류·기간당 1행, 칸은 `shared/app_schema.sql`)는 해석을 만든 때의 `metrics`·해시와 점 목록을 저장한다 — 해시·버전·모델이 같고 통과한 기간은 다시 부르지 않고(`make report`), 지금 숫자와 해시가 다르면 `stale`. API `GET /report?scope=&period=`(모르는 기간 400, LLM을 부르지 않음). 튄 숫자 조사 결과는 3단계에서 근거 쿼리·실행 id와 함께 저장한다. 항목은 [[치과 AX - 기능 정의]] §5 ⑥.
 
 ## 5. 슬롯 테이블
 
@@ -186,7 +186,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 ### 7.3 사람 데이터 보존
 
 재생성해도 `app.sqlite`는 덮어쓰지 않는다. 다만 앱 테이블이 가리키는 생성 데이터의 키(`call_uid`·환자·예약·`fin_` id)가 다른 실체를 가리킬 수 있어 테이블마다 처리를 정한다.
-- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·LLM 쌍 비교·엇갈림·준비표·⑦ 브리핑·⑥ 리포트·⑤ AI 점검(`ax_claim_checks`·`ax_claim_omissions`·`ax_claim_evidence`)·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
+- **다시 만듦**: 색인(`ax_chunks`·FTS·벡터)·분류·판정기 판정·LLM 쌍 비교·엇갈림·준비표·⑦ 브리핑·⑥ 리포트(`ax_reports`)·⑤ AI 점검(`ax_claim_checks`·`ax_claim_omissions`·`ax_claim_evidence`)·에이전트 실행 기록·되돌리지 않은 자동 처리·환자 묶음·발송함·`ax_jobs`
 - **해시로 다시 붙임**: 판정(메모 포함)·투표 — `hash(transcript)`로만(`export-human/import-human`), 미스 시 버리고 "복원 실패 N건" 리포트. 투표는 `(hash, left_model, left_version, right_model, right_version, choice)`. 판정 상태는 판정 유무에서 파생한다
 - **자연키로 보존**: 되돌린 자동 처리 — 아래 키로 다시 붙이고, 못 붙이면 리포트한다. 되돌린 건은 같은 키로 다시 자동 처리하지 않는다
 
