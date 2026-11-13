@@ -134,7 +134,10 @@ def test_bodies_export_then_apply(conn, tmp_path):
     paths = _paths(tmp_path)
     ctx = LLMContext(paths, fake=False)
     documents.stage_bodies(SimpleNamespace(conn=conn, state={"llm": ctx}), None, None)
-    assert ctx.finish() == {"document": len(CATALOG)}
+    claim = [d for d in CATALOG if d.type == "claim_standard"]
+    assert claim and ctx.finish() == {
+        "document": len(CATALOG) - len(claim)
+    }  # 청구 기준은 LLM에 안 보냄
     jobs = {
         j["item"]: j
         for j in (

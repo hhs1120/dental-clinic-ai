@@ -10,6 +10,7 @@
 import json
 
 from generator import llm_jobs
+from generator.claim_standards import INTRO_NOTE, section_body
 from generator.doc_catalog import BY_KEY, CATALOG, CLAIM_HEADINGS, Doc
 from generator.llm_jobs import Task
 from generator.master import CLINIC_NAME
@@ -48,25 +49,19 @@ def _words(d: Doc) -> list[str]:
     return [w for f in d.facts for w in f.words]
 
 
-def _rules(d: Doc, reason: str) -> list[str]:
-    return [f.text for f in d.facts if f.reason == reason and not f.id.endswith(".heading")]
-
-
 def draft(d: Doc) -> str:
-    """초안 — 사실 문장을 그대로. 청구 기준은 사유마다 소제목 한 절"""
+    """초안 — 사실 문장을 그대로. 청구 기준은 사유마다 소제목 한 절의 최종 본문(generator/claim_standards.py)"""
+    if (
+        d.type == "claim_standard"
+    ):  # 최종 본문 — 원문 발췌를 글자 그대로 두려고 LLM에 보내지 않는다(stage_bodies)
+        lines = [f"# {d.title}", "", f"{d.topic}. {INTRO_NOTE}"]
+        for r in d.sections:
+            lines += ["", f"## {CLAIM_HEADINGS[r]}", "", section_body(r)]
+        return "\n".join(lines)
     lines = [f"# {d.title}", "", f"{d.topic}."]
     if d.effective:
         lines.append(f"시행일: {d.effective}")
-    if d.type == "claim_standard":
-        for r in d.sections:
-            lines += [
-                "",
-                f"## {CLAIM_HEADINGS[r]}",
-                "",
-                *(f"- {t}." for t in _rules(d, r) or ["기록 기준을 지킨다"]),
-            ]
-    else:
-        lines += [""] + [f"- {f.text}." for f in d.facts]
+    lines += [""] + [f"- {f.text}." for f in d.facts]
     return "\n".join(lines)
 
 
@@ -75,10 +70,7 @@ def payload(d: Doc) -> dict:
     p = {"type": d.type, "title": d.title, "topic": d.topic, "draft": draft(d)}
     if d.effective:
         p["effective_date"] = d.effective
-    if d.type == "claim_standard":
-        p["sections"] = [{"heading": CLAIM_HEADINGS[r], "rules": _rules(d, r)} for r in d.sections]
-    else:
-        p["facts"] = [f.text for f in d.facts]
+    p["facts"] = [f.text for f in d.facts]
     if d.kind == "similar":
         p["skip_topic"] = d.skip
     old = next((o for o in CATALOG if o.kind == "old_version" and o.pair == d.key), None)
@@ -170,6 +162,8 @@ def stage_bodies(run, rng, fake) -> None:
         "SELECT doc_id, doc_key FROM truth.truth_doc_meta ORDER BY doc_id"
     ).fetchall():
         d = BY_KEY[key]
+        if d.type == "claim_standard":  # 본문은 계획 단계 초안 그대로(draft)
+            continue
         out = ctx.resolve(TASK, str(doc_id), payload(d), checks(d))
         if out is not None:
             run.conn.execute(

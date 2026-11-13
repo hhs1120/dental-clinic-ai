@@ -13,6 +13,7 @@
 
 from dataclasses import dataclass, field, replace
 
+from generator.claim_standards import REAL, VIRTUAL
 from generator.master import (
     AGE_BANDS,
     CONDITIONAL_INSURED_MIN_AGE,
@@ -121,77 +122,26 @@ CLAIM_DOCS = {  # 분야 → 사유 (고시처럼 분야별 문서)
     "외과임플란트": ("R05", "R06"),
     "공통": ("D01", "D02", "D03", "C01"),
 }
-_CLAIM_RULE = {  # 절에 넣을 기준 — 급여 조건은 master 값만 (생성기가 추적하지 않는 조건을 쓰면 오류 없는 줄이 위반처럼 보임)
-    "R01": F(
-        "claim.R01",
-        "같은 치아에 같은 치료를 다시 할 때는 이전 치료 시점과 다시 하는 사유를 적는다",
-        "다시 하는 사유",
-        reason="R01",
-    ),
-    "R02": F(
-        "claim.R02",
-        f"치석제거 후 {PERIO_LINK_DAYS}일 안에 이어지는 치주치료는 재평가 소견과 연결 사실을 적는다",
-        f"{PERIO_LINK_DAYS}일",
-        reason="R02",
-    ),
-    "R03": F(
-        "claim.R03",
-        f"치주치료는 치주낭이 {PERIO_POCKET_MIN_MM}mm 이상인 부위가 있고 출혈 같은 염증 소견이 함께 있어야 산정하며,"
-        " 그 소견을 적는다",
-        f"{PERIO_POCKET_MIN_MM}mm",
-        "출혈",
-        reason="R03",
-    ),
-    "R04": F(
-        "claim.R04",
-        f"실란트는 만 {_CHILD_MAX}세 이하의 우식 없는 소와열구 치아가 대상이다",
-        f"{_CHILD_MAX}세",
-        "소와열구",
-        reason="R04",
-        same="sealant.age",
-    ),
-    "R05": F(
-        "claim.R05",
-        "사랑니 발치 난이도는 매복 정도와 골삭제 여부로 산정하고 그 근거를 적는다",
-        "골삭제",
-        reason="R05",
-    ),
-    "R06": F(
-        "claim.R06",
-        f"임플란트 급여는 {CONDITIONAL_INSURED_MIN_AGE}세 이상이고 대상 부위가 무치악 부위여야 한다",
-        f"{CONDITIONAL_INSURED_MIN_AGE}세",
-        "무치악",
-        reason="R06",
-        same="implant.age",
-    ),
-    "D01": F(
-        "claim.D01",
-        "요건 근거가 필요한 시술은 내역설명란에 그 근거를 적는다",
-        "내역설명란",
-        reason="D01",
-    ),
-    "D02": F(
-        "claim.D02",
-        "신경치료·발치·임플란트는 방사선 사진 등 증빙자료를 남긴다",
-        "방사선 사진",
-        reason="D02",
-    ),
-    "D03": F(
-        "claim.D03",
-        "청구 내역에 치아 부위와 산정 내역을 빠짐없이 적는다",
-        "치아 부위",
-        reason="D03",
-    ),
-    "C01": F("claim.C01", "상병은 시행한 시술에 맞는 것으로 적는다", "시행한 시술", reason="C01"),
-    "E01": F(
-        "claim.E01",
-        f"급여 스케일링은 {SCALING_MIN_AGE}세 이상 연 1회 산정하며 타 기관 이력도 횟수에 들어간다",
-        f"{SCALING_MIN_AGE}세",
-        "연 1회",
-        reason="E01",
-        same="scaling.age",
-    ),
+# 절에 넣을 기준 — 본문은 generator/claim_standards.py(실제 고시 발췌 또는 병원 내부 점검 기준), 꼭 넣을 말은 그 절 안 말.
+# 사실 문장은 실제 절이면 인용 문단을 이은 것, 내부 기준 절이면 첫 기준 문장. 같은 사실 묶음은 master 값과 같은 말일 때만
+# (실란트 나이는 원문에서 뺐다 — 설계 2026-11-13 "R04")
+_SAME = {"E01": "scaling.age", "R06": "implant.age"}
+
+
+def _claim_rule(r: str) -> Fact:
+    if r in VIRTUAL:
+        text, words = VIRTUAL[r][0], _VIRTUAL_WORDS[r]
+    else:
+        text, words = " ".join(q.replace("\n> ", " ") for q in REAL[r].quote), REAL[r].words
+    return F(f"claim.{r}", text.rstrip("."), *words, reason=r, same=_SAME.get(r))
+
+
+_VIRTUAL_WORDS = {
+    "R01": ("다시 하는 사유",),
+    "R02": (f"{PERIO_LINK_DAYS}일",),
+    "R03": (f"{PERIO_POCKET_MIN_MM}mm", "출혈"),
 }
+_CLAIM_RULE = {r: _claim_rule(r) for r in CLAIM_HEADINGS}
 
 
 def _claim_doc(field_name: str, reasons: tuple[str, ...]) -> Doc:
