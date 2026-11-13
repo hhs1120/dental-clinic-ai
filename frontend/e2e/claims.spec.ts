@@ -15,6 +15,7 @@ const base = {
   ai_evidence: null as { source: string; quote: string }[] | null,
   standard: null as { doc_title: string; heading: string; body: string } | null,
   chart_quotes: null as string[] | null,
+  appeal: null as unknown,
 };
 
 const DOC_STANDARD = {
@@ -453,6 +454,117 @@ test("청구 기준 찾기 — 찾은 조항, 닫기, 색인 없음", async ({ p
   status = 503;
   await box.press("Enter");
   await expect(page.getByText("검색 색인이 없습니다")).toBeVisible();
+});
+
+const APPEAL = {
+  sentences: [
+    {
+      text: "조정 사유는 '치주치료 산정 기준 소견 미확인'입니다.",
+      basis: "adjustment",
+      quote: "치주치료 산정 기준 소견 미확인",
+      assumption: null,
+    },
+    {
+      text: "청구 기준은 치주낭 깊이가 4mm 이상인 부위가 확인될 때 산정한다고 정합니다.",
+      basis: "standard",
+      quote: "치주낭 깊이가 4mm 이상인 부위가 확인될 때",
+      assumption: null,
+    },
+    {
+      text: "위 기록에 따라 재심사를 요청합니다.",
+      basis: "assumption",
+      quote: null,
+      assumption: 1,
+    },
+  ],
+  assumptions: ["재심사를 요청한다는 결론은 AI가 쓴 문장입니다"],
+  valid: true,
+  reviewed: null as { by: string; at: string } | null,
+  submitted: null as { by: string; at: string } | null,
+  at: "2026-11-13T10:00:00",
+};
+const CONTESTED = {
+  ...REQ,
+  judgment: { value: "contestable", by: "데스크", at: "2026-11-13 10:00:00" },
+};
+
+test("재심 사유서 — 초안 쓰기, 꼬리표·추측, 검토 확인 뒤 제출 결정", async ({
+  page,
+}) => {
+  let appeal: typeof APPEAL | null = null;
+  await fakeClaims(page, () => sheet([{ ...CONTESTED, appeal }]));
+  await page.route("**/api/claims/12/appeal", (r) => {
+    appeal = { ...APPEAL };
+    return r.fulfill({ json: appeal });
+  });
+  await page.route("**/api/claims/12/appeal/review", (r) => {
+    appeal = {
+      ...APPEAL,
+      reviewed: { by: "데스크", at: "2026-11-13 10:01:00" },
+    };
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/claims/12/appeal/submit", (r) => {
+    appeal = {
+      ...appeal!,
+      submitted: { by: "데스크", at: "2026-11-13 10:02:00" },
+    };
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await draft.getByRole("button", { name: "초안 쓰기" }).click();
+  await expect(draft).toContainText("재심사를 요청합니다.");
+  await expect(draft).toContainText("조정 내역 인용");
+  await expect(draft).toContainText("기준 절 인용");
+  await expect(draft).toContainText("추측 ①");
+  await expect(draft).toContainText(
+    "AI가 추측한 부분 — 여기만 확인하면 됩니다",
+  );
+  await expect(draft.getByRole("button", { name: "복사" })).toBeDisabled();
+  await expect(draft.getByRole("button", { name: "제출 결정" })).toBeDisabled();
+  // 체크는 서버에 저장한 뒤 다시 조회한 값으로 그린다 — check()가 아니라 눌러 놓고 상태를 기다린다
+  const box = draft.getByRole("checkbox", { name: "검토했고 정확함" });
+  await box.click();
+  await expect(box).toBeChecked();
+  await expect(draft.getByRole("button", { name: "제출 결정" })).toBeEnabled();
+  await expect(draft.getByRole("button", { name: "복사" })).toBeEnabled();
+  await draft.getByRole("button", { name: "제출 결정" }).click();
+  await expect(draft).toContainText("제출 결정 · 데스크");
+  await expect(draft.getByRole("button", { name: "다시 쓰기" })).toHaveCount(0);
+  const detail = page.getByRole("region", { name: "이두리 청구 상세" });
+  await expect(
+    detail.getByRole("button", { name: "삭감 수용" }),
+  ).toBeDisabled();
+});
+
+test("재심 사유서 — 실패 안내, 재심 신청이 아니면 숨김", async ({ page }) => {
+  let rows: unknown[] = [
+    {
+      ...CONTESTED,
+      appeal: { ...APPEAL, valid: false, sentences: null, assumptions: null },
+    },
+  ];
+  await fakeClaims(page, () => sheet(rows as (typeof REQ)[]));
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await expect(draft).toContainText("초안을 만들지 못했습니다");
+  await expect(draft.getByRole("button", { name: "다시 쓰기" })).toBeVisible();
+  await expect(draft.getByRole("button", { name: "제출 결정" })).toHaveCount(0);
+  rows = [
+    {
+      ...REQ,
+      judgment: { value: "justified", by: "데스크", at: "x" },
+      appeal: APPEAL,
+    },
+  ];
+  await page.reload();
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  await expect(page.getByRole("region", { name: "재심 사유서" })).toHaveCount(
+    0,
+  );
 });
 
 test("청구 전 점검 — 경고 칩 기본, 과거 이력 문구", async ({ page }) => {

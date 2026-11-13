@@ -61,6 +61,8 @@ export interface AdjustRow {
   standard: StandardCard | null;
   /** 서류 사유 차트 문장(AI, backend/claim_evidence.py) — 결과 없으면 null, 빈 답은 [] */
   chart_quotes: string[] | null;
+  /** ⑤-4 재심 사유서 초안(backend/claim_appeal.py) — 없으면 null, 화면은 판단이 재심 신청일 때만 보인다 */
+  appeal: Appeal | null;
   judgment: { value: Judgment; by: string; at: string } | null;
   /** 추천을 낸 쪽 — 사유 유형 규칙, 요건 사유는 AI 점검(backend/claims.py AI_SUGGEST), 없으면 null */
   suggest_by: "rule" | "ai" | null;
@@ -123,6 +125,34 @@ export interface PreSheet {
   ai_pending: { pre: number; adjust: number };
   rows: PreRow[];
 }
+
+export type AppealBasis = "adjustment" | "standard" | "chart" | "assumption";
+
+export interface Appeal {
+  /** 후검증 실패면 null */
+  sentences:
+    | {
+        text: string;
+        basis: AppealBasis;
+        quote: string | null;
+        assumption: number | null;
+      }[]
+    | null;
+  assumptions: string[] | null;
+  valid: boolean;
+  reviewed: { by: string; at: string } | null;
+  submitted: { by: string; at: string } | null;
+  at: string;
+}
+
+export const draftAppeal = (claimId: number) =>
+  postJson<Appeal>(`/claims/${claimId}/appeal`, {});
+
+export const reviewAppeal = (claimId: number, part: string, checked: boolean) =>
+  postJson<{ ok: true }>(`/claims/${claimId}/appeal/review`, { part, checked });
+
+export const submitAppeal = (claimId: number, part: string) =>
+  postJson<{ ok: true }>(`/claims/${claimId}/appeal/submit`, { part });
 
 export interface StandardCard {
   doc_title: string;

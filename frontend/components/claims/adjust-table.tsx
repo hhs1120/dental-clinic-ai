@@ -24,6 +24,7 @@ import {
 } from "@/lib/claims-api";
 import { won } from "@/lib/format";
 import { readPart } from "@/lib/part";
+import { AppealDraft } from "@/components/claims/appeal-draft";
 
 type Sort = "deadline" | "amount";
 /** 지금 정렬 문구 — 기한 지난 건은 기한 지남 칩에만 있고 서버가 최근에 지난 순으로 준다 */
@@ -283,10 +284,12 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
       },
     );
   };
+  const contested = r.judgment?.value === "contestable" && !r.expired;
+  const locked = !!r.appeal?.submitted; // 제출 결정한 건은 판단을 바꾸지 않는다(설계 §4)
   return (
     <section
       aria-label={`${r.name} 청구 상세`}
-      className="grid gap-4 md:grid-cols-2"
+      className={`grid gap-4 ${contested ? "md:grid-cols-3" : "md:grid-cols-2"}`}
     >
       <div className="flex flex-col gap-1">
         <h3 className="font-bold">왜 깎였나</h3>
@@ -330,7 +333,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
                 size="sm"
                 variant={r.judgment?.value === j ? "secondary" : "outline"}
                 aria-pressed={r.judgment?.value === j}
-                disabled={busy}
+                disabled={busy || locked}
                 onClick={() => save(j)}
               >
                 {JUDGMENT_LABEL[j]}
@@ -340,6 +343,9 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         )}
         {error && <ErrorBand text={error} />}
       </div>
+      {contested && (
+        <AppealDraft claimId={r.claim_id} appeal={r.appeal} onSaved={onSaved} />
+      )}
     </section>
   );
 }
