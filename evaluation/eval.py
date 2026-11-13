@@ -702,7 +702,6 @@ def _render_report(p: dict) -> list[str]:
         "| 지표 | 값 |",
         "|---|---|",
         f"| 본문 숫자 metrics 존재(점 단위) | {_kn(p['numbers_ok'])} |",
-        f"| [추정] 표시 어긋남 | {p['est_missing']} |",
         "",
     ]
 

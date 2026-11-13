@@ -12,10 +12,9 @@ import { useFetch } from "@/lib/api";
 import { won } from "@/lib/format";
 import {
   fetchReport,
-  isEst,
+  metricTag,
   type Metrics,
   type ReportSheet,
-  ROLE_LABEL,
   SCOPE_LABEL,
   type Scope,
 } from "@/lib/report-api";
@@ -33,28 +32,19 @@ function periodLabel(scope: Scope, p: string, prev?: string) {
 const pct = (n: number | undefined) =>
   n === undefined ? null : `${n > 0 ? "+" : ""}${n}%`;
 
-function Est() {
-  return <Badge variant="warn">[추정]</Badge>;
-}
-
 function Stat({
   value,
   label,
   sub,
-  est = false,
 }: {
   value: string;
   label: string;
   sub?: string | null;
-  est?: boolean;
 }) {
   return (
-    <Card data-testid={est ? "stat-est" : undefined} className="py-4">
+    <Card className="py-4">
       <CardContent className="flex flex-col gap-1 px-4">
-        <div className="flex items-center gap-1.5 text-xl font-bold tabular-nums">
-          {est && <Est />}
-          {value}
-        </div>
+        <div className="text-xl font-bold tabular-nums">{value}</div>
         <div className="text-sm text-muted-foreground">{label}</div>
         {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
       </CardContent>
@@ -62,9 +52,27 @@ function Stat({
   );
 }
 
-function Stats({ m, monthly }: { m: Metrics; monthly: boolean }) {
+/** 비교한 이전 기간 — 월 "10월", 주 "11/16 주", 일 "지난주 같은 요일(11/23)"(백엔드 prev_period) */
+function prevLabel(scope: Scope, prev: string) {
+  if (scope === "monthly") return `${Number(prev.slice(5))}월`;
+  const md = periodLabel("daily", prev);
+  return scope === "weekly" ? `${md} 주` : `지난주 같은 요일(${md})`;
+}
+
+function Stats({
+  m,
+  scope,
+  prev,
+}: {
+  m: Metrics;
+  scope: Scope;
+  prev: string | null;
+}) {
+  const monthly = scope === "monthly";
   const prevSub = (k: string) =>
-    pct(m[`pct.${k}`]) && `이전 대비 ${pct(m[`pct.${k}`])}`;
+    prev && pct(m[`pct.${k}`])
+      ? `${prevLabel(scope, prev)} 대비 ${pct(m[`pct.${k}`])}`
+      : null;
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -107,19 +115,7 @@ function Stats({ m, monthly }: { m: Metrics; monthly: boolean }) {
           <Stat
             value={won(m.profit_ex_labor)}
             label="인건비 제외 손익"
-            sub="수금 − 출금"
-          />
-          <Stat
-            est
-            value={won(m["est.profit"])}
-            label="추정 손익"
-            sub={`인건비 ${won(m["est.labor"])} 반영 · 대표 원장 보수·세금 전`}
-          />
-          <Stat
-            est
-            value={m["est.bep"] === undefined ? "—" : won(m["est.bep"])}
-            label="손익분기 매출"
-            sub="대표 원장 보수·세금 전"
+            sub="수금 − 출금 · 인건비는 병원 기록에 없어 빠짐"
           />
         </div>
       ) : (
@@ -135,13 +131,13 @@ function Stats({ m, monthly }: { m: Metrics; monthly: boolean }) {
 function Interpretation({ sheet }: { sheet: ReportSheet }) {
   const it = sheet.interpretation;
   return (
-    <Card className="py-4">
+    <Card className="border-primary py-4">
       <CardContent className="flex flex-col gap-3 px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-bold">주목할 점</h2>
           <Badge variant="kind">AI</Badge>
+          <h2 className="text-lg font-bold">AI가 고른 주목할 점</h2>
           <span className="text-xs text-muted-foreground">
-            문장의 숫자는 점마다 아래 꼬리표 값에서 — 후검증을 통과한 해석만
+            문장의 숫자는 점마다 근거 보기의 값에서 — 후검증을 통과한 해석만
             보입니다
           </span>
           {it?.stale && (
@@ -152,7 +148,7 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
         </div>
         {!it ? (
           <p className="text-sm text-muted-foreground">
-            해석 없음 — 숫자는 위와 같습니다
+            해석 없음 — 아래 숫자는 그대로 볼 수 있습니다
           </p>
         ) : it.points.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -163,16 +159,19 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
             {it.points.map((p, k) => (
               <li key={k} className="flex flex-col gap-1">
                 <p>{p.text}</p>
-                <div className="flex flex-wrap gap-1">
-                  {p.used.map((u) => (
-                    <code
-                      key={u}
-                      className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {u} {it.values[u]?.toLocaleString("ko-KR") ?? "—"}
-                    </code>
-                  ))}
-                </div>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="w-fit cursor-pointer">근거 보기</summary>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {p.used.map((u) => (
+                      <span
+                        key={u}
+                        className="rounded-sm bg-muted px-1.5 py-0.5"
+                      >
+                        {metricTag(u, it.values[u] ?? null)}
+                      </span>
+                    ))}
+                  </div>
+                </details>
               </li>
             ))}
           </ol>
@@ -182,31 +181,11 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
   );
 }
 
-function MonthlyCards({ sheet }: { sheet: ReportSheet }) {
-  const { labor, dx_top: dx } = sheet;
-  if (!labor) return null;
+function DxCard({ sheet }: { sheet: ReportSheet }) {
+  const dx = sheet.dx_top;
+  if (sheet.scope !== "monthly") return null;
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <Card className="py-4">
-        <CardContent className="flex flex-col gap-2 px-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">인건비 가정값</h2>
-            <Badge variant="warn">가정값</Badge>
-          </div>
-          <p className="text-sm">
-            {Object.entries(labor.wage)
-              .map(
-                ([r, v]) =>
-                  `${ROLE_LABEL[r] ?? r} ${labor.headcount[r] ?? 0}명 × ${won(v)}`,
-              )
-              .join(" · ")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            실제 급여가 아닙니다. 대표 원장 보수는 넣지 않았고, 값은 앱
-            설정(ax_settings)에서 바꿉니다.
-          </p>
-        </CardContent>
-      </Card>
       <Card className="py-4">
         <CardContent className="flex flex-col gap-2 px-4">
           <div className="flex items-center gap-2">
@@ -262,7 +241,6 @@ function Trend({
               <>
                 <th className="px-3 py-2 text-right">재료비</th>
                 <th className="px-3 py-2 text-right">인건비 제외 손익</th>
-                <th className="px-3 py-2 text-right">추정 손익 [추정]</th>
               </>
             )}
           </tr>
@@ -289,9 +267,6 @@ function Trend({
                     <td className="px-3 py-2 text-right">{cell(r.material)}</td>
                     <td className="px-3 py-2 text-right">
                       {cell(r.profit_ex_labor)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {cell(r["est.profit"])}
                     </td>
                   </>
                 )}
@@ -368,15 +343,14 @@ export function ReportView() {
               </Button>
             ))}
           </div>
-          <Stats m={sheet.metrics} monthly={sheet.scope === "monthly"} />
           <Interpretation sheet={sheet} />
-          <MonthlyCards sheet={sheet} />
+          <Stats
+            m={sheet.metrics}
+            scope={sheet.scope}
+            prev={sheet.prev_period}
+          />
+          <DxCard sheet={sheet} />
           <Trend sheet={sheet} onPick={(p) => go({ period: p })} />
-          {Object.keys(sheet.metrics).some(isEst) && (
-            <p className="text-xs text-muted-foreground">
-              [추정] 값은 인건비 가정값으로 계산했고 성과 지표로 쓰지 않습니다.
-            </p>
-          )}
         </>
       )}
     </div>
