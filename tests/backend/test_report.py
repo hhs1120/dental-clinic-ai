@@ -252,3 +252,67 @@ def test_pct_sign_follows_direction_when_prev_negative(conn):
     m = report.metrics(conn, TODAY, "monthly", "2026-11")
     assert m["prev.profit_ex_labor"] < 0 and m["diff.profit_ex_labor"] < 0
     assert m["pct.profit_ex_labor"] < 0  # 손실이 커졌으면 음수
+
+
+# ── 후검증(설계 §4) ──
+M = {"sales": 48_213_000, "diff.sales": -3_204_000, "pct.sales": -6, "est.profit": 5_120_000}
+X = report.label_numbers("monthly", "2026-11", "2026-10")
+EST = "대표 원장 보수·세금 전"
+
+
+def _out(text: str, used: list[str]) -> dict:
+    return {"points": [{"text": text, "used": used}]}
+
+
+def test_check_passes_rounded_and_abs():
+    out = _out(
+        "11월 매출은 4,821만 원으로 10월보다 320만 원(6%) 줄었습니다.",
+        ["sales", "diff.sales", "pct.sales"],
+    )
+    assert report.check_report(M, out, X)
+
+
+def test_check_passes_exact_won():
+    assert report.check_report(M, _out("매출 48,213,000원", ["sales"]), X)
+
+
+def test_check_rejects_unknown_key():
+    assert not report.check_report(M, _out("매출 4,821만 원", ["sales.x"]), X)
+
+
+def test_check_rejects_number_not_in_used():
+    assert not report.check_report(M, _out("매출 4,821만 원, 6% 감소", ["sales"]), X)
+
+
+def test_check_rejects_eok():
+    assert not report.check_report(M, _out("매출 4억 8천만 원", ["sales"]), X)
+
+
+def test_check_est_needs_marks():
+    assert not report.check_report(M, _out("[추정] 손익 512만 원", ["est.profit"]), X)
+    assert report.check_report(M, _out(f"[추정] 손익 512만 원({EST})", ["est.profit"]), X)
+
+
+def test_check_no_est_no_mark():
+    assert not report.check_report(M, _out("[추정] 매출 4,821만 원", ["sales"]), X)
+
+
+def test_check_empty_points():
+    assert report.check_report(M, {"points": []}, X)
+
+
+def test_check_too_many_points():
+    p = {"text": "매출 4,821만 원", "used": ["sales"]}
+    assert not report.check_report(M, {"points": [p] * 4}, X)
+
+
+def test_check_missing_field():
+    assert not report.check_report(M, {"points": [{"text": "매출"}]}, X)
+    assert not report.check_report(M, {}, X)
+
+
+def test_label_numbers():
+    assert report.label_numbers("monthly", "2026-11") == {2026, 11}
+    # 11/9(월)~11/15(일), 11월 둘째 주
+    assert report.label_numbers("weekly", "2026-11-09") == {2026, 11, 9, 15, 2}
+    assert report.label_numbers("daily", "2026-11-03") == {2026, 11, 3}

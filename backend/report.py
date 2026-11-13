@@ -7,6 +7,7 @@ import sqlite3
 from datetime import date, timedelta
 
 from backend import db, expense
+from backend.prep import numbers
 
 SCOPES = ("monthly", "weekly", "daily")
 COUNTS = {"monthly": 6, "weekly": 8, "daily": 10}  # 화면 기간 수(설계 §1)
@@ -15,6 +16,31 @@ COUNTS = {"monthly": 6, "weekly": 8, "daily": 10}  # 화면 기간 수(설계 §
 LABOR_DEFAULT = {"hygienist": 3_800_000, "desk": 3_000_000, "consultant": 3_800_000}
 MATERIAL, LAB = "재료비", "외주가공비"  # ⑧-2 계정 과목 이름(master ACCOUNTS)
 NO_PCT = ("noshow_rate",)  # 이미 %인 값 — 증감률 없이 증감(%p)만
+MAX_POINTS = 3
+EST_MARK, EST_NOTE = (
+    "[추정]",
+    "대표 원장 보수·세금 전",
+)  # 추정 값을 쓴 점에 글자 그대로(기능 정의 §5 ⑥)
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "points": {
+            "type": "array",
+            "maxItems": MAX_POINTS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "used": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["text", "used"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["points"],
+    "additionalProperties": False,
+}
 
 
 def is_est(key: str) -> bool:
@@ -225,3 +251,55 @@ def metrics(conn: sqlite3.Connection, today: date, scope: str, label: str) -> di
         if prev[k] and k not in NO_PCT:  # 음수 기준이어도 부호 = 방향
             out[f"pct.{k}"] = round((v - prev[k]) * 100 / abs(prev[k]))
     return out
+
+
+def label_numbers(scope: str, *labels: str) -> set[int]:
+    """기간 라벨이 문장에 들어갈 숫자 — 연·월·일, 주간은 그 주 일요일의 연·월·일과 월의 몇째 주도(설계 §4)"""
+    out: set[int] = set()
+    for label in labels:
+        if scope == "monthly":
+            y, m = label.split("-")
+            out |= {int(y), int(m)}
+            continue
+        d = date.fromisoformat(label)
+        out |= {d.year, d.month, d.day}
+        if scope == "weekly":
+            end = d + timedelta(days=6)
+            out |= {end.year, end.month, end.day, (d.day - 1) // 7 + 1}
+    return out
+
+
+def _allowed(values) -> set[int]:
+    """값 그대로·절댓값·만 원 단위 반올림(설계 §4)"""
+    out: set[int] = set()
+    for v in values:
+        out |= {v, abs(v), round(abs(v) / 10000) * 10000}
+    return out
+
+
+def point_numbers_ok(metrics: dict, point: dict, extra: set[int]) -> bool:
+    """본문 숫자가 모두 그 점이 기댄 값(또는 기간 라벨)에서 나온다"""
+    return numbers(point["text"]) <= _allowed(metrics[k] for k in point["used"]) | extra
+
+
+def point_est_ok(metrics: dict, point: dict) -> bool:
+    """추정 키를 쓰면 [추정]과 "대표 원장 보수·세금 전", 안 쓰면 [추정] 없음"""
+    if any(is_est(k) for k in point["used"]):
+        return EST_MARK in point["text"] and EST_NOTE in point["text"]
+    return EST_MARK not in point["text"]
+
+
+def check_report(metrics: dict, out: dict, extra: set[int]) -> bool:
+    """후검증(설계 §4, 평가 설계 §4 단위 정규화) — 점 0~3개, 쓴 키가 모두 metrics에 있고 숫자·추정 표시가 맞다"""
+    try:
+        points = out["points"]
+        if len(points) > MAX_POINTS:
+            return False
+        for p in points:
+            if not p["text"].strip() or any(k not in metrics for k in p["used"]):
+                return False
+            if not point_numbers_ok(metrics, p, extra) or not point_est_ok(metrics, p):
+                return False
+    except (KeyError, TypeError, AttributeError):  # 칸이 빠진 답
+        return False
+    return True
