@@ -473,3 +473,81 @@ def test_adjusted_invalid_or_na_check_keeps_none(src):
     for cid in (bad, na, none):
         assert (got[cid]["suggestion"], got[cid]["suggest_by"]) == (None, None)
         assert got[cid]["ai_evidence"] is None
+
+
+# ── ⑤-3 기준 조항 카드·서류 사유 차트 문장(설계 §3) ─────────────────────────
+
+
+def add_standards(src) -> None:
+    """청구 기준 문서 — 분야 문서마다 사유 절(generator/doc_catalog.py CLAIM_DOCS의 묶음)"""
+    from generator.doc_catalog import CLAIM_DOCS
+
+    for i, (field, reasons) in enumerate(CLAIM_DOCS.items(), 1):
+        body = f"# {field} 분야 청구 기준\n\n머리말.\n\n" + "".join(
+            f"## {CLAIM_HEADINGS[k]}\n\n- {CLAIM_HEADINGS[k]} 본문.\n\n" for k in reasons
+        )
+        src.conn.execute(
+            "INSERT INTO ax_documents (id, type, title, version, effective_date, path, body)"
+            " VALUES (?, 'claim_standard', ?, '1', '2024-01-01', 'x.md', ?)",
+            (i, f"{field} 분야 청구 기준", body),
+        )
+
+
+def save_evidence(conn, cid: int, quotes) -> None:
+    import json
+
+    result = None if quotes is None else json.dumps({"quotes": list(quotes)})
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_claim_evidence VALUES (?, '{}', 'h', ?, ?, 'v1', 'm', ?)",
+            (cid, result, int(result is not None), AT),
+        )
+
+
+def test_every_reason_card_and_rule(src):
+    """상세 사유 11개 모두 카드 절 = CLAIM_HEADINGS, 헷갈리기 쉬운 쌍 — 내역설명 미기재는 보완 후 재청구·채울 항목,
+    상병 착오는 삭감 수용(설계 §3 채점)"""
+    add_standards(src)
+    ids = {
+        k: add_claim(src, i, note=r["note"], reviewed=reviewed_for(10))
+        for i, (k, r) in enumerate(ADJUST_REASONS.items(), 1)
+    }
+    got = rows(src.app())
+    for k, cid in ids.items():
+        card = got[cid]["standard"]
+        assert card["heading"] == CLAIM_HEADINGS[k] and card["body"].startswith("- ")
+        assert card["doc_title"].endswith("분야 청구 기준")
+    assert (got[ids["D01"]]["suggestion"], got[ids["D01"]]["fill_item"]) == (
+        "resubmit",
+        CLAIM_HEADINGS["D01"],
+    )
+    assert (got[ids["C01"]]["suggestion"], got[ids["C01"]]["fill_item"]) == ("justified", None)
+
+
+def test_card_none_without_document(src):
+    cid = add_claim(src, 1, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    assert rows(src.app())[cid]["standard"] is None
+
+
+def test_adjusted_chart_quotes_documentation_only(src):
+    doc = add_claim(src, 1, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    empty = add_claim(src, 2, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    none = add_claim(src, 3, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    req = add_claim(src, 4, note=NOTE["requirement"][1], reviewed=reviewed_for(10))
+    conn = src.app()
+    save_evidence(conn, doc, ["치주낭 5mm, 출혈 있음"])
+    save_evidence(conn, empty, [])
+    save_evidence(conn, req, ["요건 건에 잘못 저장된 문장"])
+    got = rows(conn)
+    assert got[doc]["chart_quotes"] == ["치주낭 5mm, 출혈 있음"]
+    assert got[empty]["chart_quotes"] == []
+    assert got[none]["chart_quotes"] is None and got[req]["chart_quotes"] is None
+
+
+def test_pending_adjust_union(src):
+    """갱신 버튼 삭감 대응 건수 = 2a 할 일 ∪ 서류 사유 차트 문장 할 일"""
+    add_standards(src)
+    add_claim(src, 1, code=EXTRACT, note=ADJUST_REASONS["R05"]["note"], reviewed=reviewed_for(10))
+    add_claim(src, 2, note=NOTE["documentation"][1], reviewed=reviewed_for(10))
+    src.conn.execute("UPDATE emr_chart_notes SET note = '38번 매복, 골삭제 후 분할 발치함'")
+    assert claims._ai_pending(src.app(), DAY) == {"pre": 0, "adjust": 2}

@@ -129,6 +129,18 @@ CREATE TABLE truth_doc_meta (
     CHECK (is_distractor = (kind != 'core'))
 );
 
+-- ⑤-3 청구 기준 질문(설계 docs/superpowers/specs/2026-11-10-claim-review-design.md §3, 평가 설계 §5 ⑤-3). AI 초안 → 사람 검토
+-- (evaluation/claim_qa.py review) → ground_truth/claim_qa.json — make data가 적재한다. 정답 = 그 사유의 청구 기준 절 제목,
+-- warnings = 사람이 고친 문장에 남은 베끼기 경고(JSON 목록), split은 사유 단위
+CREATE TABLE truth_claim_qa (
+    id             TEXT PRIMARY KEY,
+    reason         TEXT NOT NULL,
+    question       TEXT NOT NULL,
+    answer_heading TEXT NOT NULL,
+    warnings       TEXT NOT NULL,
+    split          TEXT NOT NULL CHECK (split IN ('dev', 'test'))
+);
+
 -- RAG 질문 70개 (평가 설계 §3.1, 사람이 생성 후 작성). 원본은 ground_truth/rag_qa.json — make data가 적재한다.
 -- type = manual/notice/case/data/chart/refusal. answer_doc_ids JSON [출처 id] — 'doc:<ax_documents.id>' / 'call:<ax_calls.call_uid>' /
 -- 'thread:<chart_no>:<YYYY-MM>' / 'chart:<emr_treatments.id>' (청크 id에서 끝 순번을 뗀 것 — 앱 설계 §3).

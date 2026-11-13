@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>청구 기준 질문 검토</title>
+<!-- ⑤-3 청구 기준 질문 검토(evaluation/claim_qa.py review) — 앱과 따로 도는 로컬 페이지. 정답(절)은 이 페이지에만 보인다 -->
+<style>
+  :root { --bg: #f7f8fa; --card: #ffffff; --fg: #1f2933; --muted: #52606d; --line: #cfd6dd;
+          --ok: #1f7a4d; --ok-bg: #e7f6ee; --warn: #8a5a00; --warn-bg: #fff6df; --drop-bg: #f1f1f1; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+          display: flex; flex-direction: column; gap: 6px; }
+  .item.approved { border-color: var(--ok); background: var(--ok-bg); }
+  .item.dropped { background: var(--drop-bg); opacity: .7; }
+  .meta { font-size: 13px; color: var(--muted); }
+  details { font-size: 13px; color: var(--muted); }
+  details pre { white-space: pre-wrap; font: inherit; margin: 4px 0 0; color: var(--fg); }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px;
+             border: 1px solid var(--line); border-radius: 6px; color: var(--fg); background: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line);
+           background: #fff; color: var(--fg); cursor: pointer; }
+  button.on { background: var(--fg); color: #fff; border-color: var(--fg); }
+  .warn { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  .bar { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; display: flex; gap: 12px; align-items: center; }
+  .bar button { background: var(--fg); color: #fff; border-color: var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>청구 기준 질문 검토</h1>
+  <p class="hint">질문마다 [승인] 또는 [버림]을 고르세요. 문장을 고치면 '수정'으로 저장되고 베끼기 검사를 다시 합니다(경고가 있어도 저장은 됩니다). 정답은 그 사유의 절입니다 — 질문을 읽고 그 절이 답인지 확인해 주세요.</p>
+  <div id="list"></div>
+  <div class="bar"><button id="save">저장</button><span id="status" class="hint"></span></div>
+</main>
+<script>
+const list = document.getElementById("list");
+const state = {};
+const post = (path, body) =>
+  fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then((r) => r.json());
+
+function render(item) {
+  const box = document.createElement("section");
+  box.className = "item";
+  box.innerHTML = `
+    <div class="meta">${item.id} · ${item.split} · 사유: ${item.note}</div>
+    <div class="meta">정답 절: <b>${item.heading}</b></div>
+    <details><summary>절 본문 보기</summary><pre></pre></details>
+    <textarea rows="2"></textarea>
+    <div class="warn" hidden></div>
+    <div class="row"><button data-s="approved">승인</button><button data-s="dropped">버림</button></div>`;
+  box.querySelector("pre").textContent = item.body;
+  const text = box.querySelector("textarea");
+  const warn = box.querySelector(".warn");
+  text.value = item.saved ?? item.question;
+  const edited = item.saved != null && item.saved !== item.question;
+  const s = (state[item.id] = {
+    id: item.id,
+    status: item.saved == null ? null : edited ? "edited" : "approved",
+    question: text.value,
+  });
+  const check = () =>
+    post("/check", { reason: item.reason, question: s.question }).then((r) => {
+      warn.hidden = !r.warnings.length;
+      warn.textContent = "베끼기 경고: " + r.warnings.join(", ");
+    });
+  const paint = () => {
+    box.classList.toggle("approved", s.status === "approved" || s.status === "edited");
+    box.classList.toggle("dropped", s.status === "dropped");
+    for (const b of box.querySelectorAll("button"))
+      b.classList.toggle("on", b.dataset.s === s.status || (b.dataset.s === "approved" && s.status === "edited"));
+  };
+  text.addEventListener("change", () => {
+    s.question = text.value.trim();
+    if (s.question !== item.question && s.status !== "dropped") s.status = "edited";
+    check();
+    paint();
+  });
+  for (const b of box.querySelectorAll("button"))
+    b.addEventListener("click", () => {
+      s.status = b.dataset.s === "approved" && s.question !== item.question ? "edited" : b.dataset.s;
+      paint();
+    });
+  if (edited) check(); // 다시 열 때 고친 문장의 경고를 다시 보인다
+  paint();
+  list.appendChild(box);
+}
+
+fetch("/drafts").then((r) => r.json()).then((d) => d.items.forEach(render));
+document.getElementById("save").addEventListener("click", () => {
+  const decisions = Object.values(state).filter((s) => s.status);
+  const left = Object.values(state).length - decisions.length;
+  post("/save", { decisions }).then((r) => {
+    document.getElementById("status").textContent =
+      `저장 ${r.saved}문항(경고 ${r.warned})` + (left ? ` · 안 고른 ${left}문항은 빠짐` : "");
+  });
+});
+</script>
+</body>
+</html>

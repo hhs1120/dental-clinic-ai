@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { AdjustTable } from "@/components/claims/adjust-table";
 import { PreClaimTable } from "@/components/claims/pre-claim-table";
+import { StandardSearch } from "@/components/claims/standard-search";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TABS = [
@@ -27,29 +28,38 @@ export function ClaimsView() {
   };
 
   return (
-    <Tabs
-      value={tab}
-      // 탭을 바꾸면 그 탭의 기본 칩으로 — 칩 이름이 탭마다 다르다
-      onValueChange={(v) => go({ tab: v === "adjust" ? null : v, chip: null })}
-      className="gap-4"
-    >
-      <TabsList variant="line" className="w-full justify-start border-b">
-        {TABS.map((t) => (
-          <TabsTrigger key={t.value} value={t.value} className="flex-none px-4">
-            {t.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <TabsContent value="adjust">
-        {tab === "adjust" && (
-          <AdjustTable chip={chip} onChip={(c) => go({ chip: c })} />
-        )}
-      </TabsContent>
-      <TabsContent value="pre">
-        {tab === "pre" && (
-          <PreClaimTable chip={chip} onChip={(c) => go({ chip: c })} />
-        )}
-      </TabsContent>
-    </Tabs>
+    <div className="flex flex-col gap-4">
+      <StandardSearch />
+      <Tabs
+        value={tab}
+        // 탭을 바꾸면 그 탭의 기본 칩으로 — 칩 이름이 탭마다 다르다
+        onValueChange={(v) =>
+          go({ tab: v === "adjust" ? null : v, chip: null })
+        }
+        className="gap-4"
+      >
+        <TabsList variant="line" className="w-full justify-start border-b">
+          {TABS.map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              className="flex-none px-4"
+            >
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="adjust">
+          {tab === "adjust" && (
+            <AdjustTable chip={chip} onChip={(c) => go({ chip: c })} />
+          )}
+        </TabsContent>
+        <TabsContent value="pre">
+          {tab === "pre" && (
+            <PreClaimTable chip={chip} onChip={(c) => go({ chip: c })} />
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

@@ -8,7 +8,7 @@ master 값은 source.ax_master_values로만 읽는다(CLAUDE.md). 오늘 화면(
 import sqlite3
 from datetime import date, timedelta
 
-from backend import claim_check, claim_omission
+from backend import claim_check, claim_evidence, claim_omission
 from backend.prep import master_values
 
 # 칩 순서 = 화면 순서(설계 §1). 화면 문구는 frontend/lib/claims-api.ts
@@ -60,6 +60,8 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
     days, types, headings = mv["appeal_days"], mv["adjust_note_types"], mv["adjust_note_headings"]
     rows = []
     ai = claim_check.results(conn)
+    cards = claim_check.section_cards(conn)
+    quotes = claim_evidence.results(conn)
     for r in conn.execute(
         "SELECT c.id, c.chart_no, p.name, c.service_date, c.tooth_no, pr.name AS procedure_name,"
         " c.status, c.claim_amount, COALESCE(c.paid_amount, 0) AS paid_amount, c.adjust_note,"
@@ -102,6 +104,11 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
                 "ai_evidence": evidence,
                 "reason": SUGGEST_REASON[type_],
                 "fill_item": headings[r["adjust_note"]] if suggestion == "resubmit" else None,
+                "standard": cards.get(headings[r["adjust_note"]]),
+                # 서류 사유만 — 통과한 결과가 있으면 목록(빈 답은 []), 없거나 실패면 None
+                "chart_quotes": (quotes.get(r["id"]) or {}).get("quotes")
+                if type_ == "documentation"
+                else None,
                 "judgment": (
                     {"value": r["judgment"], "by": r["judged_by"], "at": r["judged_at"]}
                     if r["judgment"]
@@ -132,13 +139,14 @@ def adjusted(conn: sqlite3.Connection, today: date) -> dict:
 
 
 def _ai_pending(conn, today: date) -> dict[str, int]:
-    """갱신 버튼 줄 수 — 청구 전은 대기 줄 중 2a·2b 어느 쪽이든 다시 부를 줄(합집합), 삭감 대응은 2a만"""
+    """갱신 버튼 줄 수 — 청구 전은 대기 줄 중 2a·2b 어느 쪽이든 다시 부를 줄, 삭감 대응은 2a·⑤-3 차트 문장(합집합)"""
     req = claim_check.todo_ids(conn, today)
     pending = {
         r[0] for r in conn.execute("SELECT id FROM source.emr_claims WHERE status = 'pending'")
     }
     pre = (req | claim_omission.todo_ids(conn, today)) & pending
-    return {"pre": len(pre), "adjust": len(req - pending)}
+    adjust = (req | claim_evidence.todo_ids(conn, today)) - pending
+    return {"pre": len(pre), "adjust": len(adjust)}
 
 
 def pre_claim(conn: sqlite3.Connection, today: date) -> dict:

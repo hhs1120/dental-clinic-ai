@@ -298,6 +298,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         <p className="text-xs text-muted-foreground tabular-nums">
           심사결과 통보 {r.reviewed_at} · 재심 신청 기한 {r.deadline}
         </p>
+        {r.standard && <StandardBox card={r.standard} />}
       </div>
       <div className="flex flex-col gap-1.5">
         <h3 className="font-bold">어떻게 할까</h3>
@@ -311,6 +312,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
           </p>
         ))}
         {r.fill_item && <p>채울 항목: {r.fill_item}</p>}
+        {r.chart_quotes && <ChartQuotes quotes={r.chart_quotes} />}
         {r.judgment && (
           <p>
             남긴 판단: <b>{judgedText(r.judgment)}</b>
@@ -339,5 +341,39 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         {error && <ErrorBand text={error} />}
       </div>
     </section>
+  );
+}
+
+/** 기준 조항 카드 — 그 사유의 청구 기준 절 전문(설계 §3), 머리는 `문서 › 절` */
+export function StandardBox({
+  card,
+}: {
+  card: { doc_title: string; heading: string; body: string };
+}) {
+  return (
+    <div className="mt-1 rounded-lg border bg-card p-2.5 text-sm">
+      <p className="text-xs text-muted-foreground">
+        {card.doc_title} › {card.heading}
+      </p>
+      <p className="whitespace-pre-line">{card.body}</p>
+    </div>
+  );
+}
+
+/** 서류 사유 차트 문장(AI) — 보완 서류에 옮겨 적을 차트 인용, 빈 답이면 없음 한 줄 */
+function ChartQuotes({ quotes }: { quotes: string[] }) {
+  if (!quotes.length)
+    return (
+      <p className="text-sm text-muted-foreground">
+        차트에 옮겨 적을 문장 없음
+      </p>
+    );
+  return (
+    <div className="rounded-lg border border-status-warn-border bg-status-warn-bg p-2.5 text-sm text-status-warn-fg">
+      <p className="text-xs font-bold">차트에서 옮겨 적을 문장(AI)</p>
+      {quotes.map((q, i) => (
+        <p key={`${i}-${q}`}>“{q}”</p>
+      ))}
+    </div>
   );
 }

@@ -222,3 +222,17 @@ def test_prompt_v2_no_ambiguous_example():
 
     assert co.PROMPT_VERSION == "v2"
     assert "때움" not in prompts.load(co.TASK, co.PROMPT_VERSION)["system"]
+
+
+def test_results_skip_unknown_claim(src):
+    """청구가 없어진 저장 행(재설계 뒤 남은 옛 행)은 건너뛴다 — 화면이 500을 내지 않게"""
+    cid = claim(src, 1)
+    conn = src.app()
+    build(conn, FakeGw(llm(HIT)))
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_claim_omissions SELECT 999, facts, facts_hash, result, valid,"
+            " prompt_version, model, created_at FROM ax_claim_omissions WHERE claim_id = ?",
+            (cid,),
+        )
+    assert set(co.results(conn)) == {cid}
