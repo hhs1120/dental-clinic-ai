@@ -2,13 +2,19 @@
 끝난 기간(월·주·진료일)마다 운영 숫자와 이전 기간 대비 변화 분해를 코드가 `metrics`로 모은다(설계 §2·§3).
 재료비 과목은 ⑧-2 지출 증빙 줄(backend/expense.py sheet)의 과목을 그대로 쓴다. master 값은 source.ax_master_values로만."""
 
+import argparse
+import hashlib
 import json
 import sqlite3
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
-from backend import db, expense
+from backend import db, expense, prompts
 from backend.prep import numbers
 
+ALIAS, TASK, PROMPT_VERSION = "chat", "report", "v1"  # config/llm.yaml "③ 챗·④ 제안" 별칭
+ROOT = Path(__file__).resolve().parents[1]
 SCOPES = ("monthly", "weekly", "daily")
 COUNTS = {"monthly": 6, "weekly": 8, "daily": 10}  # 화면 기간 수(설계 §1)
 # 역할별 월 인건비 가정값(원, 4대보험 포함) — 실제 급여가 아니다. ax_settings labor_cost_assumed가 역할별로 덮어쓴다.
@@ -303,3 +309,138 @@ def check_report(metrics: dict, out: dict, extra: set[int]) -> bool:
     except (KeyError, TypeError, AttributeError):  # 칸이 빠진 답
         return False
     return True
+
+
+def metrics_hash(m: dict) -> str:
+    return hashlib.sha256(json.dumps(m, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
+def _input(conn, today: date, scope: str, label: str, m: dict) -> dict:
+    return {
+        "scope": scope,
+        "period": label,
+        "prev_period": prev_period(conn, today, scope, label),
+        "metrics": m,
+    }
+
+
+def _request(facts: dict) -> dict:
+    return {
+        "system": prompts.load(TASK, PROMPT_VERSION)["system"],
+        "messages": [
+            {
+                "role": "user",
+                "content": "기간과 숫자:\n" + json.dumps(facts, ensure_ascii=False, indent=1),
+            }
+        ],
+        "schema": SCHEMA,
+    }
+
+
+def _valid(result, facts: dict, extra: set[int]):
+    """통과한 답 dict, 아니면 None"""
+    if result is None or not result.ok or not isinstance(result.data, dict):
+        return None
+    return result.data if check_report(facts["metrics"], result.data, extra) else None
+
+
+def _extra(conn, today: date, scope: str, label: str) -> set[int]:
+    prev = prev_period(conn, today, scope, label)
+    return label_numbers(scope, label, *([prev] if prev else []))
+
+
+def _save(conn, scope: str, label: str, m: dict, out, model: str) -> None:
+    with conn:  # 행마다 커밋 — 다시 부르는 동안 쓰기 잠금을 쥐지 않는다
+        conn.execute(
+            "INSERT INTO ax_reports (scope, period, metrics, metrics_hash, points, valid,"
+            " prompt_version, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT (scope, period) DO UPDATE SET metrics = excluded.metrics,"
+            " metrics_hash = excluded.metrics_hash, points = excluded.points,"
+            " valid = excluded.valid, prompt_version = excluded.prompt_version,"
+            " model = excluded.model, created_at = excluded.created_at",
+            (
+                scope,
+                label,
+                json.dumps(m, ensure_ascii=False),
+                metrics_hash(m),
+                None if out is None else json.dumps(out["points"], ensure_ascii=False),
+                int(out is not None),
+                PROMPT_VERSION,
+                model,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+
+
+def _batchable(gw) -> bool:
+    first = gw.config["aliases"][ALIAS][0]
+    return gw.config["models"][first].get("provider", "anthropic") == "anthropic"
+
+
+def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> dict:
+    """화면 기간 전부의 해석을 만든다(설계 §5). 숫자 해시·버전·모델이 같고 통과한 기간은 부르지 않는다 — 숫자가 바뀐 기간은
+    다시 부른다. 첫 답은 use_batch면 Batch 한 번, 아니면 일반 호출. 후검증에 실패하거나 Batch에서 빠진 기간만 일반 호출로
+    한 번 더, 또 실패면 해석 없음(points NULL·valid 0). 일반 호출은 차례로 — 게이트웨이 기록이 앱 연결 하나에 쓴다"""
+    model = gw.config["aliases"][ALIAS][0]
+    out = {"rows": 0, "called": 0, "skipped": 0, "failed": 0}
+    todo = []
+    for scope in SCOPES:
+        for label in periods(conn, today, scope):
+            out["rows"] += 1
+            m = metrics(conn, today, scope, label)
+            old = conn.execute(
+                "SELECT metrics_hash, prompt_version, model, valid FROM ax_reports"
+                " WHERE scope = ? AND period = ?",
+                (scope, label),
+            ).fetchone()
+            if old and old["valid"] and tuple(old)[:3] == (metrics_hash(m), PROMPT_VERSION, model):
+                out["skipped"] += 1
+                continue
+            facts = _input(conn, today, scope, label, m)
+            todo.append(
+                (f"{scope}_{label}", scope, label, facts, _extra(conn, today, scope, label))
+            )
+    first = {}
+    if todo and use_batch and _batchable(gw):
+        bid = gw.submit_batch(
+            ALIAS,
+            [{"custom_id": key, **_request(facts)} for key, _, _, facts, _ in todo],
+            task=TASK,
+            prompt_version=PROMPT_VERSION,
+        )
+        while gw.batch_status(bid) != "ended":
+            time.sleep(poll_seconds)
+        first = gw.batch_results(
+            bid, ALIAS, task=TASK, prompt_version=PROMPT_VERSION, schema=SCHEMA
+        )
+
+    def plain(facts):
+        return gw.complete(ALIAS, task=TASK, prompt_version=PROMPT_VERSION, **_request(facts))
+
+    for key, scope, label, facts, extra in todo:
+        out["called"] += 1
+        used = first.get(key) or plain(facts)
+        got = _valid(used, facts, extra)
+        if got is None:
+            used = plain(facts)
+            got = _valid(used, facts, extra)
+        out["failed"] += got is None
+        _save(conn, scope, label, facts["metrics"], got, used.model if used else model)
+    return out
+
+
+def main(argv=None) -> None:
+    from backend.harness.llm import make_gateway
+    from shared.clinic import load_clinic
+
+    p = argparse.ArgumentParser(prog="python -m backend.report")
+    p.add_argument("command", choices=("run",))
+    p.add_argument("--no-batch", action="store_true", help="Batch 없이 일반 호출만")
+    args = p.parse_args(argv)
+    conn = db.connect(ROOT / "data" / "app.sqlite", ROOT / "data" / "source.sqlite")
+    db.init_schema(conn)
+    print(build(conn, make_gateway(conn), load_clinic().today, use_batch=not args.no_batch))
+
+
+if __name__ == "__main__":
+    main()

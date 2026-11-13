@@ -316,3 +316,74 @@ def test_label_numbers():
     # 11/9(월)~11/15(일), 11월 둘째 주
     assert report.label_numbers("weekly", "2026-11-09") == {2026, 11, 9, 15, 2}
     assert report.label_numbers("daily", "2026-11-03") == {2026, 11, 3}
+
+
+# ── 저장·일괄 생성(설계 §5) ──
+EMPTY = {"points": []}
+BAD = {"points": [{"text": "매출 1원", "used": ["nope"]}]}
+
+
+def _gw(batch, *turns):
+    from tests.backend.test_prep import FakeGw, res
+
+    return FakeGw(*[res(t) for t in turns], batch=lambda cid: res(batch))
+
+
+def _n(conn) -> int:
+    return sum(len(report.periods(conn, TODAY, s)) for s in report.SCOPES)
+
+
+def _rows(conn):
+    return conn.execute("SELECT * FROM ax_reports ORDER BY scope, period").fetchall()
+
+
+def test_build_saves_and_skips(conn):
+    n = _n(conn)
+    out = report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)
+    assert out == {"rows": n, "called": n, "skipped": 0, "failed": 0}
+    rows = _rows(conn)
+    assert len(rows) == n and all(r["valid"] == 1 for r in rows)
+    r = next(r for r in rows if (r["scope"], r["period"]) == ("monthly", "2026-11"))
+    assert json.loads(r["metrics"]) == report.metrics(conn, TODAY, "monthly", "2026-11")
+    assert r["metrics_hash"] == report.metrics_hash(json.loads(r["metrics"]))
+    again = report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)
+    assert again["called"] == 0 and again["skipped"] == n
+
+
+def test_build_regenerates_stale(conn):
+    report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)
+    with (
+        conn
+    ):  # 11월 재료비 출금을 소모품비로 확정 — 같은 출금처 기억으로 10월 출금 과목도 바뀐다(⑧-2)
+        conn.execute(
+            "INSERT INTO ax_expense_confirmations VALUES ('fin_bank_transactions', 2,"
+            " '바른덴탈상사', '[]', '소모품비', 'desk', '2026-11-30 10:00:00')"
+        )
+    gw = _gw(EMPTY)
+    out = report.build(conn, gw, TODAY, use_batch=True, poll_seconds=0)
+    assert out["called"] == 2  # 주간·일간은 재료비가 없어 그대로
+    assert [r["custom_id"] for r in gw.batches[-1]] == ["monthly_2026-10", "monthly_2026-11"]
+
+
+def test_build_fail_saves_invalid(conn):
+    n = _n(conn)
+    out = report.build(conn, _gw(BAD, *[BAD] * n), TODAY, use_batch=True, poll_seconds=0)
+    assert out["failed"] == n
+    assert all(r["valid"] == 0 and r["points"] is None for r in _rows(conn))
+
+
+def test_build_retries_once(conn):
+    n = _n(conn)
+    gw = _gw(BAD, *[EMPTY] * n)
+    out = report.build(conn, gw, TODAY, use_batch=True, poll_seconds=0)
+    assert out["failed"] == 0 and len(gw.calls) == n
+    assert all(r["valid"] == 1 for r in _rows(conn))
+
+
+def test_build_input_has_periods_and_metrics(conn):
+    gw = _gw(EMPTY)
+    report.build(conn, gw, TODAY, use_batch=True, poll_seconds=0)
+    req = next(r for r in gw.batches[0] if r["custom_id"] == "monthly_2026-11")
+    sent = json.loads(req["messages"][0]["content"].split("\n", 1)[1])
+    assert sent["period"] == "2026-11" and sent["prev_period"] == "2026-10"
+    assert sent["metrics"]["sales"] == 670_000

@@ -284,6 +284,22 @@ CREATE TABLE ax_prep_sheets (
     UNIQUE (sheet_date, patient_id, appointment_id)
 );
 
+-- ⑥ 경영 리포트 해석(backend/report.py, 설계 docs/superpowers/specs/2026-11-13-report-design.md §5). 기간 종류·기간당 1행.
+-- metrics = 해석을 만든 때의 숫자(지금 숫자와 해시가 다르면 화면이 stale로 보인다), metrics_hash·prompt_version·model이
+-- 같고 통과한 행은 다시 부르지 않는다. points = [{text, used[metrics 키]}], 후검증 실패면 NULL·valid 0
+CREATE TABLE ax_reports (
+    scope          TEXT NOT NULL CHECK (scope IN ('monthly', 'weekly', 'daily')),
+    period         TEXT NOT NULL,
+    metrics        TEXT NOT NULL,
+    metrics_hash   TEXT NOT NULL,
+    points         TEXT,
+    valid          INTEGER NOT NULL DEFAULT 0,
+    prompt_version TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (scope, period)
+);
+
 -- ⑤-2 AI 점검(backend/claim_check.py) — 청구 줄 하나에 한 행. facts = LLM 입력(시술·치아·상병·나이·차트 서술·요건 절,
 -- 청구 상태·조정 사유는 없음), facts_hash·prompt_version·model이 같고 통과한 줄은 다시 부르지 않는다.
 -- result = {requirement: met|missing|na, omissions[{procedure,quote}], evidence[{source,quote}]}, 후검증 실패면 NULL·valid 0
