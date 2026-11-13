@@ -25,6 +25,11 @@ def test_real_section_shape():
         "병원 내부 보충: 촬영으로 확인한 매복 정도와 골삭제 여부를 차트에 함께 적는다."
     )
     assert "병원 내부 보충" not in section_body("D03")
+    # 원문은 환자 단위("부분 무치악 환자"), 차트는 부위 단위("무치악 부위") — 보충 줄이 잇는다
+    assert section_body("R06").endswith(
+        "병원 내부 보충: 차트에 발치 시점이나 무치악 기간과 함께 시술 부위가 무치악 부위임을"
+        " 진료 소견으로 적는다. 환자의 말만으로는 근거가 아니다."
+    )
 
 
 def test_virtual_section_marked():
