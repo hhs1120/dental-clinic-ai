@@ -141,7 +141,8 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
           <h2 className="text-lg font-bold">주목할 점</h2>
           <Badge variant="kind">AI</Badge>
           <span className="text-xs text-muted-foreground">
-            숫자는 모두 아래 metrics 값에서 — 후검증 통과분만 보입니다
+            문장의 숫자는 점마다 아래 꼬리표 값에서 — 후검증을 통과한 해석만
+            보입니다
           </span>
           {it?.stale && (
             <Badge variant="warn">
@@ -168,7 +169,7 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
                       key={u}
                       className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                     >
-                      {u}
+                      {u} {it.values[u]?.toLocaleString("ko-KR") ?? "—"}
                     </code>
                   ))}
                 </div>

@@ -50,6 +50,17 @@ def test_score(conn):
     assert s["est_missing"] == 1
 
 
+def test_score_only_screen_periods(conn):
+    """화면 기간 밖의 옛 행(기준일이 바뀐 뒤 남은 것)은 세지 않는다"""
+    _put(conn, "2026-11", [GOOD])
+    with conn:
+        conn.execute(
+            "INSERT INTO ax_reports VALUES ('monthly', '2020-01', '{}', 'x', '[]', 1, 'v1', 'm',"
+            " '2026-12-01')"
+        )
+    assert report_eval.score(conn, TODAY)["saved"] == 1
+
+
 def test_score_empty(conn):
     s = report_eval.score(conn, TODAY)
     assert (s["saved"], s["points"], s["numbers_ok"]) == (0, 0, {"k": 0, "n": 0})

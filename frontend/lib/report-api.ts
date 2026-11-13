@@ -16,6 +16,7 @@ export interface Point {
 
 export interface Interpretation {
   points: Point[];
+  values: Record<string, number | null>; // 꼬리표 값 — 해석을 만든 때의 숫자
   model: string;
   created_at: string;
   stale: boolean; // 해석을 만든 뒤 숫자가 바뀜(⑧ 확정 등)

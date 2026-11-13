@@ -20,7 +20,10 @@ def score(conn, today: date) -> dict:
         "numbers_ok": {"k": 0, "n": 0},
         "est_missing": 0,
     }
+    screen = {(s, p) for s in report.SCOPES for p in report.periods(conn, today, s)}
     for r in conn.execute("SELECT * FROM ax_reports"):
+        if (r["scope"], r["period"]) not in screen:  # 기준일이 바뀐 뒤 남은 옛 기간
+            continue
         out["saved"] += 1
         if not r["valid"]:
             continue

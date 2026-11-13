@@ -311,6 +311,30 @@ def test_check_missing_field():
     assert not report.check_report(M, {}, X)
 
 
+def test_check_round_half_up():
+    """만 원 반올림은 .5를 올린다(파이썬 round는 짝수 쪽)"""
+    m = {"diff.sales.preventive": -1_965_000}
+    assert report.check_report(m, _out("예방 매출이 197만 원 줄었습니다.", list(m)), X)
+
+
+def test_check_rejects_point_without_used():
+    """기댄 키가 없는 점 = metrics에 없는 원인(설계 "하면 실패인 것")"""
+    assert not report.check_report(M, _out("환자가 경쟁 병원으로 옮겼습니다.", []), X)
+
+
+def test_check_small_value_does_not_allow_zero():
+    m = {"noshow": 3}
+    assert not report.check_report(m, _out("노쇼가 0건에서 3건이 됐습니다.", ["noshow"]), X)
+
+
+def test_check_label_number_needs_unit():
+    """기간 숫자는 뒤에 년·월·일·주가 붙을 때만 — 단위 없는 같은 숫자는 값으로 본다"""
+    x = report.label_numbers("daily", "2026-11-25", "2026-11-24")
+    m = {"visits": 12}
+    assert report.check_report(m, _out("11월 25일 예약은 12건입니다.", ["visits"]), x)
+    assert not report.check_report(m, _out("예약은 11건입니다.", ["visits"]), x)
+
+
 def test_label_numbers():
     assert report.label_numbers("monthly", "2026-11") == {2026, 11}
     # 11/9(월)~11/15(일), 11월 둘째 주
@@ -356,9 +380,8 @@ def test_build_saves_and_skips(conn):
 
 def test_build_regenerates_stale(conn):
     report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)
-    with (
-        conn
-    ):  # 11월 재료비 출금을 소모품비로 확정 — 같은 출금처 기억으로 10월 출금 과목도 바뀐다(⑧-2)
+    # 11월 재료비 출금을 소모품비로 확정 — 같은 출금처 기억으로 10월 출금 과목도 바뀐다(⑧-2)
+    with conn:
         conn.execute(
             "INSERT INTO ax_expense_confirmations VALUES ('fin_bank_transactions', 2,"
             " '바른덴탈상사', '[]', '소모품비', 'desk', '2026-11-30 10:00:00')"
@@ -382,6 +405,27 @@ def test_build_retries_once(conn):
     out = report.build(conn, gw, TODAY, use_batch=True, poll_seconds=0)
     assert out["failed"] == 0 and len(gw.calls) == n
     assert all(r["valid"] == 1 for r in _rows(conn))
+
+
+def test_build_without_batch(conn):
+    n = _n(conn)
+    gw = _gw(BAD, *[EMPTY] * n)
+    out = report.build(conn, gw, TODAY, use_batch=False)
+    assert out["failed"] == 0 and len(gw.calls) == n and not gw.batches
+
+
+def test_build_batch_missing_falls_back(conn):
+    """Batch 결과에서 빠진 기간은 일반 호출로"""
+    from tests.backend.test_prep import FakeGw, res
+
+    n = _n(conn)
+    gw = FakeGw(
+        res(EMPTY),
+        batch=lambda cid: None if cid == "monthly_2026-11" else res(EMPTY),
+    )
+    out = report.build(conn, gw, TODAY, use_batch=True, poll_seconds=0)
+    assert out == {"rows": n, "called": n, "skipped": 0, "failed": 0}
+    assert len(gw.calls) == 1
 
 
 def test_build_input_has_periods_and_metrics(conn):
@@ -428,6 +472,8 @@ def test_sheet_stale(conn):
         )
     got = report.sheet(conn, TODAY, "monthly", "2026-11")["interpretation"]
     assert got["stale"] is True and got["points"] == GOOD["points"]
+    # 꼬리표 값은 해석을 만든 때의 숫자 — 지금 숫자가 아니라
+    assert got["values"] == {"sales": 670_000}
 
 
 def test_sheet_invalid_is_none(conn):

@@ -5,6 +5,7 @@
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from datetime import date, datetime, timedelta
@@ -276,16 +277,22 @@ def label_numbers(scope: str, *labels: str) -> set[int]:
 
 
 def _allowed(values) -> set[int]:
-    """값 그대로·절댓값·만 원 단위 반올림(설계 §4)"""
+    """값 그대로·절댓값·만 원 단위 반올림(설계 §4) — .5는 올림, 1만 이상만(작은 값이 0을 허용하지 않게)"""
     out: set[int] = set()
     for v in values:
-        out |= {v, abs(v), round(abs(v) / 10000) * 10000}
+        out |= {v, abs(v)}
+        if abs(v) >= 10000:
+            out.add((abs(v) + 5000) // 10000 * 10000)
     return out
 
 
+LABEL_UNIT = re.compile(r"(\d+)\s*(?=[년월일주])")
+
+
 def point_numbers_ok(metrics: dict, point: dict, extra: set[int]) -> bool:
-    """본문 숫자가 모두 그 점이 기댄 값(또는 기간 라벨)에서 나온다"""
-    return numbers(point["text"]) <= _allowed(metrics[k] for k in point["used"]) | extra
+    """본문 숫자가 모두 그 점이 기댄 값에서 나온다. 기간 라벨 숫자는 뒤에 년·월·일·주가 붙을 때만 뺀다"""
+    text = LABEL_UNIT.sub(lambda m: " " if int(m[1]) in extra else m[0], point["text"])
+    return numbers(text) <= _allowed(metrics[k] for k in point["used"])
 
 
 def point_est_ok(metrics: dict, point: dict) -> bool:
@@ -302,7 +309,8 @@ def check_report(metrics: dict, out: dict, extra: set[int]) -> bool:
         if len(points) > MAX_POINTS:
             return False
         for p in points:
-            if not p["text"].strip() or any(k not in metrics for k in p["used"]):
+            # 기댄 키가 없는 점 = metrics에 없는 원인(설계 "하면 실패인 것")
+            if not p["text"].strip() or not p["used"] or any(k not in metrics for k in p["used"]):
                 return False
             if not point_numbers_ok(metrics, p, extra) or not point_est_ok(metrics, p):
                 return False
@@ -379,8 +387,8 @@ def _batchable(gw) -> bool:
 
 def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> dict:
     """화면 기간 전부의 해석을 만든다(설계 §5). 숫자 해시·버전·모델이 같고 통과한 기간은 부르지 않는다 — 숫자가 바뀐 기간은
-    다시 부른다. 첫 답은 use_batch면 Batch 한 번, 아니면 일반 호출. 후검증에 실패하거나 Batch에서 빠진 기간만 일반 호출로
-    한 번 더, 또 실패면 해석 없음(points NULL·valid 0). 일반 호출은 차례로 — 게이트웨이 기록이 앱 연결 하나에 쓴다"""
+    다시 부른다. 첫 답은 use_batch면 Batch 한 번, 아니면 일반 호출. Batch에서 빠진 기간은 일반 호출이 첫 답이 되고,
+    첫 답이 후검증에 실패하면 일반 호출로 한 번 더, 또 실패면 해석 없음(points NULL·valid 0). 일반 호출은 차례로 — 게이트웨이 기록이 앱 연결 하나에 쓴다"""
     model = gw.config["aliases"][ALIAS][0]
     out = {"rows": 0, "called": 0, "skipped": 0, "failed": 0}
     todo = []
@@ -446,14 +454,17 @@ def sheet(conn: sqlite3.Connection, today: date, scope: str, period: str | None 
     by = {p: metrics(conn, today, scope, p) for p in labels}
     m = by[period]
     row = conn.execute(
-        "SELECT points, valid, metrics_hash, model, created_at FROM ax_reports"
+        "SELECT points, valid, metrics, metrics_hash, model, created_at FROM ax_reports"
         " WHERE scope = ? AND period = ?",
         (scope, period),
     ).fetchone()
     interp = None
     if row and row["valid"]:
+        points, made = json.loads(row["points"]), json.loads(row["metrics"])
         interp = {
-            "points": json.loads(row["points"]),
+            "points": points,
+            # 꼬리표 값 — 해석을 만든 때의 숫자(stale이면 지금 숫자와 다르다)
+            "values": {k: made.get(k) for p in points for k in p["used"]},
             "model": row["model"],
             "created_at": row["created_at"],
             "stale": row["metrics_hash"] != metrics_hash(m),

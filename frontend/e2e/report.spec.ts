@@ -98,6 +98,7 @@ async function fakeReport(page: Page, interpretation: unknown) {
 test("월간 — 숫자 카드·[추정]·AI 해석 점", async ({ page }) => {
   await fakeReport(page, {
     points: POINTS,
+    values: { sales: 65_495_000, "diff.sales": 17_995_000, "pct.sales": 38 },
     model: "m",
     created_at: "2026-12-01T05:00:00",
     stale: false,
@@ -108,7 +109,7 @@ test("월간 — 숫자 카드·[추정]·AI 해석 점", async ({ page }) => {
   await expect(page.getByText("미확정 3건 포함")).toBeVisible();
   await expect(page.getByTestId("stat-est")).toHaveCount(2);
   await expect(page.getByText(POINTS[0].text)).toBeVisible();
-  await expect(page.getByText("diff.sales")).toBeVisible();
+  await expect(page.getByText("diff.sales 17,995,000")).toBeVisible();
   await expect(page.getByText("다시 만들기 필요")).toHaveCount(0);
   await expect(page.getByText("임플란트 1차 × 만성 치은염")).toBeVisible();
 });
@@ -120,6 +121,7 @@ test("해석 없음·숫자가 바뀐 해석", async ({ page }) => {
   await page.unroute("**/api/report**");
   await fakeReport(page, {
     points: POINTS,
+    values: { sales: 65_495_000, "diff.sales": 17_995_000, "pct.sales": 38 },
     model: "m",
     created_at: "2026-12-01T05:00:00",
     stale: true,
