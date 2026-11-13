@@ -119,8 +119,6 @@ def test_payload_hides_distractor_status():
 def test_checks():
     sim = documents.checks(BY_KEY["sim-booking-basics"])
     assert sim["must_include"] == [] and {"3회", "3개월"} <= set(sim["forbidden_words"])
-    claim = documents.checks(BY_KEY["claim-치주"])
-    assert ["## 치석제거 뒤 치주치료 연결"] in claim["must_include"]
     assert documents.checks(BY_KEY["ext-noshow"])["forbidden_words"] == ["클로드치과"]
     assert documents.checks(BY_KEY["edu-brushing"])["length"] == list(
         documents.DOC_LENGTH_CHARS["default"]

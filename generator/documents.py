@@ -3,8 +3,8 @@
 - doc_plan(코드): doc_catalog 표로 문서·정답을 쓰고, 본문에는 사실을 그대로 옮긴 초안을 넣는다(가짜 게이트웨이면 남음).
   문서 번호는 시드 셔플, 경로는 번호 — 표 순서(핵심 → 방해)나 표 이름(sim-·old-)이 source.sqlite에 드러나지 않게.
   나중에 더한 문서(APPENDED)는 셔플에서 빼고 뒤 번호를 붙인다 — 기존 번호(캐시·③ 질문 정답)를 그대로 둔다
-- documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실·청구 기준 소제목 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
-  건 id는 문서 번호(작업 파일에도 표 이름이 없게)
+- documents(LLM): 초안을 문서로 다시 쓴다 — 심은 사실 포함, 비슷한 주제는 짝의 사실 없음(llm_jobs 검증).
+  건 id는 문서 번호(작업 파일에도 표 이름이 없게). 청구 기준은 계획 단계 본문이 최종(generator/claim_standards.py — LLM에 안 보냄)
 """
 
 import json
@@ -15,9 +15,8 @@ from generator.doc_catalog import BY_KEY, CATALOG, CLAIM_HEADINGS, Doc
 from generator.llm_jobs import Task
 from generator.master import CLINIC_NAME
 
-# 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧고, 청구 기준은 절 수에 비례(기준을 지어내 길이를 채우지 않게)
+# 본문 글자 수(공백 제외) — 생성 검증. 공지는 짧게
 DOC_LENGTH_CHARS = {"notice": (150, 1500), "default": (400, 3000)}
-CLAIM_CHARS_PER_SECTION = 120
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -40,8 +39,6 @@ def path(d: Doc, doc_id: int) -> str:
 
 
 def length(d: Doc) -> list[int]:
-    if d.type == "claim_standard":
-        return [CLAIM_CHARS_PER_SECTION * len(d.sections), DOC_LENGTH_CHARS["default"][1]]
     return list(DOC_LENGTH_CHARS.get(d.type, DOC_LENGTH_CHARS["default"]))
 
 
@@ -98,21 +95,6 @@ def checks(d: Doc) -> dict:
         "forbidden_patterns": llm_jobs.forbidden_patterns(),
         "length": length(d),
     }
-    if (
-        d.type == "claim_standard"
-    ):  # 사유마다 소제목 한 번, 그 기준 말은 그 절 안 (verify check_claim_sections와 같은 기준)
-        c["sections"] = [
-            [
-                f"## {CLAIM_HEADINGS[r]}",
-                [
-                    w
-                    for f in d.facts
-                    if f.reason == r and not f.id.endswith(".heading")
-                    for w in f.words
-                ],
-            ]
-            for r in d.sections
-        ]
     return c
 
 
