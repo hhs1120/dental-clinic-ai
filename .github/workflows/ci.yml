@@ -36,9 +36,9 @@ jobs:
       matrix:
         part:
           - name: part1
-            tests: tests/generator/test_records.py tests/generator/test_chart.py tests/generator/test_calls.py tests/generator/test_generator.py
+            tests: tests/generator/test_records.py tests/generator/test_chart.py tests/generator/test_generator.py tests/generator/test_hard_calls.py tests/generator/test_verify_required.py
           - name: part2
-            tests: --ignore=tests/generator/test_records.py --ignore=tests/generator/test_chart.py --ignore=tests/generator/test_calls.py --ignore=tests/generator/test_generator.py
+            tests: --ignore=tests/generator/test_records.py --ignore=tests/generator/test_chart.py --ignore=tests/generator/test_generator.py --ignore=tests/generator/test_hard_calls.py --ignore=tests/generator/test_verify_required.py
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

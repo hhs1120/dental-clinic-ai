@@ -321,11 +321,12 @@ def _final(uid, **labels):
     return {"call_uid": uid, "labels": base | labels, "label_source": "human"}
 
 
-def test_final_labels_survive_rebuild(tmp_path):
-    """최종 라벨 JSON이 있으면 빌드마다 생성 라벨을 덮어쓴다 — 다시 생성해도 사람이 정한 값 그대로"""
-    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
+def test_final_labels_survive_rebuild(generated, tmp_path):
+    """최종 라벨 JSON이 있으면 빌드마다 생성 라벨을 덮어쓴다 — 다시 생성해도 사람이 정한 값 그대로.
+    빌드 연결을 보는 유일한 생성 테스트 — 녹취 해시는 같은 시드의 공유 생성본에서(생성기를 한 번 덜 돈다)"""
     final = tmp_path / "hard_call_labels.json"
-    final.write_text(json.dumps([_sha_final(tmp_path, "hc-0001", has_todo=0)]), encoding="utf-8")
+    label = _sha_final(generated("hard_rebuild")[0], "hc-0001", has_todo=0)
+    final.write_text(json.dumps([label]), encoding="utf-8")
     for _ in range(2):
         build.generate(
             tmp_path / "source.sqlite",
@@ -343,17 +344,11 @@ def test_final_labels_survive_rebuild(tmp_path):
     assert (tmp_path / "hard_calls.json").exists()
 
 
-def test_stale_final_labels_fail(tmp_path):
-    final = tmp_path / "hard_call_labels.json"
-    final.write_text(json.dumps([_final("hc-9999")]), encoding="utf-8")
+def test_stale_final_labels_fail(generated):
+    """DB에 없는 hc-가 든 최종 라벨은 옛 파일이라 멈춘다(build.apply_hard_labels — 빌드 연결은 위 테스트)"""
+    conn, _ = _open(generated("hard_stale")[0])
     with pytest.raises(ValueError, match="hc-9999"):
-        build.generate(
-            tmp_path / "source.sqlite",
-            tmp_path / "truth.sqlite",
-            CONFIG,
-            fake_llm=True,
-            hard_labels_path=final,
-        )
+        build.apply_hard_labels(conn, [_final("hc-9999")])
 
 
 def test_label_checks_skip_final_labels(generated):
@@ -436,21 +431,15 @@ def _sha_final(out, uid, **labels):
     return _final(uid, **labels) | {"transcript_sha": hashlib.sha256(text.encode()).hexdigest()}
 
 
-def test_final_labels_skip_changed_transcript(tmp_path):
-    """녹취 해시가 다르거나 JSON에 없는 hc-는 최종 라벨을 덮지 않고 생성 라벨로 둔다 — 옛 정답이 새 녹취에 붙지 않게"""
-    build.generate(tmp_path / "source.sqlite", tmp_path / "truth.sqlite", CONFIG, fake_llm=True)
-    good = _sha_final(tmp_path, "hc-0001", has_todo=0)
-    stale = _sha_final(tmp_path, "hc-0002", has_todo=0) | {"transcript_sha": "0" * 64}
-    final = tmp_path / "hard_call_labels.json"
-    final.write_text(json.dumps([good, stale]), encoding="utf-8")
-    build.generate(
-        tmp_path / "source.sqlite",
-        tmp_path / "truth.sqlite",
-        CONFIG,
-        fake_llm=True,
-        hard_labels_path=final,
-    )
-    conn, _ = _open(tmp_path)
+def test_final_labels_skip_changed_transcript(generated):
+    """녹취 해시가 다르거나 JSON에 없는 hc-는 최종 라벨을 덮지 않고 생성 라벨로 둔다 — 옛 정답이 새 녹취에 붙지 않게
+    (build.apply_hard_labels — 빌드 연결은 test_final_labels_survive_rebuild)"""
+    out = generated("hard_skip")[0]
+    good = _sha_final(out, "hc-0001", has_todo=0)
+    stale = _sha_final(out, "hc-0002", has_todo=0) | {"transcript_sha": "0" * 64}
+    conn, _ = _open(out)
+    redo = build.apply_hard_labels(conn, [good, stale])
+    assert "hc-0002" in redo and "hc-0003" in redo and "hc-0001" not in redo
     src = dict(conn.execute("SELECT call_uid, label_source FROM truth.truth_hard_calls"))
     assert src["hc-0001"] == "human"
     assert src["hc-0002"] == "generated"  # 녹취가 바뀜
