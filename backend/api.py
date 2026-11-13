@@ -24,6 +24,7 @@ from backend import (
     claim_check,
     claim_evidence,
     claim_omission,
+    claim_search,
     claims,
     db,
     documents,
@@ -199,6 +200,37 @@ def search(
         finally:
             log.close()
     return out
+
+
+@app.get("/claims/standards")
+def claim_standards(
+    q: str,
+    paths: Annotated[tuple[Path, Path], Depends(get_db_paths)],
+    models: Annotated[tuple, Depends(get_models)],
+) -> dict:
+    """⑤-3 청구 기준 찾기 — 청구 기준 절 5개 원문(backend/claim_search.py), 색인이 없으면 503(GET /search와 같음)"""
+    if not q.strip():
+        raise HTTPException(422, "q: 질문이 비었습니다")
+    conn = _open(paths, NO_INDEX)
+    try:
+        if not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+            raise HTTPException(503, NO_INDEX)
+        try:
+            searcher = Searcher(conn, _clinic(), *models)
+            results = claim_search.search(searcher, q.strip())
+        except MissingVectors as e:
+            raise HTTPException(503, NO_INDEX) from e
+        except EmbeddingFailed as e:
+            raise HTTPException(503, f"임베딩 호출 실패: {e}") from e
+    finally:
+        conn.close()
+    if usage := searcher.drain_usage():  # 읽기 전용 연결이라 기록은 따로 연다(하루 상한이 센다)
+        log = db.connect(*paths)
+        try:
+            record_voyage(log, usage, is_eval=False, ref=None)
+        finally:
+            log.close()
+    return {"results": results}
 
 
 CHAT_MAX_QUESTION = 500  # 글자 — 질문 1개(기능 정의 §4 ③ 멀티턴 없음)

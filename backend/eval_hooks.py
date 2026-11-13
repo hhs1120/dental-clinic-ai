@@ -5,7 +5,7 @@
 from pathlib import Path
 
 from backend import chat as chat_agent
-from backend import db
+from backend import claim_search, db
 from backend.embeddings import make_embedder
 from backend.harness.llm import make_gateway
 from backend.rag_search import (
@@ -60,6 +60,13 @@ class App:
         found = s.search(question, top_k=CANDIDATES)
         s.drain_usage()  # 검색 지표용 직접 호출 — 챗 비용에 섞이지 않게 비운다(기록하지 않음, 금액 작음)
         return {bucket: [c["id"] for c in chunks] for bucket, chunks in found.items()}
+
+    def claim_search(self, question: str, condition: str | None = None) -> list[str]:
+        """⑤-3 청구 기준 찾기 — 절 제목 순위(평가 설계 §5 ⑤-3, 절 단위 채점)"""
+        s = self._searcher(condition)
+        found = claim_search.search(s, question)
+        s.drain_usage()  # search와 같이 기록하지 않는다(금액 작음)
+        return [c["heading"] for c in found]
 
     def chat(self, question: str, qa_id: str, condition: str | None = None) -> dict:
         gw = make_gateway(self.conn, is_eval=True)

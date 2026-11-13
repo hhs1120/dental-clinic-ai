@@ -164,7 +164,7 @@ class Searcher:
             out.append(c)
         return out
 
-    def _where(self, kinds, date_from, date_to, chart_no) -> tuple[str, list]:
+    def _where(self, kinds, date_from, date_to, chart_no, doc_type=None) -> tuple[str, list]:
         sql = [
             f"c.source_type IN ({','.join('?' * len(kinds))})",
             "(c.event_date IS NULL OR c.event_date <= ?)",
@@ -174,6 +174,7 @@ class Searcher:
             ("c.event_date >= ?", date_from),
             ("c.event_date <= ?", date_to),
             ("c.chart_no = ?", chart_no),
+            ("c.doc_type = ?", doc_type),  # ⑤-3 청구 기준 찾기(backend/claim_search.py)
         ):
             if value:
                 sql.append(clause)
@@ -227,6 +228,7 @@ class Searcher:
         date_to=None,
         patient_chart_no=None,
         top_k=5,
+        doc_type=None,
     ) -> dict:
         if hasattr(self.embedder, "embed_with_usage"):
             vectors, tokens = self.embedder.embed_with_usage([query], "query")
@@ -238,7 +240,9 @@ class Searcher:
         for bucket, kinds in BUCKETS.items():
             chosen = [k for k in kinds if not source_types or k in source_types]
             out[bucket] = (
-                self._bucket(query, vector, chosen, (date_from, date_to, patient_chart_no), top_k)
+                self._bucket(
+                    query, vector, chosen, (date_from, date_to, patient_chart_no, doc_type), top_k
+                )
                 if chosen
                 else []
             )
