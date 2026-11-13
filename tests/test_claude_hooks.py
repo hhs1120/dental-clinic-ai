@@ -48,8 +48,6 @@ def test_bulk_add_blocked(command):
     [
         "git add evaluation/eval.py tests/evaluation/test_rag.py",
         'git add "docs/치과 AX - 평가 설계.md"',
-        # 대괄호·괄호가 든 실제 파일 이름(Next.js 동적 경로) — 글롭이 아니다
-        "git add 'frontend/app/(portal)/[screen]/page.tsx'",
         "git diff --name-only -z | xargs -0 git add --",
         'echo "git add -A 는 금지"',
         "git commit -m 'a 와 b'",
@@ -61,6 +59,15 @@ def test_bulk_add_blocked(command):
 def test_other_commands_pass(command, monkeypatch):
     monkeypatch.setattr(guard, "lint_failure", lambda root: None)
     assert guard.check_bash(command, ROOT) is None
+
+
+def test_bracket_file_name_passes(tmp_path, monkeypatch):
+    """대괄호·괄호가 든 실제 파일 이름(Next.js 동적 경로) — 있는 파일이면 글롭이 아니다"""
+    monkeypatch.setattr(guard, "lint_failure", lambda root: None)
+    page = tmp_path / "frontend" / "app" / "(portal)" / "[screen]" / "page.tsx"
+    page.parent.mkdir(parents=True)
+    page.touch()
+    assert guard.check_bash("git add 'frontend/app/(portal)/[screen]/page.tsx'", tmp_path) is None
 
 
 def test_multiline_commit_still_linted(monkeypatch):
