@@ -353,7 +353,12 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         {error && <ErrorBand text={error} />}
       </div>
       {contested && (
-        <AppealDraft claimId={r.claim_id} appeal={r.appeal} onSaved={onSaved} />
+        <AppealDraft
+          claimId={r.claim_id}
+          appeal={r.appeal}
+          internal={!!r.standard?.internal}
+          onSaved={onSaved}
+        />
       )}
     </section>
   );

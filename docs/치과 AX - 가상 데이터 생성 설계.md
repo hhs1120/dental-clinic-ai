@@ -395,7 +395,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - **EMR과 겹치는 값을 다루는 공지**: 최신 버전 시행일 ≤ EMR 최초 기록일(창 이전 내원 포함 — 기준 `tests/generator/test_doc_catalog.py` `EMR_START`) — 진료 기록과 모순이 없게
 - **청구 기준**: 문서 안에서 상세 사유(`master.ADJUST_REASONS`) 하나 = 소제목(코드가 정함) 한 절. ⑤-3의 정답 = 그 사유의 절(사유 → 절은 `truth_doc_meta`). 본문은 코드가 쓴다(`generator/claim_standards.py` — 9단계 문서 생성 LLM에 보내지 않음)
   - **실제 고시 발췌 절**(`REAL`): 원문 인용(원문 한 줄 = 인용 한 줄 — `Real.quote` 원소 하나, 원소 안에서 줄을 나누지 않는다(테스트)) + 출처 줄(책자 판·쪽, 고시 번호·시행일) + 데이터 사유가 기대지만 원문에 없는 말은 "병원 내부 보충" 줄. 원문 중 생성기가 추적하지 않는 조건은 "…"로 뺀다(오류 없는 줄이 위반처럼 보임 — 실란트 나이, 임플란트 평생 개수). 원문의 나이는 `master` 값과 같아야 한다(테스트)
-  - **병원 내부 점검 기준 절**(`VIRTUAL`, 고시에 같은 뜻의 문장이 없는 사유): 첫 줄 `VIRTUAL_MARK` + 기준 목록. 임상 요건형 조건(§4.3)은 `master` 값을 쓴다
+  - **병원 내부 점검 기준 절**(`VIRTUAL`, 고시에 같은 뜻의 문장이 없는 사유): 첫 줄 `VIRTUAL_MARK` + 기준 목록. 앱 ⑤-4가 이 첫 줄로 내부 기준 절을 가려 재심 사유서의 근거로 쓰지 않는다(`backend/claim_check.py` `INTERNAL_MARK` — 같은 문구인지 `tests/backend/test_claim_appeal.py`가 본다). 임상 요건형 조건(§4.3)은 `master` 값을 쓴다
   - 문서 머리말에 두 종류가 섞였다는 문장(`INTRO_NOTE`)
   - `prompts/gen_document.md`의 청구 기준 지시(`sections`·`rules`)는 쓰이지 않지만 지우지 않는다 — 프롬프트 해시가 캐시 키라 고치면 문서 전부가 다시 나간다. 문서 프롬프트를 다른 이유로 고칠 때 함께 지운다
 - **방해 문서**: `type`은 짝과 같은 값(타 병원·일반은 `external`) — 종류로 방해 여부가 드러나지 않게

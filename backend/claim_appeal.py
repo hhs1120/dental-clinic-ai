@@ -9,10 +9,10 @@ import sqlite3
 from datetime import date, timedelta
 
 from backend import claim_store
-from backend.claim_check import CUT, found, section_cards
+from backend.claim_check import CUT, found, is_internal, section_cards
 from backend.prep import master_values
 
-TASK, ALIAS, PROMPT_VERSION = "claim_appeal", "chat", "v1"
+TASK, ALIAS, PROMPT_VERSION = "claim_appeal", "chat", "v2"
 BASES = ("adjustment", "standard", "chart", "assumption")
 _NULL_STR = {"anyOf": [{"type": "string"}, {"type": "null"}]}
 SCHEMA = {
@@ -43,12 +43,18 @@ _SPLIT = re.compile(r"(?<=[.?!])\s+|\n+")  # 마침표·물음표·느낌표 뒤
 
 def appeal_facts(row: dict) -> dict:
     """LLM 입력 — 조정 사유 문구·시술·치아·그 사유의 기준 절(행에 붙은 heading·body)·차트 서술.
-    청구 금액·상태·판단은 row에 있어도 넣지 않는다"""
+    청구 금액·상태·판단은 row에 있어도 넣지 않는다. 병원 내부 점검 기준 절은 본문을 넣지 않고 internal만 — 심평원에 내는
+    사유서가 병원 내부 기준을 근거로 들지 않게(인용할 원문이 없어 기준 인용 칸은 후검증에서 떨어진다)"""
+    internal = is_internal(row["body"])
     return {
         "adjust_note": row["adjust_note"],
         "procedure": row["procedure_name"],
         "tooth": None if row["tooth_no"] == "00" else row["tooth_no"],
-        "standard": {"heading": row["heading"], "body": row["body"]},
+        "standard": {
+            "heading": row["heading"],
+            "body": None if internal else row["body"],
+            "internal": internal,
+        },
         "note": row["note"] or "",
     }
 
@@ -70,6 +76,8 @@ def _backed(facts: dict, s: dict, piece: str, n_assumptions: int) -> bool:
     if s["basis"] == "assumption":
         idx = s["assumption"]
         return isinstance(idx, int) and 1 <= idx <= n_assumptions
+    if s["basis"] == "standard" and facts["standard"]["internal"]:
+        return False  # 병원 내부 기준은 사유서의 기준 근거가 아니다
     q = s["quote"] or ""
     return found(q, _source(facts, s["basis"])) and found(q, piece)
 
@@ -153,13 +161,28 @@ def _row(conn, claim_id: int):
     ).fetchone()
 
 
-def _view(r) -> dict:
+def _stale(conn, r, got: dict | None) -> bool:
+    """저장된 초안이 지금 규칙(지금 입력 + 후검증)으로 떨어지나 — 기준 문서·후검증 규칙이 바뀐 뒤 옛 초안이 그대로 검토·
+    제출되지 않게(예: 병원 내부 기준을 인용한 v1 초안). 제출 결정한 초안은 기록이라 보지 않는다"""
+    if got is None or r["submitted_by"]:
+        return False
+    now = row(conn, r["claim_id"])
+    return now is not None and not check_result(appeal_facts(now), got)
+
+
+def _view(conn, r) -> dict:
     got = json.loads(r["result"]) if r["result"] else None
+    stale = _stale(conn, r, got)
+    if stale:
+        got = None  # 다시 쓰기 필요 — 옛 문장은 보이지 않고 검토 확인·제출이 막힌다
     return {
         "sentences": got["sentences"] if got else None,
         "assumptions": got["assumptions"] if got else None,
         "valid": got is not None,
-        "reviewed": {"by": r["reviewed_by"], "at": r["reviewed_at"]} if r["reviewed_by"] else None,
+        "stale": stale,
+        "reviewed": {"by": r["reviewed_by"], "at": r["reviewed_at"]}
+        if r["reviewed_by"] and not stale
+        else None,
         "submitted": {"by": r["submitted_by"], "at": r["submitted_at"]}
         if r["submitted_by"]
         else None,
@@ -168,14 +191,15 @@ def _view(r) -> dict:
 
 
 def appeal(conn: sqlite3.Connection, claim_id: int) -> dict | None:
-    """저장된 초안 — {sentences, assumptions, valid, reviewed, submitted, at}, 후검증 실패는 sentences None, 없으면 None"""
+    """저장된 초안 — {sentences, assumptions, valid, stale, reviewed, submitted, at}, 후검증 실패·지금 규칙에 어긋남(stale)은
+    sentences None, 없으면 None"""
     r = _row(conn, claim_id)
-    return None if r is None else _view(r)
+    return None if r is None else _view(conn, r)
 
 
 def appeals(conn: sqlite3.Connection) -> dict[int, dict]:
     """저장된 초안 전부 {claim_id: appeal} — 조정 목록이 표마다 한 번 읽는다"""
-    return {r["claim_id"]: _view(r) for r in conn.execute("SELECT * FROM ax_claim_appeals")}
+    return {r["claim_id"]: _view(conn, r) for r in conn.execute("SELECT * FROM ax_claim_appeals")}
 
 
 def submitted(conn: sqlite3.Connection, claim_id: int) -> bool:
