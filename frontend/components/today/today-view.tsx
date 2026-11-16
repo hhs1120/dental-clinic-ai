@@ -38,6 +38,7 @@ export function TodayView() {
   return (
     <div className="flex flex-col gap-6">
       <Cards sheet={today.data} />
+      <Briefing lines={today.data.briefing} />
       <People sheet={today.data} />
       <AiDone sheet={today.data} reload={today.reload} />
     </div>
@@ -88,6 +89,26 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
         </Link>
       ))}
     </div>
+  );
+}
+
+/** ⑦ 아침 브리핑 — 왼쪽 머리말·오른쪽 내용 2열, 같은 머리말이 이어지면 첫 줄에만. 코드가 만든 줄이라 AI 배지 없음 */
+function Briefing({ lines }: { lines: TodaySheet["briefing"] }) {
+  if (lines.length === 0) return null;
+  return (
+    <Card aria-label="아침 브리핑" className="gap-3 px-4 shadow-card">
+      <h2 className="text-lg font-bold">아침 브리핑</h2>
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2">
+        {lines.map((l, i) => (
+          <div key={i} className="contents">
+            <dt className="font-semibold">
+              {i > 0 && lines[i - 1].head === l.head ? "" : l.head}
+            </dt>
+            <dd>{l.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
 
@@ -271,6 +292,28 @@ function Tag({ tone, children }: { tone: Tone; children: string }) {
   );
 }
 
+const NIGHT_END: Record<string, string> = {
+  done: "끝남",
+  budget: "상한으로 중단",
+  stopped: "중단",
+  failed: "실패로 끝남",
+};
+
+/** 야간 실행 꼬리표(backend/nightly.py state) — 끝난 지 오래면 날짜를 붙여 어젯밤 실행으로 읽히지 않게 */
+function nightTags(n: TodaySheet["ai"]["nightly"]): string[] {
+  if (!n) return [];
+  if (n.state === "running") return ["야간 실행 중"];
+  if (n.state === "broken") return ["야간 실행 끊김"];
+  const at = n.finished_at ?? "";
+  const when = n.recent
+    ? at.slice(11, 16)
+    : `${at.slice(5, 7)}/${at.slice(8, 10)} ${at.slice(11, 16)}`;
+  return [
+    `야간 실행 ${when} ${NIGHT_END[n.state]}${n.recent ? "" : "(오래됨)"}`,
+    ...(n.failed > 0 ? [`야간 실패 ${n.failed}`] : []),
+  ];
+}
+
 function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const ai = sheet.ai;
   const [open, setOpen] = useState(false);
@@ -278,6 +321,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const [fail, setFail] = useState<string | null>(null);
   const failed = ai.prep.failed + ai.classify_failed + ai.followup_failed;
   const summary = [
+    ...nightTags(ai.nightly),
     ai.autoclose_on ? `자동 처리 ${ai.auto_total}건` : "자동 종결 꺼짐",
     ...(ai.recon_auto.on ? [`일계표 자동 마감 ${ai.recon_auto.total}건`] : []),
     ...(ai.expense_auto.on

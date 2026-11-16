@@ -87,6 +87,10 @@ followup-eval:
 prep:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.prep run $(if $(DATE),--date $(DATE)) $(if $(NO_BATCH),--no-batch)
 
+# 야간 실행(backend/nightly.py) — 고정 순서 단계로 모든 화면의 AI 결과를 최신으로(과금, 이어 돎). PLAN=1이면 LLM 없이 단계별 새로 부를 건수만
+# (Batch는 하루 상한 밖이라 첫 실행·버전 교체 전에 본다), NO_BATCH=1이면 일반 호출만, FORCE=1이면 남은 running 행(죽은 실행)을 넘긴다. Qwen 판정기 때문에 finetune 그룹
+nightly:
+	uv run --group finetune $(if $(wildcard .env),--env-file .env) python -m backend.nightly run $(if $(PLAN),--plan) $(if $(NO_BATCH),--no-batch) $(if $(FORCE),--force)
 # ⑥ 경영 리포트 해석(backend/report.py) — 화면 기간 전부(과금), Batch(NO_BATCH=1이면 일반 호출). 숫자·버전·모델이 같고 통과한 기간은 건너뜀
 report:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.report run $(if $(NO_BATCH),--no-batch)

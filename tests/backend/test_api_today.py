@@ -44,7 +44,8 @@ def _judge(tmp_path, uid, **on):
 def test_get_today_shape(client):
     r = client.get("/today").json()
     assert r["date"] == "2026-12-01"
-    assert set(r) == {"date", "cards", "people", "ai"}
+    assert set(r) == {"date", "cards", "people", "briefing", "ai"}
+    assert r["briefing"] == [] and r["ai"]["nightly"] is None  # 예약 없음·야간 실행 전
     assert set(r["cards"]) == {"appointments", "new_patients", "alert_patients", "todo"}
     assert set(r["people"]) == {
         "urgent_calls",
@@ -66,6 +67,7 @@ def test_get_today_shape(client):
         "autoclose_on",
         "auto_total",
         "auto_recent",
+        "nightly",
         "recon_auto",
         "expense_auto",
         "prep",

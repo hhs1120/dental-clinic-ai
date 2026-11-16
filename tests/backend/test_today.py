@@ -348,3 +348,79 @@ def test_today_expense_line_matches_screen(tmp_path):
     conn.commit()
     people = _sheet(conn)["people"]
     assert (people["expense_open"], people["expense_month"]) == (0, None)
+
+
+# ── ⑦ 아침 브리핑·야간 실행(설계 2026-11-16 nightly §4) ──
+def test_sheet_briefing_from_prep_rows(pconn):
+    s = _sheet(pconn)
+    first = s["briefing"][0]
+    assert first["head"] == "오늘"
+    assert first["text"].startswith(f"예약 {s['cards']['appointments']['total']}건")
+
+
+def test_sheet_without_nightly(pconn):
+    s = _sheet(pconn)
+    assert all(line["head"] != "밤사이" for line in s["briefing"])
+    assert s["ai"]["nightly"] is None
+
+
+def test_sheet_nightly_finished(pconn):
+    detail = [
+        {"step": "classify", "new": 2, "failed": 0, "note": None},
+        {"step": "prep", "new": 1, "failed": 1, "note": None},
+    ]
+    pconn.execute(
+        "INSERT INTO ax_jobs (kind, status, done, total, started_at, finished_at, detail)"
+        " VALUES ('nightly', 'done', 2, 2, '2026-11-10T03:00:00', '2026-11-10T03:12:00', ?)",
+        (json.dumps(detail),),
+    )
+    pconn.commit()
+    s = _sheet(pconn)  # NOW = 2026-11-10 09:00
+    assert s["ai"]["nightly"] == {
+        "finished_at": "2026-11-10T03:12:00",
+        "state": "done",
+        "recent": True,
+        "failed": 1,
+    }
+    assert s["briefing"][-1] == {
+        "head": "밤사이",
+        "text": "통화 2건 분류 · 자동 종결 0 · 실패 1 (03:12 끝남)",
+    }
+
+
+def _night(conn, status, started, finished=None, detail=()):
+    conn.execute(
+        "INSERT INTO ax_jobs (kind, status, started_at, finished_at, detail)"
+        " VALUES ('nightly', ?, ?, ?, ?)",
+        (status, started, finished, json.dumps(list(detail))),
+    )
+    conn.commit()
+
+
+@pytest.mark.parametrize(
+    "status,started,finished,detail,want",
+    [
+        # 사흘 전 실행 — 끝났지만 어젯밤 것이 아니다
+        ("done", "2026-11-07T03:00:00", "2026-11-07T03:12:00", [], ("done", False)),
+        (
+            "failed",
+            "2026-11-10T03:00:00",
+            "2026-11-10T03:05:00",
+            [{"step": "judge", "new": 0, "failed": 0, "note": "상한으로 중단"}],
+            ("budget", True),
+        ),
+        (
+            "failed",
+            "2026-11-10T03:00:00",
+            "2026-11-10T03:05:00",
+            [{"step": "judge", "new": 0, "failed": 0, "note": "중단"}],
+            ("stopped", True),
+        ),
+        ("running", "2026-11-09T20:00:00", None, [], ("broken", False)),  # NIGHTLY_STALE 지남
+        ("running", "2026-11-10T08:00:00", None, [], ("running", False)),
+    ],
+)
+def test_sheet_nightly_states(pconn, status, started, finished, detail, want):
+    _night(pconn, status, started, finished, detail)
+    n = _sheet(pconn)["ai"]["nightly"]  # NOW = 2026-11-10 09:00
+    assert (n["state"], n["recent"]) == want

@@ -138,11 +138,17 @@ def _documents(conn, overlap: int = OVERLAP) -> list[dict]:
 
 
 def _calls(conn) -> list[dict]:
+    """생성 통화 + 화면에서 붙여넣은 통화(ax_pasted_calls — 상대 이름이 없어 환자가 아니면 '미상')"""
     out = []
     for c in conn.execute(
-        "SELECT c.*, p.chart_no, p.name FROM source.ax_calls c"
+        "SELECT c.call_uid, c.direction, c.started_at, c.transcript, c.caller_name,"
+        " p.chart_no, p.name FROM source.ax_calls c"
         " LEFT JOIN source.emr_patients p ON p.id = c.patient_id"
-        " WHERE c.has_transcript = 1 ORDER BY c.id"
+        " WHERE c.has_transcript = 1"
+        " UNION ALL SELECT c.call_uid, c.direction, c.started_at, c.transcript, '미상',"
+        " p.chart_no, p.name FROM ax_pasted_calls c"
+        " LEFT JOIN source.emr_patients p ON p.id = c.patient_id"
+        " ORDER BY call_uid"
     ):
         day = c["started_at"][:10]
         who = (
@@ -263,26 +269,27 @@ def collect_chunks(conn: sqlite3.Connection, overlap: int = OVERLAP) -> list[dic
 
 
 def _write_chunks(conn: sqlite3.Connection, chunks: list[dict]) -> None:
+    """청크·FTS를 다시 쓰고 글이 바뀐 청크의 벡터를 지운다 — 커밋은 부르는 쪽(with conn)"""
     old = dict(conn.execute("SELECT id, text FROM ax_chunks").fetchall())
     new = {c["id"]: c["text"] for c in chunks}
     stale = [i for i, text in old.items() if new.get(i) != text]
-    with conn:
-        conn.executemany("DELETE FROM ax_chunk_vectors WHERE chunk_id = ?", [(i,) for i in stale])
-        conn.executemany("DELETE FROM ax_chunks WHERE id = ?", [(i,) for i in old if i not in new])
-        conn.executemany(
-            "INSERT OR REPLACE INTO ax_chunks (id, source_type, text, chart_no, event_date,"
-            " doc_type) VALUES (:id, :source_type, :text, :chart_no, :event_date, :doc_type)",
-            chunks,
-        )
-        conn.execute("DELETE FROM ax_chunks_fts")
-        conn.executemany(
-            "INSERT INTO ax_chunks_fts VALUES (?, ?)", [(c["id"], c["text"]) for c in chunks]
-        )
+    conn.executemany("DELETE FROM ax_chunk_vectors WHERE chunk_id = ?", [(i,) for i in stale])
+    conn.executemany("DELETE FROM ax_chunks WHERE id = ?", [(i,) for i in old if i not in new])
+    conn.executemany(
+        "INSERT OR REPLACE INTO ax_chunks (id, source_type, text, chart_no, event_date,"
+        " doc_type) VALUES (:id, :source_type, :text, :chart_no, :event_date, :doc_type)",
+        chunks,
+    )
+    conn.execute("DELETE FROM ax_chunks_fts")
+    conn.executemany(
+        "INSERT INTO ax_chunks_fts VALUES (?, ?)", [(c["id"], c["text"]) for c in chunks]
+    )
 
 
 def build_index(conn: sqlite3.Connection, embedder, overlap: int = OVERLAP) -> int:
     """청크·FTS를 다시 쓰고 이 모델의 벡터가 없는 청크만 계산한다(글이 바뀐 청크는 벡터를 지워 다시). 새로 계산한 수"""
-    _write_chunks(conn, collect_chunks(conn, overlap))
+    with conn:
+        _write_chunks(conn, collect_chunks(conn, overlap))
     missing = conn.execute(
         "SELECT c.id, c.text FROM ax_chunks c LEFT JOIN ax_chunk_vectors v"
         " ON v.chunk_id = c.id AND v.model = ? WHERE v.chunk_id IS NULL ORDER BY c.id",
@@ -294,6 +301,38 @@ def build_index(conn: sqlite3.Connection, embedder, overlap: int = OVERLAP) -> i
         with conn:
             store.upsert([r[0] for r in batch], embedder.embed([r[1] for r in batch], "document"))
     return len(missing)
+
+
+def _todo(conn: sqlite3.Connection, chunks: list[dict], model: str) -> list[dict]:
+    """이 모델 벡터를 새로 계산할 청크 — 새 청크, 글이 바뀐 청크, 벡터가 없는 청크"""
+    old = dict(conn.execute("SELECT id, text FROM ax_chunks").fetchall())
+    have = {
+        r[0]
+        for r in conn.execute("SELECT chunk_id FROM ax_chunk_vectors WHERE model = ?", (model,))
+    }
+    return [c for c in chunks if old.get(c["id"]) != c["text"] or c["id"] not in have]
+
+
+def update_todo(conn: sqlite3.Connection, model: str, overlap: int = OVERLAP) -> int:
+    """update_index가 임베딩할 청크 수 — 쓰지 않는다(야간 실행 PLAN)"""
+    return len(_todo(conn, collect_chunks(conn, overlap), model))
+
+
+def update_index(conn: sqlite3.Connection, embedder, overlap: int = OVERLAP) -> int:
+    """야간 색인 갱신(backend/nightly.py) — 벡터를 먼저 계산하고 청크·FTS·벡터를 한 트랜잭션에 쓴다. 임베딩이 실패하면
+    아무것도 바뀌지 않아 검색이 벡터 없는 청크로 막히지 않는다(rag_search.Searcher MissingVectors). 이어 가기가 필요한
+    첫 색인은 build_index(make index). 새로 계산한 수"""
+    chunks = collect_chunks(conn, overlap)
+    todo = _todo(conn, chunks, embedder.model)
+    vectors = [
+        v
+        for i in range(0, len(todo), BATCH)
+        for v in embedder.embed([c["text"] for c in todo[i : i + BATCH]], "document")
+    ]
+    with conn:
+        _write_chunks(conn, chunks)
+        VectorStore(conn, embedder.model).upsert([c["id"] for c in todo], vectors)
+    return len(todo)
 
 
 def main(argv=None) -> None:

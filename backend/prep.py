@@ -409,11 +409,7 @@ def build(
             out["rows"] += 1
             facts = llm_facts(r)
             h = _hash(facts)
-            old = conn.execute(
-                "SELECT facts_hash, prompt_version, model, suggestion, suggestion_valid, created_at"
-                " FROM ax_prep_sheets WHERE sheet_date = ? AND patient_id = ? AND appointment_id = ?",
-                (day.isoformat(), r["patient_id"], r["appointment_id"]),
-            ).fetchone()
+            old = _saved_row(conn, day, r)
             if _reusable(old, h, model):
                 _save(conn, day, r, h, json.loads(old["suggestion"]), model, old["created_at"])
                 out["skipped"] += 1
@@ -446,6 +442,23 @@ def build(
         out["failed"] += got is None
         _save(conn, day, r, h, got, used.model if used else model)  # 실제로 답한 모델(폴백 포함)
     return out
+
+
+def _saved_row(conn, day: date, r: dict):
+    return conn.execute(
+        "SELECT facts_hash, prompt_version, model, suggestion, suggestion_valid, created_at"
+        " FROM ax_prep_sheets WHERE sheet_date = ? AND patient_id = ? AND appointment_id = ?",
+        (day.isoformat(), r["patient_id"], r["appointment_id"]),
+    ).fetchone()
+
+
+def todo_count(conn, days: list[date], today: date, model: str) -> int:
+    """build가 부를 행 수 — 같은 재사용 판정(_reusable), 쓰지 않는다(야간 실행 PLAN)"""
+    return sum(
+        not _reusable(_saved_row(conn, day, r), _hash(llm_facts(r)), model)
+        for day in days
+        for r in prep_facts(conn, day, today)
+    )
 
 
 def tab_days(today: date) -> list[date]:
