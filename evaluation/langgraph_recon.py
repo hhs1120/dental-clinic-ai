@@ -315,18 +315,14 @@ def dev_items(conn, today: date) -> list[dict]:
 
 
 def harness_stats(conn, keys: set[str]) -> dict[str, dict]:
-    """하네스 v3 실행(앱 DB, 지금 결과로 읽히는 것)의 건별 호출·토큰·비용 — 토큰은 그 실행의 호출 기록 합"""
+    """하네스 v3 실행(앱 DB, 지금 결과로 읽히는 것)의 건별 호출·비용. 토큰은 비우다 — 라운드 배치 호출은 기록이
+    배치 단위(ref_type batch)라 실행별로 나눌 수 없다"""
     results = recon_agent.results(conn, keys)
     out = {}
     for k, r in results.items():
         run = conn.execute("SELECT model_calls FROM ax_agent_runs WHERE id = ?", (r["run_id"],))
-        tok = conn.execute(
-            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0)"
-            " FROM ax_llm_calls WHERE ref_type = 'agent_run' AND ref_id = ?",
-            (r["run_id"],),
-        ).fetchone()
         out[k] = {"model_calls": run.fetchone()[0], "tool_calls": r["tool_calls"],
-                  "input_tokens": tok[0], "output_tokens": tok[1],
+                  "input_tokens": None, "output_tokens": None,
                   "cost_usd": r["cost_usd"] or 0.0, "status": r["status"]}  # fmt: skip
     return out
 
@@ -342,8 +338,8 @@ def _calls(rows: list[dict]) -> dict:
         "runs": len(rows),
         "model_calls": mean_max("model_calls"),
         "tool_calls": mean_max("tool_calls"),
-        "input_tokens": sum(r["input_tokens"] for r in rows),
-        "output_tokens": sum(r["output_tokens"] for r in rows),
+        "input_tokens": None if None in (t := [r["input_tokens"] for r in rows]) else sum(t),
+        "output_tokens": None if None in (t := [r["output_tokens"] for r in rows]) else sum(t),
         "cost_usd": round(sum(r["cost_usd"] for r in rows), 4),
         "status": {s: sum(r["status"] == s for r in rows) for s in {r["status"] for r in rows}},
     }
