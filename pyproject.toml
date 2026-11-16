@@ -34,6 +34,10 @@ dev = [
 finetune = [
     "mlx-lm>=0.32.2",
 ]
+langgraph = [
+    "langgraph==1.2.19",
+    "langgraph-checkpoint-sqlite==3.1.3",
+]
 
 [tool.uv]
 default-groups = ["generator", "backend", "dev"]  # uv sync·uv run 기본
