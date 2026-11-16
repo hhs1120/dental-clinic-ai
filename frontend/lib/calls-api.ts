@@ -52,11 +52,18 @@ export interface CallCard {
   purpose: string | null;
   urgency: string | null;
   emergency: boolean;
+  complaint: boolean;
   disagree: boolean;
   todo_total: number;
   todo_left: number;
   summary: string | null;
   closed: boolean;
+}
+
+/** 그 환자의 통화 — 최신순 몇 건(backend/calls.py PATIENT_CALLS_MAX)과 전체 수 */
+export interface PatientCalls {
+  calls: CallCard[];
+  total: number;
 }
 
 export interface CallList {
@@ -125,6 +132,16 @@ export const fetchCalls = (
   for (const [k, v] of Object.entries(o)) if (v) p.set(k, v);
   return getJson<CallList>("/calls", p, signal);
 };
+export const fetchPatientCalls = (
+  chartNo: string,
+  exclude: string | null,
+  signal?: AbortSignal,
+) =>
+  getJson<PatientCalls>(
+    `/calls/patient/${encodeURIComponent(chartNo)}`,
+    exclude ? new URLSearchParams({ exclude }) : undefined,
+    signal,
+  );
 export const setTodoDone = (
   uid: string,
   item: number,

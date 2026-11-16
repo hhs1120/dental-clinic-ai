@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PatientCalls } from "@/components/calls/patient-calls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -95,10 +96,35 @@ export function PatientSummary({
           </p>
           {appt.call && (
             <>
-              <p>통화 있음 · {appt.call.started_at}</p>
-              <p className="flex items-center gap-2 text-muted-foreground">
-                응급 여부 <Badge variant="outdated">분류 전</Badge>
-              </p>
+              {/* 판정 풀 통화는 통화 화면에 없어 글자만 */}
+              {appt.call.pool ? (
+                <p>통화 있음 · {appt.call.started_at}</p>
+              ) : (
+                <Link
+                  className="block text-link hover:underline"
+                  href={`/calls?tab=history&call=${encodeURIComponent(appt.call.uid)}`}
+                >
+                  통화 있음 · {appt.call.started_at}
+                </Link>
+              )}
+              {/* 판정 풀 통화는 분류를 보이지 않는다(기능 정의 §4 ①) */}
+              {!appt.call.pool && (
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  응급 여부{" "}
+                  {appt.call.emergency === null ? (
+                    <Badge variant="outdated">분류 전</Badge>
+                  ) : (
+                    <>
+                      <Badge variant="kind">AI</Badge>
+                      {appt.call.emergency ? (
+                        <Badge variant="danger">응급</Badge>
+                      ) : (
+                        <span className="text-foreground">아님</span>
+                      )}
+                    </>
+                  )}
+                </p>
+              )}
             </>
           )}
         </Section>
@@ -117,6 +143,14 @@ export function PatientSummary({
         <p>
           최근 1년 · 노쇼 {summary.noshow_1y} · 취소 {summary.cancelled_1y}
         </p>
+      </Section>
+
+      <Section title="최근 통화">
+        <PatientCalls
+          chartNo={patient.chart_no}
+          label="최근 통화"
+          empty="최근 통화 없음"
+        />
       </Section>
 
       <Section title="연락">

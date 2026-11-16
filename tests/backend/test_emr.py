@@ -312,7 +312,7 @@ def test_schedule_appointment_fields(conn):
     assert (a[101]["time"], a[101]["duration"], a[101]["unconfirmed"]) == ("10:00", 60, True)
     assert (a[101]["staff_name"], a[101]["staff_role"]) == ("강태현", "원장")
     assert a[101]["plan_step"] == {"seq": 2, "total": 3} and a[101]["tooth"] == "36"
-    assert a[101]["call"] == {"uid": "c-0003", "started_at": "2026-11-17 14:20"}
+    assert a[101]["call"] == {"uid": "c-0003", "started_at": "2026-11-17 14:20", "pool": False}
     assert a[101]["booked_at"] == "2026-11-17 14:20" and a[101]["booked_via"] == "phone"
     assert a[102]["unconfirmed"] is False and a[102]["plan_step"] is None
     assert a[102]["call"] is None and a[102]["tooth"] is None
@@ -504,3 +504,31 @@ def test_plan_step_skips_replaced_and_open_items(conn):
 def test_search_escapes_like_wildcards(conn):
     assert search_patients(conn, "%", TODAY) == []
     assert search_patients(conn, "_", TODAY) == []
+
+
+def test_schedule_booking_call_in_pool(conn, emr_paths):
+    """판정 풀 통화는 통화 화면에서 열 수 없다 — 화면이 링크를 걸지 않게 표시만"""
+    with sqlite3.connect(emr_paths[1]) as w:
+        w.execute("UPDATE ax_calls SET in_eval_pool = 1 WHERE call_uid = 'c-0003'")
+    a = {x["id"]: x for x in schedule_day(conn, TODAY, TODAY, START)["appointments"]}
+    assert a[101]["call"]["pool"] is True
+
+
+def test_schedule_route_booking_call_emergency(emr_paths, client):
+    """잡은 통화의 응급 여부는 앱 DB의 활성 분류에서 — 예약표 패널이 AI 표시와 함께 보인다"""
+    from backend import db
+    from tests.backend.call_db import LABELS, classify_row
+
+    c = db.connect(emr_paths[0], emr_paths[1])
+    db.init_schema(c)
+    db.set_setting(c, "active_prompt_version", "v2")
+    classify_row(c, "c-0003", labels=LABELS | {"emergency": 1})
+    c.close()
+    a = {x["id"]: x for x in client.get("/emr/schedule").json()["appointments"]}
+    assert a[101]["call"]["emergency"] is True
+
+
+def test_schedule_route_booking_call_unclassified(client_source_only):
+    """앱 DB가 없거나 분류 전이면 None — 화면은 분류 전 표시"""
+    a = {x["id"]: x for x in client_source_only.get("/emr/schedule").json()["appointments"]}
+    assert a[101]["call"]["emergency"] is None

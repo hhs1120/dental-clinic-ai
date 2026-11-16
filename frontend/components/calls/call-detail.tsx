@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { PatientCalls } from "@/components/calls/patient-calls";
 import { Transcript } from "@/components/calls/transcript";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ export function CallDetail({
   onReclassify,
   onRevertClose,
   onCheckReview,
+  onOpen,
   busy,
 }: {
   detail: Detail;
@@ -71,6 +73,7 @@ export function CallDetail({
   onReclassify: () => void;
   onRevertClose: (id: number) => void;
   onCheckReview: () => void;
+  onOpen: (uid: string) => void; // 지난 통화를 누르면 이 패널을 그 통화로
   busy: boolean;
 }) {
   const { call, classification: k, judge, disagree } = detail;
@@ -284,6 +287,15 @@ export function CallDetail({
       />
     </Section>
   );
+  const pastCalls = call.chart_no && (
+    <Section title="이 환자의 지난 통화">
+      <PatientCalls
+        chartNo={call.chart_no}
+        exclude={call.call_uid}
+        onOpen={onOpen}
+      />
+    </Section>
+  );
 
   if (wide)
     return (
@@ -303,6 +315,7 @@ export function CallDetail({
               {table}
               {patient}
             </div>
+            {pastCalls}
           </div>
           <div className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4">
             <Transcript
@@ -329,6 +342,7 @@ export function CallDetail({
       {diff}
       {table}
       {patient}
+      {pastCalls}
       {transcript}
     </aside>
   );

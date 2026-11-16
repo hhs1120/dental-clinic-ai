@@ -445,9 +445,22 @@ def emr_schedule(
         raise HTTPException(422, f"date: {e}") from e
     conn = _open_source(paths)
     try:
-        return emr.schedule_day(conn, day, clinic.today, clinic.range_start)
+        out = emr.schedule_day(conn, day, clinic.today, clinic.range_start)
     finally:
         conn.close()
+    # 잡은 통화의 응급 여부 — ① 분류는 앱 DB에 있다(emr.py는 원본만). 앱 DB가 없으면 분류 전
+    booked = [a["call"] for a in out["appointments"] if a["call"] and not a["call"]["pool"]]
+    flags = {}
+    if booked and Path(paths[0]).exists():
+        app_conn = _open_rw(paths)
+        try:
+            flags = calls.call_emergency(app_conn, [c["uid"] for c in booked])
+        finally:
+            app_conn.close()
+    for a in out["appointments"]:
+        if a["call"]:
+            a["call"]["emergency"] = flags.get(a["call"]["uid"])
+    return out
 
 
 @app.get("/emr/patients")
@@ -578,6 +591,15 @@ def calls_list(
         return calls.list_calls(conn, flt=filter or None, q=q, before=before, limit=limit)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
+    finally:
+        conn.close()
+
+
+@app.get("/calls/patient/{chart_no}")
+def calls_of_patient(chart_no: str, paths: Paths, exclude: str | None = None) -> dict:
+    conn = _open_rw(paths)
+    try:
+        return calls.patient_calls(conn, chart_no, exclude=exclude)
     finally:
         conn.close()
 

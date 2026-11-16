@@ -26,7 +26,14 @@ export interface Appt {
   plan_step: { seq: number; total: number } | null;
   booked_via: "phone" | "desk";
   booked_at: string;
-  call: { uid: string; started_at: string } | null;
+  // pool — 판정 풀 통화는 통화 화면에 없어 링크를 걸지 않는다
+  // emergency — 활성 ① 분류의 응급 여부(분류 전·판정 풀이면 null)
+  call: {
+    uid: string;
+    started_at: string;
+    pool: boolean;
+    emergency: boolean | null;
+  } | null;
 }
 
 export interface ScheduleDay {

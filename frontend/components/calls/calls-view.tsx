@@ -120,6 +120,7 @@ export function CallsView() {
         onReclassify={redo}
         onRevertClose={revertClose}
         onCheckReview={checkReview}
+        onOpen={open}
         busy={busy}
       />
     ) : (
@@ -142,7 +143,12 @@ export function CallsView() {
           ]}
           value={tab}
           onChange={(v) =>
-            go({ tab: v === "today" ? null : v, call: null, wide: null })
+            go({
+              tab: v === "today" ? null : v,
+              call: null,
+              wide: null,
+              q: null,
+            })
           }
         />
         <span className="flex-1" />
@@ -185,6 +191,8 @@ export function CallsView() {
               )
             ) : (
               <CallHistory
+                initialQ={params.get("q") ?? ""}
+                onTyped={() => params.get("q") && go({ q: null })}
                 names={names}
                 selected={call}
                 onOpen={open}
