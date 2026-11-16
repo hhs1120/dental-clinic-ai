@@ -584,6 +584,14 @@ def test_more_commands_ask(command):
         "uv run python -m backend.report --help",  # argparse가 설명만 찍고 끝난다
         "python -m evaluation.prompt_gate -h",
         "uv run python -m backend.classify_batch classify --help",
+        # 과금 모듈 경로를 읽기만 하는 명령 — 실행이 아니다
+        "sed -n 100,125p backend/harness/rounds.py; grep -n run_batch backend/report.py",
+        "grep -n has_todo evaluation/prompt_gate.py | head",
+        "cat backend/nightly.py",
+        "git diff main -- backend/report.py",
+        "uv run ruff check backend/report.py",
+        "uv run pytest tests/backend/test_report.py -q",
+        'uv run python -c "import backend.report"',
         "uv run python -m evaluation.claim_qa score --split dev",
         "make test",
         "make verify",
@@ -797,6 +805,10 @@ def test_review_lookalikes_pass(command, monkeypatch):
         "uv run python -m evaluation.claim_check sample",
         "uv run python -m evaluation.claim_appeal run --split dev",
         "uv run python backend/prep.py run",
+        "python3 evaluation/prompt_gate.py --a v2 --b v3 --item purpose",
+        "./backend/report.py",
+        "uv run --env-file .env python -m backend.report",
+        "uv run backend/nightly.py run",
         "rm -rf .claude/worktrees/feat-x",  # worktree 지우기는 확인(보호 경로에서 뺌)
         "rm -rf .claude/worktrees/feat-x/frontend/.next",
     ],

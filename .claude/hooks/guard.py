@@ -433,6 +433,12 @@ PAID_MODULES = {
     "evaluation.claim_check": {"sample", "run"}, "evaluation.claim_appeal": {"run"},
 }  # fmt: skip
 FREE_FLAGS = {"--plan", "--stats", "--help", "-h"}
+_PYTHON = re.compile(r"python[\d.]*")
+_SCRIPT = re.compile(r"(?:\./)?(backend|evaluation)/(\w+)\.py")
+_UV_VALUE_OPTS = {
+    "--env-file", "--group", "--only-group", "--no-group", "--extra", "--with",
+    "--with-requirements", "--python", "-p", "--package", "--directory", "--project", "--index",
+}  # fmt: skip
 
 
 def is_env_file(path: str) -> bool:
@@ -790,13 +796,22 @@ def _push_risk(args: list[str], cwd: Path) -> str | None:
 
 
 def _module(tokens: list[str]) -> str:
-    """python -m 모듈 또는 backend/x.py·evaluation/x.py 스크립트 → 모듈 이름"""
-    for i, t in enumerate(tokens[:-1]):
+    """python이 실행하는 -m 모듈 또는 backend/x.py·evaluation/x.py 스크립트 → 모듈 이름.
+    경로를 읽기만 하는 명령(grep·sed·cat·git diff·ruff·pytest)은 실행이 아니라 빈 문자열"""
+    if tokens[:2] == ["uv", "run"]:  # uv run 옵션(--env-file .env 등)을 건너뛴 첫 프로그램
+        i = 2
+        while i < len(tokens) and tokens[i].startswith("-"):
+            i += 2 if tokens[i] in _UV_VALUE_OPTS else 1
+        tokens = tokens[i:]
+    if tokens and (m := _SCRIPT.fullmatch(tokens[0])):
+        return f"{m.group(1)}.{m.group(2)}"
+    if not tokens or not _PYTHON.fullmatch(Path(tokens[0]).name):
+        return ""
+    for i, t in enumerate(tokens[1:], 1):
         if t == "-m":
-            return tokens[i + 1]
-    for t in tokens:
-        if m := re.fullmatch(r"(?:\./)?(backend|evaluation)/(\w+)\.py", t):
-            return f"{m.group(1)}.{m.group(2)}"
+            return tokens[i + 1] if i + 1 < len(tokens) else ""
+        if not t.startswith("-"):  # 첫 위치 인자가 스크립트(-c 코드는 경로가 아니다)
+            return f"{m.group(1)}.{m.group(2)}" if (m := _SCRIPT.fullmatch(t)) else ""
     return ""
 
 
