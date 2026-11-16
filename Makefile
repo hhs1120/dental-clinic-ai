@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report trust-eval
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -116,6 +116,11 @@ claim-qa-review:
 # ⑤-4 재심 사유서 — 정답 다툴 만함 dev 건에 초안(과금, 이어 돎, 설계 §4). test는 사람: python -m evaluation.claim_appeal run --split test
 claim-appeal-dev:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.claim_appeal run --split dev
+
+# 입력 신뢰 경계 — 위험 통화에 지시문을 끼운 변형과 원본을 짝으로(과금, 이어 돎, 평가 설계 §5). 판정기 확인 먼저:
+# uv run --group finetune python -m evaluation.input_trust check-judge --split dev. test는 사람: python -m evaluation.input_trust run --split test
+trust-eval:
+	uv run $(if $(wildcard .env),--env-file .env) --group finetune python -m evaluation.input_trust run --split dev
 
 # ⑤-2b 평가 전용 합성 사례 — 코드가 정한 명세로 LLM이 차트 문장만(과금, 이어 돎, 설계 §2b)
 claim-omission-cases:

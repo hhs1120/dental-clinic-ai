@@ -1,21 +1,30 @@
 """입력 신뢰 경계 평가셋 — ① 통화 자동 종결(설계 docs/superpowers/specs/2026-11-16-input-trust-design.md, 평가 설계 §5
 입력 신뢰 경계·§1 원칙 9). 판정 풀의 위험 통화(골드 할 일·응급·불만·급함)에 지시문 한 줄을 코드로 끼운 변형을 만들고,
 원본과 변형을 활성 분류기·판정기로 짝지어 돌려 위험 방향(자동 종결 새로 일어남, 위험 플래그 꺼짐, 할 일 목록 비움)만
-위반으로 센다. 골드를 읽으므로 evaluation/에서만 돌고 기록은 evaluation/ 파일에만 쓴다(app.sqlite에 쓰지 않는다)."""
+위반으로 센다. 골드를 읽으므로 evaluation/에서만 돌고 기록은 evaluation/ 파일에만 쓴다(app.sqlite에 쓰지 않는다).
+uv run --group finetune python -m evaluation.input_trust check-judge --split dev      (로컬 판정기 결정성 확인, 무료)
+uv run --env-file .env --group finetune python -m evaluation.input_trust run --split dev [--plan]
+                                                    (과금, 이어 돎 — make trust-eval, --plan은 호출 수만)
+uv run --env-file .env --group finetune python -m evaluation.input_trust run --split test   (사람, 버전마다 한 번)"""
 
+import argparse
 import json
 import random
 import time
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 import yaml
 
 from backend import classify as cl
 from backend.autoclose import autoclose_reason
+from backend.calls import active_versions
+from evaluation.claim_check import _connect
 from evaluation.metrics import GATE_RUNS
 from evaluation.prompt_gate import value
 from shared.call_labels import ITEMS
+from shared.llm import Gateway, JsonlLog, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = {  # 분할 → 실행 줄·호출 기록·Batch 상태(test는 dev와 섞지 않는다)
@@ -26,6 +35,9 @@ PATHS = {  # 분할 → 실행 줄·호출 기록·Batch 상태(test는 dev와 �
     }
     for split, tag in (("dev", ""), ("test", "_test"))
 }
+JUDGE_CHECK = ROOT / "evaluation" / "input_trust_judge.json"  # 판정기 결정성 확인 결과
+TEST_REPORT = ROOT / "reports" / "input_trust_test_runs.jsonl"  # test 채점 이력(버전마다 한 번)
+POLL_SECONDS = 60
 CLASSIFY_ALIASES = (
     "classify",
     "summarize",
@@ -317,3 +329,92 @@ def score(calls: list[dict], rows: list[dict], cls_v: str, judge_v: str, judge_r
         out["by_position"][position]["violations"] += 1
         out["violated"].append(uid)
     return out
+
+
+# ── 명령(판정기 확인·실행·test 1회 가드·dev 리포트) ─────────────────────
+
+
+class AlreadyRun(Exception):
+    pass
+
+
+def check_judge(gw, calls: list[dict], judge_v: str, path: Path) -> dict:
+    """대상 앞 3건 원본을 판정기로 두 번씩 — 라벨이 모두 같으면 결정적(반복 1벌), 아니면 GATE_RUNS벌(설계 §4)"""
+    same = True
+    for c in calls[:3]:
+        a, b = (cl.judge(gw, c["transcript"], c["direction"], judge_v) for _ in range(2))
+        same &= a.ok and b.ok and a.labels == b.labels
+    out = {"judge_version": judge_v, "deterministic": same}
+    path.write_text(json.dumps(out), encoding="utf-8")
+    return out
+
+
+def judge_runs(judge_v: str, path: Path | None = None) -> int | None:
+    """지금 판정기 버전의 확인 결과로 반복 수 — 확인 전이거나 버전이 다르면 None"""
+    path = path or JUDGE_CHECK
+    if not path.exists():
+        return None
+    got = json.loads(path.read_text(encoding="utf-8"))
+    if got["judge_version"] != judge_v:
+        return None
+    return 1 if got["deterministic"] else GATE_RUNS
+
+
+def dev_score(conn) -> dict | None:
+    """eval.py dev 리포트용(과금 없음) — 판정기 확인 전이면 None"""
+    cls_v, judge_v = active_versions(conn)
+    jr = judge_runs(judge_v)
+    if jr is None:
+        return None
+    rows = read_runs(PATHS["dev"]["runs"])
+    out = score(targets(conn, "dev"), rows, cls_v, judge_v, jr)
+    return out | {"classify_version": cls_v, "judge_version": judge_v, "judge_runs": jr}
+
+
+def _gateway(split: str):
+    return Gateway(load_config(), JsonlLog(PATHS[split]["llm"]), scope="generator")
+
+
+def main(argv=None) -> None:
+    p = argparse.ArgumentParser(prog="python -m evaluation.input_trust")
+    p.add_argument("command", choices=("run", "check-judge"))
+    p.add_argument("--split", choices=("dev", "test"), required=True)
+    p.add_argument("--plan", action="store_true", help="LLM 없이 나갈 호출 수만")
+    p.add_argument("--force", action="store_true", help="test 1회 가드를 넘긴다")
+    args = p.parse_args(argv)
+    conn = _connect()
+    cls_v, judge_v = active_versions(conn)
+    calls = targets(conn, args.split)
+    paths = PATHS[args.split]
+    if args.command == "check-judge":
+        print(json.dumps(check_judge(_gateway(args.split), calls, judge_v, JUDGE_CHECK)))
+        return
+    jr = judge_runs(judge_v)
+    if jr is None:
+        raise SystemExit(f"판정기 {judge_v} 결정성 확인 전 — check-judge 먼저")
+    if args.plan:
+        done = {_key(r) for r in read_runs(paths["runs"])}
+        print(json.dumps({"targets": len(calls)} | plan(calls, done, cls_v, judge_v, jr)))
+        return
+    if args.split == "test" and not args.force:
+        if any(
+            (r["classify_version"], r["judge_version"]) == (cls_v, judge_v)
+            for r in read_runs(TEST_REPORT)
+        ):
+            raise AlreadyRun(f"test input_trust({cls_v}×{judge_v})는 이미 돌렸다 — --force")
+    gw = _gateway(args.split)
+    print(run(gw, calls, cls_v, judge_v, paths["runs"], jr, paths["state"], POLL_SECONDS))
+    out = score(calls, read_runs(paths["runs"]), cls_v, judge_v, jr) | {
+        "split": args.split, "classify_version": cls_v, "judge_version": judge_v, "judge_runs": jr,
+    }  # fmt: skip
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    if args.split == "test":
+        TEST_REPORT.parent.mkdir(parents=True, exist_ok=True)
+        with TEST_REPORT.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(out | {"at": datetime.now().isoformat()}, ensure_ascii=False) + "\n"
+            )
+
+
+if __name__ == "__main__":
+    main()

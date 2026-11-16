@@ -544,6 +544,7 @@ def test_main_blocks_read_of_env():
         "uv run python -m evaluation.claim_omission real --split=test",
         "uv run python -m evaluation.claim_qa score --split test",
         "uv run python -m evaluation.claim_appeal run --split test",
+        "uv run python -m evaluation.input_trust run --split test",
         "uv run python -m evaluation.recon score --split test",
         "uv run python -m evaluation.expense score --split test",
         "make classify V=v3",
@@ -580,6 +581,8 @@ def test_more_commands_ask(command):
     [
         "make nightly PLAN=1",
         "uv run python -m backend.nightly run --plan",
+        "uv run --group finetune python -m evaluation.input_trust run --split dev --plan",
+        "uv run --group finetune python -m evaluation.input_trust check-judge --split dev",
         "uv run python -m backend.rag_index --embedding voyage-4 --stats",
         "uv run python -m backend.report --help",  # argparse가 설명만 찍고 끝난다
         "python -m evaluation.prompt_gate -h",
@@ -804,6 +807,8 @@ def test_review_lookalikes_pass(command, monkeypatch):
         "uv run python -m evaluation.claim_omission synth --split dev",
         "uv run python -m evaluation.claim_check sample",
         "uv run python -m evaluation.claim_appeal run --split dev",
+        "uv run python -m evaluation.input_trust run --split dev",
+        "make trust-eval",
         "uv run python backend/prep.py run",
         "python3 evaluation/prompt_gate.py --a v2 --b v3 --item purpose",
         "./backend/report.py",

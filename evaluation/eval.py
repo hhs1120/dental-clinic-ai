@@ -39,6 +39,7 @@ from evaluation import (
     expense,
     followup,
     gold_audit,
+    input_trust,
     prep,
     rag,
     recon,
@@ -271,6 +272,7 @@ def run(
         "claim_omission": None,
         "claim_basis": None,
         "claim_appeal": None,
+        "input_trust": None,
     }
     gold_drop = None
     if (dev or section == "judge") and gold_audit_path and gold_audit_path.exists():
@@ -411,6 +413,9 @@ def run(
         result["claim_appeal"] = claim_appeal.score(
             claim_appeal.targets(conn, "dev"), claim_appeal.read_runs(claim_appeal.RUNS)
         )
+    if dev and input_trust.PATHS["dev"]["runs"].exists():
+        # 입력 신뢰 경계(평가 설계 §5) — 과금 없음(기록은 make trust-eval). test는 python -m evaluation.input_trust run --split test(사람)
+        result["input_trust"] = input_trust.dev_score(conn)
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
@@ -525,6 +530,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_claim_basis(r["claim_basis"])
     if r.get("claim_appeal") is not None:
         out += _render_claim_appeal(r["claim_appeal"])
+    if r.get("input_trust") is not None:
+        out += _render_input_trust(r["input_trust"])
     if r.get("recon") is not None:
         out += _render_recon(r["recon"])
     if r.get("expense") is not None:
@@ -915,6 +922,28 @@ def _render_claim_appeal(c: dict) -> list[str]:
         f"정답 다툴 만함 dev {c['n']}건 · 초안 {c['run']} — 후검증 통과 첫 답 {c['first_valid']}/{c['run']}"
         f" · 다시 부른 뒤 {c['final_valid']}/{c['run']}",
         f"첫 답 근거 없는 문장 {c['unbacked']}/{c['sentences']}({rate})",
+        "",
+    ]
+
+
+def _render_input_trust(t: dict) -> list[str]:
+    """위반은 분수로 — 0건을 안전의 증거로 쓰지 않는다(평가 설계 §1 원칙 9)"""
+
+    def nv(d):
+        return " · ".join(f"{k} {v['violations']}/{v['n']}" for k, v in d.items())
+
+    diff = " · ".join(f"{k} {v}" for k, v in t["diff_items"].items() if v) or "없음"
+    return [
+        f"## 입력 신뢰 경계 — ① 자동 종결 (분류 {t['classify_version']} × 판정기 {t['judge_version']})",
+        "",
+        f"위험 통화 dev {t['n']}건 · 짝 {t['pairs']} — 위반 {t['violations']}/{t['pairs']}"
+        f" (자동 종결 새로 일어남 {t['autoclose_flips']}) · 모델별 분류 {t['by_model']['classify']}"
+        f" · 판정기 {t['by_model']['judge']}",
+        f"유형별 {nv(t['by_kind'])}",
+        f"위치별 {nv(t['by_position'])}",
+        f"위반 아닌 차이(짝 수) {diff}",
+        f"모수 밖 — 원본이 이미 자동 종결 {t['excluded_already_closed']} · 폴백 {t['fallback']}"
+        f" · 반복 덜 참 {t['incomplete']} · 판정기 반복 {t['judge_runs']}벌",
         "",
     ]
 

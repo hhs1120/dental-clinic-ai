@@ -352,3 +352,79 @@ def test_incomplete_counted():
     rows = [r for r in pair_rows(RISKY, SAFE, RISKY, SAFE) if r["model"] != "judge"]
     s = _score(rows)
     assert s["incomplete"] == 1 and s["pairs"] == 0
+
+
+# ── Task 4: 명령·dev 리포트 ─────────────────────────────────────────
+
+
+def test_check_judge_detects_nondeterminism(tmp_path):
+    flip = iter([RISKY, SAFE] * 10)
+    gw = FakeGw(lambda alias, text: res(next(flip)))
+    got = it.check_judge(gw, [CALL], "v3", tmp_path / "judge.json")
+    assert got == {"judge_version": "v3", "deterministic": False}
+    assert it.judge_runs("v3", tmp_path / "judge.json") == it.GATE_RUNS
+
+
+def test_check_judge_deterministic(tmp_path):
+    it.check_judge(FakeGw(), [CALL, {**CALL, "call_uid": "c-0002"}], "v3", tmp_path / "j.json")
+    assert it.judge_runs("v3", tmp_path / "j.json") == 1
+    assert it.judge_runs("v4", tmp_path / "j.json") is None  # 다른 판정기 버전은 다시 확인
+
+
+def _main(monkeypatch, tmp_path, conn, argv, gw=None):
+    monkeypatch.setattr(it, "_connect", lambda: conn)
+    monkeypatch.setattr(it, "active_versions", lambda c: ("v2", "v3"))
+    monkeypatch.setattr(it, "JUDGE_CHECK", tmp_path / "judge.json")
+    monkeypatch.setattr(it, "TEST_REPORT", tmp_path / "test_runs.jsonl")
+    paths = {s: {k: tmp_path / f"{s}-{k}" for k in ("runs", "llm", "state")} for s in it.PATHS}
+    monkeypatch.setattr(it, "PATHS", paths)
+
+    def make(split):
+        if gw is None:
+            raise AssertionError("게이트웨이를 만들면 안 된다")
+        return gw
+
+    monkeypatch.setattr(it, "_gateway", make)
+    monkeypatch.setattr(it, "POLL_SECONDS", 0)
+    return it.main(argv)
+
+
+def test_run_refuses_without_check_judge(monkeypatch, tmp_path, conn):
+    with pytest.raises(SystemExit, match="check-judge"):
+        _main(monkeypatch, tmp_path, conn, ["run", "--split", "dev"], FakeGw())
+
+
+def test_plan_does_not_call_gateway(monkeypatch, tmp_path, conn, capsys):
+    (tmp_path / "judge.json").write_text(
+        json.dumps({"judge_version": "v3", "deterministic": True})
+    )
+    _main(monkeypatch, tmp_path, conn, ["run", "--split", "dev", "--plan"])
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"targets": 2, "classify_calls": 2 * 2 * it.GATE_RUNS * 2, "judge_calls": 2 * 2}
+
+
+def test_test_split_runs_once(monkeypatch, tmp_path, conn):
+    (tmp_path / "judge.json").write_text(
+        json.dumps({"judge_version": "v3", "deterministic": True})
+    )
+    argv = ["run", "--split", "test"]
+    _main(monkeypatch, tmp_path, conn, argv, FakeGw())
+    lines = it.read_runs(tmp_path / "test_runs.jsonl")
+    assert len(lines) == 1 and lines[0]["split"] == "test" and lines[0]["n"] == 1
+    with pytest.raises(it.AlreadyRun):
+        _main(monkeypatch, tmp_path, conn, argv, FakeGw())
+    _main(monkeypatch, tmp_path, conn, argv + ["--force"], FakeGw())
+    assert len(it.read_runs(tmp_path / "test_runs.jsonl")) == 2
+
+
+def test_dev_report_section(monkeypatch, tmp_path, conn):
+    from evaluation import eval as ev
+
+    (tmp_path / "judge.json").write_text(
+        json.dumps({"judge_version": "v3", "deterministic": True})
+    )
+    _main(monkeypatch, tmp_path, conn, ["run", "--split", "dev"], FakeGw())
+    s = it.dev_score(conn)
+    text = "\n".join(ev._render_input_trust(s))
+    assert "입력 신뢰 경계" in text
+    assert f"위반 {s['violations']}/{s['pairs']}" in text
