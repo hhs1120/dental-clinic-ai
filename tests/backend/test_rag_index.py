@@ -134,6 +134,24 @@ def test_call_prefix_without_patient(conn):
     assert c["text"].startswith("[상대: 이영자 | 2026-07-04 | 발신]\n") and c["chart_no"] is None
 
 
+def test_pasted_calls_chunked(conn):
+    """화면에서 붙여넣은 통화(ax_pasted_calls)도 생성 통화와 같은 꼴로 — 야간 실행 색인 단계"""
+    conn.executemany(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, patient_id,"
+        " added_by, added_at) VALUES (?, ?, ?, ?, ?, 'desk', '2026-11-16 10:00:00')",
+        [
+            ("p-0001", "inbound", "2026-12-01 10:00:00", "직원: 네\n환자: 틀니 문의", 1),
+            ("p-0002", "outbound", "2026-12-01 11:00:00", "직원: 납품 확인", None),
+        ],
+    )
+    build_index(conn, FakeEmbedder())
+    c = chunk(conn, "call:p-0001:0")
+    assert c["text"].startswith("[환자: 김철수(C-00001) | 2026-12-01 | 수신]\n")
+    assert c["source_type"] == "call" and c["chart_no"] == "C-00001"
+    assert c["event_date"] == "2026-12-01"
+    assert chunk(conn, "call:p-0002:0")["text"].startswith("[상대: 미상 | 2026-12-01 | 발신]\n")
+
+
 def test_call_without_transcript_is_skipped(conn):
     build_index(conn, FakeEmbedder())
     assert chunk(conn, "call:c-0003:0") is None

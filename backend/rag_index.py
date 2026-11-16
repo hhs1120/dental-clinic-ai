@@ -138,11 +138,17 @@ def _documents(conn, overlap: int = OVERLAP) -> list[dict]:
 
 
 def _calls(conn) -> list[dict]:
+    """생성 통화 + 화면에서 붙여넣은 통화(ax_pasted_calls — 상대 이름이 없어 환자가 아니면 '미상')"""
     out = []
     for c in conn.execute(
-        "SELECT c.*, p.chart_no, p.name FROM source.ax_calls c"
+        "SELECT c.call_uid, c.direction, c.started_at, c.transcript, c.caller_name,"
+        " p.chart_no, p.name FROM source.ax_calls c"
         " LEFT JOIN source.emr_patients p ON p.id = c.patient_id"
-        " WHERE c.has_transcript = 1 ORDER BY c.id"
+        " WHERE c.has_transcript = 1"
+        " UNION ALL SELECT c.call_uid, c.direction, c.started_at, c.transcript, '미상',"
+        " p.chart_no, p.name FROM ax_pasted_calls c"
+        " LEFT JOIN source.emr_patients p ON p.id = c.patient_id"
+        " ORDER BY call_uid"
     ):
         day = c["started_at"][:10]
         who = (
