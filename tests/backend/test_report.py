@@ -459,3 +459,13 @@ def test_sheet_unknown(conn):
         report.sheet(conn, TODAY, "monthly", "1999-01")
     with pytest.raises(ValueError):
         report.sheet(conn, TODAY, "yearly")
+
+
+def test_todo_count_matches_build_called(conn):
+    """야간 실행 PLAN — build가 부를 기간 수와 같다(설계 2026-11-16 nightly §3)"""
+    from tests.backend.test_prep import MODEL
+
+    n = _n(conn)
+    assert report.todo_count(conn, TODAY, MODEL) == n
+    assert report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)["called"] == n
+    assert report.todo_count(conn, TODAY, MODEL) == 0

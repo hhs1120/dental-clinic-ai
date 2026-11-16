@@ -8,8 +8,34 @@ import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
-from shared.llm import BudgetExceeded
+from backend import (
+    autoclose,
+    calls,
+    claim_check,
+    claim_evidence,
+    claim_omission,
+    classify_batch,
+    db,
+    disagreements,
+    expense_agent,
+    expense_auto,
+    followup,
+    judge_queue,
+    prep,
+    rag_index,
+    recon_agent,
+    recon_auto,
+    report,
+)
+from backend.embeddings import make_embedder
+from backend.harness import policy
+from backend.rag_search import DEFAULT_EMBEDDING
+from shared.clinic import load_clinic
+from shared.llm import BudgetExceeded, load_config
+
+ROOT = Path(__file__).resolve().parents[1]
 
 KIND = "nightly"
 # 이보다 오래 running이면 죽은 실행 — Batch 대기·Qwen 판정이 길어 화면 작업(api.JOB_STALE)보다 길게
@@ -105,3 +131,229 @@ def run(ctx: Ctx, steps: list[Step], clock=datetime.now) -> dict | None:
 def plan(ctx: Ctx, steps: list[Step]) -> list[tuple[str, int | None]]:
     """단계별 새로 부를 건수 — LLM을 부르지 않고 ax_jobs에 쓰지 않는다(make nightly PLAN=1)"""
     return [(s.name, s.plan(ctx)) for s in steps]
+
+
+# ── 단계 (설계 §3 표 — 각 모듈 main이 하는 일을 기본 범위로) ──
+SOURCE = ROOT / "data" / "source.sqlite"
+AFTER_PREVIOUS = (
+    "judge",
+    "disagreements",
+    "autoclose",
+    "followup",
+)  # PLAN 수가 앞 단계 뒤 늘 수 있음
+
+
+def _ok(n: int = 0, failed: int = 0, note: str | None = None) -> dict:
+    return {"new": n, "failed": failed, "note": note}
+
+
+def _pasted_todo(conn, version: str) -> list[str]:
+    """활성 분류 ok가 없는 붙여넣은 통화 — 추가 때 분류가 상한·오류로 실패한 것(calls.add_call)"""
+    return [
+        r[0]
+        for r in conn.execute(
+            "SELECT call_uid FROM ax_pasted_calls WHERE call_uid NOT IN"
+            " (SELECT call_uid FROM ax_call_classifications WHERE model_alias = 'classify'"
+            "  AND prompt_version = ? AND status = 'ok') ORDER BY call_uid",
+            (version,),
+        )
+    ]
+
+
+def _source(ctx: Ctx) -> dict:
+    changed = policy.check_source(ctx.conn, SOURCE)
+    ctx.conn.commit()
+    return _ok(note="원본이 바뀌어 자동 처리 정책 끔" if changed else None)
+
+
+def _classify(ctx: Ctx) -> dict:
+    a, _ = calls.active_versions(ctx.conn)
+    out = classify_batch.run(ctx.conn, ctx.gw, "classify", a, use_batch=ctx.use_batch)
+    n, failed = out["done"], out["failed"]
+    for uid in _pasted_todo(ctx.conn, a):
+        calls.classify_one(ctx.conn, ctx.gw, uid)
+        n += 1
+    return _ok(n, failed)
+
+
+def _classify_plan(ctx: Ctx) -> int:
+    a, _ = calls.active_versions(ctx.conn)
+    return len(classify_batch.targets(ctx.conn, "classify", a, None)) + len(
+        _pasted_todo(ctx.conn, a)
+    )
+
+
+def _judge(ctx: Ctx) -> dict:
+    _, b = calls.active_versions(ctx.conn)
+    if not b:
+        return _ok(note="판정기 버전 없음")
+    out = classify_batch.run(ctx.conn, ctx.gw, "judge", b, use_batch=ctx.use_batch)
+    return _ok(out["done"], out["failed"])
+
+
+def _judge_plan(ctx: Ctx) -> int | None:
+    _, b = calls.active_versions(ctx.conn)
+    return len(classify_batch.targets(ctx.conn, "judge", b, None)) if b else None
+
+
+def _disagreements(ctx: Ctx) -> dict:
+    a, b = calls.active_versions(ctx.conn)
+    if not b:
+        return _ok(note="판정기 버전 없음")
+    n = disagreements.compute(ctx.conn, a, b)
+    judge_queue.refresh_if_active(ctx.conn, a, b)
+    judge_queue.prune(ctx.conn, a, b)
+    ctx.conn.commit()
+    return _ok(n)
+
+
+def _autoclose(ctx: Ctx) -> dict:
+    out = autoclose.run(ctx.conn)
+    return _ok(note="정책 꺼짐") if out.get("off") else _ok(out["closed"])
+
+
+def _followup(ctx: Ctx) -> dict:
+    clinic = load_clinic()
+    searcher = followup.app_searcher(ctx.conn)
+    n = failed = 0
+    for uid in followup.targets(ctx.conn, ctx.today):
+        try:
+            r = followup.run_for_call(ctx.conn, ctx.gw, uid, clinic, searcher)
+        except Exception:  # noqa: BLE001 — 한 통화 때문에 나머지가 멈추지 않게(make followups와 같다)
+            ctx.conn.rollback()
+            failed += 1
+            continue
+        if r:
+            n += r["status"] == "done"
+            failed += r["status"] == "failed"
+    return _ok(n, failed)
+
+
+def _has_index(conn) -> bool:
+    return conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone() is not None
+
+
+def _index(ctx: Ctx) -> dict:
+    if not _has_index(ctx.conn):
+        return _ok(note="건너뜀: 색인 없음")
+    return _ok(rag_index.build_index(ctx.conn, make_embedder(DEFAULT_EMBEDDING)))
+
+
+def _prep(ctx: Ctx) -> dict:
+    out = prep.build(
+        ctx.conn, ctx.gw, prep.tab_days(ctx.today), ctx.today, use_batch=ctx.use_batch
+    )
+    return _ok(out["called"], out["failed"])
+
+
+def _prep_plan(ctx: Ctx) -> int:
+    return prep.todo_count(ctx.conn, prep.tab_days(ctx.today), ctx.today, _model(ctx, prep.ALIAS))
+
+
+def _claim(mod) -> Step:
+    def run(ctx: Ctx) -> dict:
+        rows = mod.targets(ctx.conn, ctx.today, scope="app")
+        out = mod.build(ctx.conn, ctx.gw, rows, use_batch=ctx.use_batch)
+        return _ok(out.get("called", 0), out.get("failed", 0))
+
+    return Step(
+        mod.__name__.rsplit(".", 1)[1], run, lambda ctx: len(mod.todo_ids(ctx.conn, ctx.today))
+    )
+
+
+def _agent(name: str, mod, auto) -> Step:
+    def run(ctx: Ctx) -> dict:
+        if not mod.targets(
+            ctx.conn, ctx.today
+        ):  # 조사할 것이 없어도 자동 처리는 다시 계산(make recon과 같다)
+            auto.refresh(ctx.conn, ctx.today)
+            ctx.conn.commit()
+            return _ok()
+        out = mod.run_batch(ctx.conn, ctx.gw, ctx.today, None, batch=ctx.use_batch)
+        return _ok(out.get("done", 0) + out.get("handed_off", 0), out.get("failed", 0))
+
+    return Step(name, run, lambda ctx: len(mod.targets(ctx.conn, ctx.today)))
+
+
+def _report(ctx: Ctx) -> dict:
+    out = report.build(ctx.conn, ctx.gw, ctx.today, use_batch=ctx.use_batch)
+    return _ok(out["called"], out["failed"])
+
+
+def _model(ctx: Ctx, alias: str) -> str:
+    cfg = getattr(ctx.gw, "config", None) or load_config()
+    return cfg["aliases"][alias][0]
+
+
+def _none(ctx: Ctx) -> None:
+    return None
+
+
+STEPS = [
+    Step("source", _source, _none),
+    Step("classify", _classify, _classify_plan),
+    Step("judge", _judge, _judge_plan),
+    Step("disagreements", _disagreements, _none),
+    Step("autoclose", _autoclose, _none),
+    Step("followup", _followup, lambda ctx: len(followup.targets(ctx.conn, ctx.today))),
+    Step("index", _index, lambda ctx: None if _has_index(ctx.conn) else 0),
+    Step("prep", _prep, _prep_plan),
+    _claim(claim_check),
+    _claim(claim_omission),
+    _claim(claim_evidence),
+    _agent("recon", recon_agent, recon_auto),
+    _agent("expense", expense_agent, expense_auto),
+    Step(
+        "report",
+        _report,
+        lambda ctx: report.todo_count(ctx.conn, ctx.today, _model(ctx, report.ALIAS)),
+    ),
+]
+
+
+def main(argv=None) -> None:
+    import argparse
+    import time
+
+    from backend.harness.llm import make_gateway
+
+    p = argparse.ArgumentParser(prog="python -m backend.nightly")
+    p.add_argument("command", choices=("run",))
+    p.add_argument("--plan", action="store_true", help="LLM 없이 단계별 새로 부를 건수만")
+    p.add_argument("--no-batch", action="store_true", help="Batch 없이 일반 호출만")
+    args = p.parse_args(argv)
+    conn = db.connect(ROOT / "data" / "app.sqlite", SOURCE)
+    db.init_schema(conn)
+    ctx = Ctx(conn, make_gateway(conn), load_clinic().today, use_batch=not args.no_batch)
+    if args.plan:
+        for name, n in plan(ctx, STEPS):
+            tail = " (앞 단계 뒤 늘 수 있음)" if name in AFTER_PREVIOUS else ""
+            print(f"{name}: {'—' if n is None else f'{n}건'}{tail}")
+        print("Batch는 하루 상한 밖 — 이 건수로 확인하고 돌린다")
+        return
+    start = datetime.now().isoformat(timespec="seconds")
+    timed = []
+    for s in STEPS:
+
+        def run_timed(c, s=s):
+            t = time.monotonic()
+            got = s.run(c)
+            print(
+                f"{s.name}: 새로 {got['new']} · 실패 {got['failed']} · {time.monotonic() - t:.0f}초"
+                + (f" · {got['note']}" if got["note"] else "")
+            )
+            return got
+
+        timed.append(Step(s.name, run_timed, s.plan))
+    job = run(ctx, timed)
+    if job is None:
+        print("야간 실행이 이미 돌고 있다 — 끝나거나 오래되면 다시")
+        return
+    cost = conn.execute(
+        "SELECT COALESCE(SUM(cost_usd), 0) FROM ax_llm_calls WHERE created_at >= ?", (start,)
+    ).fetchone()[0]
+    print(f"{job['status']} · {job['finished_at']} 끝남 · 비용 ${cost:.4f}")
+
+
+if __name__ == "__main__":
+    main()

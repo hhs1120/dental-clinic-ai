@@ -498,3 +498,14 @@ def test_changed_plan_compares_values_not_positions():
         {"key": "plan", "before": "A", "after": None},
         {"key": "plan", "before": None, "after": "D"},
     ]
+
+
+def test_todo_count_matches_build_called(app):
+    """야간 실행 PLAN — build가 부를 행 수와 같고, 쓰지 않는다(설계 2026-11-16 nightly §3)"""
+    assert prep.todo_count(app, [TODAY], TODAY, MODEL) == 3
+    assert app.execute("SELECT COUNT(*) FROM ax_prep_sheets").fetchone()[0] == 0
+    out = prep.build(
+        app, FakeGw(res(SUGGEST), res(NONE), res(NONE)), [TODAY], TODAY, use_batch=False
+    )
+    assert out["called"] == 3
+    assert prep.todo_count(app, [TODAY], TODAY, MODEL) == 0

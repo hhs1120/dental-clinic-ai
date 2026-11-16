@@ -348,6 +348,27 @@ def _batchable(gw) -> bool:
     return gw.config["models"][first].get("provider", "anthropic") == "anthropic"
 
 
+def _fresh(conn, scope: str, label: str, m: dict, model: str) -> bool:
+    """저장된 해석을 그대로 쓰는 기간 — 숫자 해시·버전·모델이 같고 통과"""
+    old = conn.execute(
+        "SELECT metrics_hash, prompt_version, model, valid FROM ax_reports"
+        " WHERE scope = ? AND period = ?",
+        (scope, label),
+    ).fetchone()
+    return bool(
+        old and old["valid"] and tuple(old)[:3] == (metrics_hash(m), PROMPT_VERSION, model)
+    )
+
+
+def todo_count(conn, today: date, model: str) -> int:
+    """build가 부를 기간 수 — 같은 판정(_fresh), 쓰지 않는다(야간 실행 PLAN)"""
+    return sum(
+        not _fresh(conn, scope, label, metrics(conn, today, scope, label), model)
+        for scope in SCOPES
+        for label in periods(conn, today, scope)
+    )
+
+
 def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> dict:
     """화면 기간 전부의 해석을 만든다(설계 §5). 숫자 해시·버전·모델이 같고 통과한 기간은 부르지 않는다 — 숫자가 바뀐 기간은
     다시 부른다. 첫 답은 use_batch면 Batch 한 번, 아니면 일반 호출. Batch에서 빠진 기간은 일반 호출이 첫 답이 되고,
@@ -359,12 +380,7 @@ def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> 
         for label in periods(conn, today, scope):
             out["rows"] += 1
             m = metrics(conn, today, scope, label)
-            old = conn.execute(
-                "SELECT metrics_hash, prompt_version, model, valid FROM ax_reports"
-                " WHERE scope = ? AND period = ?",
-                (scope, label),
-            ).fetchone()
-            if old and old["valid"] and tuple(old)[:3] == (metrics_hash(m), PROMPT_VERSION, model):
+            if _fresh(conn, scope, label, m, model):
                 out["skipped"] += 1
                 continue
             facts = _input(conn, today, scope, label, m)

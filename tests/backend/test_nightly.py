@@ -89,3 +89,49 @@ def test_plan_writes_no_job(conn):
 
 def test_last_run_none(conn):
     assert nightly.last_run(conn) is None
+
+
+# ── 실제 단계(Task 4) ──
+def test_step_names_order():
+    assert [s.name for s in nightly.STEPS] == [
+        "source",
+        "classify",
+        "judge",
+        "disagreements",
+        "autoclose",
+        "followup",
+        "index",
+        "prep",
+        "claim_check",
+        "claim_omission",
+        "claim_evidence",
+        "recon",
+        "expense",
+        "report",
+    ]
+
+
+def _real(names):
+    return [s for s in nightly.STEPS if s.name in names]
+
+
+def test_second_run_new_zero(cconn, clock):
+    """같은 날 두 번 — 두 번째는 새로 만드는 것도, LLM 호출도 없다(캐시). 가짜 응답의 처리안 실패도
+    실패 행으로 남아 다시 부르지 않는다(followup.targets)"""
+    from backend.harness.store import SqliteLlmLog
+    from shared.llm import FakeGateway
+
+    ctx = Ctx(cconn, FakeGateway(SqliteLlmLog(cconn), scope="runtime"), TODAY, use_batch=False)
+    steps = _real({"classify", "autoclose", "followup"})
+    nightly.run(ctx, steps, clock)
+    llm_calls = cconn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0]
+    clock.advance(60)
+    second = nightly.run(ctx, steps, clock)
+    assert [d["new"] for d in second["detail"]] == [0, 0, 0]
+    assert cconn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0] == llm_calls
+
+
+def test_index_step_skips_without_index(conn):
+    (index,) = _real({"index"})
+    assert index.run(_ctx(conn)) == {"new": 0, "failed": 0, "note": "건너뜀: 색인 없음"}
+    assert index.plan(_ctx(conn)) == 0
