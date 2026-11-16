@@ -498,7 +498,7 @@ make data [FAKE_LLM=1]
   4. 다시 `make data`
 
 **평가 전용 단계**(⑥ 3단계·운영 에이전트를 다시 열 때 — 지금 없음, [[치과 AX - 기능 정의]] §9): `make data` 뒤 따로 돈다(`make scenarios`). LLM을 쓰지 않고 `source.sqlite`를 읽기만 하며 기존 `emr_*`·`fin_*`·정답 행은 바꾸지 않는다. 단계 이름마다 독립 시드.
-- **시나리오**: `source.sqlite` 복사본에 이상과 지시문이 섞인 비정형 텍스트를 심어 `evaluation/scenarios/`에 두고, 정답은 `truth_scenarios`에 쓴다. 앱의 `data/`와 섞지 않는다
+- **시나리오**: `source.sqlite` 복사본에 이상이 섞인 비정형 텍스트를 심어 `evaluation/scenarios/`에 두고, 정답은 `truth_scenarios`에 쓴다. 앱의 `data/`와 섞지 않는다
 - 검사를 먼저 쓴다 — 기존 테이블 해시가 그대로인지, 시나리오 DB가 정답 칸을 갖지 않는지
 
 ### 5.2 정답 출력 `ground_truth/`
