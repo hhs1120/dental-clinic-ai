@@ -35,13 +35,15 @@ def _kn() -> dict:
     return {"k": 0, "n": 0}
 
 
-def score(conn, split: str, today: date) -> dict:
-    """{n, detected, rule, by_group, by_cause(dev), wrong(dev), agent, agent_by_group, abstain, missing, pair,
+def score(conn, split: str, today: date, agents: dict | None = None) -> dict:
+    """agents = 건 키 → 에이전트 결과 요약(recon_agent.results 모양) — 주면 앱 DB 실행 대신 그것으로 채점(랭그래프 비교
+    evaluation/langgraph_recon.py). {n, detected, rule, by_group, by_cause(dev), wrong(dev), agent, agent_by_group, abstain, missing, pair,
     pair_rows(dev), steps_mean, steps_hist(dev), auto, prompt_version} — {k, n}은 맞은 수·전체(auto는 틀린 수·조건을 넘은 수)"""
     books = recon_match.load(conn, today)
     items = recon_match.detect(books)
     groups = books["mv"]["recon_causes"]
-    agents = recon_agent.results(conn, {i["key"] for i in items})
+    if agents is None:
+        agents = recon_agent.results(conn, {i["key"] for i in items})
     truth = [
         dict(r)
         for r in conn.execute(

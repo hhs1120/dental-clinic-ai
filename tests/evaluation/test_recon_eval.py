@@ -198,3 +198,16 @@ def test_test_split_hides_agent_rows(world):
     assert r["pair_rows"] is None and r["steps_hist"] is None
     text = "\n".join(ev._render_recon(r))
     assert "에이전트" in text and "2026-11-03" not in text
+
+
+def test_score_agents_override(world, monkeypatch):
+    """다른 실행기(랭그래프 비교 — evaluation/langgraph_recon.py)의 결과를 넘기면 앱 DB 실행 대신 그것으로 채점"""
+    conn = _two_truths(world)
+    monkeypatch.setattr(recon_agent, "results", lambda *a: pytest.fail("앱 DB를 읽으면 안 된다"))
+    items = recon_match.detect(recon_match.load(conn, DAY))
+    agents = {
+        i["key"]: {"run_id": i["key"], "status": "done", "tool_calls": 3, "cause": "entry_missing"}
+        for i in items
+    }
+    r = recon_eval.score(conn, "dev", DAY, agents=agents)
+    assert r["agent"] == {"k": 1, "n": 2} and r["steps_mean"] == 3

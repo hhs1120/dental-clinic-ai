@@ -484,7 +484,7 @@ PAID_MODULES = {
     "evaluation.prompt_gate": None, "evaluation.claim_qa": {"draft"},
     "evaluation.claim_omission": {"cases", "synth", "real"},
     "evaluation.claim_check": {"sample", "run"}, "evaluation.claim_appeal": {"run"},
-    "evaluation.input_trust": {"run"},
+    "evaluation.input_trust": {"run"}, "evaluation.langgraph_recon": {"run"},
 }  # fmt: skip
 FREE_FLAGS = {"--plan", "--stats", "--help", "-h"}
 # 확인 창에 모듈 이름 대신 보일 말
@@ -499,7 +499,7 @@ MODULE_LABELS = {
     "evaluation.gold_audit": "골드 점검 중재", "evaluation.prompt_gate": "프롬프트 관문 판정",
     "evaluation.claim_qa": "청구 기준 질문 초안", "evaluation.claim_omission": "청구 누락 합성 평가",
     "evaluation.claim_check": "청구 점검 평가", "evaluation.claim_appeal": "재심 사유서 초안 평가",
-    "evaluation.input_trust": "입력 신뢰 경계 평가",
+    "evaluation.input_trust": "입력 신뢰 경계 평가", "evaluation.langgraph_recon": "랭그래프 비교 실행",
 }  # fmt: skip
 PROMPT_PART_MAX = 80  # 확인 창의 "걸린 부분" 글자 수
 PAID_THEN = "LLM 호출 비용이 나간다"

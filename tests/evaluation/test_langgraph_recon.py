@@ -200,3 +200,46 @@ def test_resume_after_interrupt(conn, tmp_path, monkeypatch):
     assert st["model_calls"] == base["model_calls"] == 2
     assert sum(gw.pos.values()) == 2  # 모델은 다시 부르지 않았다
     assert ran["n"] == base_tools + 1  # 끊기 전 끝난 조회 1번을 다시 실행
+
+
+# ── Task 4: 실행·채점 ────────────────────────────────────────────
+
+
+def test_run_skips_done_keys(conn, tmp_path):
+    from backend import recon_match
+    from tests.backend.test_recon_agent import Script
+    from tests.backend.test_recon_match import DAY
+
+    items = recon_match.detect(recon_match.load(conn, DAY))
+    path = tmp_path / "runs.jsonl"
+    gw = Script(conn, LOOK, submit())
+    out = lg.run(gw, conn, items, DAY, path, tmp_path / "cp.sqlite")
+    assert out == {"done": 1}
+    [line] = lg.read_runs(path)
+    assert line["key"] == items[0]["key"] and line["cause"] == "amount_typo"
+    assert line["model_calls"] == 2 and line["tool_calls"] == 2
+    gw2 = Script(conn, LOOK, submit())
+    assert lg.run(gw2, conn, items, DAY, path, tmp_path / "cp.sqlite") == {}
+    assert gw2.pos == {}
+
+
+def test_failed_key_runs_again(conn, tmp_path):
+    from backend import recon_match
+    from tests.backend.test_recon_agent import Script
+    from tests.backend.test_recon_match import DAY
+
+    items = recon_match.detect(recon_match.load(conn, DAY))
+    path = tmp_path / "runs.jsonl"
+    cp = tmp_path / "cp.sqlite"  # 같은 체크포인터 — 실패로 끝난 thread는 지우고 처음부터
+    assert lg.run(Script(conn, ("fail", "거절")), conn, items, DAY, path, cp) == {"failed": 1}
+    assert lg.run(Script(conn, LOOK, submit()), conn, items, DAY, path, cp) == {"done": 1}
+    assert lg.latest(lg.read_runs(path))[items[0]["key"]]["status"] == "done"
+
+
+def test_plan_counts_without_gateway(conn):
+    from backend import recon_match
+    from tests.backend.test_recon_match import DAY
+
+    items = recon_match.detect(recon_match.load(conn, DAY))
+    got = lg.plan(items, {}, harness_mean_usd=0.04)
+    assert got == {"targets": 1, "todo": 1, "estimated_usd": 0.08}  # 일반 호출이라 Batch의 두 배

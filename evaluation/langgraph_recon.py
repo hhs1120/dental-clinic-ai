@@ -6,11 +6,16 @@
 uv run --env-file .env --group langgraph python -m evaluation.langgraph_recon run [--limit N] [--plan]   (과금, 이어 돎)
 uv run --group langgraph python -m evaluation.langgraph_recon score                                    (무료)"""
 
+import argparse
+import json
+import sqlite3
+from datetime import date
+from pathlib import Path
 from typing import TypedDict
 
 from pydantic import ValidationError
 
-from backend import prompts, recon_agent
+from backend import prompts, recon_agent, recon_match, recon_tools
 from backend.harness.hooks import BAD_ARGS, NOT_ALLOWED, READ_ONLY, first_block
 from backend.harness.loop import (
     DEFAULT_RESULT_LIMIT,
@@ -22,6 +27,16 @@ from backend.harness.loop import (
 )
 from backend.recon_agent import ALIAS, PROMPT_VERSION, RECON_MAX_TOOL_CALLS, SUBMIT, TASK
 from shared.llm import BudgetExceeded
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = (
+    ROOT / "evaluation" / "langgraph_recon_runs.jsonl"
+)  # 건마다 결과 한 줄(끝난 것만 다시 돌지 않는다)
+LLM_LOG = (
+    ROOT / "evaluation" / "langgraph_recon_llm.jsonl"
+)  # 게이트웨이 기록 — app.sqlite에 쓰지 않는다
+CHECKPOINTS = ROOT / "evaluation" / "runs" / "langgraph_recon.sqlite"  # 랭그래프 체크포인터
+BATCH_DISCOUNT = 0.5  # 하네스 실행은 라운드 배치(Batch 단가 절반) — 일반 호출 환산에 쓴다
 
 RECON_MAX_USD = recon_agent.RECON_MAX_USD  # 테스트가 바꿀 수 있게 모듈 이름으로
 END_TOOLS = (SUBMIT,)
@@ -208,3 +223,176 @@ def summary(st: State) -> dict:
     run = {"id": st["key"], "status": st["status"] or "running", "tool_calls": st["tool_calls"],
            "cost_usd": st["cost_usd"], "reason": st["reason"]}  # fmt: skip
     return recon_agent._summary(run, st["steps"])
+
+
+# ── 실행·채점(설계 §5) ──────────────────────────────────────────────
+
+
+def read_runs(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
+
+
+def latest(lines: list[dict]) -> dict[str, dict]:
+    """건 키 → 마지막 결과 줄"""
+    return {r["key"]: r for r in lines}
+
+
+def _line(st: State) -> dict:
+    s = summary(st)
+    keep = (
+        "model_calls",
+        "tool_calls",
+        "input_tokens",
+        "output_tokens",
+        "cost_usd",
+        "status",
+        "reason",
+    )
+    return {"key": st["key"], **{k: st[k] for k in keep}, "cost_usd": round(st["cost_usd"], 6),
+            **{k: s[k] for k in ("cause", "runner_up", "evidence")}}  # fmt: skip
+
+
+def run(gw, conn, items: list[dict], today: date, path: Path, checkpoints: Path) -> dict:
+    """끝난(done·handed_off) 결과 줄이 없는 건만 — 체크포인트에 끊긴 상태가 있으면 거기서 이어 간다. {상태: 건수}"""
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    done = {k for k, r in latest(read_runs(path)).items() if r["status"] in recon_agent.ENDED}
+    books = recon_match.load(conn, today)
+    checkpoints.parent.mkdir(parents=True, exist_ok=True)
+    saver = SqliteSaver(sqlite3.connect(checkpoints, check_same_thread=False))
+    graph = build_graph(gw, conn, saver)
+    out: dict = {}
+    with path.open("a", encoding="utf-8") as f:
+        for item in items:
+            if item["key"] in done:
+                continue
+            cfg = {"configurable": {"thread_id": item["key"]}}
+            snap = graph.get_state(cfg)
+            resume = bool(snap.next) and not snap.values.get("status")
+            if snap.values and not resume:  # 끝난 thread(실패 등)는 지우고 처음부터
+                saver.delete_thread(item["key"])
+            st = investigate(
+                graph, item["key"], recon_tools.input_text(item, books, today), resume
+            )
+            f.write(json.dumps(_line(st), ensure_ascii=False) + "\n")
+            f.flush()
+            out[st["status"]] = out.get(st["status"], 0) + 1
+    return out
+
+
+def plan(items: list[dict], lines: dict, harness_mean_usd: float) -> dict:
+    """나갈 건 수와 예상 비용(무료) — 하네스 v3 건당 평균(Batch)의 일반 호출 환산"""
+    todo = [i for i in items if lines.get(i["key"], {}).get("status") not in recon_agent.ENDED]
+    est = round(len(todo) * harness_mean_usd / BATCH_DISCOUNT, 2)
+    return {"targets": len(items), "todo": len(todo), "estimated_usd": est}
+
+
+def _connect() -> sqlite3.Connection:
+    """앱·생성·정답 DB 모두 읽기 전용 — 이 실험은 app.sqlite에 쓰지 않는다"""
+
+    def uri(p: Path) -> str:
+        return f"{p.resolve().as_uri()}?mode=ro"
+
+    conn = sqlite3.connect(uri(ROOT / "data" / "app.sqlite"), uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("ATTACH DATABASE ? AS source", (uri(ROOT / "data" / "source.sqlite"),))
+    conn.execute("ATTACH DATABASE ? AS truth", (uri(ROOT / "ground_truth" / "truth.sqlite"),))
+    return conn
+
+
+def dev_items(conn, today: date) -> list[dict]:
+    """dev 정답에 대응하는 탐지 건(evaluation/recon.py match와 같은 대응) — 하네스 v3 dev 채점과 같은 건"""
+    from evaluation.recon import match
+
+    items = recon_match.detect(recon_match.load(conn, today))
+    truth = conn.execute(
+        "SELECT fin_ids, payment_ids FROM truth.truth_recon_mismatches WHERE split = 'dev'"
+    ).fetchall()
+    keys = {m["key"] for t in truth if (m := match(dict(t), items))}
+    return [i for i in items if i["key"] in keys]
+
+
+def harness_stats(conn, keys: set[str]) -> dict[str, dict]:
+    """하네스 v3 실행(앱 DB, 지금 결과로 읽히는 것)의 건별 호출·토큰·비용 — 토큰은 그 실행의 호출 기록 합"""
+    results = recon_agent.results(conn, keys)
+    out = {}
+    for k, r in results.items():
+        run = conn.execute("SELECT model_calls FROM ax_agent_runs WHERE id = ?", (r["run_id"],))
+        tok = conn.execute(
+            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0)"
+            " FROM ax_llm_calls WHERE ref_type = 'agent_run' AND ref_id = ?",
+            (r["run_id"],),
+        ).fetchone()
+        out[k] = {"model_calls": run.fetchone()[0], "tool_calls": r["tool_calls"],
+                  "input_tokens": tok[0], "output_tokens": tok[1],
+                  "cost_usd": r["cost_usd"] or 0.0, "status": r["status"]}  # fmt: skip
+    return out
+
+
+def _calls(rows: list[dict]) -> dict:
+    n = len(rows) or 1
+
+    def mean_max(k):
+        vals = [r[k] for r in rows]
+        return {"mean": round(sum(vals) / n, 2), "max": max(vals, default=0)}
+
+    return {
+        "runs": len(rows),
+        "model_calls": mean_max("model_calls"),
+        "tool_calls": mean_max("tool_calls"),
+        "input_tokens": sum(r["input_tokens"] for r in rows),
+        "output_tokens": sum(r["output_tokens"] for r in rows),
+        "cost_usd": round(sum(r["cost_usd"] for r in rows), 4),
+        "status": {s: sum(r["status"] == s for r in rows) for s in {r["status"] for r in rows}},
+    }
+
+
+def compare(conn, today: date, path: Path = RUNS) -> dict:
+    """하네스(앱 DB)와 랭그래프(결과 줄)를 같은 채점 규칙(evaluation/recon.py score)으로 나란히(설계 §4)"""
+    from evaluation.recon import score
+
+    items = dev_items(conn, today)
+    keys = {i["key"] for i in items}
+    lg_lines = {k: r for k, r in latest(read_runs(path)).items() if k in keys}
+    agents = {k: {"run_id": k, "status": r["status"], "tool_calls": r["tool_calls"],
+                  "cost_usd": r["cost_usd"], "cause": r["cause"]} for k, r in lg_lines.items()}  # fmt: skip
+    h = harness_stats(conn, keys)
+    hs, ls = score(conn, "dev", today), score(conn, "dev", today, agents=agents)
+    pick = ("agent", "agent_by_group", "abstain", "missing", "pair", "steps_mean")
+    harness_calls = _calls(list(h.values()))
+    harness_calls["cost_usd_plain"] = round(harness_calls["cost_usd"] / BATCH_DISCOUNT, 4)
+    return {
+        "targets": len(items),
+        "rule": hs["rule"],
+        "harness": {k: hs[k] for k in pick} | {"calls": harness_calls},
+        "langgraph": {k: ls[k] for k in pick} | {"calls": _calls(list(lg_lines.values()))},
+    }
+
+
+def main(argv=None) -> None:
+    from shared.clinic import load_clinic
+    from shared.llm import Gateway, JsonlLog, load_config
+
+    p = argparse.ArgumentParser(prog="python -m evaluation.langgraph_recon")
+    p.add_argument("command", choices=("run", "score"))
+    p.add_argument("--limit", type=int, help="앞에서 N건만")
+    p.add_argument("--plan", action="store_true", help="LLM 없이 건 수·예상 비용만")
+    args = p.parse_args(argv)
+    conn, today = _connect(), load_clinic().today
+    if args.command == "score":
+        print(json.dumps(compare(conn, today), ensure_ascii=False, indent=1))
+        return
+    items = dev_items(conn, today)[: args.limit]
+    if args.plan:
+        h = harness_stats(conn, {i["key"] for i in items})
+        mean = sum(r["cost_usd"] for r in h.values()) / (len(h) or 1)
+        print(json.dumps(plan(items, latest(read_runs(RUNS)), mean)))
+        return
+    gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
+    print(run(gw, conn, items, today, RUNS, CHECKPOINTS))
+
+
+if __name__ == "__main__":
+    main()
