@@ -60,8 +60,18 @@ MIN_QUOTE = (
 _EDGE = "\"'“”‘’「」『』.,·…:;!? "  # 인용 앞뒤에 붙기 쉬운 따옴표·문장부호
 
 
+# 청구 기준 문서에서 실제 고시가 받치지 않는 절의 첫 줄(가상 데이터 생성 설계 §4.2 "청구 기준") — 생성기의 같은 문구와
+# 같은지 tests/backend/test_claim_appeal.py가 본다(backend는 생성기 코드를 import하지 않는다)
+INTERNAL_MARK = "병원 내부 점검 기준 — 고시에 같은 문장 없음"
+
+
+def is_internal(body: str) -> bool:
+    """병원 내부 점검 기준 절인가 — 심평원에 내는 글(⑤-4 재심 사유서)의 기준 근거가 될 수 없다"""
+    return body.lstrip().startswith(INTERNAL_MARK)
+
+
 def section_cards(conn: sqlite3.Connection) -> dict[str, dict]:
-    """청구 기준 문서(ax_documents claim_standard)의 절 제목 → {doc_title, heading, body} — 머리말은 절이 아니라 뺀다.
+    """청구 기준 문서(ax_documents claim_standard)의 절 제목 → {doc_title, heading, body, internal} — 머리말은 절이 아니라 뺀다.
     ⑤-3 조항 카드(backend/claims.py)도 쓴다(설계 §3)"""
     out = {}
     for d in conn.execute(
@@ -69,7 +79,12 @@ def section_cards(conn: sqlite3.Connection) -> dict[str, dict]:
     ):
         for heading, body in _sections(d["title"], d["body"]):
             if heading != d["title"]:
-                out[heading] = {"doc_title": d["title"], "heading": heading, "body": body.strip()}
+                out[heading] = {
+                    "doc_title": d["title"],
+                    "heading": heading,
+                    "body": body.strip(),
+                    "internal": is_internal(body),
+                }
     return out
 
 

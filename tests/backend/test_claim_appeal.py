@@ -54,6 +54,46 @@ def test_facts_hide_amount_and_judgment():
     assert "35000" not in blob and "contestable" not in blob and "adjusted" not in blob
 
 
+# 병원 내부 점검 기준(고시에 같은 문장 없음) 사유 — 기준 본문을 입력에 넣지 않고 기준 인용을 막는다(실험 기록 §30)
+INTERNAL_ROW = ROW | {
+    "body": "병원 내부 점검 기준 — 고시에 같은 문장 없음\n\n" + ROW["body"],
+}
+F_INTERNAL = ca.appeal_facts(INTERNAL_ROW)
+NO_STANDARD = {
+    "sentences": [x for x in GOOD["sentences"] if x["basis"] != "standard"],
+    "assumptions": GOOD["assumptions"],
+}
+
+
+def test_internal_mark_matches_generator():
+    """백엔드는 generator를 import하지 않는다 — 기준 문서의 표시 문구가 생성기와 같은지 여기서 본다"""
+    from backend.claim_check import INTERNAL_MARK
+    from generator.claim_standards import VIRTUAL_MARK
+
+    assert INTERNAL_MARK == VIRTUAL_MARK
+
+
+def test_is_internal():
+    from backend.claim_check import is_internal
+
+    assert is_internal(INTERNAL_ROW["body"]) and not is_internal(ROW["body"])
+
+
+def test_facts_internal_standard_has_no_body():
+    assert F_INTERNAL["standard"] == {
+        "heading": "치석제거 뒤 치주치료 연결",
+        "body": None,
+        "internal": True,
+    }
+    assert F["standard"]["internal"] is False and F["standard"]["body"] == ROW["body"]
+
+
+def test_check_internal_rejects_standard_quote():
+    assert not ca.check_result(F_INTERNAL, GOOD)
+    assert ca.check_result(F_INTERNAL, NO_STANDARD)
+    assert ca.unbacked(F_INTERNAL, GOOD) == (4, 1)
+
+
 def test_split_sentences():
     assert ca.split_sentences("가입니다. 나인가? 다예요!\n라") == [
         "가입니다.",
@@ -407,3 +447,51 @@ def test_review_requires_contestable(src):
     judged(conn, cid, "justified")
     with pytest.raises(ValueError, match="재심 신청"):
         ca.review(conn, cid, "데스크", AT, True, DAY)
+
+
+def _make_internal(src):
+    """기준 문서의 그 절을 병원 내부 점검 기준으로 바꾼다 — 저장된 초안이 지금 규칙과 어긋나는 경우"""
+    body = STD.replace(
+        ROW["body"], "병원 내부 점검 기준 — 고시에 같은 문장 없음\n\n" + ROW["body"]
+    )
+    import sqlite3
+
+    with sqlite3.connect(src.path) as w:  # src.app() 뒤라 source 연결은 닫혀 있다
+        w.execute("UPDATE ax_documents SET body = ? WHERE id = 1", (body,))
+
+
+def test_section_cards_mark_internal_after_split(src):
+    """기준 문서를 절로 나눈 뒤의 본문(앞 줄바꿈 포함)으로 내부 기준을 알아본다"""
+    from backend.claim_check import section_cards
+
+    conn = src.app()
+    assert section_cards(conn)["치석제거 뒤 치주치료 연결"]["internal"] is False
+    _make_internal(src)
+    assert section_cards(conn)["치석제거 뒤 치주치료 연결"]["internal"] is True
+
+
+def test_stored_draft_against_current_rules_needs_redraft(src):
+    """저장된 초안이 지금 규칙(입력·후검증)으로 떨어지면 다시 쓰기 필요 — 검토 확인·제출을 막는다"""
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    assert ca.draft(conn, FakeGw(), cid, DAY)["valid"]  # 기준 절 인용이 든 초안
+    _make_internal(src)
+    got = ca.appeal(conn, cid)
+    assert got["valid"] is False and got["stale"] is True and got["sentences"] is None
+    assert ca.appeals(conn)[cid]["stale"] is True
+    with pytest.raises(ValueError):
+        ca.review(conn, cid, "데스크", AT, True, DAY)
+
+
+def test_submitted_draft_kept_as_record(src):
+    """제출 결정한 초안은 기록 — 규칙이 바뀌어도 그대로 보인다"""
+    cid = contested(src)
+    conn = src.app()
+    judged(conn, cid)
+    ca.draft(conn, FakeGw(), cid, DAY)
+    ca.review(conn, cid, "데스크", AT, True, DAY)
+    ca.submit(conn, cid, "데스크", AT, DAY)
+    _make_internal(src)
+    got = ca.appeal(conn, cid)
+    assert got["valid"] is True and got["stale"] is False and got["submitted"]

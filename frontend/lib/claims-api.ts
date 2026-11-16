@@ -140,6 +140,7 @@ export interface Appeal {
     | null;
   assumptions: string[] | null;
   valid: boolean;
+  stale: boolean; // 저장된 초안이 지금 규칙(입력·후검증)에 어긋남 — 다시 쓰기 필요(backend/claim_appeal.py _stale)
   reviewed: { by: string; at: string } | null;
   submitted: { by: string; at: string } | null;
   at: string;
@@ -158,6 +159,7 @@ export interface StandardCard {
   doc_title: string;
   heading: string;
   body: string;
+  internal: boolean; // 병원 내부 점검 기준 — 고시가 받치지 않는 절(backend/claim_check.py is_internal)
 }
 
 /** 청구 기준 찾기 결과 한 절(backend/claim_search.py) */

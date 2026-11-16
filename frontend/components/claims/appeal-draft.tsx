@@ -33,10 +33,12 @@ const tag = (basis: AppealBasis, n: number | null) =>
 export function AppealDraft({
   claimId,
   appeal,
+  internal,
   onSaved,
 }: {
   claimId: number;
   appeal: Appeal | null;
+  internal: boolean; // 이 사유의 기준 절이 병원 내부 점검 기준 — 사유서는 기준을 인용하지 않는다
   onSaved: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -79,13 +81,22 @@ export function AppealDraft({
   return (
     <section aria-label="재심 사유서" className="flex flex-col gap-2">
       <h3 className="font-bold">재심 사유서</h3>
+      {internal && (
+        <p className="rounded-lg border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
+          이 사유의 기준은 고시에 같은 문장이 없는 병원 내부 점검 기준입니다.
+          사유서는 기준을 인용하지 않고 조정 사유와 차트 기록을 근거로 씁니다 —
+          다툴 근거가 약할 수 있습니다.
+        </p>
+      )}
       {!appeal ? (
         <Button size="sm" variant="outline" disabled={!!busy} onClick={draft}>
           {busy === "draft" ? "쓰는 중…" : "초안 쓰기"}
         </Button>
       ) : !sentences ? (
         <p className="text-sm text-muted-foreground">
-          초안을 만들지 못했습니다
+          {appeal.stale
+            ? "규칙이 바뀌어 다시 써야 합니다 — 이전 초안은 지금 기준에 맞지 않습니다"
+            : "초안을 만들지 못했습니다"}
         </p>
       ) : (
         <>

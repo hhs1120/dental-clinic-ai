@@ -13,7 +13,12 @@ const base = {
   judgment: null as Judgment,
   suggest_by: null as string | null,
   ai_evidence: null as { source: string; quote: string }[] | null,
-  standard: null as { doc_title: string; heading: string; body: string } | null,
+  standard: null as {
+    doc_title: string;
+    heading: string;
+    body: string;
+    internal: boolean;
+  } | null,
   chart_quotes: null as string[] | null,
   appeal: null as unknown,
 };
@@ -23,6 +28,7 @@ const DOC_STANDARD = {
   heading: "내역설명 기재",
   // 실제 고시 발췌 절 모양(generator/claim_standards.py) — 인용 블록 + 출처 줄 + 병원 내부 보충 줄
   body: '> 제24조(특정내역 등 기재) … 해당 구분코드 및 내역을 "특정내역기재란"에 기재한다.\n\n출처: 청구방법 2016 제24조\n\n병원 내부 보충: 근거는 간결하게 적는다.',
+  internal: false,
 };
 const DOC_QUOTE = "치주낭 5mm, 출혈 있음";
 
@@ -484,6 +490,7 @@ const APPEAL = {
   ],
   assumptions: ["재심사를 요청한다는 결론은 AI가 쓴 문장입니다"],
   valid: true,
+  stale: false,
   reviewed: null as { by: string; at: string } | null,
   submitted: null as { by: string; at: string } | null,
   at: "2026-11-13T10:00:00",
@@ -755,4 +762,54 @@ test("점검 결과가 없을 때 AI 칩 주소는 경고 칩으로", async ({ p
     page.getByRole("button", { name: "상병 확인 경고(규칙) 1" }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(table(page).locator("tbody > tr")).toHaveCount(1);
+});
+
+// 병원 내부 점검 기준 사유 — 사유서는 기준을 인용하지 않는다는 안내(코드 고정 문구, 실험 기록 §30)
+test("재심 사유서 — 병원 내부 기준 사유면 기준 인용 없이 쓴다는 안내", async ({
+  page,
+}) => {
+  const internal = {
+    doc_title: "치주 분야 청구 기준",
+    heading: "치석제거 뒤 치주치료 연결",
+    body: "병원 내부 점검 기준 — 고시에 같은 문장 없음\n\n- 재평가 소견을 적는다.",
+    internal: true,
+  };
+  let rows: unknown[] = [{ ...CONTESTED, standard: internal }];
+  await fakeClaims(page, () => sheet(rows as (typeof REQ)[]));
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await expect(draft).toContainText("병원 내부 점검 기준");
+  await expect(draft).toContainText("조정 사유와 차트 기록을 근거로");
+  rows = [{ ...CONTESTED, standard: DOC_STANDARD }];
+  await page.reload();
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  await expect(
+    page.getByRole("region", { name: "재심 사유서" }),
+  ).not.toContainText("조정 사유와 차트 기록을 근거로");
+});
+
+test("재심 사유서 — 지금 규칙에 어긋난 옛 초안은 다시 쓰기 필요", async ({
+  page,
+}) => {
+  const rows = [
+    {
+      ...CONTESTED,
+      appeal: {
+        ...APPEAL,
+        valid: false,
+        stale: true,
+        sentences: null,
+        assumptions: null,
+      },
+    },
+  ];
+  await fakeClaims(page, () => sheet(rows as (typeof REQ)[]));
+  await page.goto("/claims");
+  await bodyRows(page).filter({ hasText: "이두리" }).click();
+  const draft = page.getByRole("region", { name: "재심 사유서" });
+  await expect(draft).toContainText("규칙이 바뀌어 다시 써야 합니다");
+  await expect(draft).not.toContainText("초안을 만들지 못했습니다");
+  await expect(draft.getByRole("button", { name: "다시 쓰기" })).toBeVisible();
+  await expect(draft.getByRole("button", { name: "제출 결정" })).toHaveCount(0);
 });
