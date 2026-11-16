@@ -128,8 +128,9 @@ type Line = {
 function People({ sheet }: { sheet: TodaySheet }) {
   const names = useLabels();
   const p = sheet.people;
-  // 급한 것부터. 0건인 줄은 숨긴다(목록 줄·숫자 줄 모두, 예외: 미예약 환자 고정 링크)
-  const lines: Line[] = [
+  // 통화에서 온 일 / 업무에서 온 일로 나누고 묶음 안은 급한 것부터. 0건인 줄은 숨긴다(목록 줄·숫자 줄 모두,
+  // 예외: 미예약 환자 고정 링크)
+  const callLines: Line[] = [
     ...p.urgent_calls.map((u) => ({
       key: `u-${u.call_uid}`,
       tag: "급한 통화",
@@ -147,7 +148,9 @@ function People({ sheet }: { sheet: TodaySheet }) {
       meta: "통화 상세에서 확인함을 누르면 빠집니다",
     })),
   ];
+  const workLines: Line[] = [];
   const count = (
+    lines: Line[],
     n: number,
     key: string,
     tag: string,
@@ -157,6 +160,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     meta: string,
   ) => n > 0 && lines.push({ key, tag, tone, href, title, meta });
   count(
+    workLines,
     p.unconfirmed,
     "unconfirmed",
     "내원 확인 전",
@@ -166,6 +170,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "준비표에서 내원 확인 전 칩으로 보기",
   );
   count(
+    workLines,
     p.alert_patients,
     "alert",
     "주의 환자",
@@ -175,6 +180,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "준비표에서 주의 칩으로 보기",
   );
   count(
+    callLines,
     p.todo_left.items,
     "todo",
     "남은 할 일",
@@ -184,6 +190,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "급함 먼저 · 끝내면 빠짐",
   );
   count(
+    workLines,
     p.appeal_soon,
     "appeal",
     "재심 기한",
@@ -193,6 +200,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "30일 이내 · 상병 착오 제외",
   );
   count(
+    workLines,
     p.preclaim_warning,
     "preclaim",
     "청구 전 경고",
@@ -202,6 +210,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "청구 점검에서 허용 상병 밖 줄 보기",
   );
   count(
+    workLines,
     p.preclaim_ai,
     "preclaim-ai",
     "청구 전 AI",
@@ -211,6 +220,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "청구 점검에서 AI 근거 문장 보기",
   );
   count(
+    workLines,
     p.recon_open,
     "recon",
     "일계표",
@@ -220,6 +230,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "장부와 카드·통장 입금이 안 맞는 건 확정",
   );
   count(
+    workLines,
     p.expense_open,
     "expense",
     "지출 증빙",
@@ -231,6 +242,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "지난달 출금 중 증빙 못 찾음·과목 확인 필요",
   );
   count(
+    workLines,
     p.judge_pending,
     "judge",
     "판정 대기",
@@ -240,7 +252,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "AI 평가 판정 탭",
   );
   for (const q of p.refused)
-    lines.push({
+    workLines.push({
       key: `q-${q.id}`,
       tag: "근거 없음",
       tone: "muted",
@@ -259,27 +271,57 @@ function People({ sheet }: { sheet: TodaySheet }) {
     meta: "미예약 환자 화면에서 연락 결과 남기기",
   };
 
+  const list = (lines: Line[]) => (
+    <ul className="flex flex-col divide-y rounded-xl border bg-card">
+      {lines.map((l) => (
+        <li key={l.key} className="flex items-start gap-3 px-4 py-3">
+          <Tag tone={l.tone}>{l.tag}</Tag>
+          <Link href={l.href} className="min-w-0 flex-1 hover:underline">
+            <div className="font-medium">{l.title}</div>
+            {l.meta && (
+              <div className="text-xs text-muted-foreground">{l.meta}</div>
+            )}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+  const group = (title: string, lines: Line[], content: React.ReactNode) => (
+    <section aria-label={title} className="flex flex-col gap-1.5">
+      <h3 className="flex items-baseline gap-1.5 font-bold">
+        {title}{" "}
+        <span className="text-sm font-normal text-muted-foreground">
+          {lines.length}
+        </span>
+      </h3>
+      {content}
+    </section>
+  );
+
   return (
     <section aria-label="사람이 볼 일" className="flex flex-col gap-2">
       <h2 className="text-lg font-bold">사람이 볼 일</h2>
-      {lines.length === 0 && (
+      {callLines.length + workLines.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
           오늘 남은 일이 없습니다
         </p>
       )}
-      <ul className="flex flex-col divide-y rounded-xl border bg-card">
-        {[...lines, missedLine].map((l) => (
-          <li key={l.key} className="flex items-start gap-3 px-4 py-3">
-            <Tag tone={l.tone}>{l.tag}</Tag>
-            <Link href={l.href} className="min-w-0 flex-1 hover:underline">
-              <div className="font-medium">{l.title}</div>
-              {l.meta && (
-                <div className="text-xs text-muted-foreground">{l.meta}</div>
-              )}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {/* 넓은 화면은 좌우(통화 화면 오늘 할 일처럼), 칸은 자기 줄 수만큼만 */}
+      <div className="grid items-start gap-3 lg:grid-cols-2">
+        {group(
+          "통화에서 온 일",
+          callLines,
+          callLines.length
+            ? list(callLines)
+            : // 둘 다 비면 위 "오늘 남은 일이 없습니다" 한 번만
+              workLines.length > 0 && (
+                <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+                  통화에서 온 일 없음
+                </p>
+              ),
+        )}
+        {group("업무에서 온 일", workLines, list([...workLines, missedLine]))}
+      </div>
     </section>
   );
 }

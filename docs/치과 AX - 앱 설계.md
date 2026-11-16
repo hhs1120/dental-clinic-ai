@@ -207,7 +207,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 9. 프론트
 
-화면의 기능·표시 규칙은 [[치과 AX - 기능 정의]] §4(앱 구성·코어)·§5(슬롯)와 아래 "배치"가 기준이고 레이아웃은 앱 화면(`frontend/`) 그대로다, 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 기능·표시 규칙은 [[치과 AX - 기능 정의]] §4(앱 구성·코어)·§5(슬롯)와 아래 "배치"가 기준이고 레이아웃은 앱 화면(`frontend/`) 그대로다, 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`).
 
 **페이지**
 
