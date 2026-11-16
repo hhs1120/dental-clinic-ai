@@ -1,0 +1,121 @@
+{
+ "split": "test",
+ "section": "followup",
+ "condition": "base",
+ "prompt_version": "v3×v2×label-v2",
+ "retrieval_only": false,
+ "classification": null,
+ "judge": null,
+ "crosscheck": null,
+ "rag": null,
+ "gold_audit": null,
+ "autoclose": null,
+ "followup": {
+  "prompt_version": "v3",
+  "score": {
+   "test": {
+    "n": 61,
+    "agent": {
+     "k": 56,
+     "n": 61,
+     "by_action": {
+      "appointment": {
+       "k": 16,
+       "n": 18
+      },
+      "other": {
+       "k": 13,
+       "n": 15
+      },
+      "doctor_reply": {
+       "k": 9,
+       "n": 9
+      },
+      "doctor_note": {
+       "k": 10,
+       "n": 10
+      },
+      "scaling_timing": {
+       "k": 1,
+       "n": 1
+      },
+      "document": {
+       "k": 2,
+       "n": 2
+      },
+      "billing": {
+       "k": 4,
+       "n": 4
+      },
+      "insurance_cost": {
+       "k": 1,
+       "n": 2
+      }
+     }
+    },
+    "baseline": {
+     "k": 40,
+     "n": 61,
+     "by_action": {
+      "appointment": {
+       "k": 15,
+       "n": 18
+      },
+      "other": {
+       "k": 4,
+       "n": 15
+      },
+      "doctor_reply": {
+       "k": 7,
+       "n": 9
+      },
+      "doctor_note": {
+       "k": 10,
+       "n": 10
+      },
+      "scaling_timing": {
+       "k": 1,
+       "n": 1
+      },
+      "document": {
+       "k": 0,
+       "n": 2
+      },
+      "billing": {
+       "k": 2,
+       "n": 4
+      },
+      "insurance_cost": {
+       "k": 1,
+       "n": 2
+      }
+     }
+    },
+    "failed": 1,
+    "failed_by_reason": {
+     "후검증 실패": 1
+    },
+    "not_run": 0,
+    "cost_usd": 1.2932,
+    "missed_by_classifier": 0,
+    "extra_by_classifier": 4
+   }
+  },
+  "by_version": {},
+  "labels": 61,
+  "stale_labels": 0,
+  "agreement": {
+   "k": 0,
+   "n": 0,
+   "by_action": {}
+  }
+ },
+ "prep": null,
+ "report": null,
+ "claim_check": null,
+ "claim_omission": null,
+ "claim_basis": null,
+ "claim_appeal": null,
+ "input_trust": null,
+ "judge_trained_skip": 0
+}

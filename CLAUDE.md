@@ -46,6 +46,7 @@
 - `make gate` — 코어 합격 기준(기능 정의 §6), 마지막 dev 평가는 (과금), `make dev`를 끄고
 - ① `make classify V=`(과금, 이어 돎) / `judge V=`(로컬 Qwen, 이어 돎) / `disagreements A= B=`(`backend/classify_batch.py`) · `make autoclose` / `auto-policy KIND= ON=1|0`(`backend/autoclose.py`)
 - ① `make hard-label`(과금, 이어 돎) / `hard-review` — 어려운 통화 정답 라벨(`evaluation/hard_labels.py`, 평가 설계 §2.1)
+- ① `make trust-eval`(과금, 이어 돎, 입력 신뢰 경계 `evaluation/input_trust.py` — 판정기 확인 `check-judge` 먼저, test는 `python -m evaluation.input_trust run --split test`(사람))
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py` — test는 `python -m evaluation.followup run --split test` 뒤 `python -m evaluation.eval --split test --section followup`(사람))
 - ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
 - ④ `make prep [DATE=] [NO_BATCH=1]`(과금, 이어 돎, `backend/prep.py`)
