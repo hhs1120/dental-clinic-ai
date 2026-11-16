@@ -377,7 +377,6 @@ tags:
 ### 할 것
 - [ ] 스타일 다듬기: `frontend/app/globals.css` 토큰 값·간격·글자 크기를 실제 화면으로 고치고, `components/ui` variant를 정리하고, 화면 코드에 직접 색·모서리 값이 없는지 확인한다
 - [ ] ⑧ test 채점(사람, 버전을 정한 뒤) — ⑧-1 `python -m evaluation.recon score --split test`, ⑧-2 `python -m evaluation.expense score --split test`
-- [ ] 후속 처리 test 채점(사람) — test 판정 풀 처리 정답 라벨 `make action-label`(과금, 빠진 건만), test 실행 `python -m evaluation.followup run --split test`(과금), 채점 `python -m evaluation.eval --split test --section followup`. 범위는 [[치과 AX - 평가 설계]] §5 ① 후속 처리
 - [ ] ② 자동 개선(개선 에이전트, 최소 + 화면) — ① 분류 `has_todo` 하나를 목표로(흔들림 밖 오답이 남은 항목, [[치과 AX - AI 실험 기록]] §19) `make improve`와 AI 평가 화면 자동 개선 탭(읽기 전용, 개선 실행 이력), 관문에 켜진 자동 처리의 오류율 조건. 흐름·완료 기준은 §4 ②·[[치과 AX - 평가 설계]] §2.7. 프롬프트 밖 재발 방지 경로(`ax_failure_cases`)와 ① 밖 task는 넣지 않는다. 현장(골드 없음)에서 재료를 사람 판정으로 나누는 방식은 설계로만(평가 설계 §2.7 입력 출처)
 - [ ] 입력 신뢰 경계 test(사람) — `python -m evaluation.input_trust run --split test`(과금, [[치과 AX - 평가 설계]] §5 입력 신뢰 경계)
 - [ ] 랭그래프 비교 실험 — 기능 에이전트 하나만 랭그래프로 옮겨 같은 입력으로 결과·호출 수·비용·재개 동작을 나란히 잰다. 두 도구를 다 다룬다는 근거를 남기는 실험이라 코어와 다른 에이전트는 옮기지 않는다
