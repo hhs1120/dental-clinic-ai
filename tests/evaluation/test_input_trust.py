@@ -109,14 +109,20 @@ def res(data, ok=True, fallback=False):
     return LLMResult(ok, "", data, "m", fallback, 1, 1, 0.001, 1)
 
 
+JUDGE_MODEL = "qwen3.5-2b-judge"  # prompts/judge/v3 머리말 model — judge_model_ok
+
+
 class FakeGw:
     """분류(classify·summarize)는 Anthropic Batch, 판정(judge)은 로컬 일반 호출. answer(alias, 녹취) → LLMResult"""
 
     def __init__(self, answer=None, batchable=True):
         self.answer = answer or (lambda alias, text: res(_default(alias)))
         self.config = {
-            "aliases": {"classify": ["m"], "summarize": ["m"], "judge": ["q"]},
-            "models": {"m": {"provider": "anthropic" if batchable else "upstage"}, "q": {}},
+            "aliases": {"classify": ["m"], "summarize": ["m"], "judge": [JUDGE_MODEL]},
+            "models": {
+                "m": {"provider": "anthropic" if batchable else "upstage"},
+                JUDGE_MODEL: {},
+            },
         }
         self.submitted = {}  # 배치 id → (별칭, 요청 목록)
         self.calls = []  # 일반 호출 (별칭, 녹취)
@@ -210,7 +216,9 @@ def test_batch_state_resumes(tmp_path):
     cids = [f"c-0001-{s}-{k}" for s in ("orig", "inj") for k in range(1, it.GATE_RUNS + 1)]
     pre = {a: gw.submit_batch(a, [{"custom_id": c, "messages": [{"content": "x"}]} for c in cids],
                               task=a) for a in ("classify", "summarize")}  # fmt: skip
-    (tmp_path / "state.json").write_text(json.dumps({"batches": pre, "sent": cids}))
+    (tmp_path / "state.json").write_text(
+        json.dumps({"version": "v2", "batches": pre, "sent": cids})
+    )
     _run(gw, tmp_path)
     assert len(gw.submitted) == 2  # 새 배치를 내지 않았다
     rows = it.read_runs(tmp_path / "runs.jsonl")
@@ -247,7 +255,8 @@ def test_plan_counts():
         "classify_calls": 2 * 2 * it.GATE_RUNS * 2,
         "judge_calls": 2 * 2,
     }
-    done = {("c-0001", "orig", "classify", "v2", 1)}
+    kind, pos = it.assign(["c-0001", "c-0002"])["c-0001"]
+    done = {("c-0001", "orig", kind, pos, "classify", "v2", 1)}
     assert it.plan(calls, done, "v2", "v3", judge_runs=1)["classify_calls"] == (
         2 * 2 * it.GATE_RUNS * 2 - 2
     )
@@ -256,8 +265,10 @@ def test_plan_counts():
 # ── Task 3: 채점 ─────────────────────────────────────────────────
 
 
-def vrow(side, model, k, lab, todo=None, fallback=False, uid="c-0001", kind="system_spoof",
-         position="end"):  # fmt: skip
+def vrow(side, model, k, lab, todo=None, fallback=False, uid="c-0001", kind=None,
+         position=None):  # fmt: skip
+    a_kind, a_pos = it.assign([uid])[uid]
+    kind, position = kind or a_kind, position or a_pos
     v = "v2" if model == "classify" else "v3"
     if model == "classify" and todo is None:
         todo = ["다시 연락"] if lab["has_todo"] else []
@@ -309,7 +320,8 @@ def test_violation_autoclose_flip():
     assert s["pairs"] == 1 and s["violations"] == 1
     assert s["autoclose_flips"] == 1
     assert s["by_model"] == {"classify": 1, "judge": 1}
-    assert s["by_kind"]["system_spoof"] == {"n": 1, "violations": 1}
+    kind = it.assign(["c-0001"])["c-0001"][0]
+    assert s["by_kind"][kind] == {"n": 1, "violations": 1}
     assert s["violated"] == ["c-0001"]
 
 
@@ -428,3 +440,77 @@ def test_dev_report_section(monkeypatch, tmp_path, conn):
     text = "\n".join(ev._render_input_trust(s))
     assert "입력 신뢰 경계" in text
     assert f"위반 {s['violations']}/{s['pairs']}" in text
+
+
+# ── 리뷰 반영: 이어 받기·배정·일반 호출·판정기 모델 ─────────────────────
+
+
+def _state(tmp_path, gw, cids, version="v2"):
+    pre = {a: gw.submit_batch(a, [{"custom_id": c, "messages": [{"content": "x"}]} for c in cids],
+                              task=a) for a in ("classify", "summarize")}  # fmt: skip
+    (tmp_path / "state.json").write_text(
+        json.dumps({"version": version, "batches": pre, "sent": cids})
+    )
+
+
+def test_state_from_other_version_stops(tmp_path):
+    gw = FakeGw()
+    _state(tmp_path, gw, ["c-0001-orig-1"], version="v1")
+    with pytest.raises(SystemExit, match="v1"):
+        _run(gw, tmp_path)
+
+
+def test_state_skips_already_written_keys(tmp_path):
+    _run(FakeGw(), tmp_path)  # 다 기록됨
+    before = len(it.read_runs(tmp_path / "runs.jsonl"))
+    gw = FakeGw()
+    _state(tmp_path, gw, ["c-0001-orig-1"])  # 이미 기록된 키를 담은 상태 파일
+    _run(gw, tmp_path)
+    assert len(it.read_runs(tmp_path / "runs.jsonl")) == before
+
+
+def test_state_reports_pending_jobs(tmp_path):
+    gw = FakeGw()
+    _state(tmp_path, gw, ["c-0001-orig-1"])  # 나머지 분류 작업은 이 배치 밖
+    out = _run(gw, tmp_path)
+    assert out["pending"] == it.GATE_RUNS * 2 - 1
+    assert len(gw.submitted) == 2  # 이번 실행에서 새 배치를 내지 않는다
+
+
+def test_reassigned_injection_not_mixed(tmp_path):
+    """대상 집합이 바뀌어 배정이 달라지면 옛 지시문 줄을 다시 쓰지 않고 새로 돈다"""
+    _run(FakeGw(), tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    kind = it.assign(["c-0001"])["c-0001"][0]
+    other = next(k for k in it.KINDS if k != kind)
+    for r in rows:
+        r["kind"] = other
+    (tmp_path / "runs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = _run(FakeGw(), tmp_path)
+    assert out["called"] == it.GATE_RUNS * 2 + 2
+    s = it.score([CALL], it.read_runs(tmp_path / "runs.jsonl"), "v2", "v3", judge_runs=1)
+    assert s["pairs"] == 1 and s["incomplete"] == 0
+
+
+def test_plain_calls_written_as_they_go(tmp_path):
+    n = {"calls": 0}
+
+    def answer(alias, text):
+        n["calls"] += 1
+        if n["calls"] > 4:  # 라벨·요약 2쌍 뒤 멈춤
+            raise RuntimeError("예산 초과")
+        return res(_default(alias))
+
+    with pytest.raises(RuntimeError):
+        _run(FakeGw(answer, batchable=False), tmp_path)
+    assert len(it.read_runs(tmp_path / "runs.jsonl")) == 2
+
+
+def test_judge_model_mismatch_stops(tmp_path):
+    gw = FakeGw()
+    gw.config["aliases"]["judge"] = ["other-model"]
+    gw.config["models"]["other-model"] = {}
+    with pytest.raises(SystemExit, match="판정기"):
+        _run(gw, tmp_path)
+    with pytest.raises(SystemExit, match="판정기"):
+        it.check_judge(gw, [CALL], "v3", tmp_path / "j.json")
