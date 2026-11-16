@@ -471,3 +471,57 @@ test("야간 실행 꼬리표 — 오래됨·상한·끊김", async ({ page }) =
   await page.goto("/today");
   await expect(ai).toContainText("야간 실행 끊김");
 });
+
+// 사람이 볼 일 — 통화에서 온 일 / 업무에서 온 일 두 묶음(기능 정의 §4 오늘 화면). 넓은 화면은 좌우, 통화가 왼쪽
+test("사람이 볼 일은 통화에서 온 일과 업무에서 온 일로 나뉜다", async ({
+  page,
+}) => {
+  await fakeToday(page, FULL);
+  await page.goto("/today");
+  const calls = page.getByRole("region", { name: "통화에서 온 일" });
+  const work = page.getByRole("region", { name: "업무에서 온 일" });
+  for (const tag of ["급한 통화", "확인할 통화", "남은 할 일"])
+    await expect(calls.getByText(tag, { exact: true }).first()).toBeVisible();
+  for (const tag of ["내원 확인 전", "주의 환자", "판정 대기", "근거 없음"])
+    await expect(work.getByText(tag, { exact: true }).first()).toBeVisible();
+  await expect(calls.getByText("주의 환자", { exact: true })).toHaveCount(0);
+  await expect(work.getByText("급한 통화", { exact: true })).toHaveCount(0);
+  // 소제목 숫자는 줄 수 — 미예약 환자 고정 링크는 세지 않고 업무 쪽 맨 끝
+  // 제목과 숫자 사이 공백 — 스크린리더가 붙여 읽지 않게, 숫자는 끝까지 맞춘다("14"에 통과하지 않게)
+  await expect(calls.getByRole("heading")).toHaveText(
+    `통화에서 온 일 ${1 + REVIEW.length + 1}`,
+  );
+  await expect(work.getByRole("heading")).toHaveText("업무에서 온 일 4");
+  await expect(work.getByRole("listitem").last().locator("a")).toHaveAttribute(
+    "href",
+    "/missed",
+  );
+  const [c, w] = [await calls.boundingBox(), await work.boundingBox()];
+  expect(c!.x).toBeLessThan(w!.x);
+});
+
+test("통화에서 온 일이 없으면 한 줄로 알린다", async ({ page }) => {
+  await fakeToday(page, {
+    ...FULL,
+    people: {
+      ...FULL.people,
+      urgent_calls: [],
+      review_calls: [],
+      todo_left: { items: 0, calls: 0 },
+    },
+  });
+  await page.goto("/today");
+  await expect(
+    page
+      .getByRole("region", { name: "통화에서 온 일" })
+      .getByText("통화에서 온 일 없음"),
+  ).toBeVisible();
+  await expect(page.getByText("오늘 남은 일이 없습니다")).toHaveCount(0);
+});
+
+test("둘 다 비면 남은 일 없음 한 번만", async ({ page }) => {
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByText("오늘 남은 일이 없습니다")).toBeVisible();
+  await expect(page.getByText("통화에서 온 일 없음")).toHaveCount(0);
+});
