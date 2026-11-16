@@ -171,6 +171,9 @@ h2.sec{margin:0 0 12px}
 .list button.item:focus-visible{outline:2px solid var(--brand)}
 .briefing{display:flex;gap:16px;align-items:flex-start}
 .briefing .ic{width:40px;height:40px;border-radius:10px;background:var(--surface-brand-subtle);display:grid;place-items:center;flex:none}
+.brief-grid{display:grid;grid-template-columns:5.5rem 1fr;gap:8px 12px;margin:8px 0 0}
+.brief-grid dt{font-weight:600}
+.brief-grid dd{margin:0}
 
 /* 준비표 */
 .datebar{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
@@ -695,10 +698,14 @@ R.today = () => {
   <div class="card mt16 briefing">
     <div class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--brand)"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M7.5 12a4.5 4.5 0 0 1 9 0"/><circle cx="12" cy="12" r="1.5"/></svg></div>
     <div style="min-width:0">
-      <div class="row"><h2 class="headline2">아침 브리핑</h2>${AI}<span class="caption1 fg3">숫자는 쿼리, 문장은 LLM이 묶음 · 08:30 사내 메신저로 읽어 줌</span></div>
-      <p class="body1" style="margin:8px 0 0">오늘 예약은 ${rows.length}명이고 그중 신환이 ${newP.length}명입니다. 진료 ${byType("진료")}건, 위생 ${byType("위생")}건, 상담 ${byType("상담")}건이 잡혀 있습니다. 가장 바쁜 시간대는 ${+peakH[0]}시대(${peakH[1]}명)입니다. 주의사항이 있는 환자가 ${alertRows.length}명이라 준비표에서 미리 확인해 주세요. 후속 큐에 연락이 남은 통화가 ${q.length}건이고, 그중 급한 건이 ${urgentQ.length}건입니다. 아직 예약 확인이 안 된 환자가 ${unconf.length}명입니다.</p>
-      <p class="body1" style="margin:6px 0 0"><span class="est">[추정]</span>${+peakH[0]}시대에 예약이 몰려 있어 다음 시간대 진료가 조금 밀릴 수 있습니다.</p>
-      <div class="evidence">근거 <code>unconfirmed=${unconf.length}</code> <code>appointments=${rows.length}</code> <code>new_patients=${newP.length}</code> <code>peak_hour=${peakH[0]}시(${peakH[1]})</code> <code>alert_patients=${alertRows.length}</code> <code>followups=${q.length}</code> · 본문 숫자가 전부 입력에 있는지 후검증</div>
+      <div class="row"><h2 class="headline2">아침 브리핑</h2><span class="caption1 fg3">코드가 줄로 정리(기능 정의 §5 ⑦ 1단계) · 큰 시술·챙길 환자·밤사이는 예시</span></div>
+      <dl class="brief-grid">
+        <dt>오늘</dt><dd>예약 ${rows.length}건(신환 ${newP.length}) · ${+peakH[0]}시대에 몰림</dd>
+        <dt>큰 시술</dt><dd>사랑니 발치 9:30 · 단순발치 10:30 · 임플란트 1차 15:30</dd>
+        <dt>챙길 환자</dt><dd>10:30 배정웅 단순발치 — 항응고제 복용</dd>
+        <dt></dt><dd>15:30 안서준 임플란트 1차 — 당뇨</dd>
+        <dt>밤사이</dt><dd>통화 5건 분류 · 자동 종결 3 · 실패 0 (03:12 끝남)</dd>
+      </dl>
     </div>
   </div>
 

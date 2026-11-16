@@ -39,7 +39,7 @@
 | 1 | 소스 지문 | `backend/harness/policy.py` `check_source` | 바뀌었으면 자동 처리 정책 전부 끔 |
 | 2 | 분류 | `classify_batch.run` classify — 활성 분류 버전(`calls.active_versions`) | ok 아닌 생성 통화(판정 풀 포함 — `make classify`와 같고 앱 설계 §3b "판정 풀은 엇갈림까지만") + 활성 분류 ok가 없는 붙여넣은 통화(`calls.classify_one`) |
 | 3 | 판정 | `classify_batch.run` judge — 활성 판정기 버전 | 같음 |
-| 4 | 엇갈림 | `classify_batch` disagreements 경로 + 판정 큐 갱신(`judge_queue.refresh_if_active`) | 활성 버전 쌍 |
+| 4 | 엇갈림 | `disagreements.compute` + 판정 큐 갱신(`judge_queue.refresh_if_active`·`prune`) | 활성 버전 쌍 |
 | 5 | 자동 종결 | `autoclose.run` | 정책이 꺼져 있으면 아무것도 안 함 |
 | 6 | 후속 처리안 | `followup` run 경로(`targets`, `drop_stale`은 부르지 않음 — `make followups` 기본과 같음. 처리안 버전을 올린 다음 날 몰아 과금하지 않게, 다시 내기는 사람이 `REDO=1`) | 오늘 할 일에 오른 통화 중 처리안 없는 것 |
 | 7 | 색인 갱신 | `rag_index` — 청크 수집에 붙여넣은 통화(`ax_pasted_calls`)를 더하고 `build_index`(청크·FTS 다시 쓰기, 벡터는 없는 청크만 — 비용은 새 청크 임베딩뿐) | 색인이 없으면 건너뜀. 임베딩 모델은 지금 검색이 쓰는 모델 |
@@ -51,7 +51,7 @@
 
 - 브리핑은 단계가 아니다 — 템플릿이라 `GET /today`가 그때 계산한다(§4)
 - **다시 부르지 않음**: 모든 단계는 기존 캐시(해시·버전·모델이 같고 통과한 건 건너뜀)를 그대로 쓴다. 그래서 둘째 실행부터는 새로 들어온 통화·바뀐 입력만 처리한다
-- **이어 가기**: 따로 장치를 두지 않는다. 끊긴 nightly는 잠금이 `JOB_STALE`로 풀린 뒤 다시 돌리면 캐시가 이미 한 건을 건너뛴다. 끊긴 에이전트 실행은 각 모듈의 `_close_stuck`이 정리한다
+- **이어 가기**: 따로 장치를 두지 않는다. 끊긴 nightly는 잠금이 `NIGHTLY_STALE`로 풀린 뒤(또는 `FORCE=1`) 다시 돌리면 캐시가 이미 한 건을 건너뛴다. 끊긴 에이전트 실행은 각 모듈의 `_close_stuck`이 정리한다
 - **단계 실패**: 한 단계의 예외(`SystemExit` 포함 — `classify_batch.run`은 판정기 모델이 맞지 않으면 `SystemExit`)는 그 단계에 기록하고 다음 단계로 간다(반목표 "반쯤 빈 화면")
 - **하루 상한**: 하네스·`calls.add_call`이 `BudgetExceeded`를 안에서 삼키므로(`handed_off` `reason=budget`, 라운드 `break`) 예외로 알아채지 않는다. 단계가 끝날 때마다 게이트웨이의 그날 사용액(`spent`)을 상한과 비교해 넘었으면 남은 단계를 건너뛰고 "상한으로 중단"·`failed`를 남긴다
 - **Batch 기본**: 밤에 도는 일이라 결과 대기는 문제가 아니므로 각 모듈 기본대로 Batch(반값), `NO_BATCH=1`이면 일반 호출만
@@ -66,7 +66,7 @@
 
 ## 4. ⑦ 아침 브리핑(템플릿)
 
-**모듈**: `backend/briefing.py` `lines(conn, today) -> list[{"head", "text"}]`. `backend/today.py` `sheet`가 `briefing`으로 붙인다. LLM을 부르지 않는다. 입력은 `prep.prep_facts(conn, today, today)` 행과 마지막 nightly `ax_jobs` 행.
+**모듈**: `backend/briefing.py` `lines(conn, today, now) -> list[{"head", "text"}]`. `backend/today.py` `sheet`가 `briefing`으로 붙인다. LLM을 부르지 않는다. 입력은 `prep.prep_facts(conn, today, today)` 행과 마지막 nightly `ax_jobs` 행.
 
 | 머리말 | 내용 | 규칙 |
 |---|---|---|
@@ -84,7 +84,7 @@
 
 - 기능 정의 §5 ⑦: "LLM은 몇 문장으로 묶기만" → 1단계 템플릿(이 설계 §4), LLM 문장은 2단계. 완료 기준은 1단계 — 규칙별 회귀 테스트, 2단계 — 지금 기준 + §9의 쓸모 지표
 - 기능 정의 §9: 착수 순서 줄을 "`make nightly` + ⑦ 1단계" 끝남으로 정리, 운영 에이전트·⑦ LLM·⑨ 2단계는 보류 이유와 함께. 새 통화 색인 항목 지움
-- 앱 설계 §3b 스케줄러: 순서 표는 이 문서가 아니라 `backend/nightly.py` 독스트링을 가리키게, `PLAN`·실패 시 계속·Batch 상한 밖 한 줄씩
+- 앱 설계 §3b 스케줄러: 순서는 `backend/nightly.py` `STEPS`를 가리키게, `PLAN`·실패 시 계속·Batch 상한 밖 한 줄씩
 - 앱 설계 §4 오늘 화면: `ax_briefings`는 ⑦ LLM 때, 지금은 `backend/briefing.py`
 - `CLAUDE.md` 명령에 `make nightly [PLAN=1] [NO_BATCH=1]`(과금, 이어 돎)
 

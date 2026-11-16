@@ -166,7 +166,7 @@ def test_night_line_none():
   - `run(ctx: Ctx, steps: list[Step], clock=datetime.now) -> dict | None` — 잠금에 걸리면 None, 아니면 `ax_jobs` 행 dict
   - `plan(ctx: Ctx, steps: list[Step]) -> list[tuple[str, int | None]]` — `ax_jobs`에 쓰지 않음
   - `last_run(conn) -> dict | None` — 가장 최근 `kind='nightly'` 행, `detail`은 JSON을 풀어 list
-  - `over_budget(gw) -> bool` — `gw.log.spent(gw.clock().date(), gw.scope) >= gw.config["daily_usd_limit"][gw.scope]`
+  - `over_budget(gw) -> bool` — 게이트웨이의 `_check_budget()`이 `BudgetExceeded`를 내면 True(가짜 게이트웨이는 False)
 
 - [ ] **Step 1: 실패하는 테스트** — 가짜 단계(호출 순서를 리스트에 적는 람다)로, `conn` 픽스처 사용
 
@@ -222,7 +222,7 @@ def test_plan_writes_no_job(conn):
 - Consumes: Task 3 `Ctx`·`Step`·`run`·`plan`, Task 2 색인
 - Produces:
   - `prep.todo_count(conn, days: list[date], today: date, model: str) -> int` — `build`와 같은 `_reusable` 판정, 쓰기 없음
-  - `report.todo_count(conn, today: date, model: str) -> int` — `build`의 재사용 판정을 `_fresh(old, m, model) -> bool`로 꺼내 둘이 같이 씀
+  - `report.todo_count(conn, today: date, model: str) -> int` — `build`의 재사용 판정을 `_fresh(conn, scope, label, m, model) -> bool`로 꺼내 둘이 같이 씀
   - `nightly.STEPS: list[Step]` — 이름 순서 정확히 `["source", "classify", "judge", "disagreements", "autoclose", "followup", "index", "prep", "claim_check", "claim_omission", "claim_evidence", "recon", "expense", "report"]`
 
 단계별 `run`/`plan`(인자는 각 모듈 `main`이 하는 그대로, 범위 기본값):
