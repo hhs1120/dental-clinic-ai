@@ -227,7 +227,7 @@ tags:
 
 **재발 방지**(하네스가 실수를 환경 수정으로 바꾼 결과): 규칙 수, 규칙별 차단 횟수, 재현 테스트 통과율, 같은 유형 재발 건수. 차단이 많다고 좋은 규칙은 아니므로 차단된 건 표본의 오차단율을 함께 본다
 
-**① 후속 처리**: 처리안 정확도를 규칙 기준선(분류기 할 일 문장의 낱말 규칙 — `evaluation/followup.py` `baseline`)과 나란히. 모수는 골드와 활성 분류가 모두 할 일인 통화, dev 판정 풀과 silver 검증 구간을 따로 보고하고 분류기가 놓친 할 일 통화 수를 함께 적는다. 정답은 골드에 할 일 내용이 없어 코드로 파생하지 않는다 — Opus가 녹취록만 보고 붙인 라벨(`make action-label`)과 사람 표본(`make action-audit`, `evaluation/metrics.py` `ACTION_AUDIT_SAMPLE`통화 — 표본은 사람 답이 정답), 라벨 vs 사람 일치율을 리포트에. 평가 실행은 `make followup-eval`이 `app.sqlite` 사본(`evaluation/runs/`)에서 라운드 배치(남은 실행이 `backend/harness/rounds.py` `ROUND_BATCH_MIN` 이하면 일반 호출)로 돌려 `evaluation/followup_runs.jsonl`에 쌓고, `eval.py`는 채점만 한다. 실행 줄은 (통화, 분류 행, 프롬프트 버전)으로 구분해 버전마다 다시 돌고, 리포트는 같은 통화·같은 정답으로 버전을 나란히 놓는다. 근거 후검증은 입력(녹취록·통화 일시·오늘)과 도구 인자·결과를 근거로 본다. 한계: 평가 통화는 1년에 걸쳐 있는데 조회 도구는 기준일 상태를 돌려줘, 지난 통화에서 "이미 지난 예약"처럼 실제 당일과 다른 추론이 나온다. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 잰다(묶음 키는 §7, `evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 앱의 종결 기록을 읽지 않고 `eval.py`가 같은 조건 함수로 다시 재며(test 판정 풀은 앱이 자동 처리하지 않는다) 결과는 리포트에만 남긴다
+**① 후속 처리**: 처리안 정확도를 규칙 기준선(분류기 할 일 문장의 낱말 규칙 — `evaluation/followup.py` `baseline`)과 나란히. 모수는 골드와 활성 분류가 모두 할 일인 통화, dev 판정 풀과 silver 검증 구간을 따로 보고하고 분류기가 놓친 할 일 통화 수를 함께 적는다. test 판정 풀은 test 묶음 `followup`으로만 보고한다(사람, 묶음·가드는 §7). 정답은 골드에 할 일 내용이 없어 코드로 파생하지 않는다 — Opus가 녹취록만 보고 붙인 라벨(`make action-label`, 대상은 dev 판정 풀·silver 검증 구간·test 판정 풀)과 사람 표본(`make action-audit`, dev·검증 구간에서 `evaluation/metrics.py` `ACTION_AUDIT_SAMPLE`통화 — 표본은 사람 답이 정답), 라벨 vs 사람 일치율을 리포트에. 평가 실행은 `make followup-eval`(dev·검증 구간, test 판정 풀은 `python -m evaluation.followup run --split test` — 사람, 실행 줄은 `evaluation/followup_test_runs.jsonl`이고 사본·Batch 상태도 따로)이 `app.sqlite` 사본(`evaluation/runs/`)에서 라운드 배치(남은 실행이 `backend/harness/rounds.py` `ROUND_BATCH_MIN` 이하면 일반 호출)로 돌려 `evaluation/followup_runs.jsonl`에 쌓고, `eval.py`는 채점만 한다. 실행 줄은 (통화, 분류 행, 프롬프트 버전)으로 구분해 버전마다 다시 돌고, 리포트는 같은 통화·같은 정답으로 버전을 나란히 놓는다. 근거 후검증은 입력(녹취록·통화 일시·오늘)과 도구 인자·결과를 근거로 본다. 한계: 평가 통화는 1년에 걸쳐 있는데 조회 도구는 기준일 상태를 돌려줘, 지난 통화에서 "이미 지난 예약"처럼 실제 당일과 다른 추론이 나온다. 자동 종결 오류율 = 자동 종결 조건(`backend/autoclose.py` `autoclose_reason`)을 넘은 통화 중 골드가 할 일·응급·불만·급함(urgent)인 비율 — dev는 silver 검증 구간(`silver_split`)에서 활성 분류 × 활성 판정기로, test는 test 판정 풀에서 잰다(묶음 키는 §7, `evaluation/autoclose.py`). 분수와 Wilson 95% 구간, 자동 처리율(대상 중 조건을 넘은 비율)과 항목별 오류 수를 함께 낸다. 앱의 종결 기록을 읽지 않고 `eval.py`가 같은 조건 함수로 다시 재며(test 판정 풀은 앱이 자동 처리하지 않는다) 결과는 리포트에만 남긴다
 
 **시나리오 평가**(⑥ 3단계·운영 에이전트 — 보류, [[치과 AX - 기능 정의]] §9): 생성 데이터에 정답이 없어 시나리오 DB로 잰다. ⑥은 이상 원인 정확도, 운영 에이전트는 심은 환자 묶음의 재현율·정밀도를 고정 순서 기준선과 나란히. 시나리오는 dev/test로 나누고 test는 묶음마다 1회
 
@@ -281,7 +281,7 @@ tags:
 
 ```
 eval.py --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-eval.py --split test --section classification|judge|crosscheck|auto|retrieval|chat [--prompt-version v2] [--condition reranker=off] [--force]
+eval.py --split test --section classification|judge|crosscheck|auto|retrieval|chat|followup [--prompt-version v2] [--condition reranker=off] [--force]
         [--reports-dir 경로]   # 기본 reports/
   → reports/eval_<split>_<condition>_<ts>.md + 같은 이름 .json  (+ reports/eval_runs.jsonl 1줄)
 ```
@@ -290,12 +290,12 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - 판정: 판정기 vs 골드(§2.6). 교차검증: 엇갈림·핵심 엇갈림·일치 오류·오류 포착·향상 배수(§2.5) — dev는 분류 버전 × 판정기 버전 전부, 자동 종결은 활성 분류 × 판정기 버전별(§5). 골드 점검(§2.3 쓰임)
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 주의사항 반영률·과잉 언급률·과잉 제안률(템플릿 기준선과 나란히, §4)
-- ① 후속 처리: §5 — dev만(test 묶음은 [[치과 AX - 기능 정의]] §9 "후속 처리 test 정답" 뒤)
+- ① 후속 처리: §5 — dev는 dev·검증 구간, test 묶음 `followup`은 test 판정 풀
 - ⑤-2·⑤-2b·⑤-3·⑤-4·⑧-1·⑧-2: §5 — dev만(test는 모듈별 `--split test`, 사람). 나머지 슬롯·에이전트 섹션은 착수 시 추가
 - 자동 처리 값도 `eval.py`가 낸다(§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
 - `is_eval=true`로 실사용 로그와 분리
-- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류는 분류 `--prompt-version` 하나, 판정은 판정기 `--prompt-version` 하나, 교차검증·자동 종결은 분류 `--prompt-version` 하나 × 판정기 버전(하나뿐이면 그것, 여럿이면 `ax_settings.prompt_versions`의 judge), RAG는 검색·챗 중 하나와 조건 하나). 분류 묶음에는 판정기 수치를 내지 않는다. 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있거나, 교차검증에서 판정기와 겹치는 통화가 없거나 모델 A·B가 같으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
+- **test 1회 가드**: test는 한 번에 묶음 하나만 돌린다(`--section` — 분류는 분류 `--prompt-version` 하나, 판정은 판정기 `--prompt-version` 하나, 교차검증·자동 종결은 분류 `--prompt-version` 하나 × 판정기 버전(하나뿐이면 그것, 여럿이면 `ax_settings.prompt_versions`의 judge), RAG는 검색·챗 중 하나와 조건 하나, 후속 처리는 옵션 없이 지금 후속 프롬프트 버전 × 활성 분류 버전 × 처리 정답 라벨 버전). 분류 묶음에는 판정기 수치를 내지 않는다. 이력에 같은 묶음(섹션·버전 / 검색·조건 / 챗·조건)이 있으면 실행하지 않는다 — 다시 돌리려면 `--force`(§1 원칙 2). 앱 경고(빈 색인·리랭커 실패)가 있거나, 교차검증에서 판정기와 겹치는 통화가 없거나 모델 A·B가 같거나, 후속 처리 모수 통화에 지금 버전 처리 정답 라벨·실행이 하나라도 없으면 이력에 쓰기 전에 거절한다. dev는 묶음 제한 없이 전부
 - **`--condition`**: `embedding=<모델>,reranker=<off·haiku·rerank-…>` 형식이고 빠진 키는 기본값이다(`backend/rag_search.py` `parse_condition`). 같은 문항에서 기본 조건과 짝 비교(분수·MRR 평균 + McNemar 정확 검정 한 줄 + 구제/손실 문항)를 낸다. dev는 기본 조건도 같이 돌리고, test는 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과와 비교한다(그래서 test json에는 문항 id별 통과 여부와 MRR 짝 비교용 역순위 `rr`만 남기고 md에는 내지 않는다)
 - **건별 덤프는 `--split dev`에서만**: 사람이 보는 오류 목록(틀린 통화 id·녹취록 — dev 판정 풀만, 골드 기준. 비풀은 관문 검증 구간이라 건별로 보이지 않는다, §2.7)과 RAG 구제/손실 문항 덤프는 튜닝 범위에서만 출력한다. 자동 개선은 이 덤프를 입력으로 쓰지 않는다(§2.7). `--split test`는 집계만 내고 건별 목록을 내지 않는다(§1 원칙 2 — 튜닝 중 test 항목을 보지 않게)
 - **few-shot 예시 제외**: 예시는 사람이 판정한 운영 판정 건에서만 고르고(골드 점검 표본은 골드로 뽑은 통화라 쓰지 않는다), 프롬프트 파일 머리말(`---` 사이 `fewshot_call_uids: [c-0123, …]`, classify는 버전 폴더의 `labels.md`)의 예시 `call_uid`를 dev 집계와 관문 모수에서 뺀다. 자동 개선은 few-shot을 추가하지 않는다

@@ -1,6 +1,7 @@
 """처리 정답 — 후속 처리안 채점 모수 통화에 Opus가 녹취록만 보고 처리 종류를 붙이고(Batch), 사람이 표본을 직접 고른다.
 골드에는 할 일의 내용이 없어 코드로 파생하지 않는다(설계 docs/superpowers/specs/2026-11-08-followup-autoclose-design.md
-"PR ② 처리 정답", 평가 설계 §5). 기록은 evaluation/call_actions.jsonl — 앱 DB·truth.sqlite에 쓰지 않는다."""
+"PR ② 처리 정답", 평가 설계 §5). 기록은 evaluation/call_actions.jsonl — 앱 DB·truth.sqlite에 쓰지 않는다.
+라벨 대상은 dev 판정 풀·silver 검증 구간·test 판정 풀, 사람 표본은 dev·검증 구간에서만 고른다."""
 
 import argparse
 import json
@@ -21,14 +22,20 @@ TASK, PROMPT_VERSION, ALIAS = "call_actions", "v2", "action_label"  # v2: 원장
 ACTIONS_PATH = ROOT / "evaluation" / "call_actions.jsonl"
 LLM_LOG = ROOT / "evaluation" / "call_actions_llm.jsonl"
 BATCH_STATE = ROOT / "evaluation" / "call_actions_batch.json"  # 커밋 안 함
+DEV_PARTS = ("dev", "validation")  # 튜닝 쪽 구간 — test 판정 풀은 test 묶음에서만(평가 설계 §2.7)
 
 __all__ = ["load", "save"]
 
 
-def eval_calls(conn) -> dict[str, list[str]]:
-    """채점 모수 — 골드 has_todo와 활성 분류 has_todo가 모두 참인 통화. dev = dev 판정 풀, validation = silver 검증 구간"""
+def eval_calls(conn, parts: tuple[str, ...] | None = None) -> dict[str, list[str]]:
+    """채점 모수 — 골드 has_todo와 활성 분류 has_todo가 모두 참인 통화(구간은 split_population).
+    parts가 있으면 그 구간만 — 튜닝 쪽(후속 평가 실행 기본·dev 리포트)은 DEV_PARTS로 test를 읽지 않는다(평가 설계 §2.7)"""
     cls_todo = classifier_todo(conn)
-    return {k: [u for u in v if u in cls_todo] for k, v in gold_todo_calls(conn).items()}
+    return {
+        k: [u for u in v if u in cls_todo]
+        for k, v in gold_todo_calls(conn).items()
+        if parts is None or k in parts
+    }
 
 
 def classifier_todo(conn) -> set[str]:
@@ -46,7 +53,8 @@ def classifier_todo(conn) -> set[str]:
 
 
 def split_population(conn) -> dict[str, list[dict]]:
-    """구간별 통화(골드 행) — dev = dev 판정 풀, validation = silver 검증 구간"""
+    """구간별 통화(골드 행) — dev = dev 판정 풀, validation = silver 검증 구간, test = test 판정 풀(평가 설계 §5).
+    test는 뒤에 더해 dev·검증 구간의 대상·순서가 그대로다(이미 라벨된 건이 다시 나가지 않게)"""
     rows = [
         dict(r)
         for r in conn.execute(
@@ -63,6 +71,10 @@ def split_population(conn) -> dict[str, list[dict]]:
         ),
         "validation": sorted(
             (r for r in rows if r["call_uid"] in validation), key=lambda r: r["call_uid"]
+        ),
+        "test": sorted(
+            (r for r in rows if r["split"] == "test" and r["in_eval_pool"]),
+            key=lambda r: r["call_uid"],
         ),
     }
 
@@ -166,7 +178,12 @@ def _save(path: Path, records: list[dict]) -> None:
 def audit(conn, path: Path, read=input, write=print, n: int = ACTION_AUDIT_SAMPLE) -> None:
     """사람 표본 — 해시 순 앞 n통화를 한 통화씩. 라벨은 저장 전까지 보이지 않는다(앵커링 없게), 통화마다 저장"""
     records = load(path)
-    picks = sorted(records, key=lambda r: _hash_order(r["call_uid"]))[:n]
+    test = {
+        r["call_uid"] for r in split_population(conn)["test"]
+    }  # 표본은 dev·검증 구간 라벨에서만
+    picks = sorted(
+        (r for r in records if r["call_uid"] not in test), key=lambda r: _hash_order(r["call_uid"])
+    )[:n]
     todo = [r for r in picks if r["human_action"] is None]
     calls = _calls(conn, [r["call_uid"] for r in todo]) if todo else {}
     write(f"표본 {len(picks)}통화 중 남은 {len(todo)}통화")

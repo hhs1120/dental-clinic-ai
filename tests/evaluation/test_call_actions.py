@@ -145,3 +145,58 @@ def test_reopen_requires_known_action():
     for argv in (["reopen"], ["reopen", "--action", "othr"]):
         with pytest.raises(SystemExit):
             call_actions.main(argv)
+
+
+def _todo_c3(conn):
+    """통화 3(test 판정 풀)을 골드·분류 모두 할 일로"""
+    conn.execute("UPDATE truth.truth_call_labels SET has_todo = 1 WHERE call_uid = 'c-0003'")
+    conn.execute(
+        "UPDATE ax_call_classifications SET labels = json_set(labels, '$.has_todo', 1)"
+        " WHERE call_uid = 'c-0003' AND labels IS NOT NULL"
+    )
+
+
+def test_population_adds_test_pool_keeps_dev(conn):
+    """test 판정 풀을 더해도 dev·검증 구간의 대상과 순서는 그대로(평가 설계 §5)"""
+    before = call_actions.eval_calls(conn)
+    _todo_c3(conn)
+    after = call_actions.eval_calls(conn)
+    assert list(after) == ["dev", "validation", "test"]
+    assert after["test"] == ["c-0003"]
+    dev = {k: before[k] for k in call_actions.DEV_PARTS}
+    assert {k: after[k] for k in call_actions.DEV_PARTS} == dev and before["test"] == []
+    assert call_actions.eval_calls(conn, ("test",)) == {"test": ["c-0003"]}
+    assert call_actions.eval_calls(conn, call_actions.DEV_PARTS) == dev
+
+
+def test_label_adds_test_without_relabeling(conn, tmp_path):
+    """이미 라벨된 dev·검증 통화는 다시 나가지 않고 test 통화만 나간다(이어 돎)"""
+    p, state = tmp_path / "a.jsonl", tmp_path / "s.json"
+    first = BatchFake(tmp_path)
+    call_actions.label(first, conn, p, state_path=state, poll_seconds=0)
+    [(_, reqs)] = first.batches.values()
+    assert "c-0003" not in {r["custom_id"] for r in reqs}
+    before = call_actions.load(p)
+    _todo_c3(conn)
+    gw = BatchFake(tmp_path)
+    assert call_actions.label(gw, conn, p, state_path=state, poll_seconds=0)["done"] == 1
+    [(_, reqs)] = gw.batches.values()
+    assert [r["custom_id"] for r in reqs] == ["c-0003"]
+    after = {r["call_uid"]: r for r in call_actions.load(p)}
+    assert [after[r["call_uid"]] for r in before] == before
+
+
+def test_audit_skips_test_records(conn, tmp_path):
+    """사람 표본은 dev·검증 구간 라벨에서만 — test 라벨이 더해져도 표본이 바뀌지 않는다"""
+    p = tmp_path / "a.jsonl"
+    call_actions._save(
+        p,
+        [
+            {"call_uid": u, "llm_action": "other", "human_action": None}
+            for u in ("c-0001", "c-0003", "c-0004")
+        ],
+    )
+    out = []
+    with pytest.raises(EOFError):
+        call_actions.audit(conn, p, read=_keys(), write=out.append, n=5)
+    assert out[0] == "표본 2통화 중 남은 2통화"

@@ -252,3 +252,226 @@ def test_dev_report_flags_old_labels(tmp_path):
         conn, reports_dir=tmp_path / "r", app=FakeApp(), split="dev", call_actions_path=acts
     )
     assert "옛 버전 라벨 1통화" in out["report_path"].read_text(encoding="utf-8")
+
+
+# ── test 묶음 followup (평가 설계 §5·§7) ─────────────────────────────
+
+
+def _todo_c3(c):
+    """통화 3(test 판정 풀)을 골드·분류 모두 할 일로"""
+    c.execute("UPDATE truth.truth_call_labels SET has_todo = 1 WHERE call_uid = 'c-0003'")
+    c.execute(
+        "UPDATE ax_call_classifications SET labels = json_set(labels, '$.has_todo', 1), todo = '[]'"
+        " WHERE call_uid = 'c-0003' AND labels IS NOT NULL"
+    )
+
+
+def test_run_default_skips_test_and_split_test_runs_only_test(paths):
+    """make followup-eval(기본)은 dev·검증 구간만, --split test는 test 판정 풀만 돈다"""
+    import sqlite3
+
+    c = sqlite3.connect(paths / "app.sqlite")
+    c.execute("ATTACH DATABASE ? AS truth", (str(paths / "truth.sqlite"),))
+    _todo_c3(c)
+    c.commit()
+    c.close()
+    _run(paths, {})
+    assert "c-0003" not in {r["call_uid"] for r in ev_followup.load(paths / "runs.jsonl")}
+    n = len(ev_followup.load(paths / "runs.jsonl"))
+    r = ev_followup.run(
+        paths / "app.sqlite",
+        paths / "source.sqlite",
+        paths / "truth.sqlite",
+        out=paths / "runs.jsonl",
+        copy=paths / "runs" / "copy.sqlite",
+        state=paths / "runs" / "state.json",
+        gw_factory=lambda c: BatchScript(c, [("tool", "submit_followup", SUBMIT)]),
+        parts=("test",),
+        min_batch=0,
+        poll_seconds=0,
+    )
+    rows = ev_followup.load(paths / "runs.jsonl")
+    assert r["done"] == 1 and len(rows) == n + 1 and rows[-1]["call_uid"] == "c-0003"
+
+
+def _test_conn(tmp_path):
+    from tests.evaluation.test_rag import make_rag_db
+
+    conn = make_rag_db(tmp_path)
+    _todo_c3(conn)
+    return conn
+
+
+def _cls_id(conn, uid):
+    return conn.execute(
+        "SELECT id FROM ax_call_classifications WHERE call_uid = ? AND prompt_version = 'v1'"
+        " AND model_alias = 'classify'",
+        (uid,),
+    ).fetchone()[0]
+
+
+def _write(path, rows):
+    import json
+
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+
+
+def test_test_followup_refuses_without_labels_or_runs(tmp_path):
+    """test 정답 라벨이나 test 실행이 없으면 리포트·이력을 쓰기 전에 멈춘다 — 1회 기회를 소진하지 않게"""
+    from evaluation import EvalRefused, call_actions
+    from evaluation import eval as ev
+    from tests.evaluation.test_rag import FakeApp
+
+    conn = _test_conn(tmp_path)
+    reports, runs, acts = tmp_path / "r", tmp_path / "runs.jsonl", tmp_path / "acts.jsonl"
+    kw = {"reports_dir": reports, "app": FakeApp(), "split": "test", "section": "followup"}
+    with pytest.raises(EvalRefused, match="make action-label"):  # 라벨 파일 없음
+        ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    dev_only = {"call_uid": "c-0001", "llm_action": "other", "human_action": None}
+    _write(acts, [dev_only | {"prompt_version": call_actions.PROMPT_VERSION}])
+    with pytest.raises(EvalRefused, match="make action-label"):  # test 라벨 없음
+        ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    _write(acts, [dict(dev_only, call_uid="c-0003", prompt_version="v0")])
+    with pytest.raises(EvalRefused, match="make action-label"):  # 옛 버전 라벨
+        ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    _write(acts, [dict(dev_only, call_uid="c-0003", prompt_version=call_actions.PROMPT_VERSION)])
+    with pytest.raises(EvalRefused, match="--split test"):  # 실행 없음
+        ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    for bad in ({"prompt_version": "v1"}, {"condition": "reranker=off"}):
+        with pytest.raises(EvalRefused):  # 묶음과 안 맞는 옵션
+            ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw, **bad)
+    assert not reports.exists()
+
+
+def _json_of(out):
+    import json
+
+    return json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
+
+
+def test_test_followup_scores_test_only_once(tmp_path, monkeypatch):
+    """test 묶음은 test 판정 풀만 집계로 — 후속 프롬프트 버전 × 활성 분류 버전마다 한 번"""
+    import json
+
+    from evaluation import call_actions
+    from evaluation import eval as ev
+    from tests.evaluation.test_rag import FakeApp
+
+    conn = _test_conn(tmp_path)
+    reports, runs, acts = tmp_path / "r", tmp_path / "runs.jsonl", tmp_path / "acts.jsonl"
+    pv = ev_followup.followup_version()
+    _write(
+        acts,
+        [
+            {
+                "call_uid": u,
+                "llm_action": "other",
+                "human_action": None,
+                "prompt_version": call_actions.PROMPT_VERSION,
+            }
+            for u in ("c-0001", "c-0003")
+        ],
+    )
+    _write(
+        runs,
+        [
+            {
+                "call_uid": u,
+                "classification_id": _cls_id(conn, u),
+                "prompt_version": pv,
+                "action": "other",
+                "status": "done",
+                "cost_usd": 0.01,
+            }
+            for u in ("c-0001", "c-0003")
+        ],
+    )
+    kw = {"reports_dir": reports, "app": FakeApp(), "split": "test", "section": "followup"}
+    out = ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    data = json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
+    f = data["followup"]
+    assert list(f["score"]) == ["test"] and f["score"]["test"]["agent"]["k"] == 1
+    lv = call_actions.PROMPT_VERSION
+    assert f["labels"] == 1 and data["prompt_version"] == f"{pv}×v1×label-{lv}"
+    assert data["classification"] is None and data["rag"] is None
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert "## ① 후속 처리" in md
+    assert "처리 정답 1통화(Opus 라벨만 — 사람 표본은 dev·검증 구간)" in md
+    assert "라벨 vs 사람" not in md
+    with pytest.raises(ev.AlreadyRun):
+        ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
+    ev.run(conn, followup_runs=runs, call_actions_path=acts, force=True, **kw)
+    # 처리 정답 라벨 버전이 바뀌면 다른 묶음 — 정답이 바뀌었으니 다시 잴 수 있다
+    monkeypatch.setattr(call_actions, "PROMPT_VERSION", "v99")
+    rows = call_actions.load(acts)
+    _write(acts, [dict(r, prompt_version="v99") for r in rows])
+    again = _json_of(ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw))
+    assert again["prompt_version"] == f"{pv}×v1×label-v99"
+
+
+def test_dev_report_followup_excludes_test(tmp_path):
+    """dev 리포트의 후속 처리는 dev·검증 구간만 — test 라벨·실행이 있어도 보이지 않는다"""
+    import json
+
+    from evaluation import eval as ev
+    from tests.evaluation.test_rag import FakeApp
+
+    conn = _test_conn(tmp_path)
+    runs, acts = tmp_path / "runs.jsonl", tmp_path / "acts.jsonl"
+    _write(
+        acts,
+        [
+            {"call_uid": u, "llm_action": "other", "human_action": None}
+            for u in ("c-0001", "c-0003")
+        ],
+    )
+    _write(
+        runs,
+        [
+            {"call_uid": "c-0003", "action": "other", "status": "done", "cost_usd": 0},
+            {"call_uid": "c-0003", "prompt_version": "v99", "action": "other", "status": "done"},
+        ],
+    )
+    out = ev.run(
+        conn,
+        reports_dir=tmp_path / "r",
+        app=FakeApp(),
+        split="dev",
+        followup_runs=runs,
+        call_actions_path=acts,
+    )
+    data = json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
+    f = data["followup"]
+    assert "test" not in f["score"] and f["labels"] == 1
+    assert "v99" not in f["by_version"]  # 버전 목록도 dev·검증 구간 실행 줄에서만
+    assert "라벨 vs 사람" in out["report_path"].read_text(encoding="utf-8")
+    assert (
+        data["rag"]["retrieval"]["hit5"]["n"] == 3
+    )  # 후속 처리 절이 검색 절 구간을 건드리지 않는다
+
+
+def test_test_run_files_are_separate():
+    """test 실행은 실행 줄·사본(LLM 기록)·Batch 상태가 dev와 따로 — 남은 dev 배치를 test가 받지 않게(평가 설계 §5)"""
+    dev, test = ev_followup.PATHS["dev"], ev_followup.PATHS["test"]
+    assert dev == (ev_followup.OUT, ev_followup.COPY, ev_followup.STATE)
+    assert test[0].name == "followup_test_runs.jsonl"
+    assert test[2].name == "followup_batch_test.json"
+    assert not set(dev) & set(test)
+
+
+def test_eval_main_reads_runs_file_by_split(tmp_path, monkeypatch):
+    """eval.py는 dev면 dev 실행 줄, test면 test 실행 줄을 읽는다"""
+    from evaluation import eval as ev
+    from tests.evaluation.test_eval_cli import _db_files
+    from tests.evaluation.test_rag import FakeApp, make_rag_db
+
+    conn = make_rag_db(tmp_path)
+    seen = []
+    monkeypatch.setattr(ev, "load_app", lambda db, source: FakeApp())
+    monkeypatch.setattr(
+        ev, "run", lambda conn, **kw: seen.append(kw["followup_runs"]) or {"report_path": "x"}
+    )
+    args = _db_files(conn, tmp_path) + ["--reports-dir", str(tmp_path / "out")]
+    ev.main(["--split", "dev"] + args)
+    ev.main(["--split", "test", "--section", "followup"] + args)
+    assert seen == [ev_followup.OUT, ev_followup.OUT_TEST]
