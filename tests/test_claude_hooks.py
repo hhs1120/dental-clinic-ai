@@ -581,6 +581,17 @@ def test_more_commands_ask(command):
         "make nightly PLAN=1",
         "uv run python -m backend.nightly run --plan",
         "uv run python -m backend.rag_index --embedding voyage-4 --stats",
+        "uv run python -m backend.report --help",  # argparse가 설명만 찍고 끝난다
+        "python -m evaluation.prompt_gate -h",
+        "uv run python -m backend.classify_batch classify --help",
+        # 과금 모듈 경로를 읽기만 하는 명령 — 실행이 아니다
+        "sed -n 100,125p backend/harness/rounds.py; grep -n run_batch backend/report.py",
+        "grep -n has_todo evaluation/prompt_gate.py | head",
+        "cat backend/nightly.py",
+        "git diff main -- backend/report.py",
+        "uv run ruff check backend/report.py",
+        "uv run pytest tests/backend/test_report.py -q",
+        'uv run python -c "import backend.report"',
         "uv run python -m evaluation.claim_qa score --split dev",
         "make test",
         "make verify",
@@ -794,6 +805,10 @@ def test_review_lookalikes_pass(command, monkeypatch):
         "uv run python -m evaluation.claim_check sample",
         "uv run python -m evaluation.claim_appeal run --split dev",
         "uv run python backend/prep.py run",
+        "python3 evaluation/prompt_gate.py --a v2 --b v3 --item purpose",
+        "./backend/report.py",
+        "uv run --env-file .env python -m backend.report",
+        "uv run backend/nightly.py run",
         "rm -rf .claude/worktrees/feat-x",  # worktree 지우기는 확인(보호 경로에서 뺌)
         "rm -rf .claude/worktrees/feat-x/frontend/.next",
     ],
@@ -960,3 +975,48 @@ def test_main_asks_on_broken_input(monkeypatch, capsys):
 def test_readonly_allows_copy_to_tmpdir():
     """리뷰 에이전트가 DB 사본을 임시 폴더로 뜨는 것 — $TMPDIR를 펼쳐 저장소 밖으로 본다"""
     assert guard.check_readonly('cp data/app.sqlite "$TMPDIR/a.sqlite"', ROOT) is None
+
+
+_WRAPPED_INNER = [
+    "rm -rf docs",
+    "cat .env",
+    "echo x > ground_truth/a.json",
+    "git push --force",
+    "make nightly",
+    "uv run python -m backend.report run",
+]
+
+
+@pytest.mark.parametrize("wrap", ['bash -c "{}"', "sh -lc '{}'", 'zsh -c "{}"', 'eval "{}"'])
+@pytest.mark.parametrize("inner", _WRAPPED_INNER)
+def test_shell_wrapper_checks_inner_command(wrap, inner):
+    """bash -c·eval로 감싸도 안쪽 명령을 같은 규칙으로 본다"""
+    command = wrap.format(inner)
+    # 감싸지 않으면 걸리는 명령
+    assert guard.check_bash(inner, ROOT) or guard.check_ask(inner, ROOT)
+    assert guard.check_bash(command, ROOT) == guard.check_bash(inner, ROOT)
+    assert guard.check_ask(command, ROOT) == guard.check_ask(inner, ROOT)
+
+
+def test_shell_wrapper_readonly():
+    assert guard.check_readonly('bash -c "git commit -m x"', ROOT)
+
+
+@pytest.mark.parametrize(
+    "command", ['bash -c "make nightly PLAN=1"', 'sh -c "ls docs | head"', "bash scripts/x.sh"]
+)
+def test_shell_wrapper_free(command):
+    assert guard.check_bash(command, ROOT) is None
+    assert guard.check_ask(command, ROOT) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "uv run python -m backend.report run > >(sort -h)",  # 다른 도구의 -h는 무료 플래그가 아니다
+        "uv run python -m backend.report run 2>-h",
+        "uv run python -m backend.nightly run -- -h",
+    ],
+)
+def test_help_flag_only_for_the_module(command):
+    assert guard.check_ask(command, ROOT)

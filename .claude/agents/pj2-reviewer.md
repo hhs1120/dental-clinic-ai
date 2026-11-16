@@ -27,7 +27,8 @@ hooks:
 
 - 작업 트리·인덱스·HEAD·브랜치를 바꾸지 않는다. 커밋·푸시하지 않는다. 다른 서브에이전트를 띄우지 않는다.
 - `make data`를 돌리지 않는다(DB를 다시 쓴다). 원본 DB(`data/source.sqlite`·`data/app.sqlite`·`ground_truth/truth.sqlite`)는 읽기 전용(`file:…?mode=ro`)으로만 연다.
-- 해도 되는 것: `uv run pytest`, `uv run python -m generator.verify`(읽기 전용), 실데이터로 코드를 직접 돌려 보기(코드만 읽어서는 놓치는 문제를 찾는다). 단:
+- **과금 명령은 실행하지 않는다** — `CLAUDE.md` 명령의 "(과금)"(`make` 대상, `python -m backend.*`·`evaluation.*` 일괄 모듈과 그 스크립트 경로). 인자는 `--help`, 건수는 `--plan`·`--stats`로만 본다. 훅이 어떻게 판정하는지는 실행하지 말고 `uv run python -c 'import sys; sys.path.insert(0, ".claude/hooks"); import guard; from pathlib import Path; print(guard.check_ask("<명령>", Path(".")))'`처럼 문자열로 확인한다. 확인 창이 뜨는 명령은 사용자에게 승인을 떠넘기는 것이라 내지 않는다
+- 해도 되는 것: `uv run pytest`, `uv run python -m generator.verify`(읽기 전용), 실데이터로 과금 없는 코드를 직접 돌려 보기(코드만 읽어서는 놓치는 문제를 찾는다). 단:
   - DB는 부르는 쪽이 준 임시 폴더(스크래치패드)로 **복사해서** 쓴다.
   - 결과를 쓰는 명령은 출력 경로를 **항상 임시 폴더로 명시**한다(`--reports-dir`, `--db`·`--truth` 등). 기본 경로에 기대지 않는다.
   - 저장소를 바꾸는 Bash(쓰는 git·make·rm·저장소 안 리디렉션, `--reports-dir` 없는 eval.py 등)는 이 에이전트 전용 훅(`.claude/hooks/guard.py --readonly`)이 막는다. 막히면 임시 폴더를 쓰는 명령으로 바꾼다.

@@ -16,7 +16,7 @@
 - `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 앱 설계 §9(와이어프레임 `index-v2.html`과 그 예외). 데이터는 `make wireframe`
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·(착수 때) 자동 개선·시나리오 DB
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·(착수 때) 자동 개선
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기·LLM 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
@@ -71,7 +71,7 @@
 - PR은 `.github/pull_request_template.md`, CI(`.github/workflows/ci.yml`)가 `make lint`(파이썬·프론트)·`make test`·프론트 빌드를 따로 동시에 돌린다
 
 ## 현재 단계
-진행 순서와 다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.
+다음 할 일은 `docs/치과 AX - 기능 정의.md` §9.
 
 ---
 
