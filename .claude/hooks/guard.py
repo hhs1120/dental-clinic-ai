@@ -729,7 +729,11 @@ def _secret_danger(tokens: list[str], prog: str, cwd: Path) -> str | None:
         for i, t in enumerate(tokens[1:], 1):
             if tokens[i - 1] == "--env-file" or t.startswith("--exclude"):
                 continue
-            value = t.split("=", 1)[1] if t.startswith("--include=") else t
+            value = (
+                t.split("=", 1)[1] if t.startswith(("--include=", "--glob=", "--iglob=")) else t
+            )
+            if value.startswith("!"):  # rg -g '!…'는 빼고 찾기 — .env를 읽지 않는다
+                continue
             if env_like(value):
                 return ".env(API 키)를 읽지 않는다 — 키가 필요하면 uv run --env-file .env로 실행만 한다"
     if prog in ("grep", "egrep", "fgrep"):

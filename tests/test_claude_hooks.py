@@ -1078,3 +1078,21 @@ def test_ask_prompt_unparsable():
 def test_edit_ask_prompt_tag():
     why = guard.check_edit_ask(str(ROOT / ".claude/hooks/guard.py"), "x = 1")
     assert why.startswith("[안전장치]") and "걸린 부분: .claude/hooks/guard.py" in why
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'rg -l x -g "!docs/**" .',  # ! 글롭은 빼고 찾기 — .env를 읽지 않는다
+        "rg -n x -g '!**/node_modules/**' -g '!docs/superpowers/**' .",
+        "rg -n x --glob='!*.lock' .",
+        "rg -n x --iglob '!**/*.md' docs",
+    ],
+)
+def test_rg_exclude_glob_is_not_secret_read(command):
+    assert guard.check_bash(command, ROOT) is None
+
+
+@pytest.mark.parametrize("command", ['rg -n x -g "*" .', "rg -n x --glob '.env*' ."])
+def test_rg_include_glob_matching_env_still_blocked(command):
+    assert guard.check_bash(command, ROOT)
