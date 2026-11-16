@@ -154,14 +154,7 @@ def _base(conn, today: date, scope: str, label: str) -> dict[str, int]:
         r[0]
         for r in conn.execute("SELECT DISTINCT category FROM source.emr_procedures ORDER BY 1")
     ]
-    by_cat = dict(
-        conn.execute(
-            "SELECT p.category, SUM(t.fee_total) FROM source.emr_treatments t"
-            " JOIN source.emr_procedures p ON p.code = t.procedure_code"
-            " WHERE t.performed_at >= ? AND t.performed_at < ? GROUP BY p.category",
-            (s, e),
-        ).fetchall()
-    )
+    by_cat = {c: sales for c, (_, sales) in _by_category(conn, scope, label).items()}
     m["sales"] = sum(by_cat.values())
     for c in cats:
         m[f"sales.{c}"] = by_cat.get(c, 0)
@@ -416,6 +409,38 @@ def build(conn, gw, today: date, *, use_batch: bool, poll_seconds: int = 30) -> 
     return out
 
 
+def _by_category(conn, scope: str, label: str) -> dict[str, tuple[int, int]]:
+    """분류 → (처치 건수, 매출) — _base의 sales.<분류>와 시술별 표가 같이 쓴다"""
+    s, e = _range(scope, label)
+    return {
+        r[0]: (r[1], r[2])
+        for r in conn.execute(
+            "SELECT p.category, COUNT(*), SUM(t.fee_total) FROM source.emr_treatments t"
+            " JOIN source.emr_procedures p ON p.code = t.procedure_code"
+            " WHERE t.performed_at >= ? AND t.performed_at < ? GROUP BY p.category",
+            (s, e),
+        )
+    }
+
+
+def procedures(conn, scope: str, label: str, prev: str | None) -> list[dict]:
+    """시술별 표(기능 정의 §5 ⑥) — 분류마다 이번·이전 기간 건수·매출, 매출 큰 순(같으면 분류 이름순).
+    둘 다 0인 분류는 뺀다. 건수는 metrics에 넣지 않는다 — 해석 해시가 바뀌어 저장된 해석이 낡음이 되지 않게"""
+    cur = _by_category(conn, scope, label)
+    before = _by_category(conn, scope, prev) if prev else {}
+    rows = [
+        {
+            "category": c,
+            "count": cur.get(c, (0, 0))[0],
+            "sales": cur.get(c, (0, 0))[1],
+            "prev_count": before.get(c, (0, 0))[0] if prev else None,
+            "prev_sales": before.get(c, (0, 0))[1] if prev else None,
+        }
+        for c in cur.keys() | before.keys()
+    ]
+    return sorted(rows, key=lambda r: (-r["sales"], r["category"]))
+
+
 TREND = ("sales", "collected", "noshow_rate", "new_patients")
 TREND_MONTHLY = ("material", "profit_ex_labor")
 
@@ -450,11 +475,13 @@ def sheet(conn: sqlite3.Connection, today: date, scope: str, period: str | None 
         }
     keys = TREND + (TREND_MONTHLY if scope == "monthly" else ())
     monthly = scope == "monthly"
+    prev = prev_period(conn, today, scope, period)
     return {
         "scope": scope,
         "periods": labels,
         "period": period,
-        "prev_period": prev_period(conn, today, scope, period),
+        "prev_period": prev,
+        "procedures": procedures(conn, scope, period, prev),
         "metrics": m,
         "interpretation": interp,
         "trend": [{"period": p} | {k: by[p].get(k) for k in keys} for p in labels],

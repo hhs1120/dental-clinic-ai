@@ -16,6 +16,8 @@ const base = {
   "prev.sales": 47_500_000,
   "diff.sales": 17_995_000,
   "pct.sales": 38,
+  "pct.sales.surgery": -40,
+  "pct.sales.implant": 167,
   "diff.new_patients": 3,
 };
 
@@ -38,6 +40,24 @@ const POINTS = [
   },
 ];
 
+// 시술별 표 — 11월 실데이터 모양(매출 큰 순, 이전 10월)
+const PROCEDURES = [
+  ["prosth", 30, 22_200_000, 21, 17_250_000],
+  ["implant", 16, 20_800_000, 6, 7_800_000],
+  ["restorative", 88, 7_075_000, 80, 7_510_000],
+  ["preventive", 123, 6_520_000, 124, 6_465_000],
+  ["ortho", 39, 2_880_000, 25, 1_760_000],
+  ["endo", 16, 1_920_000, 18, 2_160_000],
+  ["surgery", 26, 1_200_000, 41, 2_010_000],
+  ["consult", 15, 0, 11, 0], // 매출 0 — 건수만 바뀌어도 "변화 작음"으로 묶지 않는다
+].map(([category, count, sales, prev_count, prev_sales]) => ({
+  category,
+  count,
+  sales,
+  prev_count,
+  prev_sales,
+}));
+
 function monthly(period: string, interpretation: unknown) {
   return {
     scope: "monthly",
@@ -56,6 +76,7 @@ function monthly(period: string, interpretation: unknown) {
       profit_ex_labor: 1,
     })),
     dx_top: { name: "임플란트 1차 × 만성 치은염", n: 1, lost: 206_850 },
+    procedures: PROCEDURES,
   };
 }
 
@@ -74,6 +95,7 @@ const weekly = {
     new_patients: 5,
   })),
   dx_top: null,
+  procedures: [],
 };
 
 // 일간 — 지난주 같은 요일(11/23)과 비교, 근거에 음수 증감·%p
@@ -191,4 +213,40 @@ test("일간 — 지난주 같은 요일과 비교, 음수·%p 근거", async ({
   await expect(page.getByText("매출 증감 -3,935,000원")).toBeVisible();
   await expect(page.getByText("노쇼율 증감 -12%p")).toBeVisible();
   await expect(page.getByText("임플란트 매출 증감 -1,300,000원")).toBeVisible();
+});
+
+test("시술별 표 — 매출 비중 위 5개 + 나머지, 이전 기간 대비는 변화 큰 순", async ({
+  page,
+}) => {
+  await fakeReport(page, null);
+  await page.goto("/report");
+  const share = page.getByRole("list", { name: "매출 비중" });
+  await expect(share.getByRole("listitem")).toHaveCount(6);
+  await expect(share.getByRole("listitem").first()).toContainText(
+    "22,200,000원 · 36% · 30건",
+  );
+  await expect(share.getByRole("listitem").last()).toContainText("나머지 2");
+  const change = page.getByRole("list", { name: "이전 기간 대비" });
+  await expect(page.getByRole("heading", { name: "10월 대비" })).toBeVisible();
+  // 늘어난 것 큰 순(임플란트 +1,300만) → 줄어든 것 큰 순(외과 −81만), 예방·상담은 변화 작음
+  await expect(change.getByRole("listitem").first()).toContainText("임플란트");
+  await expect(change.getByRole("listitem").first()).toContainText("+10건");
+  await expect(change.getByText("예방 — 변화 작음")).toBeVisible();
+  await expect(
+    change.getByRole("listitem").filter({ hasText: "상담" }),
+  ).toContainText("매출 없음");
+  await expect(
+    change.getByRole("listitem").filter({ hasText: "상담" }),
+  ).toContainText("+4건");
+  // 증감률은 metrics의 pct.sales.<분류>, 기호는 −로 통일
+  await expect(
+    change.getByRole("listitem").filter({ hasText: "외과" }),
+  ).toContainText("−810,000원 (−40%)");
+});
+
+test("시술별 표 — 진료 없는 기간", async ({ page }) => {
+  await fakeReport(page, null);
+  await page.goto("/report?scope=weekly");
+  await expect(page.getByText("이 기간 매출 없음")).toBeVisible();
+  await expect(page.getByText("비교할 진료 없음")).toBeVisible();
 });
