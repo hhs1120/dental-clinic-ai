@@ -469,3 +469,47 @@ def test_todo_count_matches_build_called(conn):
     assert report.todo_count(conn, TODAY, MODEL) == n
     assert report.build(conn, _gw(EMPTY), TODAY, use_batch=True, poll_seconds=0)["called"] == n
     assert report.todo_count(conn, TODAY, MODEL) == 0
+
+
+def test_sheet_procedures_by_category(conn):
+    """시술별 표(기능 정의 §5 ⑥) — 분류마다 이번·이전 기간 건수·매출, 매출 큰 순(같으면 분류 이름순).
+    이번·이전 모두 0인 분류는 뺀다"""
+    s = report.sheet(conn, TODAY, "monthly", "2026-11")
+    assert s["procedures"] == [
+        {
+            "category": "prosth",
+            "count": 1,
+            "sales": 550_000,
+            "prev_count": 1,
+            "prev_sales": 550_000,
+        },
+        {
+            "category": "preventive",
+            "count": 1,
+            "sales": 60_000,
+            "prev_count": 1,
+            "prev_sales": 60_000,
+        },
+        {"category": "surgery", "count": 2, "sales": 60_000, "prev_count": 0, "prev_sales": 0},
+    ]
+
+
+def test_sheet_procedures_keep_metrics_unchanged(conn):
+    """건수는 해석용 숫자(metrics)에 넣지 않는다 — 저장된 해석이 낡음으로 바뀌지 않게"""
+    s = report.sheet(conn, TODAY, "monthly", "2026-11")
+    assert s["metrics"] == report.metrics(conn, TODAY, "monthly", "2026-11")
+
+
+def test_sheet_procedures_without_prev_period(conn):
+    """비교할 기간이 없으면(일간 — 지난주 같은 요일에 진료 없음) 이전 칸은 None"""
+    s = report.sheet(conn, TODAY, "daily", "2026-11-24")
+    assert s["prev_period"] is None
+    assert s["procedures"] == [
+        {
+            "category": "surgery",
+            "count": 2,
+            "sales": 60_000,
+            "prev_count": None,
+            "prev_sales": None,
+        }
+    ]

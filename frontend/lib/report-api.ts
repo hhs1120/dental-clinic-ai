@@ -33,6 +33,16 @@ export interface ReportSheet {
   interpretation: Interpretation | null;
   trend: ({ period: string } & Record<string, number | null>)[];
   dx_top: { name: string; n: number; lost: number } | null;
+  procedures: ProcedureRow[];
+}
+
+/** 시술별 표 한 줄 — 이번·이전 기간 건수·매출(이전 기간이 없으면 prev_* null, backend/report.py procedures) */
+export interface ProcedureRow {
+  category: string;
+  count: number;
+  sales: number;
+  prev_count: number | null;
+  prev_sales: number | null;
 }
 
 export const fetchReport = (
@@ -72,7 +82,7 @@ const BASE: Record<string, [string, Unit]> = {
 };
 
 // 시술 분류(emr_procedures.category) — sales.<분류>
-const CATEGORY: Record<string, string> = {
+export const CATEGORY: Record<string, string> = {
   preventive: "예방",
   restorative: "보존",
   endo: "신경",

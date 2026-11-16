@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFetch } from "@/lib/api";
 import { won } from "@/lib/format";
 import {
+  CATEGORY,
   fetchReport,
   metricTag,
   type Metrics,
@@ -18,6 +19,7 @@ import {
   SCOPE_LABEL,
   type Scope,
 } from "@/lib/report-api";
+import { cn } from "@/lib/utils";
 
 const SCOPES = Object.keys(SCOPE_LABEL) as Scope[];
 
@@ -216,6 +218,157 @@ function DxCard({ sheet }: { sheet: ReportSheet }) {
   );
 }
 
+// 시술별 표(기능 정의 §5 ⑥) — 왼쪽 매출 비중은 위 SHARE_TOP개만, 오른쪽 변화는 작으면 한 줄로 묶는다
+const SHARE_TOP = 5;
+const SMALL_CHANGE_WON = 100_000; // 매출 증감이 이보다 작거나
+const SMALL_CHANGE_PCT = 1; // 증감률(%, 반올림 전)이 이보다 작으면 "변화 작음" — 매출이 없는 분류(상담)는 건수가 그대로일 때만
+
+/** 정수 비중 — 합이 100이 되게 소수점이 큰 쪽부터 1씩 더한다(최대 나머지) */
+function shares(values: number[]): number[] {
+  const total = values.reduce((n, v) => n + v, 0);
+  if (!total) return values.map(() => 0);
+  const raw = values.map((v) => (v * 100) / total);
+  const out = raw.map(Math.floor);
+  const order = raw
+    .map((r, i) => [r - Math.floor(r), i] as const)
+    .sort((a, b) => b[0] - a[0]);
+  const need = 100 - out.reduce((n, v) => n + v, 0);
+  for (let k = 0; k < need; k++) out[order[k][1]] += 1;
+  return out;
+}
+
+const MINUS = "−";
+const sign = (n: number) => (n > 0 ? "+" : n < 0 ? MINUS : "");
+
+function ProcedureCard({ sheet }: { sheet: ReportSheet }) {
+  const rows = sheet.procedures.filter((r) => r.sales > 0);
+  const top = rows.slice(0, SHARE_TOP);
+  const rest = rows.slice(SHARE_TOP);
+  const restSales = rest.reduce((n, r) => n + r.sales, 0);
+  const restCount = rest.reduce((n, r) => n + r.count, 0);
+  const pcts = shares([...top.map((r) => r.sales), restSales]);
+  const max = top[0]?.sales ?? 0;
+  const prev = sheet.prev_period;
+  const changes = sheet.procedures.map((r) => {
+    const prevSales = r.prev_sales ?? 0;
+    const diff = r.sales - prevSales;
+    const countDiff = r.count - (r.prev_count ?? 0);
+    // 증감률은 백엔드 metrics 값 그대로 — AI 해석 근거와 같은 숫자(이전 매출 0이면 없음)
+    const pct: number | undefined = sheet.metrics[`pct.sales.${r.category}`];
+    const small =
+      r.sales === 0 && prevSales === 0
+        ? countDiff === 0
+        : Math.abs(diff) < SMALL_CHANGE_WON ||
+          (prevSales > 0 &&
+            Math.abs((diff * 100) / prevSales) < SMALL_CHANGE_PCT);
+    return { ...r, diff, countDiff, pct, prevSales, small };
+  });
+  // 늘어난 것 큰 순 → 줄어든 것 큰 순(매출 그대로·건수만 바뀐 분류는 끝)
+  const moved = changes
+    .filter((c) => !c.small)
+    .sort((a, b) =>
+      a.diff > 0 === b.diff > 0
+        ? Math.abs(b.diff) - Math.abs(a.diff)
+        : b.diff - a.diff,
+    );
+  const quiet = changes.filter((c) => c.small);
+  const name = (c: string) => CATEGORY[c] ?? c;
+  const money = (n: number) => `${sign(n)}${won(Math.abs(n))}`;
+  const tone = (n: number) =>
+    n > 0
+      ? "text-status-ok-fg"
+      : n < 0
+        ? "text-status-danger-fg"
+        : "text-muted-foreground";
+  const salesChange = (c: (typeof changes)[number]) =>
+    c.sales === 0 && c.prevSales === 0
+      ? "매출 없음"
+      : c.prevSales === 0
+        ? `${money(c.diff)} (새로)`
+        : `${money(c.diff)}${c.pct !== undefined ? ` (${sign(c.pct)}${Math.abs(c.pct)}%)` : ""}`;
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <Card className="py-4">
+        <CardContent className="flex flex-col gap-2 px-4">
+          <h2 className="text-lg font-bold">매출 비중</h2>
+          {top.length === 0 ? (
+            <p className="text-sm text-muted-foreground">이 기간 매출 없음</p>
+          ) : (
+            <ul
+              className="flex flex-col gap-1.5 text-sm"
+              aria-label="매출 비중"
+            >
+              {top.map((r, i) => (
+                <li
+                  key={r.category}
+                  className="grid grid-cols-[5rem_1fr_auto] items-center gap-2"
+                >
+                  <span>{name(r.category)}</span>
+                  <span
+                    className="h-2.5 rounded-sm bg-primary"
+                    style={{ width: `${max ? (r.sales * 100) / max : 0}%` }}
+                  />
+                  <span className="tabular-nums">
+                    {won(r.sales)} · {pcts[i]}% · {r.count}건
+                  </span>
+                </li>
+              ))}
+              {rest.length > 0 && (
+                <li className="grid grid-cols-[5rem_1fr_auto] gap-2 text-muted-foreground">
+                  <span>나머지 {rest.length}</span>
+                  <span />
+                  <span className="tabular-nums">
+                    {won(restSales)} · {pcts[top.length]}% · {restCount}건
+                  </span>
+                </li>
+              )}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <Card className="py-4">
+        <CardContent className="flex flex-col gap-2 px-4">
+          <h2 className="text-lg font-bold">
+            {prev ? `${prevLabel(sheet.scope, prev)} 대비` : "이전 기간 대비"}
+          </h2>
+          {!prev ? (
+            <p className="text-sm text-muted-foreground">비교 기간 없음</p>
+          ) : changes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">비교할 진료 없음</p>
+          ) : (
+            <ul
+              className="flex flex-col gap-1.5 text-sm"
+              aria-label="이전 기간 대비"
+            >
+              {moved.map((c) => (
+                <li
+                  key={c.category}
+                  className="grid grid-cols-[5rem_1fr_auto] items-center gap-2"
+                >
+                  <span>{name(c.category)}</span>
+                  <span className={cn("tabular-nums", tone(c.diff))}>
+                    {salesChange(c)}
+                  </span>
+                  <span className={cn("tabular-nums", tone(c.countDiff))}>
+                    {sign(c.countDiff)}
+                    {Math.abs(c.countDiff)}건
+                  </span>
+                </li>
+              ))}
+              {quiet.length > 0 && (
+                <li className="text-muted-foreground">
+                  {quiet.map((c) => name(c.category)).join("·")} — 변화 작음
+                </li>
+              )}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function Trend({
   sheet,
   onPick,
@@ -349,6 +502,7 @@ export function ReportView() {
             scope={sheet.scope}
             prev={sheet.prev_period}
           />
+          <ProcedureCard sheet={sheet} />
           <DxCard sheet={sheet} />
           <Trend sheet={sheet} onPick={(p) => go({ period: p })} />
         </>
