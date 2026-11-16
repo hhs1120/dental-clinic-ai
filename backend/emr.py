@@ -220,7 +220,7 @@ def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> d
 
 
 def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict | None:
-    """전환 전 EMR 한 환자 전체. 칸은 와이어프레임 export.py의 emr[...]와 같고 목록은 오래된 순"""
+    """전환 전 EMR 한 환자 전체. 목록은 오래된 순"""
     p = conn.execute(
         "SELECT * FROM emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
     ).fetchone()

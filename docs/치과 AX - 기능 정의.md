@@ -375,7 +375,7 @@ tags:
 ## 9. 다음 액션
 
 ### 할 것
-- [ ] 오늘 화면 할 일 나누기 — 사람이 볼 일을 **통화에서 온 일**(급한 통화·확인할 통화·남은 통화 할 일)과 **업무에서 온 일**(내원 확인 전·주의 환자·재심 기한·청구 전 상병 경고·요건 근거 못 찾음·일계표 불일치·지출 증빙)로 묶어 보인다. 판정 대기·근거 없는 질문·미예약 환자 링크는 업무 쪽 끝에. §4 오늘 화면 문구·와이어프레임·소개 문서도 같이
+- [ ] 오늘 화면 할 일 나누기 — 사람이 볼 일을 **통화에서 온 일**(급한 통화·확인할 통화·남은 통화 할 일)과 **업무에서 온 일**(내원 확인 전·주의 환자·재심 기한·청구 전 상병 경고·요건 근거 못 찾음·일계표 불일치·지출 증빙)로 묶어 보인다. 판정 대기·근거 없는 질문·미예약 환자 링크는 업무 쪽 끝에. §4 오늘 화면 문구·소개 문서도 같이
 - [ ] README — 전환 전 EMR 화면 이동 수 vs 준비표 1행(§4 ④)
 - [ ] 스타일 다듬기: `frontend/app/globals.css` 토큰 값·간격·글자 크기를 실제 화면으로 고치고, `components/ui` variant를 정리하고, 화면 코드에 직접 색·모서리 값이 없는지 확인한다
 - [ ] ⑤ test 채점(사람, 지금 프롬프트 버전): 2a `python -m evaluation.claim_check run --split test`, 2b `python -m evaluation.claim_omission synth --split test`·`real --split test`, ⑤-3 `python -m evaluation.claim_qa score --split test`, ⑤-4 `python -m evaluation.claim_appeal run --split test`. 채점 범위·분할은 [[치과 AX - 평가 설계]] §5 ⑤
@@ -395,7 +395,6 @@ tags:
 - thinking을 켤 때 — 게이트웨이 `_blocks`가 thinking·fallback 블록도 돌려주게
 - few-shot 예시를 쓰는 classify 버전이 생길 때 — `evaluation/prompt_gate.py` 모수에서 예시 `call_uid`를 뺀다([[치과 AX - 평가 설계]] §7)
 - 일괄 실행을 화면에서 돌릴 때 — 작업 API(`POST /jobs/classify-batch`·`judge-batch`·`blind-judge-batch`, `ax_jobs`). 지금은 `make classify`·`judge`·`blind-judge`·`make nightly`
-- 화면마다 옮길 때 와이어프레임에서 고쳐 옮긴다 — 칩 변경 시 판단 유실, `openPrepChip` 탭 초기화, ⑨ 자동 처리, 문서 초안 게시, `export.py` 상병 조합 금액 정렬
 - ⑤-4 프롬프트 개정 때 — 출처 없는 절(병원 내부 점검 기준)을 사유서의 "기준 절 인용"으로 쓰지 않게(심평원에 내는 글이 병원 내부 기준을 근거로 든다)
 - 에이전트마다 착수 시 — 도구 목록·호출 상한·기준선 정의
 
