@@ -199,6 +199,7 @@ def test_resume_after_interrupt(conn, tmp_path, monkeypatch):
     assert lg.summary(st)["cause"] == lg.summary(base)["cause"] == "amount_typo"
     assert st["model_calls"] == base["model_calls"] == 2
     assert sum(gw.pos.values()) == 2  # 모델은 다시 부르지 않았다
+    assert st["cost_usd"] == base["cost_usd"]  # 비용 합도 끊지 않은 실행과 같다
     assert ran["n"] == base_tools + 1  # 끊기 전 끝난 조회 1번을 다시 실행
 
 
@@ -241,5 +242,73 @@ def test_plan_counts_without_gateway(conn):
     from tests.backend.test_recon_match import DAY
 
     items = recon_match.detect(recon_match.load(conn, DAY))
-    got = lg.plan(items, {}, harness_mean_usd=0.04)
-    assert got == {"targets": 1, "todo": 1, "estimated_usd": 0.08}  # 일반 호출이라 Batch의 두 배
+    got = lg.plan(items, {}, mean_usd=0.08)
+    assert got == {"targets": 1, "todo": 1, "estimated_usd": 0.08}
+
+
+# ── 리뷰 반영 ──────────────────────────────────────────────────────
+
+
+def test_after_rule_exception_returned_as_error(conn, monkeypatch):
+    """하네스는 실행 뒤 규칙의 예외도 도구 오류로 모델에 돌려준다(backend/harness/loop.py _tool)"""
+    from backend.harness.hooks import Rule
+
+    def boom(*a):
+        raise ValueError("규칙 깨짐")
+
+    monkeypatch.setattr(recon_agent, "rules", lambda: (Rule("x", after=boom),))
+    block, step = lg.call_tool(conn, _state(), "K", call(LOOK[1], LOOK[2]))
+    assert step["is_error"] == 1 and "ValueError: 규칙 깨짐" in step["result"]
+
+
+def test_run_reuses_finished_checkpoint(conn, tmp_path):
+    """끝난 thread인데 결과 줄을 쓰기 전에 죽었으면 체크포인트의 결과를 쓰고 다시 부르지 않는다"""
+    from backend import recon_match
+    from tests.backend.test_recon_agent import Script
+    from tests.backend.test_recon_match import DAY
+
+    items = recon_match.detect(recon_match.load(conn, DAY))
+    path, cp = tmp_path / "runs.jsonl", tmp_path / "cp.sqlite"
+    lg.run(Script(conn, LOOK, submit()), conn, items, DAY, path, cp)
+    first = lg.read_runs(path)
+    path.write_text("")  # 결과 줄을 못 쓴 것처럼
+    gw = Script(conn, LOOK, submit())
+    assert lg.run(gw, conn, items, DAY, path, cp) == {"done": 1}
+    assert gw.pos == {} and lg.read_runs(path) == first
+
+
+def test_scored_lines_drop_failed():
+    """하네스 results()처럼 failed는 결과가 아니다 — 채점에서 결과 없음(missing)으로 센다"""
+    lines = [{"key": "a", "status": "done"}, {"key": "b", "status": "failed"},
+             {"key": "c", "status": "handed_off"}, {"key": "z", "status": "done"}]  # fmt: skip
+    assert set(lg.scored_lines(lines, {"a", "b", "c"})) == {"a", "c"}
+
+
+def test_harness_cost_by_call_type():
+    """일반 호출은 그대로, Batch 호출만 두 배로 환산(라운드 배치는 남은 실행이 적으면 일반 호출로 바꾼다)"""
+    import sqlite3
+
+    c = sqlite3.connect(":memory:")
+    c.execute("CREATE TABLE ax_llm_calls (task, prompt_version, ref_type, input_tokens,"
+              " output_tokens, cost_usd)")  # fmt: skip
+    c.executemany("INSERT INTO ax_llm_calls VALUES (?, ?, ?, ?, ?, ?)", [
+        ("recon", "v3", "agent_run", 10, 1, 1.0),
+        ("recon", "v3", "batch", 20, 2, 1.0),
+        ("recon", "v3", "batch", 20, 2, 1.0),
+        ("recon", "v2", "batch", 99, 9, 9.0),
+    ])  # fmt: skip
+    got = lg.harness_v3_totals(c)
+    assert got == {"plain_calls": 1, "batch_calls": 2, "cost_usd": 3.0, "cost_usd_plain": 5.0,
+                   "input_tokens": 50, "output_tokens": 5}  # fmt: skip
+
+
+def test_agent_connection_has_no_truth(tmp_path):
+    import sqlite3
+
+    for name in ("app", "source", "truth"):
+        sqlite3.connect(tmp_path / f"{name}.sqlite").execute("CREATE TABLE t (x)")
+    paths = {n: tmp_path / f"{n}.sqlite" for n in ("app", "source", "truth")}
+    names = {r[1] for r in lg._connect(paths, truth=False).execute("PRAGMA database_list")}
+    assert "truth" not in names and "source" in names
+    names = {r[1] for r in lg._connect(paths).execute("PRAGMA database_list")}
+    assert "truth" in names

@@ -117,15 +117,15 @@ def call_tool(conn, steps: list[dict], key: str, call: dict) -> tuple[dict, dict
     if blocked := first_block(recon_agent.rules(), "before", ctx, name, args):
         return block(args, *blocked)
     changes = conn.total_changes
-    try:
+    try:  # 실행·실행 뒤 규칙의 예외는 오류 결과로 모델에 돌려 다른 길을 찾게 한다(하네스와 같다)
         result = tool.fn(ctx, args)
-    except Exception as e:  # 도구 오류는 모델에 돌려 다른 길을 찾게 한다
+        if not tool.writes and conn.total_changes != changes:
+            conn.rollback()
+            return block(args, READ_ONLY, f"{name}은 쓰기 도구가 아님", {"value": result})
+        if blocked := first_block(recon_agent.rules(), "after", ctx, name, args, result):
+            return block(args, *blocked, {"value": result})
+    except Exception as e:
         return record(args, f"{type(e).__name__}: {e}", "pass", is_error=True)
-    if not tool.writes and conn.total_changes != changes:
-        conn.rollback()
-        return block(args, READ_ONLY, f"{name}은 쓰기 도구가 아님", {"value": result})
-    if blocked := first_block(recon_agent.rules(), "after", ctx, name, args, result):
-        return block(args, *blocked, {"value": result})
     return record(args, result, "pass")
 
 
@@ -270,35 +270,46 @@ def run(gw, conn, items: list[dict], today: date, path: Path, checkpoints: Path)
                 continue
             cfg = {"configurable": {"thread_id": item["key"]}}
             snap = graph.get_state(cfg)
-            resume = bool(snap.next) and not snap.values.get("status")
-            if snap.values and not resume:  # 끝난 thread(실패 등)는 지우고 처음부터
-                saver.delete_thread(item["key"])
-            st = investigate(
-                graph, item["key"], recon_tools.input_text(item, books, today), resume
-            )
+            if snap.values.get("status") in recon_agent.ENDED:  # 끝났는데 결과 줄을 못 썼다
+                st = snap.values
+            else:
+                resume = bool(snap.next) and not snap.values.get("status")
+                if snap.values and not resume:  # 실패로 끝난 thread는 지우고 처음부터
+                    saver.delete_thread(item["key"])
+                text = recon_tools.input_text(item, books, today)
+                st = investigate(graph, item["key"], text, resume)
             f.write(json.dumps(_line(st), ensure_ascii=False) + "\n")
             f.flush()
             out[st["status"]] = out.get(st["status"], 0) + 1
     return out
 
 
-def plan(items: list[dict], lines: dict, harness_mean_usd: float) -> dict:
-    """나갈 건 수와 예상 비용(무료) — 하네스 v3 건당 평균(Batch)의 일반 호출 환산"""
+def plan(items: list[dict], lines: dict, mean_usd: float) -> dict:
+    """나갈 건 수와 예상 비용(무료) — mean_usd = 건당 일반 호출 비용(하네스 v3 호출 종류별 환산 / 실행 수)"""
     todo = [i for i in items if lines.get(i["key"], {}).get("status") not in recon_agent.ENDED]
-    est = round(len(todo) * harness_mean_usd / BATCH_DISCOUNT, 2)
+    est = round(len(todo) * mean_usd, 2)
     return {"targets": len(items), "todo": len(todo), "estimated_usd": est}
 
 
-def _connect() -> sqlite3.Connection:
-    """앱·생성·정답 DB 모두 읽기 전용 — 이 실험은 app.sqlite에 쓰지 않는다"""
+PATHS = {
+    "app": ROOT / "data" / "app.sqlite",
+    "source": ROOT / "data" / "source.sqlite",
+    "truth": ROOT / "ground_truth" / "truth.sqlite",
+}
+
+
+def _connect(paths: dict = PATHS, truth: bool = True) -> sqlite3.Connection:
+    """모두 읽기 전용 — 이 실험은 app.sqlite에 쓰지 않는다. 에이전트가 쓰는 연결(truth=False)은 하네스 앱 연결처럼
+    정답 DB를 붙이지 않고, 대상 고르기·채점 연결만 붙인다"""
 
     def uri(p: Path) -> str:
-        return f"{p.resolve().as_uri()}?mode=ro"
+        return f"{Path(p).resolve().as_uri()}?mode=ro"
 
-    conn = sqlite3.connect(uri(ROOT / "data" / "app.sqlite"), uri=True)
+    conn = sqlite3.connect(uri(paths["app"]), uri=True)
     conn.row_factory = sqlite3.Row
-    conn.execute("ATTACH DATABASE ? AS source", (uri(ROOT / "data" / "source.sqlite"),))
-    conn.execute("ATTACH DATABASE ? AS truth", (uri(ROOT / "ground_truth" / "truth.sqlite"),))
+    conn.execute("ATTACH DATABASE ? AS source", (uri(paths["source"]),))
+    if truth:
+        conn.execute("ATTACH DATABASE ? AS truth", (uri(paths["truth"]),))
     return conn
 
 
@@ -327,6 +338,35 @@ def harness_stats(conn, keys: set[str]) -> dict[str, dict]:
     return out
 
 
+def harness_v3_totals(conn) -> dict:
+    """하네스 v3 호출 전체(앱 DB 호출 기록) — 일반 호출은 그대로, Batch 호출만 단가 절반을 되돌려 일반 호출로 환산한다.
+    라운드 배치는 남은 실행이 적으면 일반 호출로 바꾸므로(backend/harness/rounds.py) 전부를 Batch로 보면 부풀려진다.
+    호출 기록이 배치 단위라 건별로는 나눌 수 없어 v3 실행 전체(dev 밖 포함) 합계다"""
+    rows = conn.execute(
+        "SELECT ref_type, COUNT(*), SUM(cost_usd), SUM(input_tokens), SUM(output_tokens)"
+        " FROM ax_llm_calls WHERE task = ? AND prompt_version = ?"
+        " AND ref_type IN ('agent_run', 'batch') GROUP BY ref_type",
+        (TASK, PROMPT_VERSION),
+    ).fetchall()
+    by = {r[0]: r[1:] for r in rows}
+    plain, batch = by.get("agent_run", (0, 0.0, 0, 0)), by.get("batch", (0, 0.0, 0, 0))
+    return {
+        "plain_calls": plain[0],
+        "batch_calls": batch[0],
+        "cost_usd": round(plain[1] + batch[1], 4),
+        "cost_usd_plain": round(plain[1] + batch[1] / BATCH_DISCOUNT, 4),
+        "input_tokens": plain[2] + batch[2],
+        "output_tokens": plain[3] + batch[3],
+    }
+
+
+def scored_lines(lines: list[dict], keys: set[str]) -> dict[str, dict]:
+    """채점할 결과 줄 — 대상 건이고 끝난(done·handed_off) 것만. failed는 하네스 results()처럼 결과 없음"""
+    return {
+        k: r for k, r in latest(lines).items() if k in keys and r["status"] in recon_agent.ENDED
+    }
+
+
 def _calls(rows: list[dict]) -> dict:
     n = len(rows) or 1
 
@@ -351,18 +391,17 @@ def compare(conn, today: date, path: Path = RUNS) -> dict:
 
     items = dev_items(conn, today)
     keys = {i["key"] for i in items}
-    lg_lines = {k: r for k, r in latest(read_runs(path)).items() if k in keys}
+    lg_lines = scored_lines(read_runs(path), keys)
     agents = {k: {"run_id": k, "status": r["status"], "tool_calls": r["tool_calls"],
                   "cost_usd": r["cost_usd"], "cause": r["cause"]} for k, r in lg_lines.items()}  # fmt: skip
     h = harness_stats(conn, keys)
     hs, ls = score(conn, "dev", today), score(conn, "dev", today, agents=agents)
     pick = ("agent", "agent_by_group", "abstain", "missing", "pair", "steps_mean")
-    harness_calls = _calls(list(h.values()))
-    harness_calls["cost_usd_plain"] = round(harness_calls["cost_usd"] / BATCH_DISCOUNT, 4)
     return {
         "targets": len(items),
         "rule": hs["rule"],
-        "harness": {k: hs[k] for k in pick} | {"calls": harness_calls},
+        "harness": {k: hs[k] for k in pick}
+        | {"calls": _calls(list(h.values())), "v3_all": harness_v3_totals(conn)},
         "langgraph": {k: ls[k] for k in pick} | {"calls": _calls(list(lg_lines.values()))},
     }
 
@@ -382,12 +421,16 @@ def main(argv=None) -> None:
         return
     items = dev_items(conn, today)[: args.limit]
     if args.plan:
-        h = harness_stats(conn, {i["key"] for i in items})
-        mean = sum(r["cost_usd"] for r in h.values()) / (len(h) or 1)
+        runs = conn.execute(
+            "SELECT COUNT(*) FROM ax_agent_runs WHERE agent = ? AND prompt_version = ?"
+            " AND status IN ('done', 'handed_off')",
+            (recon_agent.AGENT, PROMPT_VERSION),
+        ).fetchone()[0]
+        mean = harness_v3_totals(conn)["cost_usd_plain"] / (runs or 1)
         print(json.dumps(plan(items, latest(read_runs(RUNS)), mean)))
         return
     gw = Gateway(load_config(), JsonlLog(LLM_LOG), scope="generator")
-    print(run(gw, conn, items, today, RUNS, CHECKPOINTS))
+    print(run(gw, _connect(truth=False), items, today, RUNS, CHECKPOINTS))
 
 
 if __name__ == "__main__":
