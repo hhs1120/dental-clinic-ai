@@ -1,13 +1,14 @@
 """eval.py — 평가 실행. 정의는 docs/치과 AX - 평가 설계.md §7.
 
   uv run python -m evaluation.eval --split dev [--retrieval-only] [--prompt-version v2] [--condition reranker=off]
-  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|auto|retrieval|chat [--prompt-version v2] [--condition …] [--force]
+  uv run python -m evaluation.eval --split test --section classification|judge|crosscheck|auto|retrieval|chat|followup [--prompt-version v2] [--condition …] [--force]
   → reports/eval_<split>_<condition>_<시각>.md + 같은 이름 .json(make gate가 읽음) + reports/eval_runs.jsonl 1줄
 
 - DB는 app.sqlite(앱 결과)에 source.sqlite(생성 데이터)·truth.sqlite(정답)를 붙여 읽는다(앱 설계 §7).
 - 분류(①)는 앱이 쓴 분류·판정·투표 테이블을 읽기만 한다. RAG(③)는 앱의 search·chat을 같은 프로세스에서 호출한다(rag.RagApp,
   backend/eval_hooks.py의 make_app(app_db, source_db)) — 앱이 없으면 RAG 절은 건너뛰고, 앱 경고(rag 색인·리랭커)가 있으면 test를 거절한다. 평가 때 게이트웨이 파일 캐시·is_eval 기록은 앱 쪽 훅의 일
-- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·자동 종결·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건),
+- test는 묶음마다 1회: 한 번에 묶음 하나(분류·버전 / 판정·판정기 버전 / 교차검증·자동 종결·분류 버전 × 판정기 버전 / 검색·조건 / 챗·조건 /
+  후속 처리·후속 프롬프트 버전 × 활성 분류 버전),
   이력에 같은 묶음이 있으면 AlreadyRun — 다시는 --force.
   test의 --condition은 기본 조건을 다시 돌리지 않고 이력의 기본 조건 test 결과(문항별 통과 여부)와 비교한다
 - 건별 목록(틀린 통화, 구제/손실·실패 문항)은 dev에서만
@@ -59,8 +60,11 @@ SECTIONS = (
     "auto",
     "retrieval",
     "chat",
-)  # test 묶음 — 분류·판정·교차검증·자동 종결은 버전, 검색·챗은 조건 단위로 1회
-VERSIONED = ("classification", "judge", "crosscheck", "auto")
+    "followup",
+)  # test 묶음 — 분류·판정·교차검증·자동 종결·후속 처리는 버전, 검색·챗은 조건 단위로 1회
+VERSIONED = ("classification", "judge", "crosscheck", "auto")  # --prompt-version을 받는 묶음
+# 이력 키가 버전인 묶음 — 후속 처리는 지금 후속 프롬프트 버전 × 활성 분류 버전을 코드가 정한다(평가 설계 §7)
+VERSION_KEYED = (*VERSIONED, "followup")
 
 
 class AlreadyRun(Exception):
@@ -108,8 +112,38 @@ def _stored_base(reports_dir: Path, history: list[dict]) -> list[dict] | None:
     return None
 
 
+def _followup_test_ready(conn, runs_path: Path | None, acts_path: Path | None) -> str:
+    """test 후속 처리 묶음을 돌릴 수 있는지 — 모든 모수 통화에 지금 버전 처리 정답 라벨과 지금 후속 버전·활성 분류 행의
+    실행이 있어야 한다(빠지면 오답·실행 전으로 세어 1회 기회를 소진하므로 이력을 쓰기 전에 거절, 평가 설계 §5·§7).
+    이력 키 = 후속 프롬프트 버전 × 활성 분류 버전"""
+    uids = call_actions.eval_calls(conn, ("test",))["test"]
+    if not uids:
+        raise EvalRefused(
+            "test 후속 처리 모수 통화가 없음 — 활성 분류·골드 모두 할 일인 test 판정 풀 통화"
+        )
+    acts = {
+        r["call_uid"]: r
+        for r in (call_actions.load(acts_path) if acts_path and acts_path.exists() else [])
+    }
+    unlabeled = sum(
+        u not in acts or acts[u].get("prompt_version") != call_actions.PROMPT_VERSION for u in uids
+    )
+    if unlabeled:
+        raise EvalRefused(
+            f"test 처리 정답 라벨이 없거나 옛 버전인 통화 {unlabeled}/{len(uids)} — make action-label 먼저"
+        )
+    runs = followup.load(runs_path) if runs_path else []
+    truth = call_actions.truth(list(acts.values()))
+    not_run = followup.score(conn, runs, truth, {"test": uids})["test"]["not_run"]
+    if not_run:
+        raise EvalRefused(
+            f"test 후속 처리 실행 전 통화 {not_run}/{len(uids)} — python -m evaluation.followup run --split test 먼저"
+        )
+    return f"{followup.followup_version()}×{active_versions(conn)[0]}"
+
+
 def _key(section: str, condition: str, prompt_version: str) -> str:
-    return prompt_version if section in VERSIONED else condition
+    return prompt_version if section in VERSION_KEYED else condition
 
 
 def run(
@@ -142,7 +176,7 @@ def run(
         section = section or ("retrieval" if retrieval_only else None)
         if section not in SECTIONS:
             raise EvalRefused(
-                "test는 --section 하나(classification·judge·crosscheck·auto·retrieval·chat)만 돌린다 (평가 설계 §7)"
+                "test는 --section 하나(classification·judge·crosscheck·auto·retrieval·chat·followup)만 돌린다 (평가 설계 §7)"
             )
         if section in VERSIONED and not prompt_version:
             raise EvalRefused(f"test {section}는 --prompt-version 하나")
@@ -150,7 +184,7 @@ def run(
             "--retrieval-only"
             if retrieval_only and section != "retrieval"
             else "--condition"
-            if condition and section in VERSIONED
+            if condition and section in VERSION_KEYED
             else "--prompt-version"
             if prompt_version and section not in VERSIONED
             else None
@@ -188,7 +222,9 @@ def run(
             if not jv:
                 raise EvalRefused("자동 종결을 잴 판정기 버전을 못 정함")
             pv = f"{prompt_version}×{jv}"
-        if section not in VERSIONED and app is None:
+        if section == "followup":
+            pv = _followup_test_ready(conn, followup_runs, call_actions_path)
+        if section in rag.PARTS and app is None:
             raise EvalRefused("앱 없음 — test RAG는 앱(backend/eval_hooks.py)이 생긴 뒤에")
         history = [
             h
@@ -211,7 +247,7 @@ def run(
         (("retrieval",) if retrieval_only else rag.PARTS)
         if dev
         else (section,)
-        if section not in VERSIONED
+        if section in rag.PARTS
         else ()
     )
     parts = tuple(p for p in parts if p != "chat" or has_chat)
@@ -312,17 +348,20 @@ def run(
                 result["autoclose_by_judge"] = [
                     autoclose.evaluate(conn, split, a, b) for b in judges
                 ]
-    if dev and call_actions_path and call_actions_path.exists():
-        # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval이 쌓은 줄. test 정답 라벨은 아직 없다
-        acts = call_actions.load(call_actions_path)
+    if (dev or section == "followup") and call_actions_path and call_actions_path.exists():
+        # 후속 처리안(평가 설계 §5) — 정답은 LLM 라벨 + 사람 표본, 실행은 make followup-eval(test는
+        # python -m evaluation.followup run --split test)이 쌓은 줄. dev는 dev·검증 구간, test는 test 판정 풀만
+        spans = call_actions.DEV_PARTS if dev else ("test",)
+        pop = {r["call_uid"] for k in spans for r in call_actions.split_population(conn)[k]}
+        acts = [r for r in call_actions.load(call_actions_path) if r["call_uid"] in pop]
         runs = followup.load(followup_runs) if followup_runs else []
-        truth, split_calls = call_actions.truth(acts), call_actions.eval_calls(conn)
+        truth, split_calls = call_actions.truth(acts), call_actions.eval_calls(conn, spans)
         versions = sorted({r["prompt_version"] for r in runs if r.get("prompt_version")})
         result["followup"] = {
             "prompt_version": followup.followup_version(),
             "score": followup.score(conn, runs, truth, split_calls),
-            "by_version": {  # 버전 비교 — 같은 통화·같은 정답으로
-                v: followup.score(conn, runs, truth, split_calls, v) for v in versions
+            "by_version": {  # 버전 비교 — 같은 통화·같은 정답으로(test는 지금 버전 하나)
+                v: followup.score(conn, runs, truth, split_calls, v) for v in versions if dev
             },
             "labels": len(acts),
             # 다시 라벨하다 실패해 옛 프롬프트 버전으로 남은 줄 — 0이 아니면 make action-label을 다시

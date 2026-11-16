@@ -68,7 +68,7 @@ prompt-gate:
 	$(if $(and $(A),$(B),$(ITEM)),,$(error A=기준 버전 B=후보 버전 ITEM=목표 항목 필요))
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.prompt_gate --a $(A) --b $(B) --item $(ITEM)
 
-# ① 처리 정답(설계 "PR ② 처리 정답") — Opus 라벨(과금, 빠진 건만, Batch)·사람 표본 터미널 화면
+# ① 처리 정답(설계 "PR ② 처리 정답") — Opus 라벨(과금, 빠진 건만, Batch — dev·검증·test 판정 풀)·사람 표본 터미널 화면(dev·검증만)
 action-label:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.call_actions label
 
@@ -79,7 +79,7 @@ action-audit:
 followups:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.followup run $(if $(REDO),--redo)
 
-# ① 후속 처리 평가 실행(evaluation/followup.py) — 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
+# ① 후속 처리 평가 실행(evaluation/followup.py) — dev·검증 구간 채점 모수 통화에 app.sqlite 사본(evaluation/runs/)에서 라운드 배치(과금, 빠진 건만). NO_BATCH=1이면 일반 호출만
 followup-eval:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.followup run $(if $(NO_BATCH),--no-batch)
 

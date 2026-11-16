@@ -1,6 +1,7 @@
 """① 후속 처리 평가 (평가 설계 §5, 설계 docs/superpowers/specs/2026-11-08-followup-autoclose-design.md "PR ②").
 평가 실행: 채점 모수 통화(evaluation/call_actions.py eval_calls)에 후속 에이전트를 app.sqlite 사본에서 라운드 배치로
-돌려 evaluation/followup_runs.jsonl에 쌓는다 — 판정 풀 통화가 들어가 앱 DB에는 쓰지 않는다. 채점은 저장된 줄만 읽는다."""
+돌려 evaluation/followup_runs.jsonl에 쌓는다 — 판정 풀 통화가 들어가 앱 DB에는 쓰지 않는다. 채점은 저장된 줄만 읽는다.
+기본은 dev·검증 구간, test 판정 풀은 run --split test(사람, 평가 설계 §2.7) — 채점은 eval.py --split test --section followup."""
 
 import argparse
 import json
@@ -13,7 +14,13 @@ from backend.calls import active_versions
 from backend.harness import rounds
 from backend.harness.loop import Runner
 from backend.harness.store import RunStore, SqliteLlmLog
-from evaluation.call_actions import classifier_todo, eval_calls, gold_todo_calls, split_population
+from evaluation.call_actions import (
+    DEV_PARTS,
+    classifier_todo,
+    eval_calls,
+    gold_todo_calls,
+    split_population,
+)
 from shared.clinic import load_clinic
 from shared.llm import Gateway, load_config
 
@@ -77,10 +84,12 @@ def run(
     gw_factory=None,
     searcher=None,
     batch: bool = True,
+    parts: tuple[str, ...] = DEV_PARTS,
     min_batch: int = rounds.ROUND_BATCH_MIN,
     poll_seconds: int = 60,
 ) -> dict:
-    """줄이 없는 모수 통화만. 후검증 실패는 한 번 더(앱과 같은 규칙) — {"done", "failed", "cost_usd"}"""
+    """줄이 없는 모수 통화만(parts 구간 — 기본은 dev·검증, test 판정 풀은 사람이 따로, 평가 설계 §2.7).
+    후검증 실패는 한 번 더(앱과 같은 규칙) — {"done", "failed", "cost_usd"}"""
     _copy(app_db, copy, state)
     conn = db.connect(copy, source_db)
     conn.execute("ATTACH DATABASE ? AS truth", (f"{truth_db.resolve().as_uri()}?mode=ro",))
@@ -94,7 +103,7 @@ def run(
         (r["call_uid"], r.get("classification_id"), r.get("prompt_version")) for r in load(out)
     }
     todo = {}
-    for u in (u for us in eval_calls(conn).values() for u in us):
+    for u in (u for us in eval_calls(conn, parts).values() for u in us):
         found = followup.active(conn, u, include_pool=True)
         if found and (u, found[1]["id"], pv) not in done:  # 키 = (통화, 분류 행, 프롬프트 버전)
             todo[u] = found
@@ -249,6 +258,12 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m evaluation.followup")
     p.add_argument("command", choices=("run",))
     p.add_argument("--no-batch", action="store_true", help="라운드 배치 없이 일반 호출만")
+    p.add_argument(
+        "--split",
+        choices=("dev", "test"),
+        default="dev",
+        help="dev = dev 판정 풀·silver 검증 구간(기본), test = test 판정 풀(사람, 평가 설계 §2.7)",
+    )
     args = p.parse_args(argv)
     data = ROOT / "data"
     # 문서 검색은 원본 색인을 읽기만 한다 — 키·색인이 없으면 문서 검색 없이
@@ -261,6 +276,7 @@ def main(argv=None) -> None:
         ROOT / "ground_truth" / "truth.sqlite",
         searcher=searcher,
         batch=not args.no_batch,
+        parts=DEV_PARTS if args.split == "dev" else ("test",),
     )
     print(f"후속 처리 평가 실행 {r}")
 
