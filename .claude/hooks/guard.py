@@ -17,7 +17,7 @@ PreToolUse
   명령 출력으로 먹이는 SQL. -readonly·mode=ro는 통과. make data 같은 정식 명령은 통과
 - Bash 확인 창: 과금·되돌리기 어려운 명령은 사용자 승인 — main으로(HEAD·@는 현재 브랜치)·강제·--mirror·--all push
   (feat 브랜치 push와 PR 만들기는 그냥), PR 머지, CLAUDE.md "(과금)" 명령(make 대상·backend·evaluation 일괄 모듈과 그
-  스크립트 경로, 무료 모드 PLAN=·--plan·--stats·--help는 제외), 모든 --split test 평가, 저장소 안 지우기(보호 경로 밖·worktree
+  스크립트 경로, 무료 모드 PLAN=·--plan·--stats·--help·-h는 제외 — 모듈 인자에서만), 모든 --split test 평가, 저장소 안 지우기(보호 경로 밖·worktree
   폴더 자체·필터로 거르는 find), xargs rm, git branch -D·stash drop·clear. 명령을 해석하지 못했는데 위험 단어가 있거나,
   검사 중 예외가 나거나, 훅 입력을 읽지 못하면 확인 창(Bash가 조용히 통과하지 않게)
 - Read·Grep 막기: .env(비밀) — Grep은 glob 인자도 본다. 값이 대화에 남지 않게
@@ -27,6 +27,7 @@ PreToolUse
   — CLAUDE.md 절대 규칙. 편집 내용만 보는 얕은 검사이고 backend 쪽 근거는 tests/test_no_ground_truth_import.py가 지킨다
 - --readonly(리뷰·문서 점검 에이전트): 저장소를 바꾸는 Bash(쓰는 git·make·rm·저장소 안 리디렉션 등)를 막는다.
   명령 문자열만 보므로 프로그램이 속에서 쓰는 것까지는 못 막는다 — 부르는 쪽이 git status 전후를 비교한다
+- Bash 공통: bash·sh·zsh -c '…'와 eval은 안쪽 명령을 같은 규칙으로 본다(스크립트 파일·python -c 속은 못 본다)
 PostToolUse
 - 정형 생성 단계·생성 프롬프트를 고치면 캐시 미스 확인을 알린다 — CLAUDE.md 절대 규칙
 
@@ -40,6 +41,7 @@ from __future__ import (
 
 import fnmatch
 import glob
+import itertools
 import json
 import os
 import re
@@ -84,6 +86,7 @@ READONLY_GIT = {
 READONLY_MAKE = {"test", "lint", "verify"}
 _MAKE_OPTS_WITH_ARG = {"-C", "-f", "-j", "-I", "-o", "-W", "--directory", "--file"}
 _PREFIX = {"env", "command", "sudo", "nice", "time", "exec"}  # 앞붙임 — 그 뒤가 진짜 명령
+_SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}  # -c '…'로 감싸면 안쪽 명령을 본다
 _REDIRECTS = {">", ">>", "&>", "&>>", ">|"}
 ROOT = Path(__file__).resolve().parents[2]
 # 히어독은 본문만 지우고 여는 줄은 남긴다(여는 줄 뒤의 '&& git push'·'> 파일'도 검사하게)
@@ -111,9 +114,28 @@ def _segments(command: str) -> list[list[str]]:
         if seg and Path(seg[0]).name == "env" and (not tokens or tokens[0].startswith("-")):
             # 'env'·'env -0' — 뒤에 실행할 명령 없이 변수 전부 출력
             tokens = ["env"]
-        if tokens:
+        if (inner := _shell_inner(tokens)) is not None:
+            out.extend(_segments(inner))  # 감싼 명령도 같은 규칙으로
+        elif tokens:
             out.append(tokens)
     return out
+
+
+def _shell_inner(tokens: list[str]) -> str | None:
+    """bash·sh·zsh -c '…'·eval … → 안쪽 명령 문자열(감싼 명령이 아니면 None)"""
+    if not tokens:
+        return None
+    prog = Path(tokens[0]).name
+    if prog == "eval":
+        return " ".join(tokens[1:])
+    if prog not in _SHELLS:
+        return None
+    for i, t in enumerate(tokens[1:], 1):
+        if not t.startswith("-"):
+            return None  # 스크립트 파일 — 문자열로 볼 수 없다
+        if not t.startswith("--") and "c" in t[1:]:
+            return tokens[i + 1] if i + 1 < len(tokens) else None
+    return None
 
 
 def _unprefix(tokens: list[str]) -> list[str]:
@@ -795,24 +817,30 @@ def _push_risk(args: list[str], cwd: Path) -> str | None:
     return None
 
 
-def _module(tokens: list[str]) -> str:
-    """python이 실행하는 -m 모듈 또는 backend/x.py·evaluation/x.py 스크립트 → 모듈 이름.
-    경로를 읽기만 하는 명령(grep·sed·cat·git diff·ruff·pytest)은 실행이 아니라 빈 문자열"""
+def _module(tokens: list[str]) -> tuple[str, list[str]]:
+    """python이 실행하는 -m 모듈 또는 backend/x.py·evaluation/x.py 스크립트 → (모듈 이름, 그 뒤 인자).
+    경로를 읽기만 하는 명령(grep·sed·cat·git diff·ruff·pytest)은 실행이 아니라 ("", [])"""
     if tokens[:2] == ["uv", "run"]:  # uv run 옵션(--env-file .env 등)을 건너뛴 첫 프로그램
         i = 2
         while i < len(tokens) and tokens[i].startswith("-"):
             i += 2 if tokens[i] in _UV_VALUE_OPTS else 1
         tokens = tokens[i:]
     if tokens and (m := _SCRIPT.fullmatch(tokens[0])):
-        return f"{m.group(1)}.{m.group(2)}"
+        return f"{m.group(1)}.{m.group(2)}", tokens[1:]
     if not tokens or not _PYTHON.fullmatch(Path(tokens[0]).name):
-        return ""
+        return "", []
     for i, t in enumerate(tokens[1:], 1):
         if t == "-m":
-            return tokens[i + 1] if i + 1 < len(tokens) else ""
+            return (tokens[i + 1], tokens[i + 2 :]) if i + 1 < len(tokens) else ("", [])
         if not t.startswith("-"):  # 첫 위치 인자가 스크립트(-c 코드는 경로가 아니다)
-            return f"{m.group(1)}.{m.group(2)}" if (m := _SCRIPT.fullmatch(t)) else ""
-    return ""
+            m = _SCRIPT.fullmatch(t)
+            return (f"{m.group(1)}.{m.group(2)}", tokens[i + 1 :]) if m else ("", [])
+    return "", []
+
+
+def _module_args(args: list[str]) -> list[str]:
+    """모듈이 받는 인자 — '--'·리디렉션(>·<·>(…)) 앞까지. 다른 도구의 -h(sort -h)를 무료 플래그로 보지 않게"""
+    return list(itertools.takewhile(lambda a: a != "--" and not set(a) & set("<>"), args))
 
 
 def _ask_more(tokens: list[str], sub, cwd: Path) -> str | None:
@@ -822,10 +850,10 @@ def _ask_more(tokens: list[str], sub, cwd: Path) -> str | None:
         paid = [t for t in _make_targets(tokens[1:]) if t in PAID_MAKE]
         if paid and not (paid == ["nightly"] and any(t.startswith("PLAN=") for t in tokens)):
             return f"make {paid[0]} — 과금 명령이라 확인한다(CLAUDE.md 명령의 '(과금)')"
-    module = _module(tokens)
-    if module in PAID_MODULES and not FREE_FLAGS & set(tokens):
+    module, args = _module(tokens)
+    if module in PAID_MODULES and not FREE_FLAGS & set(_module_args(args)):
         subs = PAID_MODULES[module]
-        if subs is None or subs & set(tokens):
+        if subs is None or subs & set(args):
             return f"{module} — 과금 일괄이라 확인한다"
     if any(_delete_risk(tokens, t, cwd) == "ask" for t in _rm_targets(tokens)):
         return "저장소 안 파일·폴더를 지운다 — 확인한다"
