@@ -137,3 +137,66 @@ def test_same_steps_as_harness(conn):
         return [(s["kind"], s["tool"], s["args"], s["hook_status"], s["rule_id"]) for s in steps]
 
     assert shape(st["steps"])[1:] == shape(harness)[1:]  # 입력 글만 다르다
+
+
+# ── Task 3: 재개 ─────────────────────────────────────────────────
+
+
+def _two_lookups_then_submit(conn):
+    """첫 턴에 조회 두 개를 한꺼번에 부르는 대본 — 노드 안에서 끊길 자리를 만든다"""
+    from dataclasses import replace
+
+    from tests.backend.test_recon_agent import Script
+
+    class Two(Script):
+        def complete(self, alias, **kw):
+            r = super().complete(alias, **kw)
+            if self.pos[kw["ref"][1]] == 1:  # 첫 턴
+                calls = tuple(
+                    {"id": f"tu-{i}", "name": LOOK[1], "input": LOOK[2]} for i in range(2)
+                )
+                return replace(r, tool_calls=calls,
+                               content=[{"type": "tool_use", **c} for c in calls])  # fmt: skip
+            return r
+
+    return Two(conn, LOOK, submit(evidence=(2,)))
+
+
+def test_resume_after_interrupt(conn, tmp_path, monkeypatch):
+    """도구 노드 안에서 두 번째 조회 중에 끊고 같은 thread로 이어 가면: 결과는 끊지 않은 실행과 같고 모델 호출은 다시
+    나가지 않지만, 노드 단위로 다시 돌아 끊기 전에 끝난 첫 조회를 한 번 더 실행한다(하네스는 도구 단계마다 기록해
+    다시 하지 않는다 — backend/harness/loop.py drive). 읽기 전용 조회라 결과는 같고, 쓰기 도구였다면 두 번 쓴다"""
+    import sqlite3
+
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    real = lg.call_tool
+    ran = {"n": 0, "fail_at": 2}
+
+    def counting(*a):  # 끝까지 실행된 조회만 센다
+        if ran["n"] + 1 == ran["fail_at"]:
+            raise RuntimeError("끊김")
+        ran["n"] += 1
+        return real(*a)
+
+    monkeypatch.setattr(lg, "call_tool", counting)
+    k = key(conn)
+
+    base_gw = _two_lookups_then_submit(conn)
+    ran["fail_at"] = -1
+    base = lg.investigate(lg.build_graph(base_gw, conn), k, "입력")
+    base_tools = ran["n"]
+
+    ran.update(n=0, fail_at=2)
+    gw = _two_lookups_then_submit(conn)
+    saver = SqliteSaver(sqlite3.connect(tmp_path / "cp.sqlite", check_same_thread=False))
+    graph = lg.build_graph(gw, conn, saver)
+    with pytest.raises(RuntimeError, match="끊김"):
+        lg.investigate(graph, k, "입력")
+    ran["fail_at"] = -1
+    st = lg.investigate(graph, k, "입력", resume=True)
+
+    assert lg.summary(st)["cause"] == lg.summary(base)["cause"] == "amount_typo"
+    assert st["model_calls"] == base["model_calls"] == 2
+    assert sum(gw.pos.values()) == 2  # 모델은 다시 부르지 않았다
+    assert ran["n"] == base_tools + 1  # 끊기 전 끝난 조회 1번을 다시 실행
