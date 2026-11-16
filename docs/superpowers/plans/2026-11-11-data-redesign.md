@@ -1,5 +1,7 @@
 # 데이터 재설계 Implementation Plan
 
+> **지금 읽는 법** — 결정 당시의 기록이라 본문은 그대로 둔다. "보일 자리"·"목표 범위"는 처음 데이터가 원인·근거마다 한 가지 모양뿐이라 단순 규칙도 거의 다 맞혀 평가셋이 규칙과 AI의 차이를 가려내지 못한 문제를 고치려던 것이다. 목표 범위는 규칙 기준선 점수로만 정한 평가셋 난이도이고(AI 결과로 맞추지 않음), 변형마다 정답을 가린 판독으로 풀리는지 확인했으며 test는 보지 않았다. AI 결과를 보고 고친 모양 몇 건은 그 dev 수치를 독립 측정으로 보지 않는다. 수치는 가상 데이터 기준이다. 지금의 해석은 [[치과 AX - AI 실험 기록]] §24.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** ⑧-1(8b)·⑧-2(8c)·⑤-2 차트 서술(5b·9b)에 "규칙은 속지만 글·행을 읽으면 풀리는" 사례를 섞어 데이터를 한 번 다시 만들고, ③ 평가셋을 보강해, dev 규칙 기준선을 목표 범위로 낮춘다.

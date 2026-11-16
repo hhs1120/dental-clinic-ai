@@ -12,8 +12,8 @@
 - `docs/치과 AX - 전환의 의미.md` — 전환 전후 업무 변화 (배경, 구현 스펙 아님)
 - `docs/치과 AX - AI 실험 기록.md` — AI 품질 실험의 문제·원인·시도·수치·한계 (구현 스펙 아님, 설계 문서에 경위를 넣지 않는 대신 여기에)
 - `docs/치과 AX - 프로젝트 소개.md` — 비개발자용 한 장 소개 (구현 스펙 아님)
-- `docs/치과 AX - 개발자 소개.md` — 팀원 모집용: 기술 스택·데이터 규모·기능별 AI·독립 과제·포트폴리오에 남는 것 (구현 스펙 아님)
-- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 앱 설계 §9(와이어프레임 `index-v2.html`과 그 예외), `index.html`은 비교용 이전 판. 데이터는 `make wireframe`
+- `docs/치과 AX - 개발자 소개.md` — 포트폴리오용 기술 소개: 기술 스택·데이터 규모·기능별 AI·구조·보여 주는 것 (구현 스펙 아님)
+- `docs/wireframe/` — 앱 화면 와이어프레임(클릭 HTML). 프론트 화면의 레이아웃·동작 기준은 앱 설계 §9(와이어프레임 `index-v2.html`과 그 예외). 데이터는 `make wireframe`
 
 ## 폴더
 - `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·(착수 때) 자동 개선·시나리오 DB
