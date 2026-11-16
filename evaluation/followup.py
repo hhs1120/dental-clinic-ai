@@ -1,7 +1,8 @@
 """① 후속 처리 평가 (평가 설계 §5, 설계 docs/superpowers/specs/2026-11-08-followup-autoclose-design.md "PR ②").
 평가 실행: 채점 모수 통화(evaluation/call_actions.py eval_calls)에 후속 에이전트를 app.sqlite 사본에서 라운드 배치로
 돌려 evaluation/followup_runs.jsonl에 쌓는다 — 판정 풀 통화가 들어가 앱 DB에는 쓰지 않는다. 채점은 저장된 줄만 읽는다.
-기본은 dev·검증 구간, test 판정 풀은 run --split test(사람, 평가 설계 §2.7) — 채점은 eval.py --split test --section followup."""
+기본은 dev·검증 구간, test 판정 풀은 run --split test(사람, 평가 설계 §2.7)가 evaluation/followup_test_runs.jsonl에 —
+채점은 eval.py --split test --section followup."""
 
 import argparse
 import json
@@ -29,6 +30,14 @@ RUNS_DIR = ROOT / "evaluation" / "runs"  # 커밋 안 함(.gitignore)
 COPY = RUNS_DIR / "followup.sqlite"
 STATE = RUNS_DIR / "followup_batch.json"
 OUT = ROOT / "evaluation" / "followup_runs.jsonl"
+# test 판정 풀은 실행 줄·사본(실행·LLM 기록)·Batch 상태를 따로 — 남은 dev 배치를 test가 받지 않게(평가 설계 §5)
+COPY_TEST = RUNS_DIR / "followup_test.sqlite"
+STATE_TEST = RUNS_DIR / "followup_batch_test.json"
+OUT_TEST = ROOT / "evaluation" / "followup_test_runs.jsonl"
+PATHS = {
+    "dev": (OUT, COPY, STATE),
+    "test": (OUT_TEST, COPY_TEST, STATE_TEST),
+}  # (실행 줄, 사본, 상태)
 
 
 def load(path: Path) -> list[dict]:
@@ -270,10 +279,14 @@ def main(argv=None) -> None:
     src = db.connect(data / "app.sqlite", data / "source.sqlite")
     src.execute("PRAGMA query_only = ON")  # 원본은 읽기만
     searcher = followup._searcher(src, load_clinic())
+    out, copy, state = PATHS[args.split]
     r = run(
         data / "app.sqlite",
         data / "source.sqlite",
         ROOT / "ground_truth" / "truth.sqlite",
+        out=out,
+        copy=copy,
+        state=state,
         searcher=searcher,
         batch=not args.no_batch,
         parts=DEV_PARTS if args.split == "dev" else ("test",),

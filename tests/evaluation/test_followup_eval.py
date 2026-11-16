@@ -343,7 +343,13 @@ def test_test_followup_refuses_without_labels_or_runs(tmp_path):
     assert not reports.exists()
 
 
-def test_test_followup_scores_test_only_once(tmp_path):
+def _json_of(out):
+    import json
+
+    return json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
+
+
+def test_test_followup_scores_test_only_once(tmp_path, monkeypatch):
     """test 묶음은 test 판정 풀만 집계로 — 후속 프롬프트 버전 × 활성 분류 버전마다 한 번"""
     import json
 
@@ -385,12 +391,22 @@ def test_test_followup_scores_test_only_once(tmp_path):
     data = json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
     f = data["followup"]
     assert list(f["score"]) == ["test"] and f["score"]["test"]["agent"]["k"] == 1
-    assert f["labels"] == 1 and data["prompt_version"] == f"{pv}×v1"
+    lv = call_actions.PROMPT_VERSION
+    assert f["labels"] == 1 and data["prompt_version"] == f"{pv}×v1×label-{lv}"
     assert data["classification"] is None and data["rag"] is None
-    assert "## ① 후속 처리" in out["report_path"].read_text(encoding="utf-8")
+    md = out["report_path"].read_text(encoding="utf-8")
+    assert "## ① 후속 처리" in md
+    assert "처리 정답 1통화(Opus 라벨만 — 사람 표본은 dev·검증 구간)" in md
+    assert "라벨 vs 사람" not in md
     with pytest.raises(ev.AlreadyRun):
         ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw)
     ev.run(conn, followup_runs=runs, call_actions_path=acts, force=True, **kw)
+    # 처리 정답 라벨 버전이 바뀌면 다른 묶음 — 정답이 바뀌었으니 다시 잴 수 있다
+    monkeypatch.setattr(call_actions, "PROMPT_VERSION", "v99")
+    rows = call_actions.load(acts)
+    _write(acts, [dict(r, prompt_version="v99") for r in rows])
+    again = _json_of(ev.run(conn, followup_runs=runs, call_actions_path=acts, **kw))
+    assert again["prompt_version"] == f"{pv}×v1×label-v99"
 
 
 def test_dev_report_followup_excludes_test(tmp_path):
@@ -409,7 +425,13 @@ def test_dev_report_followup_excludes_test(tmp_path):
             for u in ("c-0001", "c-0003")
         ],
     )
-    _write(runs, [{"call_uid": "c-0003", "action": "other", "status": "done", "cost_usd": 0}])
+    _write(
+        runs,
+        [
+            {"call_uid": "c-0003", "action": "other", "status": "done", "cost_usd": 0},
+            {"call_uid": "c-0003", "prompt_version": "v99", "action": "other", "status": "done"},
+        ],
+    )
     out = ev.run(
         conn,
         reports_dir=tmp_path / "r",
@@ -421,6 +443,35 @@ def test_dev_report_followup_excludes_test(tmp_path):
     data = json.loads(out["report_path"].with_suffix(".json").read_text(encoding="utf-8"))
     f = data["followup"]
     assert "test" not in f["score"] and f["labels"] == 1
+    assert "v99" not in f["by_version"]  # 버전 목록도 dev·검증 구간 실행 줄에서만
+    assert "라벨 vs 사람" in out["report_path"].read_text(encoding="utf-8")
     assert (
         data["rag"]["retrieval"]["hit5"]["n"] == 3
     )  # 후속 처리 절이 검색 절 구간을 건드리지 않는다
+
+
+def test_test_run_files_are_separate():
+    """test 실행은 실행 줄·사본(LLM 기록)·Batch 상태가 dev와 따로 — 남은 dev 배치를 test가 받지 않게(평가 설계 §5)"""
+    dev, test = ev_followup.PATHS["dev"], ev_followup.PATHS["test"]
+    assert dev == (ev_followup.OUT, ev_followup.COPY, ev_followup.STATE)
+    assert test[0].name == "followup_test_runs.jsonl"
+    assert test[2].name == "followup_batch_test.json"
+    assert not set(dev) & set(test)
+
+
+def test_eval_main_reads_runs_file_by_split(tmp_path, monkeypatch):
+    """eval.py는 dev면 dev 실행 줄, test면 test 실행 줄을 읽는다"""
+    from evaluation import eval as ev
+    from tests.evaluation.test_eval_cli import _db_files
+    from tests.evaluation.test_rag import FakeApp, make_rag_db
+
+    conn = make_rag_db(tmp_path)
+    seen = []
+    monkeypatch.setattr(ev, "load_app", lambda db, source: FakeApp())
+    monkeypatch.setattr(
+        ev, "run", lambda conn, **kw: seen.append(kw["followup_runs"]) or {"report_path": "x"}
+    )
+    args = _db_files(conn, tmp_path) + ["--reports-dir", str(tmp_path / "out")]
+    ev.main(["--split", "dev"] + args)
+    ev.main(["--split", "test", "--section", "followup"] + args)
+    assert seen == [ev_followup.OUT, ev_followup.OUT_TEST]
