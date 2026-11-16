@@ -16,6 +16,9 @@ from shared.call_labels import todo_items
 
 log = logging.getLogger(__name__)
 TODAY_WINDOW_DAYS = 7  # "오늘 할 일"에 오르는 생성 통화 — 기준일 전 이 날수 안
+PATIENT_CALLS_MAX = (
+    3  # 통화 상세·환자 요약 카드의 "지난 통화" 건수 — 더 있으면 통화 기록에서 전체 보기
+)
 CALLS_CTE = (
     "WITH calls AS ("
     " SELECT a.call_uid, a.direction, a.started_at AS at, a.transcript, a.duration_sec,"
@@ -249,6 +252,7 @@ def _card(r, checks: dict) -> dict:
         "purpose": labels["primary_purpose"] if labels else None,
         "urgency": labels["urgency"] if labels else None,
         "emergency": bool(labels and labels["emergency"]),
+        "complaint": bool(labels and labels["complaint"]),
         "disagree": r["disagree_items"] is not None,
         "todo_total": len(todo),
         "todo_left": sum(not t["done"] for t in todo),
@@ -297,6 +301,28 @@ def list_calls(
         d["count"] = counts[d["date"]]
     last = page[-1] if more else None
     return {"days": days, "next": f"{last['at']}|{last['call_uid']}" if last else None}
+
+
+def patient_calls(conn: sqlite3.Connection, chart_no: str, *, exclude: str | None = None) -> dict:
+    """그 환자의 통화 최신순 PATIENT_CALLS_MAX건(지금 연 통화 exclude는 뺀다)과 전체 수(그 통화까지 —
+    "전체 보기"로 연 통화 기록의 건수와 같게). 범위는 통화 기록과 같다(판정 풀 밖 생성 통화 + 새로 추가한 통화,
+    기능 정의 §4 ① 통화 상세)"""
+    rows = _rows(conn, "calls.chart_no = :chart", {"chart": chart_no})
+    top = [r for r in rows if r["call_uid"] != exclude][:PATIENT_CALLS_MAX]
+    checks = _checks(conn, [r["classification_id"] for r in top if r["classification_id"]])
+    return {"calls": [_card(r, checks) for r in top], "total": len(rows)}
+
+
+def call_emergency(conn: sqlite3.Connection, uids: list[str]) -> dict[str, bool | None]:
+    """예약을 잡은 통화의 응급 여부 — 활성 분류 값, 분류 전·실패면 None. 판정 풀 통화는 통화 화면처럼 빠진다
+    (기능 정의 §4 앱 구성 일별 예약표)"""
+    if not uids:
+        return {}
+    marks = ", ".join(f":u{i}" for i in range(len(uids)))
+    rows = _rows(conn, f"calls.call_uid IN ({marks})", {f"u{i}": u for i, u in enumerate(uids)})
+    return {
+        r["call_uid"]: bool(labels["emergency"]) if (labels := _labels(r)) else None for r in rows
+    }
 
 
 def call_detail(conn: sqlite3.Connection, call_uid: str, today: date | None = None) -> dict | None:

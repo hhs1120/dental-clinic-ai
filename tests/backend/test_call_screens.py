@@ -348,3 +348,54 @@ def test_reclassify_clears_old_checks(cconn):
     )
     calls.classify_one(cconn, _gw(cconn), item["call_uid"])
     assert cconn.execute("SELECT COUNT(*) FROM ax_todo_checks").fetchone()[0] == 0
+
+
+def _pasted(conn, uid, at, patient=1):
+    conn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, caller_phone,"
+        " patient_id, added_by, added_at) VALUES (?, 'outbound', ?, '직원: 네', '010-1111-2222', ?,"
+        " '데스크', '2026-12-01 09:00:00')",
+        (uid, at, patient),
+    )
+    conn.commit()
+
+
+def test_patient_calls_skips_pool_and_current(cconn):
+    """그 환자의 통화 — 판정 풀 통화(c-0002)는 통화 화면처럼 빠지고, 지금 연 통화는 뺀다"""
+    got = calls.patient_calls(cconn, "C-00001")
+    assert [c["call_uid"] for c in got["calls"]] == ["c-0001"] and got["total"] == 1
+    # total은 지금 연 통화까지 — "전체 보기"로 연 통화 기록의 건수와 같게
+    assert calls.patient_calls(cconn, "C-00001", exclude="c-0001") == {"calls": [], "total": 1}
+    assert calls.patient_calls(cconn, "C-99999") == {"calls": [], "total": 0}
+
+
+def test_patient_calls_newest_first_limit_and_pasted(cconn):
+    """새로 추가한 통화도 들고, 최신순 PATIENT_CALLS_MAX건, total은 전체 수"""
+    for i in range(4):
+        _pasted(cconn, f"p-000{i + 1}", f"2026-11-2{i} 15:00:00")
+    got = calls.patient_calls(cconn, "C-00001")
+    assert got["total"] == 5
+    assert len(got["calls"]) == calls.PATIENT_CALLS_MAX == 3
+    assert [c["call_uid"] for c in got["calls"]] == ["c-0001", "p-0004", "p-0003"]
+    assert got["calls"][1]["direction"] == "outbound" and got["calls"][1]["status"] is None
+
+
+def test_card_has_complaint_flag(cconn):
+    cconn.execute(
+        "UPDATE ax_call_classifications SET labels = ? WHERE call_uid = 'c-0001'",
+        (json.dumps(LABELS | {"complaint": 1}),),
+    )
+    card = calls.patient_calls(cconn, "C-00001")["calls"][0]
+    assert card["complaint"] is True and card["purpose"] == "book" and card["summary"] == "요약"
+
+
+def test_call_emergency_for_booking_calls(cconn):
+    """예약표 "어떻게 잡혔나"의 응급 여부 — 활성 분류의 값, 분류 전이면 None, 판정 풀·없는 통화는 빠진다"""
+    _pasted(cconn, "p-0001", "2026-11-20 15:00:00")
+    cconn.execute(
+        "UPDATE ax_call_classifications SET labels = ? WHERE call_uid = 'c-0004'",
+        (json.dumps(LABELS | {"emergency": 1}),),
+    )
+    got = calls.call_emergency(cconn, ["c-0001", "c-0002", "c-0004", "p-0001", "c-9999"])
+    assert got == {"c-0001": False, "c-0004": True, "p-0001": None}
+    assert calls.call_emergency(cconn, []) == {}

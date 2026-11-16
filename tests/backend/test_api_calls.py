@@ -312,3 +312,10 @@ def test_followup_is_per_classification(client, tmp_path):
 
 def test_labels_has_action(client):
     assert client.get("/labels").json()["action"]["scaling_timing"] == "스케일링 시기 안내"
+
+
+def test_patient_calls(client):
+    r = client.get("/calls/patient/C-00001").json()
+    assert [c["call_uid"] for c in r["calls"]] == ["c-0001"] and r["total"] == 1
+    r = client.get("/calls/patient/C-00001", params={"exclude": "c-0001"}).json()
+    assert r == {"calls": [], "total": 1}

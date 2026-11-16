@@ -82,3 +82,45 @@ test("이미 확인된 통화에 확인함 — 오류 띠 없이 띠가 사라�
   await expect(detail).not.toContainText("사람 판정");
   await expect(page.getByText("확인할 통화가 아닙니다")).toHaveCount(0); // 오류 띠 없음
 });
+
+// 이 환자의 지난 통화(기능 정의 §4 ①) — C-01886은 판정 풀 밖 통화 5건(c-1066이 가장 최근)
+test("지난 통화 — 최근 3건, 누르면 그 통화로, 더 있으면 전체 보기", async ({
+  page,
+}) => {
+  await page.goto("/calls?tab=history&call=c-1066");
+  const past = page.getByRole("list", { name: "이 환자의 지난 통화" });
+  await expect(past.getByRole("listitem")).toHaveCount(3);
+  await past.getByRole("button").first().click();
+  await expect(page).toHaveURL(/call=c-1341/);
+  // 건수는 지금 연 통화까지 — 열린 통화 기록의 건수와 같고, 보던 통화 패널은 열린 채
+  await page
+    .getByRole("link", { name: "통화 기록에서 전체 보기(5건)" })
+    .click();
+  await expect(page).toHaveURL(/q=C-01886/);
+  await expect(page).toHaveURL(/call=c-1341/);
+  const search = page.getByLabel("통화 검색");
+  await expect(search).toHaveValue("C-01886");
+  await expect(
+    page.getByRole("complementary", { name: "통화 상세" }),
+  ).toBeVisible();
+  // 검색창을 고친 뒤 같은 링크를 다시 누르면 검색어가 다시 차트번호로
+  await search.fill("김");
+  await expect(page).not.toHaveURL(/q=/);
+  await page
+    .getByRole("link", { name: "통화 기록에서 전체 보기(5건)" })
+    .click();
+  await expect(search).toHaveValue("C-01886");
+});
+
+test("예약표 환자 카드 — 잡은 통화 링크·응급 여부·최근 통화", async ({
+  page,
+}) => {
+  // 예약 11885(12/1, 신서준 C-02757)는 판정 풀 밖 통화 c-0319(응급 아님)로 잡혔다
+  await page.goto("/schedule?date=2026-12-01&appt=11885");
+  const card = page.getByLabel("환자 요약");
+  await expect(card.getByRole("list", { name: "최근 통화" })).toBeVisible();
+  await expect(card.getByText("응급 여부")).toContainText("AI");
+  await expect(card.getByText("응급 여부")).toContainText("아님");
+  await card.getByRole("link", { name: /통화 있음/ }).click();
+  await expect(page).toHaveURL(/\/calls\?tab=history&call=c-0319/);
+});

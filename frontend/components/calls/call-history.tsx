@@ -36,15 +36,28 @@ export function CallHistory({
   selected,
   onOpen,
   version,
+  initialQ = "",
+  onTyped,
 }: {
   names: LabelNames | null;
   selected: string | null;
   onOpen: (uid: string) => void;
   version: number; // 체크·새 통화 뒤 다시 불러오기
+  initialQ?: string; // URL q= — 지난 통화의 "전체 보기"가 차트번호로 건다
+  onTyped?: () => void; // 검색창을 고치면 URL q=를 지운다(낡은 q가 탭 이동·넓게 보기 뒤 되살아나지 않게)
 }) {
   const [filter, setFilter] = useState("");
-  const [q, setQ] = useState("");
-  const [query, setQuery] = useState("");
+  const [q, setQ] = useState(initialQ);
+  const [query, setQuery] = useState(initialQ);
+  // URL q=가 새로 오면("전체 보기") 검색창을 맞춘다
+  const [seenQ, setSeenQ] = useState(initialQ);
+  if (initialQ !== seenQ) {
+    setSeenQ(initialQ);
+    if (initialQ) {
+      setQ(initialQ);
+      setQuery(initialQ);
+    }
+  }
   // 더 불러온 쪽 — 조건(key)이 바뀌면 버린다
   const [extra, setExtra] = useState<{ key: string; pages: CallList[] }>({
     key: "",
@@ -129,7 +142,10 @@ export function CallHistory({
         <Input
           className="ml-auto w-56"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            onTyped?.();
+          }}
           placeholder="이름·번호·차트번호"
           aria-label="통화 검색"
         />

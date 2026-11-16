@@ -66,9 +66,9 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
         + ","
         " (SELECT COUNT(*) FROM emr_appointments b WHERE b.patient_id = a.patient_id"
         "  AND b.status = 'completed' AND b.scheduled_at < a.scheduled_at) AS done_before,"
-        " (SELECT c.call_uid FROM ax_calls c WHERE c.patient_id = a.patient_id"
-        "  AND c.started_at = a.created_at) AS call_uid"
+        " c.call_uid, c.in_eval_pool AS call_pool"
         " FROM emr_appointments a JOIN emr_patients p ON p.id = a.patient_id"
+        " LEFT JOIN ax_calls c ON c.patient_id = a.patient_id AND c.started_at = a.created_at"
         " JOIN emr_procedures r ON r.code = a.planned_procedure_code"
         " LEFT JOIN emr_treatment_plan_items i ON i.id = a.plan_item_id"
         " WHERE date(a.scheduled_at) = ? ORDER BY a.scheduled_at, a.id",
@@ -102,7 +102,12 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 "plan_item_id": r["plan_item_id"],
                 "booked_via": r["booked_via"],
                 "booked_at": r["created_at"][:16],
-                "call": {"uid": r["call_uid"], "started_at": r["created_at"][:16]}
+                # pool — 판정 풀 통화는 통화 화면에 없어 화면이 링크를 걸지 않는다
+                "call": {
+                    "uid": r["call_uid"],
+                    "started_at": r["created_at"][:16],
+                    "pool": bool(r["call_pool"]),
+                }
                 if r["call_uid"]
                 else None,
             }
