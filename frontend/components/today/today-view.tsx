@@ -292,21 +292,36 @@ function Tag({ tone, children }: { tone: Tone; children: string }) {
   );
 }
 
+const NIGHT_END: Record<string, string> = {
+  done: "끝남",
+  budget: "상한으로 중단",
+  stopped: "중단",
+  failed: "실패로 끝남",
+};
+
+/** 야간 실행 꼬리표(backend/nightly.py state) — 끝난 지 오래면 날짜를 붙여 어젯밤 실행으로 읽히지 않게 */
+function nightTags(n: TodaySheet["ai"]["nightly"]): string[] {
+  if (!n) return [];
+  if (n.state === "running") return ["야간 실행 중"];
+  if (n.state === "broken") return ["야간 실행 끊김"];
+  const at = n.finished_at ?? "";
+  const when = n.recent
+    ? at.slice(11, 16)
+    : `${at.slice(5, 7)}/${at.slice(8, 10)} ${at.slice(11, 16)}`;
+  return [
+    `야간 실행 ${when} ${NIGHT_END[n.state]}${n.recent ? "" : "(오래됨)"}`,
+    ...(n.failed > 0 ? [`야간 실패 ${n.failed}`] : []),
+  ];
+}
+
 function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const ai = sheet.ai;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [fail, setFail] = useState<string | null>(null);
   const failed = ai.prep.failed + ai.classify_failed + ai.followup_failed;
-  const night = ai.nightly?.finished_at ? ai.nightly : null;
   const summary = [
-    // 야간 실행 끝난 시각·실패(backend/nightly.py) — 한 번도 안 돌았거나 도는 중이면 없음
-    ...(night
-      ? [
-          `야간 실행 ${night.finished_at!.slice(11, 16)} 끝남`,
-          ...(night.failed > 0 ? [`야간 실패 ${night.failed}`] : []),
-        ]
-      : []),
+    ...nightTags(ai.nightly),
     ai.autoclose_on ? `자동 처리 ${ai.auto_total}건` : "자동 종결 꺼짐",
     ...(ai.recon_auto.on ? [`일계표 자동 마감 ${ai.recon_auto.total}건`] : []),
     ...(ai.expense_auto.on

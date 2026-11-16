@@ -18,6 +18,8 @@ from backend.rag_index import (
     split_dialog,
     split_text,
     tooth_terms,
+    update_index,
+    update_todo,
 )
 from backend.vector_store import VectorStore
 from shared.clinic import Clinic
@@ -390,3 +392,46 @@ def test_time_at_line_start_is_not_a_speaker():
         "직원: 네\n10:30에 오세요\n오전 9:00도 돼요",
         "환자: 알겠습니다",
     ]
+
+
+def _paste(conn, uid="p-0001"):
+    conn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, patient_id,"
+        " added_by, added_at) VALUES (?, 'inbound', '2026-12-01 10:00:00', '환자: 틀니 문의', 1,"
+        " 'desk', '2026-11-16 10:00:00')",
+        (uid,),
+    )
+    conn.commit()
+
+
+def _missing(conn, model="fake"):
+    return conn.execute(
+        "SELECT COUNT(*) FROM ax_chunks c LEFT JOIN ax_chunk_vectors v"
+        " ON v.chunk_id = c.id AND v.model = ? WHERE v.chunk_id IS NULL",
+        (model,),
+    ).fetchone()[0]
+
+
+class BrokenEmbedder(FakeEmbedder):
+    def embed(self, texts, kind):
+        raise RuntimeError("Voyage 장애")
+
+
+def test_update_index_failed_embedding_changes_nothing(conn):
+    """야간 색인 — 임베딩이 실패하면 청크도 쓰지 않아 검색이 벡터 없는 청크로 막히지 않는다"""
+    build_index(conn, FakeEmbedder())
+    _paste(conn)
+    with pytest.raises(RuntimeError):
+        update_index(conn, BrokenEmbedder())
+    assert chunk(conn, "call:p-0001:0") is None
+    assert _missing(conn) == 0
+
+
+def test_update_index_writes_chunks_with_vectors(conn):
+    build_index(conn, FakeEmbedder())
+    _paste(conn)
+    assert update_todo(conn, "fake") == 1
+    emb = FakeEmbedder()
+    assert update_index(conn, emb) == 1 and emb.texts == 1
+    assert chunk(conn, "call:p-0001:0") is not None and _missing(conn) == 0
+    assert update_todo(conn, "fake") == 0

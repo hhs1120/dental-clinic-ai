@@ -20,6 +20,7 @@ from backend import (
     expense,
     expense_auto,
     judge_queue,
+    nightly,
     prep,
     recon,
     recon_auto,
@@ -136,16 +137,19 @@ def _failures(conn) -> dict:
     return {"classify_failed": classify, "followup_failed": followup}
 
 
-def _nightly(conn) -> dict | None:
-    """마지막 야간 실행 — "AI가 한 일"의 끝난 시각·실패 꼬리표(실패는 단계 실패 건수 합)"""
-    from backend import nightly  # nightly가 기능 모듈 전부를 import한다
-
+def _nightly(conn, now: datetime) -> dict | None:
+    """마지막 야간 실행 — "AI가 한 일"의 상태 꼬리표. recent = 끝난 지 briefing.NIGHT_HOURS(실제 시계) 안 — 아니면
+    화면이 날짜를 붙여 어젯밤 실행으로 읽히지 않게. failed = 단계 실패 건수 합"""
     job = nightly.last_run(conn)
     if job is None:
         return None
+    end = job["finished_at"]
     return {
-        "finished_at": job["finished_at"],
-        "status": job["status"],
+        "finished_at": end,
+        "state": nightly.state(job, now),
+        "recent": bool(
+            end and now - datetime.fromisoformat(end) <= timedelta(hours=briefing.NIGHT_HOURS)
+        ),
         "failed": sum(d["failed"] for d in job["detail"]),
     }
 
@@ -216,7 +220,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
         "briefing": briefing.lines(conn, today, now),
         "ai": _auto(conn)
         | {
-            "nightly": _nightly(conn),
+            "nightly": _nightly(conn, now),
             "recon_auto": _recon_auto(conn, today),
             "expense_auto": _expense_auto(conn, today),
             "prep": _prep_saved(conn, today),

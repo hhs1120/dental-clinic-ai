@@ -429,7 +429,8 @@ test("아침 브리핑 — 머리말 2열, 같은 머리말은 첫 줄에만, �
       ...FULL.ai,
       nightly: {
         finished_at: "2026-12-01T03:12:00",
-        status: "done",
+        state: "done",
+        recent: true,
         failed: 2,
       },
     },
@@ -442,4 +443,31 @@ test("아침 브리핑 — 머리말 2열, 같은 머리말은 첫 줄에만, �
   await expect(page.getByRole("region", { name: "AI가 한 일" })).toContainText(
     "야간 실행 03:12 끝남 · 야간 실패 2",
   );
+});
+
+test("야간 실행 꼬리표 — 오래됨·상한·끊김", async ({ page }) => {
+  const ai = page.getByRole("region", { name: "AI가 한 일" });
+  const night = (n: object) =>
+    fakeToday(page, { ...FULL, ai: { ...FULL.ai, nightly: n } });
+  await night({
+    finished_at: "2026-11-28T03:12:00",
+    state: "done",
+    recent: false,
+    failed: 0,
+  });
+  await page.goto("/today");
+  await expect(ai).toContainText("야간 실행 11/28 03:12 끝남(오래됨)");
+  await page.unroute("**/api/today");
+  await night({
+    finished_at: "2026-12-01T03:05:00",
+    state: "budget",
+    recent: true,
+    failed: 0,
+  });
+  await page.goto("/today");
+  await expect(ai).toContainText("야간 실행 03:05 상한으로 중단");
+  await page.unroute("**/api/today");
+  await night({ finished_at: null, state: "broken", recent: false, failed: 0 });
+  await page.goto("/today");
+  await expect(ai).toContainText("야간 실행 끊김");
 });

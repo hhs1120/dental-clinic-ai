@@ -107,3 +107,15 @@ def test_night_line_running_hidden():
     """끝나지 않은 실행은 밤사이 결과가 아니다"""
     job = {"status": "running", "finished_at": None, "detail": []}
     assert night_line(job, datetime(2026, 11, 16, 9, 0)) is None
+
+
+def test_no_busy_phrase_when_flat_or_too_many_ties():
+    """시마다 1건이거나 동률 시간대가 BUSY_TOP을 넘으면 몰림이 아니다"""
+    flat = [_row(t, "U0001", "스케일링", n) for t, n in [("09:00", "가"), ("10:00", "나")]]
+    assert day_lines(flat, CATS)[0]["text"] == "예약 2건(신환 0)"
+    spread = [
+        _row(f"{h:02d}:{m}", "U0001", "스케일링", f"{h}{m}")
+        for h in (9, 10, 11, 14)
+        for m in ("00", "30")
+    ]
+    assert day_lines(spread, CATS)[0]["text"] == "예약 8건(신환 0)"
