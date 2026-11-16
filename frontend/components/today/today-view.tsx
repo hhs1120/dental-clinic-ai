@@ -38,6 +38,7 @@ export function TodayView() {
   return (
     <div className="flex flex-col gap-6">
       <Cards sheet={today.data} />
+      <Briefing lines={today.data.briefing} />
       <People sheet={today.data} />
       <AiDone sheet={today.data} reload={today.reload} />
     </div>
@@ -88,6 +89,26 @@ function Cards({ sheet }: { sheet: TodaySheet }) {
         </Link>
       ))}
     </div>
+  );
+}
+
+/** ⑦ 아침 브리핑 — 왼쪽 머리말·오른쪽 내용 2열, 같은 머리말이 이어지면 첫 줄에만. 코드가 만든 줄이라 AI 배지 없음 */
+function Briefing({ lines }: { lines: TodaySheet["briefing"] }) {
+  if (lines.length === 0) return null;
+  return (
+    <Card aria-label="아침 브리핑" className="gap-3 px-4 shadow-card">
+      <h2 className="text-lg font-bold">아침 브리핑</h2>
+      <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2">
+        {lines.map((l, i) => (
+          <div key={i} className="contents">
+            <dt className="font-semibold">
+              {i > 0 && lines[i - 1].head === l.head ? "" : l.head}
+            </dt>
+            <dd>{l.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
 
@@ -277,7 +298,15 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [fail, setFail] = useState<string | null>(null);
   const failed = ai.prep.failed + ai.classify_failed + ai.followup_failed;
+  const night = ai.nightly?.finished_at ? ai.nightly : null;
   const summary = [
+    // 야간 실행 끝난 시각·실패(backend/nightly.py) — 한 번도 안 돌았거나 도는 중이면 없음
+    ...(night
+      ? [
+          `야간 실행 ${night.finished_at!.slice(11, 16)} 끝남`,
+          ...(night.failed > 0 ? [`야간 실패 ${night.failed}`] : []),
+        ]
+      : []),
     ai.autoclose_on ? `자동 처리 ${ai.auto_total}건` : "자동 종결 꺼짐",
     ...(ai.recon_auto.on ? [`일계표 자동 마감 ${ai.recon_auto.total}건`] : []),
     ...(ai.expense_auto.on

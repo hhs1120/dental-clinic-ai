@@ -6,13 +6,15 @@ calls.review_calls, 판정 대기는 판정 큐(judge_queue.pending_count), 자�
 일계표 불일치는 재무 대조 화면의 확정 안 된 건(recon.open_summary — 링크는 그런 건이 있는 가장 이른 달),
 지출 증빙 확인은 지출 증빙 탭의 지난달 확인할 출금(expense.open_summary). 일계표 자동 마감·지출 증빙 자동 확정은
 그 화면과 같은 유효 조건(recon_auto.active·expense_auto.active — 정책 켜짐·지금 화면의 건).
-미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. LLM을 부르지 않는다."""
+미예약 환자 줄은 숫자 없는 고정 링크라 여기서 세지 않는다. ⑦ 아침 브리핑은 코드 템플릿(backend/briefing.py),
+야간 실행 끝난 시각·실패는 마지막 ax_jobs nightly 행(backend/nightly.py last_run). LLM을 부르지 않는다."""
 
 import sqlite3
 from datetime import date, datetime, timedelta
 
 from backend import (
     autoclose,
+    briefing,
     calls,
     claims,
     expense,
@@ -134,6 +136,20 @@ def _failures(conn) -> dict:
     return {"classify_failed": classify, "followup_failed": followup}
 
 
+def _nightly(conn) -> dict | None:
+    """마지막 야간 실행 — "AI가 한 일"의 끝난 시각·실패 꼬리표(실패는 단계 실패 건수 합)"""
+    from backend import nightly  # nightly가 기능 모듈 전부를 import한다
+
+    job = nightly.last_run(conn)
+    if job is None:
+        return None
+    return {
+        "finished_at": job["finished_at"],
+        "status": job["status"],
+        "failed": sum(d["failed"] for d in job["detail"]),
+    }
+
+
 def _prep_saved(conn, today: date) -> dict:
     """오늘 준비표 저장 행 — 제안(suggest) 수, 후검증 실패(suggestion_valid 0) 수"""
     r = conn.execute(
@@ -197,8 +213,10 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             **_recon(conn, today),
             **_expense(conn, today),
         },
+        "briefing": briefing.lines(conn, today, now),
         "ai": _auto(conn)
         | {
+            "nightly": _nightly(conn),
             "recon_auto": _recon_auto(conn, today),
             "expense_auto": _expense_auto(conn, today),
             "prep": _prep_saved(conn, today),

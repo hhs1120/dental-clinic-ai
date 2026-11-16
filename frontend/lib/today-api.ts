@@ -65,7 +65,15 @@ export interface TodaySheet {
     /** 줄 링크가 가는 달(기준일의 지난달), 0건이면 null */
     expense_month: string | null;
   };
+  /** ⑦ 아침 브리핑(backend/briefing.py) — 코드 템플릿 줄, 해당 없는 줄은 빠지고 다 없으면 빈 목록. 챙길 환자는 한 명에 한 줄(같은 head) */
+  briefing: { head: string; text: string }[];
   ai: {
+    /** 마지막 야간 실행(backend/today.py _nightly) — 한 번도 안 돌았으면 null, failed는 단계 실패 건수 합 */
+    nightly: {
+      finished_at: string | null;
+      status: "running" | "done" | "failed";
+      failed: number;
+    } | null;
     autoclose_on: boolean;
     auto_total: number;
     auto_recent: {

@@ -26,7 +26,9 @@ const EMPTY = {
     expense_open: 0,
     expense_month: null,
   },
+  briefing: [],
   ai: {
+    nightly: null,
     autoclose_on: false,
     auto_total: 0,
     auto_recent: [],
@@ -407,4 +409,37 @@ test("지출 증빙 자동 확정 목록", async ({ page }) => {
   await expect(ai).toContainText("지출 증빙 자동 확정 1건");
   await ai.getByRole("button", { name: "펼치기" }).click();
   await expect(ai).toContainText("11/10 · 이음통신 · 33,000원 → 통신비");
+});
+
+test("아침 브리핑 — 머리말 2열, 같은 머리말은 첫 줄에만, 없으면 카드 숨김", async ({
+  page,
+}) => {
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByLabel("아침 브리핑")).toHaveCount(0);
+  await page.unroute("**/api/today");
+  await fakeToday(page, {
+    ...FULL,
+    briefing: [
+      { head: "오늘", text: "예약 26건(신환 4) · 10시·14시·17시대에 몰림" },
+      { head: "챙길 환자", text: "10:30 배정웅 단순발치 — 항응고제 복용" },
+      { head: "챙길 환자", text: "15:30 안서준 임플란트 1차 — 당뇨" },
+    ],
+    ai: {
+      ...FULL.ai,
+      nightly: {
+        finished_at: "2026-12-01T03:12:00",
+        status: "done",
+        failed: 2,
+      },
+    },
+  });
+  await page.goto("/today");
+  const card = page.getByLabel("아침 브리핑");
+  await expect(card).toContainText("예약 26건(신환 4)");
+  await expect(card.getByText("챙길 환자")).toHaveCount(1);
+  await expect(card).toContainText("15:30 안서준 임플란트 1차 — 당뇨");
+  await expect(page.getByRole("region", { name: "AI가 한 일" })).toContainText(
+    "야간 실행 03:12 끝남 · 야간 실패 2",
+  );
 });
