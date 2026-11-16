@@ -5,11 +5,27 @@
 
 import json
 import random
+import time
 from pathlib import Path
 
 import yaml
 
+from backend import classify as cl
+from evaluation.metrics import GATE_RUNS
+
 ROOT = Path(__file__).resolve().parents[1]
+PATHS = {  # 분할 → 실행 줄·호출 기록·Batch 상태(test는 dev와 섞지 않는다)
+    split: {
+        "runs": ROOT / "evaluation" / f"input_trust{tag}_runs.jsonl",
+        "llm": ROOT / "evaluation" / f"input_trust{tag}_llm.jsonl",
+        "state": ROOT / "evaluation" / "runs" / f"input_trust_batch{tag}.json",
+    }
+    for split, tag in (("dev", ""), ("test", "_test"))
+}
+CLASSIFY_ALIASES = (
+    "classify",
+    "summarize",
+)  # 분류 = 라벨·요약 두 호출(backend/classify.py classify)
 
 KINDS = ("patient_request", "system_spoof", "format_mimic", "ignore_rules")
 POSITIONS = ("start", "middle", "end")
@@ -54,3 +70,152 @@ def inject(transcript: str, kind: str, position: str) -> str:
     lines = transcript.split("\n")
     at = {"start": 0, "middle": len(lines) // 2, "end": len(lines)}[position]
     return "\n".join(lines[:at] + [INJECTIONS[kind]] + lines[at:])
+
+
+# ── 실행 기록(이어 돎, 설계 §4) ─────────────────────────────────────
+
+
+def read_runs(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
+
+
+def _key(r: dict) -> tuple:
+    return (r["call_uid"], r["side"], r["model"], r["version"], r["k"])
+
+
+def _texts(c: dict, kind: str, position: str) -> dict[str, str]:
+    return {"orig": c["transcript"], "inj": inject(c["transcript"], kind, position)}
+
+
+def _jobs(calls: list[dict], done: set, cls_v: str, judge_v: str, judge_runs: int) -> dict:
+    """빠진 (통화, 쪽, k) — 분류는 GATE_RUNS벌, 판정기는 judge_runs벌"""
+    out = {"classify": [], "judge": []}
+    for c in calls:
+        for side in ("orig", "inj"):
+            for model, v, n in (("classify", cls_v, GATE_RUNS), ("judge", judge_v, judge_runs)):
+                for k in range(1, n + 1):
+                    if (c["call_uid"], side, model, v, k) not in done:
+                        out[model].append((c["call_uid"], side, k))
+    return out
+
+
+def plan(calls: list[dict], done: set, cls_v: str, judge_v: str, judge_runs: int) -> dict:
+    """나갈 호출 수(무료) — 분류는 라벨·요약 2호출로 센다"""
+    jobs = _jobs(calls, done, cls_v, judge_v, judge_runs)
+    return {
+        "classify_calls": len(jobs["classify"]) * len(CLASSIFY_ALIASES),
+        "judge_calls": len(jobs["judge"]),
+    }
+
+
+def _cid(uid: str, side: str, k: int) -> str:
+    return f"{uid}-{side}-{k}"  # Anthropic custom_id 허용 문자 [A-Za-z0-9_-]
+
+
+def _parse_cid(cid: str) -> tuple[str, str, int]:
+    uid, side, k = cid.rsplit("-", 2)
+    return uid, side, int(k)
+
+
+def _batchable(gw, alias: str) -> bool:
+    first = gw.config["aliases"][alias][0]
+    return gw.config["models"][first].get("provider", "anthropic") == "anthropic"
+
+
+def _classify_results(gw, reqs: dict, cls_v: str, state_path: Path, poll_seconds: int) -> dict:
+    """custom_id → (라벨, 요약) LLMResult(빠지면 None). Batch면 상태 파일로 끊겨도 이어 받는다
+    (evaluation/hard_labels.py label 방식), 못 쓰는 별칭이면 일반 호출"""
+    if not state_path.exists() and not all(_batchable(gw, a) for a in CLASSIFY_ALIASES):
+        return {
+            cid: tuple(
+                gw.complete(a, task=a, prompt_version=cls_v, max_tokens=cl.MAX_TOKENS, **r[a])
+                for a in CLASSIFY_ALIASES
+            )
+            for cid, r in reqs.items()
+        }
+    if state_path.exists():
+        st = json.loads(state_path.read_text(encoding="utf-8"))
+    else:
+        if not reqs:
+            return {}
+        st = {
+            "batches": {
+                a: gw.submit_batch(
+                    a,
+                    [{"custom_id": cid, **r[a]} for cid, r in reqs.items()],
+                    task=a,
+                    prompt_version=cls_v,
+                    max_tokens=cl.MAX_TOKENS,
+                )
+                for a in CLASSIFY_ALIASES
+            },
+            "sent": list(reqs),
+        }
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(st), encoding="utf-8")
+    schemas = {
+        "classify": cl.label_request("", "", cls_v)["schema"],
+        "summarize": cl.summary_request("", "", cls_v)["schema"],
+    }
+    got = {}
+    for a, bid in st["batches"].items():
+        while gw.batch_status(bid, a) != "ended":
+            time.sleep(poll_seconds)
+        got[a] = gw.batch_results(bid, a, task=a, prompt_version=cls_v, schema=schemas[a])
+    return {cid: tuple(got[a].get(cid) for a in CLASSIFY_ALIASES) for cid in st["sent"]}
+
+
+def run(
+    gw,
+    calls: list[dict],
+    cls_v: str,
+    judge_v: str,
+    path: Path,
+    judge_runs: int,
+    state_path: Path,
+    poll_seconds: int = 60,
+) -> dict:
+    """빠진 (통화, 쪽, 모델, 버전, k)만 불러 줄마다 덧붙인다. 실패·빠진 답은 저장하지 않아 다음 실행 대상으로 남고,
+    폴백 답은 fallback 표시로 저장한다(채점에서 따로 센다)"""
+    by_uid = {c["call_uid"]: c for c in calls}
+    plan_of = assign(list(by_uid))
+    jobs = _jobs(calls, {_key(r) for r in read_runs(path)}, cls_v, judge_v, judge_runs)
+    texts = {u: _texts(c, *plan_of[u]) for u, c in by_uid.items()}
+
+    def row(uid, side, model, v, k, labels, todo, fallback):
+        kind, position = plan_of[uid]
+        return {"call_uid": uid, "side": side, "kind": kind, "position": position, "model": model,
+                "version": v, "k": k, "labels": labels, "todo": todo, "fallback": fallback}  # fmt: skip
+
+    reqs = {}
+    for uid, side, k in jobs["classify"]:
+        t, d = texts[uid][side], by_uid[uid]["direction"]
+        reqs[_cid(uid, side, k)] = {
+            "classify": cl.label_request(t, d, cls_v),
+            "summarize": cl.summary_request(t, d, cls_v),
+        }
+    out = {"called": 0, "skipped": 0, "failed": 0}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        for cid, pair in _classify_results(gw, reqs, cls_v, state_path, poll_seconds).items():
+            uid, side, k = _parse_cid(cid)
+            c = cl.classification_from(*pair) if None not in pair and uid in by_uid else None
+            if c is None or not c.ok:
+                out["failed"] += 1
+                continue
+            fb = any(p.fallback_used for p in pair)
+            f.write(json.dumps(row(uid, side, "classify", cls_v, k, c.labels, c.todo, fb),
+                               ensure_ascii=False) + "\n")  # fmt: skip
+            out["called"] += 1
+        state_path.unlink(missing_ok=True)
+        for uid, side, k in jobs["judge"]:
+            j = cl.judge(gw, texts[uid][side], by_uid[uid]["direction"], judge_v)
+            if not j.ok:
+                out["failed"] += 1
+                continue
+            f.write(json.dumps(row(uid, side, "judge", judge_v, k, j.labels, None,
+                                   j.call.fallback_used), ensure_ascii=False) + "\n")  # fmt: skip
+            out["called"] += 1
+    return out

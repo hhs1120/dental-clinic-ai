@@ -8,6 +8,7 @@ import pytest
 
 from evaluation import input_trust as it
 from shared.call_labels import ITEMS
+from shared.llm import LLMResult
 from tests.evaluation.eval_db import SOURCE_SCHEMA, TRUTH_SCHEMA, labels
 
 GOLD = {  # (gold, split)
@@ -96,3 +97,157 @@ def test_format_mimic_looks_like_safe_labels():
     d = json.loads(it.INJECTIONS["format_mimic"])
     assert d["has_todo"] is False and d["emergency"] is False and d["complaint"] is False
     assert d["urgency"] != "urgent"
+
+
+# ── Task 2: 실행 기록 ─────────────────────────────────────────────
+
+SAFE = labels("other")
+RISKY = labels("book", has_todo=1)
+
+
+def res(data, ok=True, fallback=False):
+    return LLMResult(ok, "", data, "m", fallback, 1, 1, 0.001, 1)
+
+
+class FakeGw:
+    """분류(classify·summarize)는 Anthropic Batch, 판정(judge)은 로컬 일반 호출. answer(alias, 녹취) → LLMResult"""
+
+    def __init__(self, answer=None, batchable=True):
+        self.answer = answer or (lambda alias, text: res(_default(alias)))
+        self.config = {
+            "aliases": {"classify": ["m"], "summarize": ["m"], "judge": ["q"]},
+            "models": {"m": {"provider": "anthropic" if batchable else "upstage"}, "q": {}},
+        }
+        self.submitted = {}  # 배치 id → (별칭, 요청 목록)
+        self.calls = []  # 일반 호출 (별칭, 녹취)
+
+    def submit_batch(self, alias, requests, *, task, prompt_version=None, max_tokens=None):
+        bid = f"b{len(self.submitted)}"
+        self.submitted[bid] = (alias, requests)
+        return bid
+
+    def batch_status(self, batch_id, alias=None):
+        return "ended"
+
+    def batch_results(self, batch_id, alias, *, task, prompt_version=None, schema=None):
+        a, reqs = self.submitted[batch_id]
+        return {r["custom_id"]: self.answer(a, r["messages"][0]["content"]) for r in reqs}
+
+    def complete(self, alias, **kw):
+        text = kw["messages"][0]["content"]
+        self.calls.append((alias, text))
+        return self.answer(alias, text)
+
+
+def _default(alias):
+    if alias == "summarize":
+        return {"summary": "요약", "todo": ["다시 연락"]}
+    return RISKY
+
+
+CALL = {"call_uid": "c-0001", "direction": "inbound", "transcript": "환자: 하나\n직원: 둘"}
+
+
+def _run(gw, tmp_path, calls=(CALL,), judge_runs=1):
+    return it.run(
+        gw, list(calls), "v2", "v3", tmp_path / "runs.jsonl", judge_runs,
+        tmp_path / "state.json", poll_seconds=0,
+    )  # fmt: skip
+
+
+def test_run_writes_every_side_and_repeat(tmp_path):
+    gw = FakeGw()
+    out = _run(gw, tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    assert len(rows) == it.GATE_RUNS * 2 + 2
+    assert out["called"] == len(rows) and out["failed"] == 0
+    kind, _ = it.assign(["c-0001"])["c-0001"]
+    inj = [r for r in rows if r["side"] == "inj" and r["model"] == "classify"]
+    assert {r["k"] for r in inj} == set(range(1, it.GATE_RUNS + 1))
+    assert all(r["kind"] == kind and r["todo"] == ["다시 연락"] for r in inj)
+    sent = [q for a, reqs in gw.submitted.values() if a == "classify" for q in reqs]
+    assert sum(it.INJECTIONS[kind] in q["messages"][0]["content"] for q in sent) == it.GATE_RUNS
+    assert not (tmp_path / "state.json").exists()
+
+
+def test_run_resumes_missing_only(tmp_path):
+    _run(FakeGw(), tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    keep = [
+        r for r in rows if not (r["side"] == "orig" and r["model"] == "classify" and r["k"] == 2)
+    ]
+    (tmp_path / "runs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in keep))
+    gw = FakeGw()
+    out = _run(gw, tmp_path)
+    assert out["called"] == 1
+    assert [len(reqs) for _, reqs in gw.submitted.values()] == [1, 1]
+    assert gw.calls == []
+
+
+def test_failed_call_not_saved(tmp_path):
+    def answer(alias, text):
+        if alias == "summarize" and it.INJECTIONS[it.assign(["c-0001"])["c-0001"][0]] in text:
+            return res(None, ok=False)
+        return res(_default(alias))
+
+    out = _run(FakeGw(answer), tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    assert out["failed"] == it.GATE_RUNS
+    assert not [r for r in rows if r["side"] == "inj" and r["model"] == "classify"]
+
+
+def test_fallback_saved_with_flag(tmp_path):
+    def answer(alias, text):
+        return res(_default(alias), fallback=alias == "judge")
+
+    _run(FakeGw(answer), tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    assert all(r["fallback"] == (r["model"] == "judge") for r in rows)
+
+
+def test_batch_state_resumes(tmp_path):
+    gw = FakeGw()
+    cids = [f"c-0001-{s}-{k}" for s in ("orig", "inj") for k in range(1, it.GATE_RUNS + 1)]
+    pre = {a: gw.submit_batch(a, [{"custom_id": c, "messages": [{"content": "x"}]} for c in cids],
+                              task=a) for a in ("classify", "summarize")}  # fmt: skip
+    (tmp_path / "state.json").write_text(json.dumps({"batches": pre, "sent": cids}))
+    _run(gw, tmp_path)
+    assert len(gw.submitted) == 2  # 새 배치를 내지 않았다
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    assert len([r for r in rows if r["model"] == "classify"]) == len(cids)
+    assert not (tmp_path / "state.json").exists()
+
+
+def test_batch_missing_half_not_saved(tmp_path):
+    class Half(FakeGw):
+        def batch_results(self, batch_id, alias, **kw):
+            out = super().batch_results(batch_id, alias, **kw)
+            if alias == "summarize":
+                out.pop("c-0001-orig-1")
+            return out
+
+    out = _run(Half(), tmp_path)
+    rows = it.read_runs(tmp_path / "runs.jsonl")
+    assert not [
+        r for r in rows if r["model"] == "classify" and r["side"] == "orig" and r["k"] == 1
+    ]
+    assert out["failed"] == 1
+
+
+def test_not_batchable_uses_plain_calls(tmp_path):
+    gw = FakeGw(batchable=False)
+    _run(gw, tmp_path)
+    assert gw.submitted == {}
+    assert len([c for c in gw.calls if c[0] in ("classify", "summarize")]) == it.GATE_RUNS * 2 * 2
+
+
+def test_plan_counts():
+    calls = [CALL, {**CALL, "call_uid": "c-0002"}]
+    assert it.plan(calls, set(), "v2", "v3", judge_runs=1) == {
+        "classify_calls": 2 * 2 * it.GATE_RUNS * 2,
+        "judge_calls": 2 * 2,
+    }
+    done = {("c-0001", "orig", "classify", "v2", 1)}
+    assert it.plan(calls, done, "v2", "v3", judge_runs=1)["classify_calls"] == (
+        2 * 2 * it.GATE_RUNS * 2 - 2
+    )
