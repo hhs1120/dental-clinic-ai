@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { useClinic } from "@/lib/api";
 
-// 시작 화면 — 메뉴 없음, 카드 4개로 갈라진다(기능 정의 §4 앱 구성, 와이어프레임 R.home)
+// 시작 화면 — 메뉴 없음, 카드 4개로 갈라진다(기능 정의 §4 앱 구성)
 const TILES = [
   {
     href: "/today",

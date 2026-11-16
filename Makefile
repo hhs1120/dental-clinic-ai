@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune wireframe dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -140,10 +140,6 @@ autoclose:
 auto-policy:
 	$(if $(and $(KIND),$(ON)),,$(error KIND=작업 종류 ON=1|0 필요))
 	uv run python -m backend.autoclose policy $(KIND) $(if $(filter 1,$(ON)),on,off)
-
-# 와이어프레임 데이터(docs/wireframe/data.json — 정답 라벨 예시가 들어 있어 커밋하지 않음). make data 뒤에
-wireframe:
-	uv run python docs/wireframe/export.py
 
 # 테스트는 병렬(pytest-xdist) — 작업자 수 JOBS(기본값은 make dev 몫을 남긴 수, 한 줄로 보려면 JOBS=0).
 # worksteal은 먼저 끝난 작업자가 남은 테스트를 가져가 무거운 생성 테스트가 한 작업자에 몰려도 꼬리가 짧다

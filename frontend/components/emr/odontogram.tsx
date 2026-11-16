@@ -1,4 +1,4 @@
-// 치식도 — 와이어프레임 teethSvg를 옮긴 것. 치아 종류별 선화(위턱 기준 경로, 아래턱은 뒤집음).
+// 치식도 — 치아 종류별 선화(위턱 기준 경로, 아래턱은 뒤집음).
 // 진료 기록 있는 치아는 칠하고, 남은 치료계획 치아는 점선
 import type { PatientRecord } from "@/lib/emr-api";
 import { cn } from "@/lib/utils";

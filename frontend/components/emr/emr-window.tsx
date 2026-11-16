@@ -1,6 +1,6 @@
 "use client";
 
-// 가상 EMR 창 — 와이어프레임 R.emr를 옮긴 것. 버튼·탭은 옛 프로그램 모양을 위해 shadcn 대신 순수 <button>을 쓴다
+// 가상 EMR 창 — 버튼·탭은 옛 프로그램 모양을 위해 shadcn 대신 순수 <button>을 쓴다
 import { useEffect, useState } from "react";
 
 import { EmrBook } from "@/components/emr/emr-book";

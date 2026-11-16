@@ -30,7 +30,7 @@ const failure = (key: string, e: unknown): Loaded<never> => ({
   error: e instanceof ApiError ? e.message : "서버에 연결하지 못했습니다",
 });
 
-/** 화면 이동 수 — 모드·히스토리 탭·옆 패널 탭이 바뀔 때마다 1씩(와이어프레임과 같은 규칙) */
+/** 화면 이동 수 — 모드·히스토리 탭·옆 패널 탭이 바뀔 때마다 1씩 */
 export const countMoves = (a: EmrNav, b: EmrNav) =>
   Number(a.mode !== b.mode) +
   Number(a.tab !== b.tab) +

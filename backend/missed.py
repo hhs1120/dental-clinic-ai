@@ -72,7 +72,7 @@ def _n(v: float) -> str:
 
 
 def rules(w: dict) -> list[dict]:
-    """화면 "순위는 어떻게 정해지나요?" — 지금 값으로 규칙을 사람 말로(와이어프레임 howOpen). 이유는 REASONS 그대로"""
+    """화면 "순위는 어떻게 정해지나요?" — 지금 값으로 규칙을 사람 말로. 이유는 REASONS 그대로"""
     r = REASONS
     return [
         {

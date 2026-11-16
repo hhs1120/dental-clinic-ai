@@ -207,7 +207,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ## 9. 프론트
 
-화면의 레이아웃·동작 기준은 와이어프레임 `docs/wireframe/index-v2.html`이고(일별 예약표의 소요 시간 카드·환자 요약 카드, 전환 전 EMR 설명 카드, 통화·AI 평가 화면, 메뉴 순서와 물어보기 창은 [[치과 AX - 기능 정의]] §4와 아래 "배치"가 기준, 미예약 환자 화면은 [[치과 AX - 기능 정의]] §5 ⑨, 청구 점검 화면은 §5 ⑤, 경영 리포트 화면은 §5 ⑥이 기준), 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
+화면의 기능·표시 규칙은 [[치과 AX - 기능 정의]] §4(앱 구성·코어)·§5(슬롯)와 아래 "배치"가 기준이고 레이아웃은 앱 화면(`frontend/`) 그대로다, 색·모양은 `frontend/app/globals.css` 토큰과 `frontend/components/ui`에서 나온다(전환 전 EMR 창 안은 `--emr-*` 토큰과 `components/emr/emr-ui.tsx`). 기능과 표시 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성.
 
 **페이지**
 
@@ -217,7 +217,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `/today` | 오늘 — 요약 카드, 아침 브리핑(머리말·내용 2열, 코드 줄이라 AI 배지 없음), 사람이 볼 일, AI가 한 일(접힌 요약 + 펼치기) | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 내원 확인 전(기준일만)·예약 확인(`confirm` — 직전 진료일 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`, 판정 풀이면 `pool` — 화면이 링크·분류를 보이지 않는다). 응급 여부는 API가 앱 DB의 활성 분류로 붙인다(`backend/calls.py` `call_emergency` — `emr.py`는 원본만 읽는다, 분류 전·앱 DB 없음이면 null)), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준)와 최근 통화 `GET /calls/patient/{chart_no}`([[치과 AX - 기능 정의]] §4 ①) |
-| `/prep` | 준비표·체어 보기(`?view=chair`) — 와이어프레임의 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
+| `/prep` | 준비표·체어 보기(`?view=chair`) — 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
 | `/missed` | 미예약 환자(칩·연락함 숨기기 `?chip=…&hide=1`, 행마다 연락 결과) | §5 ⑨ |
 | `/ask` | 메뉴에 없음([[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창"). 질문하기(`?tab=chat&log=<id>`는 저장된 그 질문·답·출처를 다시 묻지 않고 첫 줄에 보인다, `?draft=`는 입력칸만 채운다), 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③, 여기: `GET /chat/{log_id}`(저장된 질문 1개를 답 이벤트 모양으로 — 평가·요약·아직 도는 질문은 404, `backend/api.py` `get_chat`) |
 | `/eval` | 판정, 블라인드, 정확도(자동 개선은 개선 에이전트 때) | [[치과 AX - 기능 정의]] §4 ② |

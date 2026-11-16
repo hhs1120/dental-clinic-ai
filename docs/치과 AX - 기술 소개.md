@@ -29,7 +29,7 @@ tags:
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
 | 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
 | 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·① 후속 에이전트·FastAPI 검색·EMR 조회·통화·판정·블라인드 API·③ 질문하기 에이전트·챗 SSE·④ 준비표(작업 폴링)·오늘 화면 집계·⑨ 미예약 환자(칩·점수·연락 기록)·⑤ 청구 점검(규칙 판단·AI 점검·근거 찾기·재심 사유서 초안)·⑥ 경영 리포트·⑧ 재무 대조(조사·증빙 탐색 에이전트)·야간 실행(`make nightly`)·⑦ 브리핑(템플릿) 구현 |
-| 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임(`docs/wireframe/`)으로 먼저 확정 | 앱 틀·시작 화면·기록 검색·물어보기·일별 예약표·전환 전 EMR·통화·준비표·오늘·미예약 환자·청구 점검·재무 대조·경영 리포트·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
+| 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임으로 먼저 잡은 뒤 앱으로 옮김(지금은 앱이 기준) | 앱 틀·시작 화면·기록 검색·물어보기·일별 예약표·전환 전 EMR·통화·준비표·오늘·미예약 환자·청구 점검·재무 대조·경영 리포트·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포 | `docker compose` 로컬 배포 | 착수 전([[치과 AX - 기능 정의]] §7) |
 
@@ -258,6 +258,6 @@ tags:
 ## 8. 직접 돌려 보려면
 
 1. `uv sync` → `make test`(키 없이 돌아감) → `make data`(LLM 결과는 커밋된 캐시에서 읽어 과금 없음) → `make verify`
-2. `make wireframe` 뒤 `docs/wireframe/`에서 `python -m http.server`로 화면 훑기
+2. `make dev`로 앱을 띄워 `http://localhost:3000`에서 화면 훑기(물어보기 검색은 `make index`로 색인이 있어야)
 3. [[치과 AX - 기능 정의]]에서 기능별 절, `CLAUDE.md`의 절대 규칙 읽기
 4. 지금 할 일과 보류는 [[치과 AX - 기능 정의]] §9
