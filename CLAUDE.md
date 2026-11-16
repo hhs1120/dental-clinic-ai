@@ -36,7 +36,7 @@
 
 ## 명령
 과금하는 명령은 (과금), 실패·빠진 건만 다시 도는 명령은 (이어 돎). 인자·동작은 Makefile 주석과 원본 모듈 독스트링.
-- `uv sync` — lock 커밋 필수(Faker 버전이 이름 결정성에 영향), 파이썬은 uv 관리 빌드만(sqlite-vec이 확장을 연다). 그룹: `generator`·`backend`·`dev`, Qwen 파인튜닝은 `finetune`(기본 아님 — `uv run --group finetune`)
+- `uv sync` — lock 커밋 필수(Faker 버전이 이름 결정성에 영향), 파이썬은 uv 관리 빌드만(sqlite-vec이 확장을 연다). 그룹: `generator`·`backend`·`dev`, Qwen 파인튜닝은 `finetune`, 랭그래프 비교는 `langgraph`(둘 다 기본 아님 — `uv run --group …`)
 - `make data` / `make verify` / `make test` — 테스트는 같은 생성을 임시 폴더에 돌린다(병렬, 작업자 수 `JOBS=`). `make data FAKE_LLM=1`은 가짜 게이트웨이
 - LLM 단계: `make data`가 캐시에 없는 건을 `generator/llm/jobs/`로 내보내고 멈춤 → `make llm-fill-api TASK=…`(과금) 또는 `/fill-llm-jobs` → `make llm-import` → `make data`. 옛 캐시 줄은 `make llm-prune`
 - `make index EMBEDDING=<모델>` — 검색 색인(과금, 이어 돎, 앱 설계 §3), `make data`와 따로
@@ -53,6 +53,7 @@
 - ⑤ `make claim-check [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, `backend/claim_check.py`) · `make claim-check-sample [N=] [BATCH=1]`(과금, 이어 돎, dev 고정 표본 — 프롬프트 고칠 때) / `claim-check-dev [NO_BATCH=1]`(과금, 이어 돎, dev 전부 — 버전을 정한 뒤, `evaluation/claim_check.py`) · `make claim-omission [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, ⑤-2b 추가 처치 누락 `backend/claim_omission.py`) · `make claim-evidence [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, ⑤-3 서류 사유 차트 문장) · `make claim-appeal-dev`(과금, 이어 돎, ⑤-4 재심 사유서 dev 초안 `evaluation/claim_appeal.py` — 채점은 `make eval`, test는 `python -m evaluation.claim_appeal run --split test`(사람)) · `make claim-qa-draft`(과금, 이어 돎) / `claim-qa-review`(사람, 브라우저) — ⑤-3 청구 기준 질문(`evaluation/claim_qa.py`, test는 `python -m evaluation.claim_qa score --split test`(사람)) · `make claim-omission-cases`(과금, 이어 돎, 합성 사례 문장) / `claim-omission-synth`(과금, 이어 돎, 합성 dev — test는 `python -m evaluation.claim_omission synth·real --split test`(사람))
 - `make nightly [PLAN=1] [NO_BATCH=1] [FORCE=1]`(과금, 이어 돎, `backend/nightly.py` — 고정 순서로 모든 화면의 AI 결과를 최신으로. `PLAN=1`은 LLM 없이 단계별 건수·에이전트 예상 비용, Batch는 하루 상한 밖이라 첫 실행·버전 교체 전에 본다. `FORCE=1`은 죽은 실행이 남긴 running 행을 넘긴다)
 - ⑥ `make report [NO_BATCH=1]`(과금, 이어 돎, `backend/report.py` — 채점은 `make eval`)
+- ⑧ 랭그래프 비교 `uv run --env-file .env --group langgraph python -m evaluation.langgraph_recon run [--plan]`(과금, 이어 돎 — ⑧-1 조사 에이전트를 랭그래프로, dev만) / `… score`(무료, 하네스와 나란히)
 - ⑧ `make recon [MONTHS="2026-08 2026-09"] [NO_BATCH=1]`(과금, 이어 돎, `backend/recon_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.recon score --split test`(사람)) · `make expense-ai [MONTHS=] [NO_BATCH=1]`(과금, 이어 돎, `backend/expense_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.expense score --split test`(사람))
 
 ## 코드 컨벤션
