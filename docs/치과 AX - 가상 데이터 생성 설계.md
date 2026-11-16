@@ -240,11 +240,11 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - **취소 후 재승인**: 장부 승인 → 취소 → 같은 금액 새 승인. `master.SPLIT_MIN_AMOUNT` 이상
   - **수수료 차이**: 그 정산의 율 + `master.FEE_MISMATCH_RATE_DIFF`. 다른 불일치가 없는 정산에
   - **입금 지연**: `master.DEPOSIT_DELAY_DAYS` 영업일 늦게. 다른 불일치가 없는 정산에
-  - **진료 외 매출**: `master.ORAL_CARE_PRICES` 1~2개 합의 장부 없는 승인, 연동일 영업시간. 그중 `master.NON_CLINICAL_MULTI_COUNT`건은 `master.NON_CLINICAL_MAX_ITEMS`개 합(1~2개 합과 다른 금액 — 규칙 기준선 `backend/recon.py` `rule_cause`의 구강용품 합 규칙에 안 걸리고 가격표를 조합하면 풀림). 승인 금액이 그날 어느 환자 장부 잔액과 같으면 겹치지 않는 합으로(난수 없이)
+  - **진료 외 매출**: `master.ORAL_CARE_PRICES` 1~2개 합의 장부 없는 승인, 연동일 영업시간. 그중 `master.NON_CLINICAL_MULTI_COUNT`건은 `master.NON_CLINICAL_MAX_ITEMS`개 합(한 번에 여러 개 산 경우라 1~2개 합과 금액이 다르고, 가격표를 조합하면 풀림). 승인 금액이 그날 어느 환자 장부 잔액과 같으면 겹치지 않는 합으로(난수 없이)
   - **장부 쪽**: §2.4 장부 실수를 원인으로 연결
   - **미수 정산 수납 누락**(입력 누락): 장부 잔액이 남고 그날 장부 행이 없는 환자가 잔액 전부를 이체·카드로 낸 돈 `master.UNRECORDED_SETTLEMENT_COUNT`건 — 장부에 행이 없어 `truth_ledger_errors.payment_id`는 비우고 환자를 남긴다. 구강용품 1~2개 합과 같은 금액은 넣지 않는다(`master.UNRECORDED_ORAL_SHARE`, 이유는 [[치과 AX - AI 실험 기록]] §24). 장부 실수가 있거나 그날 뒤로 정산 행이 있는 환자는 뺀다
   - **정산 수납 장부 실수**(8b 앞 `settlement_errors` 단계 — 통화·문자가 다 만들어진 뒤라 번지지 않게 정산 행만, 그날 뒤로 통화 없고 앞으로 예약 없는 환자만, 실제 날·장부 날 모두 정산이 TODAY 전에 보이는 날): 자릿수 바꿔 적기(금액 오입력 — 연동 카드, 이웃 두 자리를 바꾼 더 작은 수)·며칠 늦게 적기(날짜 밀림 — 이체, 실제 날 뒤 `master.SETTLEMENT_LATE_OPEN_DAYS`번째 진료일), 건수 `master.SETTLEMENT_ERROR_COUNTS`. 늦게 적은 정산은 금융 쪽·장부 쪽이 두 탐지 건으로 갈라진다
-  - 구강용품 여러 개 판매·미수 정산 수납 누락·정산 수납 장부 실수는 평가 달 마지막 달(화면 기본 달)에서 `master.RECON_LATEST_MONTH_MIN`건씩 먼저 고른다
+  - 구강용품 여러 개 판매·미수 정산 수납 누락·정산 수납 장부 실수는 평가 달 마지막 달(화면 기본 달)에서 `master.RECON_LATEST_MONTH_MIN`건씩 먼저 고른다(시연 화면에 모양마다 보이게 — 채점 모수는 그대로)
   - **디코이**(불일치가 아님): 보호자 이름 이체·현금 주 단위 합산 입금 — 이름·날짜가 장부와 다르다는 것만으로 불일치라 답하지 않는지 본다
 
 **⑧-2 지출** — 생성 창 전체(8c단계)
@@ -442,7 +442,7 @@ for d in 진료일(range_start … TODAY − 1):       # 휴진일은 예약 생
   - 치아 `NN번`·시술 이름(진료 기록이라 표준 이름만 — 별칭은 녹취록·검색용). 추가 처치 누락 줄은 추가 처치의 치아 `NN번`·시술 이름도
   - 치주낭 `Nmm`
   - 주의사항과 그 내원에서 발견한 주의사항. 발견한 것이 있으면 새로 알게 됐다는 말(`chart.DISCOVERED_WORDS` 중 하나)
-  - 요건 근거(기간 `N일`·`N개월`, 사랑니는 `X-선` 촬영과 매복 정도, 실란트는 `소와열구`/`충전물`). 근거 말은 표현 방식대로(`chart.EVIDENCE_WORDS` 그대로 / `chart.PARAPHRASE` 바꿔 말하기 / 근거 없는 줄은 낱말 없이 또는 `chart.NEGATION` 부정 / R03은 `chart.PERIO_PD` 깊이 약어 표기(키워드 규칙의 꼴 밖)·깊지만 출혈 없는 부분 소견 / R05는 매복·골삭제는 적고 X-선 촬영이 없는 부분 소견 — 비율은 `master.EVIDENCE_PARAPHRASE_SHARE`·`master.EVIDENCE_NEGATED_SHARE`·`master.PERIO_QUALITATIVE_SHARE`·`master.PERIO_NEAR_MISS_SHARE`·`master.R05_NEAR_MISS_SHARE`). C.C는 근거 유무와 무관하게 시술 공통 풀. 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
+  - 요건 근거(기간 `N일`·`N개월`, 사랑니는 `X-선` 촬영과 매복 정도, 실란트는 `소와열구`/`충전물`). 근거 말은 표현 방식대로(`chart.EVIDENCE_WORDS` 그대로 / `chart.PARAPHRASE` 바꿔 말하기 / 근거 없는 줄은 낱말 없이 또는 `chart.NEGATION` 부정 / R03은 `chart.PERIO_PD` 깊이 약어 표기(실제 차트의 약어 표기)·깊지만 출혈 없는 부분 소견 / R05는 매복·골삭제는 적고 X-선 촬영이 없는 부분 소견 — 비율은 `master.EVIDENCE_PARAPHRASE_SHARE`·`master.EVIDENCE_NEGATED_SHARE`·`master.PERIO_QUALITATIVE_SHARE`·`master.PERIO_NEAR_MISS_SHARE`·`master.R05_NEAR_MISS_SHARE`). C.C는 근거 유무와 무관하게 시술 공통 풀. 타 기관 이력이면 그 말(`chart.OTHER_CLINIC_WORDS` 중 하나)
   - 다음 계획: 남은 항목의 치아 `NN번`·시술 이름과 계획이라는 말(`chart.PLAN_WORDS` 중 하나), 또는 정기 검진 `N개월`. 같은 시술·치아가 여러 번이면 초안·꼭 넣을 말 모두 한 번만 `N회`와 함께(`chart.plan_items` — 같은 말을 여러 번 요구하면 모델이 '다음 내원 때' 같은 문장을 덧붙인다)
 - **검증**(건별): 꼭 넣을 사실 + 정답 어휘(`master.CHART_FORBIDDEN_WORDS`)·근거 없는 요건 줄(부정 표현 줄 제외)과 바꿔 말하기 줄의 근거 낱말·환자 이름·금지 토픽·메모체가 아닌 끝맺음·초안에 없는 시점·치아 없는 진료의 부위 말·시행한 골삭제를 '필요'로 바꾼 말(`chart.MEMO_STYLE_FORBIDDEN`) 없음 → 실패 건만 재생성(§4.1 절차 6과 같은 방식). 단순화 없음
 - **적용**: `emr_chart_notes.note`를 덮어쓴다

@@ -1164,8 +1164,8 @@ UNRECORDED_ORAL_SHARE = (
 # 자릿수 바꿔 적기(연동 카드 — 10배가 아니라 규칙 5가 못 봄)·며칠 늦게 적기(이체 — 이웃 진료일보다 뒤라 규칙 6이 못 봄). 추정값
 SETTLEMENT_ERROR_COUNTS = {"amount_typo": 14, "date_shift": 12}
 SETTLEMENT_LATE_OPEN_DAYS = (2, 4)  # 며칠 늦게 적기 — 실제 날 뒤 몇 번째 진료일에 적나
-# ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 규칙 9(1~2개 합)에 안 걸려 가격표를
-# 조합해야 풀린다. 1~2개 판매(RECON_MISMATCH_COUNTS)와 비슷한 수 — 더 늘리면 세 개 판매가 더 흔한 부자연스러운 데이터. 추정값
+# ⑧-1 구강용품 여러 개 판매(데이터 재설계): 진료 외 매출 중 NON_CLINICAL_MAX_ITEMS개 판매 — 한 번에 여러 개 산 경우라 1~2개 합과 금액이
+# 달라 가격표를 조합해야 풀린다. 1~2개 판매(RECON_MISMATCH_COUNTS)와 비슷한 수 — 더 늘리면 세 개 판매가 더 흔한 부자연스러운 데이터. 추정값
 NON_CLINICAL_MULTI_COUNT = 12
 NON_CLINICAL_MAX_ITEMS = 3
 # 화면 기본 달(평가 달 마지막 달)에 새 모양마다 최소 이만큼(데이터 재설계 설계 §4b)
