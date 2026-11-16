@@ -358,7 +358,7 @@ CREATE TABLE ax_claim_appeals (
     submitted_at   TEXT
 );
 
--- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜)·⑤-2 AI 점검(kind 'claim_check'). 화면이 GET /jobs/{id}로 폴링
+-- 30초 넘는 작업(앱 설계 §4) — 지금은 ④ 준비표 다시 만들기(kind 'prep', arg = 날짜)·⑤-2 AI 점검(kind 'claim_check')·야간 실행(kind 'nightly', backend/nightly.py — done·total은 단계 수, detail은 단계별 요약 JSON). 화면이 GET /jobs/{id}로 폴링
 CREATE TABLE ax_jobs (
     id          INTEGER PRIMARY KEY,
     kind        TEXT NOT NULL,
@@ -368,7 +368,8 @@ CREATE TABLE ax_jobs (
     total       INTEGER NOT NULL DEFAULT 0,
     error       TEXT,
     started_at  TEXT NOT NULL,
-    finished_at TEXT
+    finished_at TEXT,
+    detail      TEXT  -- nightly만: [{step, new, failed, note}]
 );
 
 -- ⑨ 미예약 환자 연락 기록(기능 정의 §5 ⑨, backend/missed.py) — 가장 최근 기록이 목록 빠짐·점수 감점을 정한다.
