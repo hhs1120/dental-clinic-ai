@@ -31,7 +31,8 @@ PreToolUse
 PostToolUse
 - 정형 생성 단계·생성 프롬프트를 고치면 캐시 미스 확인을 알린다 — CLAUDE.md 절대 규칙
 
-입력은 훅 JSON(stdin). 막기·알림은 exit 2 + 이유(stderr — Claude에게 전달), 확인 창은 JSON(permissionDecision ask),
+입력은 훅 JSON(stdin). 막기·알림은 exit 2 + 이유(stderr — Claude에게 전달), 확인 창은 JSON(permissionDecision ask —
+이유는 사용자가 읽는 한 줄 '[머리표] 무엇 · 걸린 부분: 단순 명령 하나 · 허용하면 …', _prompt),
 아니면 exit 0. 표준 라이브러리만 쓴다.
 """
 
@@ -228,32 +229,62 @@ def _in_repo(path: str, cwd: Path) -> bool:
     return True
 
 
+def _prompt(why: tuple[str, str, str], part: str = "") -> str:
+    """확인 창 이유 한 줄 — '[머리표] 무엇 · 걸린 부분: … · 허용하면 …'(긴 명령에서 걸린 곳을 찾지 않게)"""
+    tag, what, then = why
+    if len(part) > PROMPT_PART_MAX:
+        part = part[: PROMPT_PART_MAX - 1] + "…"
+    return " · ".join(
+        [f"[{tag}] {what}", *([f"걸린 부분: {part}"] if part else []), f"허용하면 {then}"]
+    )
+
+
 def check_ask(command: str, cwd: Path = ROOT) -> str | None:
-    """사용자 확인을 받을 명령이면 이유"""
+    """사용자 확인을 받을 명령이면 이유(_prompt 한 줄)"""
     try:
         segments = _segments(command)
     except ValueError:  # 해석 못 하는 명령 — 위험 단어가 있으면 그냥 넘기지 않는다
         if _RISKY_WORDS.search(command):
-            return "명령을 해석하지 못했다(따옴표) — 지우기·비밀·push 단어가 있어 확인한다"
+            return _prompt(
+                (
+                    "해석 못 함",
+                    "따옴표가 안 닫혀 명령을 읽지 못했다",
+                    "무엇을 할지 모른 채 실행된다(지우기·비밀·push 단어가 있음)",
+                )
+            )
         return None
     for tokens, here in _walk(segments, cwd):
         sub = _git_subcommand(tokens)
         text = " ".join(tokens)
-        if sub and sub[0] == "push" and (why := _push_risk(sub[1], _git_cwd(tokens, here))):
-            return why
-        if why := _ask_more(tokens, sub, here):
-            return why
-        if tokens[:3] == ["gh", "pr", "merge"]:
-            return "PR 머지 — 되돌리기 어려워 확인한다"
-        if (
-            Path(tokens[0]).name == "make"
-            and "llm-fill-api" in tokens
-            or "fill-api" in tokens
-            and any("llm_jobs" in t for t in tokens)
-        ):
-            return "LLM API 채우기 — 과금되는 배치라 확인한다(하루 상한 밖 — 건수는 make data가 알려 준다, 기능 정의 §7)"
-        if "evaluation" in text and re.search(r"--split[ =]test\b", text):
-            return "test 평가 — 묶음마다 한 번뿐이라 확인한다(평가 설계 §1 원칙 2)"
+        if why := _ask_why(tokens, sub, here, text):
+            return _prompt(why, text)
+    return None
+
+
+def _ask_why(tokens: list[str], sub, here: Path, text: str) -> tuple[str, str, str] | None:
+    if sub and sub[0] == "push" and (why := _push_risk(sub[1], _git_cwd(tokens, here))):
+        return why
+    if why := _ask_more(tokens, sub, here):
+        return why
+    if tokens[:3] == ["gh", "pr", "merge"]:
+        return ("되돌리기 어려움", "PR 머지", "main에 들어간다")
+    if (
+        Path(tokens[0]).name == "make"
+        and "llm-fill-api" in tokens
+        or "fill-api" in tokens
+        and any("llm_jobs" in t for t in tokens)
+    ):
+        return (
+            "과금",
+            "LLM API 채우기(배치)",
+            "하루 상한 밖으로 비용이 나간다 — 건수는 make data가 알려 준다(기능 정의 §7)",
+        )
+    if "evaluation" in text and re.search(r"--split[ =]test\b", text):
+        return (
+            "test 평가",
+            "--split test 평가",
+            "묶음마다 한 번뿐인 test를 쓴다(평가 설계 §1 원칙 2)",
+        )
     return None
 
 
@@ -455,6 +486,21 @@ PAID_MODULES = {
     "evaluation.claim_check": {"sample", "run"}, "evaluation.claim_appeal": {"run"},
 }  # fmt: skip
 FREE_FLAGS = {"--plan", "--stats", "--help", "-h"}
+# 확인 창에 모듈 이름 대신 보일 말
+MODULE_LABELS = {
+    "backend.nightly": "야간 일괄 실행", "backend.prep": "진료 준비표 제안",
+    "backend.report": "경영 리포트 해석", "backend.claim_check": "청구 점검",
+    "backend.claim_omission": "청구 누락 점검", "backend.claim_evidence": "청구 근거 문장",
+    "backend.recon_agent": "일계표 불일치 조사", "backend.expense_agent": "지출 증빙 탐색",
+    "backend.followup": "통화 후속 처리안", "backend.rag_index": "검색 색인(임베딩)",
+    "backend.classify_batch": "통화 분류·블라인드 일괄", "evaluation.hard_labels": "어려운 통화 정답 라벨",
+    "evaluation.call_actions": "처리 정답 라벨", "evaluation.followup": "후속 처리 평가",
+    "evaluation.gold_audit": "골드 점검 중재", "evaluation.prompt_gate": "프롬프트 관문 판정",
+    "evaluation.claim_qa": "청구 기준 질문 초안", "evaluation.claim_omission": "청구 누락 합성 평가",
+    "evaluation.claim_check": "청구 점검 평가", "evaluation.claim_appeal": "재심 사유서 초안 평가",
+}  # fmt: skip
+PROMPT_PART_MAX = 80  # 확인 창의 "걸린 부분" 글자 수
+PAID_THEN = "LLM 호출 비용이 나간다"
 _PYTHON = re.compile(r"python[\d.]*")
 _SCRIPT = re.compile(r"(?:\./)?(backend|evaluation)/(\w+)\.py")
 _UV_VALUE_OPTS = {
@@ -800,20 +846,20 @@ def _current_branch(cwd: Path) -> str:
     return r.stdout.strip()
 
 
-def _push_risk(args: list[str], cwd: Path) -> str | None:
+def _push_risk(args: list[str], cwd: Path) -> tuple[str, str, str] | None:
     """main으로·강제 push만 확인 — feat 브랜치 push는 PR 흐름이라 그냥(사용자 결정)"""
     if any(a == "--force" or a.startswith("--force") for a in args) or "f" in _shorts(args):
-        return "강제 push — 원격 기록을 덮어 확인한다"
+        return ("되돌리기 어려움", "강제 push", "원격 기록을 덮어쓴다")
     if any(a in ("--mirror", "--all") for a in args):
-        return "push --mirror·--all — main까지 나갈 수 있어 확인한다"
+        return ("되돌리기 어려움", "push --mirror·--all", "main까지 밖으로 나갈 수 있다")
     refspecs = _positional(args, ("-o", "--push-option", "--repo"))[1:]
     if any(r.startswith("+") for r in refspecs):
-        return "강제 push(+refspec) — 원격 기록을 덮어 확인한다"
+        return ("되돌리기 어려움", "강제 push(+refspec)", "원격 기록을 덮어쓴다")
     current = _current_branch(cwd)
     dests = [r.split(":")[-1] for r in refspecs] or [current]
     dests = [current if d in ("HEAD", "@") else d for d in dests]
     if any(d in ("main", "refs/heads/main") for d in dests):
-        return "main으로 push — 밖으로 나가는 일이라 확인한다(PR로 머지하는 게 기본)"
+        return ("되돌리기 어려움", "main으로 push", "main에 바로 올라간다 — 보통은 PR로 머지한다")
     return None
 
 
@@ -843,24 +889,29 @@ def _module_args(args: list[str]) -> list[str]:
     return list(itertools.takewhile(lambda a: a != "--" and not set(a) & set("<>"), args))
 
 
-def _ask_more(tokens: list[str], sub, cwd: Path) -> str | None:
+def _ask_more(tokens: list[str], sub, cwd: Path) -> tuple[str, str, str] | None:
     """과금 명령·저장소 안 지우기·브랜치·stash 삭제"""
     prog = Path(tokens[0]).name
     if prog == "make":
         paid = [t for t in _make_targets(tokens[1:]) if t in PAID_MAKE]
         if paid and not (paid == ["nightly"] and any(t.startswith("PLAN=") for t in tokens)):
-            return f"make {paid[0]} — 과금 명령이라 확인한다(CLAUDE.md 명령의 '(과금)')"
+            free = " — 건수만 보려면 PLAN=1" if paid[0] == "nightly" else ""
+            return ("과금", f"make {paid[0]}", PAID_THEN + free)
     module, args = _module(tokens)
     if module in PAID_MODULES and not FREE_FLAGS & set(_module_args(args)):
         subs = PAID_MODULES[module]
         if subs is None or subs & set(args):
-            return f"{module} — 과금 일괄이라 확인한다"
+            return (
+                "과금",
+                f"{MODULE_LABELS[module]}({module})",
+                PAID_THEN + " — 인자 보기는 --help로 무료",
+            )
     if any(_delete_risk(tokens, t, cwd) == "ask" for t in _rm_targets(tokens)):
-        return "저장소 안 파일·폴더를 지운다 — 확인한다"
+        return ("지우기", "저장소 안 파일·폴더를 지운다", "커밋 안 한 변경은 되살릴 수 없다")
     if prog == "xargs" and any(
         Path(t).name in ("rm", "rmdir", "unlink", "shred") for t in tokens[1:]
     ):
-        return "xargs rm — 무엇을 지울지 명령만으로 알 수 없어 확인한다"
+        return ("지우기", "xargs rm", "무엇을 지울지 명령만으로 알 수 없다")
     if sub:
         name, args = sub
         if (
@@ -868,9 +919,9 @@ def _ask_more(tokens: list[str], sub, cwd: Path) -> str | None:
             and any(a in ("-D", "--delete", "-d") for a in args)
             and ("-D" in args or "--force" in args or "-f" in args)
         ):
-            return "git branch -D — 머지 안 된 브랜치도 지워 확인한다"
+            return ("되돌리기 어려움", "git branch -D", "머지 안 된 브랜치도 지운다")
         if name == "stash" and args[:1] in (["drop"], ["clear"]):
-            return f"git stash {args[0]} — 맡겨 둔 작업을 지워 확인한다"
+            return ("되돌리기 어려움", f"git stash {args[0]}", "맡겨 둔 작업이 사라진다")
     return None
 
 
@@ -888,9 +939,16 @@ def check_edit_ask(path: str, text: str) -> str | None:
     except ValueError:
         return None
     if re.fullmatch(r"\.claude/settings(?:\.local)?\.json|\.claude/hooks/.+", rel):
-        return f"{rel} — 훅·권한(안전장치) 편집이라 확인한다"
+        return _prompt(("안전장치", "훅·권한 편집", "이 저장소의 막기·확인 규칙이 바뀐다"), rel)
     if rel == "evaluation/metrics.py" and "GATE_" in text:
-        return "관문 기준(GATE_*) 수정은 사람만(평가 설계 §2.7) — 확인한다"
+        return _prompt(
+            (
+                "관문 기준",
+                "GATE_* 수정",
+                "프롬프트 관문 합격 기준이 바뀐다 — 사람만 고친다(평가 설계 §2.7)",
+            ),
+            rel,
+        )
     return None
 
 
@@ -948,12 +1006,14 @@ def main(argv: list[str]) -> int:
     try:
         event = json.load(sys.stdin)
     except ValueError:
-        return _ask("훅 입력을 읽지 못했다 — 확인한다")
+        return _ask(_prompt(("훅 오류", "훅 입력을 읽지 못했다", "검사 없이 실행된다")))
     try:
         return _run(event, argv)
     except Exception as e:  # noqa: BLE001 — 검사가 죽어도 Bash는 조용히 통과시키지 않는다
         if event.get("tool_name") == "Bash":
-            return _ask(f"훅 검사 중 오류({type(e).__name__}) — 확인한다")
+            return _ask(
+                _prompt(("훅 오류", f"검사 중 오류({type(e).__name__})", "검사 없이 실행된다"))
+            )
         return 0
 
 

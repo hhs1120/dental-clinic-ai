@@ -1020,3 +1020,61 @@ def test_shell_wrapper_free(command):
 )
 def test_help_flag_only_for_the_module(command):
     assert guard.check_ask(command, ROOT)
+
+
+@pytest.mark.parametrize(
+    ("command", "tag", "part"),
+    [
+        (
+            "git status; uv run python -m backend.report run",
+            "[과금]",
+            "uv run python -m backend.report run",
+        ),
+        ("make nightly", "[과금]", "make nightly"),
+        ("git push origin main", "[되돌리기 어려움]", "git push origin main"),
+        ("gh pr merge 63 --merge", "[되돌리기 어려움]", "gh pr merge 63 --merge"),
+        ("ls; rm -rf docs", "[지우기]", "rm -rf docs"),
+        (
+            "uv run python -m evaluation.claim_qa score --split test",
+            "[test 평가]",
+            "uv run python -m evaluation.claim_qa score --split test",
+        ),
+        ('bash -c "make report"', "[과금]", "make report"),  # 감싼 명령은 안쪽을 보인다
+    ],
+)
+def test_ask_prompt_shows_tag_and_part(command, tag, part):
+    """확인 창 이유: 머리표로 시작하고, 긴 명령 중 걸린 단순 명령만 보이고, 허용하면 무슨 일인지"""
+    why = guard.check_ask(command, ROOT)
+    assert why.startswith(tag)
+    assert f"걸린 부분: {part}" in why
+    assert "허용하면" in why
+    assert "\n" not in why
+
+
+def test_ask_prompt_hides_other_segments():
+    why = guard.check_ask("git log --oneline -3; uv run python -m backend.report run", ROOT)
+    assert "git log" not in why
+
+
+def test_ask_prompt_names_paid_module():
+    why = guard.check_ask("uv run python -m backend.report run", ROOT)
+    assert "경영 리포트 해석" in why
+
+
+def test_ask_prompt_cuts_long_part():
+    why = guard.check_ask("uv run python -m backend.report run " + "--months 2026-08 " * 20, ROOT)
+    part = why.split("걸린 부분: ")[1].split(" · ")[0]
+    assert len(part) <= guard.PROMPT_PART_MAX and part.endswith("…")
+
+
+def test_every_paid_module_has_label():
+    assert set(guard.MODULE_LABELS) == set(guard.PAID_MODULES)
+
+
+def test_ask_prompt_unparsable():
+    assert guard.check_ask("rm -rf 'docs", ROOT).startswith("[해석 못 함]")
+
+
+def test_edit_ask_prompt_tag():
+    why = guard.check_edit_ask(str(ROOT / ".claude/hooks/guard.py"), "x = 1")
+    assert why.startswith("[안전장치]") and "걸린 부분: .claude/hooks/guard.py" in why
