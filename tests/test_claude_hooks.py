@@ -581,6 +581,9 @@ def test_more_commands_ask(command):
         "make nightly PLAN=1",
         "uv run python -m backend.nightly run --plan",
         "uv run python -m backend.rag_index --embedding voyage-4 --stats",
+        "uv run python -m backend.report --help",  # argparse가 설명만 찍고 끝난다
+        "python -m evaluation.prompt_gate -h",
+        "uv run python -m backend.classify_batch classify --help",
         "uv run python -m evaluation.claim_qa score --split dev",
         "make test",
         "make verify",

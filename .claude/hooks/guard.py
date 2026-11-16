@@ -17,7 +17,7 @@ PreToolUse
   명령 출력으로 먹이는 SQL. -readonly·mode=ro는 통과. make data 같은 정식 명령은 통과
 - Bash 확인 창: 과금·되돌리기 어려운 명령은 사용자 승인 — main으로(HEAD·@는 현재 브랜치)·강제·--mirror·--all push
   (feat 브랜치 push와 PR 만들기는 그냥), PR 머지, CLAUDE.md "(과금)" 명령(make 대상·backend·evaluation 일괄 모듈과 그
-  스크립트 경로, 무료 모드 PLAN=·--plan·--stats는 제외), 모든 --split test 평가, 저장소 안 지우기(보호 경로 밖·worktree
+  스크립트 경로, 무료 모드 PLAN=·--plan·--stats·--help는 제외), 모든 --split test 평가, 저장소 안 지우기(보호 경로 밖·worktree
   폴더 자체·필터로 거르는 find), xargs rm, git branch -D·stash drop·clear. 명령을 해석하지 못했는데 위험 단어가 있거나,
   검사 중 예외가 나거나, 훅 입력을 읽지 못하면 확인 창(Bash가 조용히 통과하지 않게)
 - Read·Grep 막기: .env(비밀) — Grep은 glob 인자도 본다. 값이 대화에 남지 않게
@@ -419,7 +419,8 @@ PAID_MAKE = {
     "claim-omission-synth", "claim-check-sample", "claim-check-dev", "recon", "expense-ai",
     "index", "nightly", "gate",
 }  # fmt: skip
-# 같은 일을 모듈로 직접 부를 때 — 값은 과금 하위 명령(None이면 전부). --plan·--stats는 무료
+# 같은 일을 모듈로 직접 부를 때 — 값은 과금 하위 명령(None이면 전부). --plan·--stats·--help·-h는 무료
+# (모듈마다 main이 다른 일보다 먼저 argparse로 인자를 읽어 --help면 설명만 찍고 끝난다)
 PAID_MODULES = {
     "backend.nightly": None, "backend.prep": None, "backend.report": None,
     "backend.claim_check": None, "backend.claim_omission": None, "backend.claim_evidence": None,
@@ -431,7 +432,7 @@ PAID_MODULES = {
     "evaluation.claim_omission": {"cases", "synth", "real"},
     "evaluation.claim_check": {"sample", "run"}, "evaluation.claim_appeal": {"run"},
 }  # fmt: skip
-FREE_FLAGS = {"--plan", "--stats"}
+FREE_FLAGS = {"--plan", "--stats", "--help", "-h"}
 
 
 def is_env_file(path: str) -> bool:
