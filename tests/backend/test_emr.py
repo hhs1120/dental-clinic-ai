@@ -583,6 +583,19 @@ def test_schedule_day_merges_ax_with_tag(conn):
     assert d["counts"]["unconfirmed"] == 3  # 기준일의 AX 예약도 내원 확인 전
 
 
+def test_schedule_day_ax_pasted_call_links(conn):
+    """출처가 붙여 넣은 통화(앱 DB)면 원본 통화가 없어도 통화 링크가 서고 판정 풀 밖이다"""
+    ax = _ax(source_call_uid="p-0001", pasted_call_started_at="2026-12-01 08:30:00")
+    d = schedule_day(conn, TODAY, TODAY, START, [ax])
+    assert {a["id"]: a for a in d["appointments"]}["ax-7"]["call"] == {
+        "uid": "p-0001",
+        "started_at": "2026-12-01 08:30",
+        "pool": False,
+    }
+    d = schedule_day(conn, TODAY, TODAY, START, [_ax(source_call_uid="p-0002")])
+    assert {a["id"]: a for a in d["appointments"]}["ax-7"]["call"] is None
+
+
 def test_schedule_day_ax_consult_keeps_treatment_rename(conn):
     d = schedule_day(
         conn, TODAY, TODAY, START, [_ax(type="treatment", procedure_name="상담", staff_id=1)]

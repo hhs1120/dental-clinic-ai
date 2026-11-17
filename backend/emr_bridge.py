@@ -335,8 +335,10 @@ def ax_appointments(conn: sqlite3.Connection, date_from: date, date_to: date) ->
     """기간(양 끝 포함)의 승인된 AX 예약 — 원본 예약 행(emr_appointments)과 같은 키 + 환자·시술 이름(§5.3).
     id는 "ax-<id>", 상태는 scheduled, 잡은 시각(created_at)은 승인 시각"""
     rows = conn.execute(
-        "SELECT w.*, p.chart_no, p.name, r.name AS procedure_name FROM ax_emr_writes w"
+        "SELECT w.*, p.chart_no, p.name, r.name AS procedure_name,"
+        " pc.started_at AS pasted_call_started_at FROM ax_emr_writes w"
         " JOIN source.emr_patients p ON p.id = w.patient_id"
+        " LEFT JOIN ax_pasted_calls pc ON pc.call_uid = w.source_call_uid"
         " JOIN source.emr_procedures r ON r.code = w.procedure_code"
         " WHERE w.status = 'approved' AND date(w.scheduled_at) BETWEEN ? AND ?"
         " ORDER BY w.scheduled_at, w.id",
@@ -367,6 +369,9 @@ def ax_appointments(conn: sqlite3.Connection, date_from: date, date_to: date) ->
             "chart_no": r["chart_no"],
             "name": r["name"],
             "procedure_name": r["procedure_name"],
+            "pasted_call_started_at": r[
+                "pasted_call_started_at"
+            ],  # 출처가 붙여 넣은 통화면 그 시각
         }
         for r in rows
     ]

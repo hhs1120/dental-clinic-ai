@@ -69,6 +69,8 @@ def _ax_row(conn: sqlite3.Connection, x: dict) -> dict:
     call = conn.execute(
         "SELECT started_at, in_eval_pool FROM ax_calls WHERE call_uid = ?", (x["source_call_uid"],)
     ).fetchone()
+    # 출처가 붙여 넣은 통화(앱 DB ax_pasted_calls — 판정 풀 밖이라 통화 화면에서 열린다)면 원본에 없다
+    pasted = None if call else x.get("pasted_call_started_at")
     return x | {
         "registered_at": registered_at,
         "seq": None,
@@ -76,9 +78,9 @@ def _ax_row(conn: sqlite3.Connection, x: dict) -> dict:
         "plan_total": None,
         "reminders": 0,
         "done_before": done_before,
-        "call_uid": x["source_call_uid"] if call else None,
+        "call_uid": x["source_call_uid"] if call or pasted else None,
         "call_pool": call["in_eval_pool"] if call else 0,
-        "call_started_at": call["started_at"] if call else None,
+        "call_started_at": call["started_at"] if call else pasted,
     }
 
 

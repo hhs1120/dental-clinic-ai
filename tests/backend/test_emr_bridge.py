@@ -332,6 +332,20 @@ def test_ax_appointments_shape(conn):
     )
     assert a["planned_procedure_code"] == SCALING and a["chair_no"] == 1
     assert emr_bridge.ax_appointments(conn, date(2026, 12, 3), date(2026, 12, 9)) == []
+    assert a["pasted_call_started_at"] is None
+
+
+def test_ax_appointments_pasted_call_started_at(conn):
+    d = _draft(conn, f"{WED} 10:00")
+    conn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, patient_id,"
+        " added_by, added_at) VALUES ('p-0001', 'inbound', ?, 't', ?, '데스크', ?)",
+        (f"{WED} 09:00:00", MISSED, f"{WED} 09:01:00"),
+    )
+    conn.execute("UPDATE ax_emr_writes SET source_call_uid = 'p-0001' WHERE id = ?", (d["id"],))
+    _approve(conn, d["id"])
+    got = emr_bridge.ax_appointments(conn, date(2026, 12, 2), date(2026, 12, 2))
+    assert got[0]["pasted_call_started_at"] == f"{WED} 09:00:00"
 
 
 def _call(conn, uid, at, patient, wants=1):
