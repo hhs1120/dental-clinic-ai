@@ -23,6 +23,12 @@ from pathlib import Path
 
 from generator.master import ADJUST_REASONS, CHAIRS, DOCTOR_CONCURRENCY
 from generator.paths import output_paths
+from generator.verify.assistant_scenarios import (
+    ASSISTANT_TYPE_COUNTS,
+    check_assistant_scenarios,
+    check_assistant_split_isolation,
+    split_overlap,
+)
 from generator.verify.calls import (
     AX_CALLS_COLUMNS,
     CALL_MIX_TOLERANCE,
@@ -239,6 +245,10 @@ from generator.verify.schedule import (
 )
 
 __all__ = [
+    "ASSISTANT_TYPE_COUNTS",
+    "check_assistant_scenarios",
+    "check_assistant_split_isolation",
+    "split_overlap",
     "ADJUST_REASONS",
     "APPOINTMENT_TRIGGERS",
     "AX_CALLS_COLUMNS",
@@ -583,6 +593,8 @@ REQUIRED = [
     check_qa_expected_args,
     check_qa_patient_names,
     check_qa_refusal,
+    check_assistant_scenarios,
+    check_assistant_split_isolation,
 ]
 
 
@@ -700,7 +712,10 @@ def main(argv=None) -> int:
         conn.execute("ATTACH DATABASE ? AS app", (f"file:{args.app}?mode=ro",))
     try:
         ctx = load_ctx(
-            args.config, conn, args.rag_qa or (paths["rag_qa"] if args.db is None else None)
+            args.config,
+            conn,
+            args.rag_qa or (paths["rag_qa"] if args.db is None else None),
+            paths["assistant_scenarios"] if args.db is None else None,
         )
     except (KeyError, sqlite3.OperationalError) as e:
         print(f"truth_gen_meta 읽기 실패({e}) — make data 먼저")

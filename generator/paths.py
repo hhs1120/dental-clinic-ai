@@ -23,6 +23,8 @@ def output_paths() -> dict[str, Path]:
         "hard_labels": ROOT / "ground_truth" / "hard_call_labels.json",
         # ⑤-3 청구 기준 질문(evaluation/claim_qa.py review가 쓰고 make data가 적재)
         "claim_qa": ROOT / "ground_truth" / "claim_qa.json",
+        # AI 비서 시나리오(AI 비서 설계 §7 — evaluation/assistant_scenarios.py build가 쓴다, 적재 없음)
+        "assistant_scenarios": ROOT / "ground_truth" / "assistant_scenarios.json",
         "rag_qa": ROOT
         / "ground_truth"
         / "rag_qa.json",  # 사람이 쓴 RAG 질문(평가 설계 §3.1) — make data가 truth_rag_qa로 적재
