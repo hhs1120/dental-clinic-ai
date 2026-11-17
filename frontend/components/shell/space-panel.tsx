@@ -89,6 +89,29 @@ function EvalMenu({ tab }: { tab: string }) {
   );
 }
 
+/** 자료실 목록 칸 — 기록 검색·문서함(?tab=). 탭을 바꿔도 검색어 등 나머지 주소 값은 남긴다 */
+function LibraryMenu({ params }: { params: URLSearchParams }) {
+  const tab = params.get("tab") === "docs" ? "docs" : "search";
+  return (
+    <nav aria-label="메뉴" className="flex flex-col gap-0.5">
+      {LIBRARY_TABS.map(([key, label]) => {
+        const next = new URLSearchParams(params);
+        next.set("tab", key);
+        return (
+          <Link
+            key={key}
+            href={`/ask?${next}`}
+            aria-current={tab === key ? "page" : undefined}
+            className={itemClass(tab === key)}
+          >
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 /** AI 비서 목록 칸 — 새 대화와 지난 대화(링크는 /?c=<번호>, 열기는 AI 비서 화면이 읽는다) */
 function ConversationList({ current }: { current: string | null }) {
   const first = useFetch<Conversation[]>(`conv:${current}`, (s) =>
@@ -132,6 +155,11 @@ function ConversationList({ current }: { current: string | null }) {
   );
 }
 
+const LIBRARY_TABS = [
+  ["search", "기록 검색"],
+  ["docs", "문서함"],
+] as const;
+
 const TITLES: Record<SpaceKey, string> = {
   assistant: "대화",
   work: "업무",
@@ -158,11 +186,7 @@ export function SpacePanel({ space }: { space: SpaceKey }) {
         )}
         {space === "work" && <WorkMenu pathname={pathname} />}
         {space === "eval" && <EvalMenu tab={params.get("tab") ?? ""} />}
-        {space === "library" && (
-          <p className="px-3 text-sm text-muted-foreground">
-            매뉴얼·공지와 지난 통화·문자·차트 기록을 찾습니다.
-          </p>
-        )}
+        {space === "library" && <LibraryMenu params={params} />}
       </div>
       <p className="px-3 text-xs text-muted-foreground">
         기준일 <strong className="font-medium text-foreground">{today}</strong>

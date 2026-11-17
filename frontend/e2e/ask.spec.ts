@@ -132,8 +132,13 @@ test("자료실 제목, 질문하기 탭 없음, AI 비서에게 묻기", async 
     page.getByRole("heading", { name: "자료실", level: 1 }),
   ).toBeVisible();
   await expect(page.getByRole("tab", { name: "질문하기" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "기록 검색" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "문서함" })).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await expect(menu.getByRole("link", { name: "기록 검색" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(menu.getByRole("link", { name: "문서함" })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI 요약" })).toContainText(
     "요약을 만들지 못했습니다",
   );
@@ -159,10 +164,26 @@ test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 �
   const summary = page.getByRole("region", { name: "AI 요약" });
   await expect(summary).toContainText("접수한다");
   // 탭은 URL로 바뀐다 — 앞 전환이 끝나기 전에 누르면 그 클릭이 묻힌다
-  const docsTab = page.getByRole("tab", { name: "문서함" });
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const docsTab = menu.getByRole("link", { name: "문서함" });
   await docsTab.click();
-  await expect(docsTab).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "기록 검색" }).click();
+  await expect(docsTab).toHaveAttribute("aria-current", "page");
+  await menu.getByRole("link", { name: "기록 검색" }).click();
   await expect(summary).toContainText("접수한다");
   expect(calls).toBe(1);
+});
+
+test("목록 칸의 기록 검색·문서함 링크로 전환, 상단 탭 없음", async ({
+  page,
+}) => {
+  await page.goto("/ask");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const search = menu.getByRole("link", { name: "기록 검색" });
+  const docs = menu.getByRole("link", { name: "문서함" });
+  await expect(search).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await docs.click();
+  await expect(page).toHaveURL(/tab=docs/);
+  await expect(docs).toHaveAttribute("aria-current", "page");
+  await expect(search).not.toHaveAttribute("aria-current", "page");
 });
