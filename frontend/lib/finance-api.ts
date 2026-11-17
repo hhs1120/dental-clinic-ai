@@ -154,7 +154,7 @@ export type InvestigateEvent =
   | { type: "done"; agent: ReconAgentResult }
   | { type: "error"; message: string };
 
-/** event:/data: 블록 하나 → 이벤트(lib/chat-api.ts와 같은 형식). 모르는 형식은 버린다 */
+/** event:/data: 블록 하나 → 이벤트(lib/assistant-api.ts와 같은 형식). 모르는 형식은 버린다 */
 function parseEvent(block: string): InvestigateEvent | null {
   let kind = "";
   let data = "";

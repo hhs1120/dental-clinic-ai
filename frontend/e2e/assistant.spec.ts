@@ -15,6 +15,7 @@ const DRAFT = {
   status: "draft",
   reason: null,
   source_call_uid: "c-1",
+  source_call_pool: 0,
   decided_by: null,
   decided_at: null,
   chart_no: "C0001",
@@ -104,6 +105,43 @@ test("assistant: 초안 승인 → 확정 표시", async ({ page }) => {
     page.getByRole("link", { name: "일정에서 보기" }),
   ).toHaveAttribute("href", "/schedule?date=2026-12-01");
   await expect(page.getByRole("button", { name: "승인" })).toHaveCount(0);
+});
+
+test("assistant: 근거 통화 링크 — 판정 풀 통화는 링크 없이", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  const drafts = [
+    DRAFT,
+    { ...DRAFT, id: 8, source_call_uid: "c-9", source_call_pool: 1 },
+  ];
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({
+              cards: drafts.map((d) => ({
+                type: "draft",
+                id: String(d.id),
+                data: d,
+              })),
+            }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("예약 원한 사람 초안"));
+  await expect(page.getByRole("link", { name: "c-1" })).toHaveAttribute(
+    "href",
+    "/calls?call=c-1",
+  );
+  await expect(page.getByText("c-9")).toBeVisible();
+  await expect(page.getByRole("link", { name: "c-9" })).toHaveCount(0);
 });
 
 test("assistant: 승인 실패 이유 표시", async ({ page }) => {

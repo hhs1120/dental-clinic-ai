@@ -13,6 +13,8 @@ export interface DraftData {
   status: DraftStatus;
   reason: string | null;
   source_call_uid: string | null;
+  /** 근거 통화가 판정 풀이면 1 — 통화 화면에 없어 링크를 걸지 않는다(AI 비서 설계 §8) */
+  source_call_pool: number;
   decided_by: string | null;
   decided_at: string | null;
   chart_no: string;
@@ -130,7 +132,7 @@ function parse(block: string): AssistantEvent | null {
   return { type: kind, ...JSON.parse(data) } as AssistantEvent;
 }
 
-/** 말 1개를 보내고 이벤트를 도착 순서대로 넘긴다. HTTP 오류는 error 이벤트로(chat-api streamChat과 같은 방식) */
+/** 말 1개를 보내고 이벤트를 도착 순서대로 넘긴다. HTTP 오류는 error 이벤트로 */
 export async function streamTurn(
   body: { conversation_id: number | null; text: string; part: string },
   onEvent: (e: AssistantEvent) => void,

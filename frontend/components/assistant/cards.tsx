@@ -98,12 +98,16 @@ function DraftCard({
           {d.source_call_uid && (
             <>
               {" · 근거 통화 "}
-              <Link
-                href={`/calls?call=${encodeURIComponent(d.source_call_uid)}`}
-                className={linkClass}
-              >
-                {d.source_call_uid}
-              </Link>
+              {d.source_call_pool ? (
+                d.source_call_uid
+              ) : (
+                <Link
+                  href={`/calls?call=${encodeURIComponent(d.source_call_uid)}`}
+                  className={linkClass}
+                >
+                  {d.source_call_uid}
+                </Link>
+              )}
             </>
           )}
         </p>
