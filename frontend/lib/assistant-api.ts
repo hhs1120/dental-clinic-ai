@@ -91,6 +91,7 @@ export interface SavedMessage {
   role: "user" | "assistant";
   text: string;
   cards: Card[];
+  tool_calls: ToolCall[];
   status?: string;
 }
 export interface SavedConversation {
@@ -153,7 +154,7 @@ export async function streamTurn(
     try {
       const detail = (await res.json()).detail;
       if (typeof detail === "string") message = detail;
-      else if (Array.isArray(detail)) message = "말은 1~500자로 써 주세요";
+      else if (Array.isArray(detail)) message = "말은 1~1000자로 써 주세요";
     } catch {}
     onEvent({ type: "error", message });
     return;

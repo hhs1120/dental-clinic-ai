@@ -192,6 +192,9 @@ def test_conversation_reopen_no_model_call(conn):
     assert [m["role"] for m in got["messages"]] == ["user", "assistant"]
     card = got["messages"][1]["cards"][0]
     assert card["type"] == "draft" and card["data"]["status"] == "approved"
+    # 단계 줄 — 첫 메시지(사용자)는 비고, 답은 이번 턴 도구 호출 그대로
+    assert got["messages"][0]["tool_calls"] == []
+    assert got["messages"][1]["tool_calls"] == out["tool_calls"] and out["tool_calls"]
     assert conn.execute("SELECT count(*) FROM ax_llm_calls").fetchone()[0] == calls
     assert [c["id"] for c in assistant.conversations(conn)] == [out["conversation_id"]]
     assert assistant.conversation(conn, 999) is None

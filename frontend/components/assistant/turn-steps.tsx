@@ -3,6 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** 도구 이름 → 한 줄 이름 — 도구는 backend/assistant_tools.py·query_tools.py */
@@ -46,11 +47,13 @@ export function TurnSteps({
   const shown = open || running;
   return (
     <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         aria-expanded={shown}
         onClick={() => setOpen(!open)}
-        className="flex w-fit items-center gap-1 hover:text-foreground"
+        className="w-fit gap-1 px-1 text-muted-foreground"
       >
         <ChevronRight
           aria-hidden="true"
@@ -58,7 +61,7 @@ export function TurnSteps({
         />
         조회 {steps.length}번
         {running && <span className="ml-1">· 진행 중…</span>}
-      </button>
+      </Button>
       {shown && (
         <ol className="ml-5 flex flex-col gap-0.5">
           {steps.map((s, i) => (

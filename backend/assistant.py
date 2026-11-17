@@ -506,7 +506,8 @@ def conversation(conn: sqlite3.Connection, conversation_id: int) -> dict | None:
         return None
     messages = []
     for m in conn.execute(
-        "SELECT seq, role, text, cards, status, run_id, created_at FROM ax_assistant_messages"
+        "SELECT seq, role, text, cards, tool_calls, status, run_id, created_at"
+        " FROM ax_assistant_messages"
         " WHERE conversation_id = ? ORDER BY seq",
         (conversation_id,),
     ):
@@ -514,5 +515,7 @@ def conversation(conn: sqlite3.Connection, conversation_id: int) -> dict | None:
         for c in cards:
             if c["type"] == "draft" and (detail := card_detail(conn, "draft", c["id"])):
                 c["data"] = detail
-        messages.append({**dict(m), "cards": cards})
+        messages.append(
+            {**dict(m), "cards": cards, "tool_calls": json.loads(m["tool_calls"] or "[]")}
+        )
     return {**dict(row), "messages": messages}

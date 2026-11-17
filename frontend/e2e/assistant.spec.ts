@@ -146,11 +146,18 @@ test("assistant: 지난 대화 열기는 저장된 그대로", async ({ page }) 
         id: 5,
         title: "미예약 요청",
         messages: [
-          { seq: 1, role: "user", text: "지난주 예약 원한 사람", cards: [] },
+          {
+            seq: 1,
+            role: "user",
+            text: "지난주 예약 원한 사람",
+            cards: [],
+            tool_calls: [],
+          },
           {
             seq: 2,
             role: "assistant",
             text: "저장된 답입니다.",
+            tool_calls: [{ name: "find_calls", args: {}, ok: true }],
             cards: [{ type: "draft", id: "7", data: DRAFT }],
           },
         ],
@@ -162,6 +169,7 @@ test("assistant: 지난 대화 열기는 저장된 그대로", async ({ page }) 
   await expect(page).toHaveURL(/\/\?c=5$/);
   await expect(page.getByText("지난주 예약 원한 사람")).toBeVisible();
   await expect(page.getByText("저장된 답입니다.")).toBeVisible();
+  await expect(page.getByText("조회 1번")).toBeVisible();
   await expect(page.getByRole("button", { name: "승인" })).toBeVisible();
   expect(turns).toBe(0);
 });
@@ -177,10 +185,64 @@ test("assistant: ?draft= 로 바로 보냄, ?prefill= 은 채우기만", async (
   await expect(
     page.getByText("예약을 원했는데 안 잡힌 분은 1명입니다."),
   ).toBeVisible();
+  expect(bodies).toHaveLength(1);
   expect(bodies[0]).toMatchObject({ text: "재심 낼 만한 건" });
 
   const before = bodies.length;
   await page.goto("/?prefill=" + encodeURIComponent("틀니 수리 며칠"));
   await expect(page.getByLabel("말 입력")).toHaveValue("틀니 수리 며칠");
   expect(bodies.length).toBe(before);
+});
+
+test("assistant: 답을 기다리는 중 다른 대화를 열면 옛 답이 섞이지 않는다", async ({
+  page,
+}) => {
+  await page.route("**/api/assistant/conversations", (r) =>
+    r.fulfill({
+      json: [{ id: 9, title: "다른 대화", part: "데스크", created_at: "x" }],
+    }),
+  );
+  await page.route("**/api/assistant/conversations/9", (r) =>
+    r.fulfill({
+      json: {
+        id: 9,
+        title: "다른 대화",
+        messages: [
+          {
+            seq: 1,
+            role: "user",
+            text: "열어 본 대화",
+            cards: [],
+            tool_calls: [],
+          },
+        ],
+      },
+    }),
+  );
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  const bodies: Record<string, unknown>[] = [];
+  await page.route("**/api/assistant/turn", async (r) => {
+    bodies.push(r.request().postDataJSON());
+    await held;
+    return r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([["reply", { type: "reply", ...REPLY({ cards: [] }) }]]),
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("말 입력").fill("느린 질문");
+  await page.getByLabel("말 입력").press("Enter");
+  await page.getByRole("link", { name: "다른 대화" }).click();
+  await expect(page.getByText("열어 본 대화")).toBeVisible();
+  release();
+  await page.waitForTimeout(300);
+  await expect(
+    page.getByText("예약을 원했는데 안 잡힌 분은 1명입니다."),
+  ).toHaveCount(0);
+  await expect(page).toHaveURL(/\/\?c=9$/);
+  await page.getByLabel("말 입력").fill("이어서");
+  await page.getByLabel("말 입력").press("Enter");
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toMatchObject({ conversation_id: 9, text: "이어서" });
 });

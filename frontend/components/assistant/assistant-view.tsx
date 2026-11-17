@@ -48,6 +48,7 @@ export function AssistantView() {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const convId = useRef<number | null>(null);
+  const epoch = useRef(0); // 대화를 열거나 새로 시작할 때마다 올린다 — 옛 스트림의 이벤트를 가려낸다
   const next = useRef(0);
   const handled = useRef(false);
   const bottom = useRef<HTMLDivElement>(null);
@@ -76,12 +77,14 @@ export function AssistantView() {
     setDraft("");
     setBusy(true);
     // 화면을 떠나도 턴은 서버에서 끝까지 돈다(저장됨) — 스트림을 끊지 않는다(개발 모드 이중 실행에도 안전)
+    const mine = epoch.current;
     const ac = new AbortController();
     let ended = false; // reply·error를 받았나 — 못 받고 끝나면 끊긴 것
     try {
       await streamTurn(
         { conversation_id: convId.current, text, part: readPart() },
         (e) => {
+          if (epoch.current !== mine) return; // 그 사이 다른 대화로 옮겼다 — 이 턴은 서버에 저장되고 화면은 건드리지 않는다
           ended ||= e.type !== "step";
           if (e.type === "step")
             patch(aid, (it) => ({
@@ -110,8 +113,9 @@ export function AssistantView() {
     } catch {
       // 읽기 오류 — 아래에서 끊김으로 표시
     } finally {
-      if (!ended) patch(aid, (it) => ({ ...it, running: false, error: CUT }));
-      setBusy(false);
+      if (!ended && epoch.current === mine)
+        patch(aid, (it) => ({ ...it, running: false, error: CUT }));
+      if (epoch.current === mine) setBusy(false);
     }
   };
 
@@ -119,6 +123,8 @@ export function AssistantView() {
   useEffect(() => {
     if (c === null) {
       if (convId.current !== null) {
+        epoch.current++;
+        setBusy(false);
         convId.current = null;
         setItems([]);
         setLoadError(null);
@@ -126,6 +132,8 @@ export function AssistantView() {
       return;
     }
     if (String(convId.current) === c) return;
+    epoch.current++;
+    setBusy(false);
     const ac = new AbortController();
     getConversation(Number(c), ac.signal).then(
       (conv) => {
@@ -140,7 +148,10 @@ export function AssistantView() {
                   role: "assistant",
                   text: m.text,
                   cards: m.cards,
-                  steps: [],
+                  steps: m.tool_calls.map((t) => ({
+                    tool: t.name,
+                    args: t.args,
+                  })),
                   running: false,
                 },
           ),
