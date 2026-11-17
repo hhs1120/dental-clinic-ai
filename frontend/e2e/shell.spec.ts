@@ -1,0 +1,81 @@
+// 앱 셸 — 아이콘 줄 5칸·목록 칸·좁은 화면 서랍(AI 비서 설계 §3.1)
+import { expect, test } from "@playwright/test";
+
+test("shell: 아이콘 줄 5칸과 이름", async ({ page }) => {
+  await page.goto("/");
+  const rail = page.getByRole("navigation", { name: "공간" });
+  await expect(rail.getByRole("link")).toHaveText([
+    "AI 비서",
+    "업무",
+    "자료실",
+    "AI 평가",
+    "EMR",
+  ]);
+  await expect(rail.getByRole("link", { name: "AI 비서" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(
+    page.getByRole("heading", { name: "무엇을 도와드릴까요?" }),
+  ).toBeVisible();
+});
+
+test("shell: 업무를 누르면 목록 칸이 메뉴 8개", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "공간" })
+    .getByRole("link", { name: "업무" })
+    .click();
+  await expect(page).toHaveURL(/\/today$/);
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await expect(menu.getByRole("link")).toHaveCount(8);
+  await expect(menu.getByRole("link", { name: /^오늘/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await menu.getByRole("link", { name: "경영 리포트" }).click();
+  await expect(page).toHaveURL(/\/report$/);
+});
+
+test("shell: AI 평가 탭은 목록 칸 링크", async ({ page }) => {
+  await page.goto("/eval");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await expect(menu.getByRole("link")).toHaveText([
+    "판정",
+    "블라인드 비교",
+    "정확도 표",
+    "자동 개선",
+  ]);
+  await menu.getByRole("link", { name: "정확도 표" }).click();
+  await expect(page).toHaveURL(/\/eval\?tab=acc$/);
+  await expect(menu.getByRole("link", { name: "정확도 표" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
+test("shell: 좁은 화면에서 서랍", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/today");
+  const rail = page.getByRole("navigation", { name: "공간" });
+  await expect(rail).toBeHidden();
+  await page.getByRole("button", { name: "메뉴 열기" }).click();
+  await expect(rail.getByRole("link", { name: "자료실" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "메뉴" }).getByRole("link"),
+  ).toHaveCount(8);
+  await page
+    .getByRole("navigation", { name: "메뉴" })
+    .getByRole("link", { name: "예약", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/schedule$/);
+  await expect(rail).toBeHidden();
+});
+
+test("shell: 떠 있는 물어보기 버튼 없음", async ({ page }) => {
+  await page.goto("/today");
+  await expect(page.getByRole("button", { name: "물어보기" })).toHaveCount(0);
+  await expect(
+    page.getByRole("complementary", { name: "물어보기" }),
+  ).toHaveCount(0);
+});

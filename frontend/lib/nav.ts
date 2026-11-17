@@ -1,4 +1,28 @@
-// 메뉴와 별도 공간 (기능 정의 §4 앱 구성, 앱 설계 §9). 물어보기(/ask)는 메뉴가 아니라 떠 있는 버튼·창으로 간다
+import {
+  BotMessageSquare,
+  FolderSearch,
+  LayoutGrid,
+  Monitor,
+  Scale,
+  type LucideIcon,
+} from "lucide-react";
+
+// 공간 5개(아이콘 줄)와 업무 메뉴·AI 평가 탭(목록 칸) (AI 비서 설계 §3.1, 기능 정의 §4 앱 구성)
+export type SpaceKey = "assistant" | "work" | "library" | "eval" | "emr";
+
+export const SPACES: {
+  key: SpaceKey;
+  label: string;
+  icon: LucideIcon;
+  href: string;
+}[] = [
+  { key: "assistant", label: "AI 비서", icon: BotMessageSquare, href: "/" },
+  { key: "work", label: "업무", icon: LayoutGrid, href: "/today" },
+  { key: "library", label: "자료실", icon: FolderSearch, href: "/ask" },
+  { key: "eval", label: "AI 평가", icon: Scale, href: "/eval" },
+  { key: "emr", label: "EMR", icon: Monitor, href: "/emr" },
+];
+
 export const MENU = [
   { href: "/today", label: "오늘" },
   { href: "/schedule", label: "예약" },
@@ -10,8 +34,20 @@ export const MENU = [
   { href: "/report", label: "경영 리포트" },
 ];
 
-/** 메뉴에 넣지 않는 공간 — 들어가면 메뉴 자리에 이름과 돌아가기 */
-export const SPACES: Record<string, string> = {
-  eval: "AI 평가",
-  emr: "전환 전 EMR",
-};
+/** AI 평가 탭 — 목록 칸 링크(/eval?tab=…), 첫 탭은 주소에 ?tab이 없다 */
+export const EVAL_TABS = [
+  ["judge", "판정"],
+  ["blind", "블라인드 비교"],
+  ["acc", "정확도 표"],
+  ["improve", "자동 개선"],
+] as const;
+
+/** 지금 경로가 속한 공간 — 업무 화면 전부는 work */
+export function spaceOf(pathname: string): SpaceKey {
+  const seg = pathname.split("/")[1] ?? "";
+  if (seg === "") return "assistant";
+  if (seg === "ask") return "library";
+  if (seg === "eval") return "eval";
+  if (seg === "emr") return "emr";
+  return "work";
+}
