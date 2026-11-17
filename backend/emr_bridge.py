@@ -3,7 +3,8 @@
 
 슬롯 검사는 원본 예약이 지키는 운영 규칙 전부(가상 데이터 생성 설계 §1 (3)·(4)) — 영업시간·점심·휴진일, 기준일
 이후, 시술 소요 시간, 담당 역할, 담당 동시 건수, 체어 한 시각 1건(상담은 체어 없음), 같은 환자 같은 날 1건.
-원본(취소 제외)과 승인된 AX 예약을 합쳐 세고, 초안은 자리를 막지 않는다. 값은 source.ax_master_values(prep.master_values)."""
+원본(취소 제외)과 승인된 AX 예약을 합쳐 세고, 초안은 자리를 막지 않는다(체어는 승인 때 다시 고른다).
+값은 source.ax_master_values(prep.master_values)."""
 
 import sqlite3
 from datetime import date, datetime, time, timedelta
@@ -284,7 +285,7 @@ def approve(
         if began:
             conn.rollback()
         raise Conflict(f"초안이 아님: {draft_id}")
-    codes = check_slot(
+    codes, chairs, _, _ = _slot(
         conn,
         clinic,
         patient_id=row["patient_id"],
@@ -294,10 +295,14 @@ def approve(
         exclude_id=draft_id,
     )
     status = "rejected" if codes else "approved"
+    # 초안 때 고른 체어를 같은 시각의 다른 초안이 먼저 승인돼 차지했으면 지금 빈 체어 중 가장 작은 번호로(상담은 NULL)
+    chair = row["chair_no"]
+    if not codes and chair is not None and chair not in chairs:
+        chair = chairs[0]
     cur = conn.execute(
-        "UPDATE ax_emr_writes SET status = ?, reason = ?, decided_by = ?, decided_at = ?"
-        " WHERE id = ? AND status = 'draft'",
-        (status, ",".join(codes) or None, by, at, draft_id),
+        "UPDATE ax_emr_writes SET status = ?, reason = ?, decided_by = ?, decided_at = ?,"
+        " chair_no = ? WHERE id = ? AND status = 'draft'",
+        (status, ",".join(codes) or None, by, at, chair, draft_id),
     )
     if cur.rowcount == 0:
         raise Conflict(f"초안이 아님: {draft_id}")

@@ -390,3 +390,33 @@ def test_approve_locks_then_second_connection_rejected(conn, tmp_path):
         other.close()
     row = conn.execute("SELECT status FROM ax_emr_writes WHERE id = ?", (b["id"],)).fetchone()
     assert row[0] == "rejected"
+
+
+def _chair(conn, write_id):
+    return conn.execute("SELECT chair_no FROM ax_emr_writes WHERE id = ?", (write_id,)).fetchone()[
+        0
+    ]
+
+
+def test_approve_reassigns_chair_taken_by_earlier_approval(conn):
+    # 초안은 자리를 막지 않아 같은 시각 두 초안이 같은 체어를 받는다 — 승인 때 빈 체어로 다시 고른다
+    a = _draft(conn, f"{WED} 10:00", patient=MISSED)
+    b = _draft(conn, f"{WED} 10:00", patient=NEW)
+    assert a["chair_no"] == b["chair_no"] == 1
+    assert _approve(conn, a["id"])["ok"] is True
+    assert _approve(conn, b["id"])["ok"] is True
+    assert {_chair(conn, a["id"]), _chair(conn, b["id"])} == {1, 2}
+
+
+def test_approve_no_chair_left_rejects(conn):
+    chairs = emr_bridge.prep.master_values(conn)["chairs"]
+    _src_add(
+        conn,
+        *[(99, HYGIENIST, f"{WED} 10:00:00", "hygiene", SCALING, c) for c in range(1, chairs)],
+    )
+    a = _draft(conn, f"{WED} 10:00", patient=MISSED)
+    b = _draft(conn, f"{WED} 10:00", patient=NEW)
+    assert a["chair_no"] == b["chair_no"] == chairs
+    assert _approve(conn, a["id"])["ok"] is True
+    assert _approve(conn, b["id"]) == {"ok": False, "reasons": ["no_chair"]}
+    assert _chair(conn, a["id"]) == chairs

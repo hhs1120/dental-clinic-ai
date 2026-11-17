@@ -4,13 +4,14 @@
 # ruff: noqa: F401, F811  (다른 테스트 모듈의 fixture를 가져와 쓴다)
 
 import json
+import sqlite3
 from dataclasses import replace
 
 import pytest
 
 from backend import assistant, chat, emr_bridge
 from shared.llm import BudgetExceeded, FakeGateway
-from tests.backend.test_emr_bridge import CLINIC, WED, _approve, conn, src
+from tests.backend.test_emr_bridge import CLINIC, MISSED, NEW, WED, _approve, _call, conn, src
 from tests.backend.test_followup import Script
 
 PATIENT = ("tool", "query_patient", {"chart_no": "C-00001"})
@@ -252,3 +253,106 @@ def test_input_states_today_and_closed_days(conn):
     turn(conn, gw, "내일 예약 몇 건?")
     first = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
     assert "오늘: 2026-12-01(화)" in first and "휴진 요일: 목·일" in first
+
+
+DRAFT = (
+    "tool",
+    "draft_appointment",
+    {"chart_no": "C-00002", "date": WED, "start": "10:00", "staff": "원장", "procedure": "레진"},
+)
+
+
+def test_draft_card_attached_even_if_reply_omits_it(conn):
+    gw = Turns(conn, [[DRAFT, DONE]], [reply("확인해 주세요")])
+    out = turn(conn, gw, "이영희 수요일 10시 레진")
+    assert [(c["type"], c["id"]) for c in out["cards"]] == [("draft", "1")]
+    saved = json.loads(_messages(conn, out["conversation_id"])[-1]["cards"])
+    assert [c["id"] for c in saved] == ["1"]
+
+
+def test_draft_card_not_duplicated_when_reply_lists_it(conn):
+    cards = [{"type": "draft", "id": "1"}, {"type": "patient", "id": "C-00002"}]
+    gw = Turns(conn, [[DRAFT, DONE]], [reply("초안을 만들었습니다", cards)])
+    out = turn(conn, gw, "이영희 수요일 10시 레진")
+    assert [(c["type"], c["id"]) for c in out["cards"]] == [
+        ("draft", "1"),
+        ("patient", "C-00002"),
+    ]
+
+
+def test_draft_card_attached_on_reply_budget(conn):
+    class Broke(Turns):
+        def complete(self, alias, **kw):
+            if kw.get("schema") is not None:
+                raise BudgetExceeded("하루 상한")
+            return super().complete(alias, **kw)
+
+    out = turn(conn, Broke(conn, [[DRAFT, DONE]], [reply()]), "이영희 수요일 10시 레진")
+    assert out["status"] == "budget" and out["text"] == assistant.FAILED_TEXT
+    assert [(c["type"], c["id"]) for c in out["cards"]] == [("draft", "1")]
+    assert out["cards"][0]["data"]["status"] == "draft"
+
+
+def test_draft_claim_without_draft_retries_then_fixed_text(conn):
+    gw = Turns(conn, [[DONE]], [reply("예약을 잡았습니다"), reply("초안을 만들었어요")])
+    out = turn(conn, gw, "이영희 수요일 10시 레진 잡아줘")
+    assert out["status"] == "draft_failed" and out["text"] == assistant.FAILED_TEXT
+    assert len([kw for _, kw in gw.calls if kw.get("schema")]) == 2
+    rule = conn.execute(
+        "SELECT blocked FROM ax_rule_counts WHERE rule_id = ?", (assistant.DRAFT_CLAIM,)
+    ).fetchone()[0]
+    assert rule == 2
+
+
+def test_draft_claim_rule_wording():
+    claims = ["예약했습니다", "예약을 잡았어요", "초안을 만들었습니다", "예약 넣었어요"]
+    plain = ["김철수님은 예약을 원했습니다", "예약 원함 통화입니다", "초안을 만들까요?"]
+    assert all(assistant.DRAFT_CLAIM_RE.search(t) for t in claims)
+    assert not any(assistant.DRAFT_CLAIM_RE.search(t) for t in plain)
+
+
+def test_draft_claim_then_honest_reply_passes(conn):
+    gw = Turns(conn, [[DONE]], [reply("예약했습니다"), reply("그 시간은 비어 있지 않아요")])
+    out = turn(conn, gw, "이영희 수요일 10시 레진 잡아줘")
+    assert out["status"] == "ok" and out["text"] == "그 시간은 비어 있지 않아요"
+
+
+def test_concurrent_send_failure_closes_run(conn):
+    class Racing(Turns):
+        def complete(self, alias, **kw):
+            # 같은 대화에 동시에 보낸 말이 다음 자리(seq 2)를 먼저 쓰고, 이 턴은 도중에 끊긴다
+            assistant._save(conn, 1, 2, "user", "동시에 보낸 말")
+            conn.commit()
+            raise RuntimeError("끊김")
+
+    with pytest.raises(RuntimeError):
+        turn(conn, Racing(conn, [[DONE]], [reply()]), "김철수 환자")
+    assert not conn.in_transaction
+    run = conn.execute("SELECT * FROM ax_agent_runs").fetchone()
+    assert run["status"] == "failed" and run["locked_by"] is None
+    assert [r["text"] for r in _messages(conn, 1)] == ["김철수 환자", "동시에 보낸 말"]
+
+
+def test_draft_card_marks_pool_source_call(conn):
+    _call(conn, "c-1", "2026-11-26 15:00:00", NEW)
+    _call(conn, "c-2", "2026-11-26 16:00:00", MISSED)
+    path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
+        0
+    ]
+    s = sqlite3.connect(path)
+    s.execute("UPDATE ax_calls SET in_eval_pool = 1 WHERE call_uid = 'c-2'")
+    s.commit()
+    s.close()
+    args = {**DRAFT[2], "source_call_uid": "c-1"}
+    pooled = {**DRAFT[2], "chart_no": "C-00001", "start": "11:00", "source_call_uid": "c-2"}
+    gw = Turns(conn, [[("tool", DRAFT[1], args), ("tool", DRAFT[1], pooled), DONE]], [reply()])
+    out = turn(conn, gw, "두 사람 수요일 레진")
+    got = {c["data"]["source_call_uid"]: c["data"]["source_call_pool"] for c in out["cards"]}
+    assert got == {"c-1": 0, "c-2": 1}
+
+
+def test_tool_log_marks_error_result_failed(conn):
+    closed = ("tool", DRAFT[1], {**DRAFT[2], "date": "2026-12-03"})  # 목요일 휴진
+    gw = Turns(conn, [[closed, DONE]], [reply("그날은 휴진이에요")])
+    out = turn(conn, gw, "이영희 목요일 레진")
+    assert [c["ok"] for c in out["tool_calls"]] == [False, True]

@@ -213,9 +213,17 @@ def _missed(clinic: Clinic, conn, args: dict) -> dict:
 
 
 def _draft(clinic: Clinic, conn, turn: dict, args: dict) -> dict:
+    """근거 통화(source_call_uid)는 있는 통화여야 한다 — 없으면 {error: [unknown_call]}(행 없음, 모델이 고쳐 다시
+    부르거나 통화 없이 만든다). 지어낸 통화 id가 초안·카드 링크에 남지 않게"""
     code, err = _procedure(conn, args["procedure"])
     if err:
         return err
+    uid = args["source_call_uid"]
+    if (
+        uid is not None
+        and not conn.execute("SELECT 1 FROM source.ax_calls WHERE call_uid = ?", (uid,)).fetchone()
+    ):
+        return {"error": ["unknown_call"]}
     patient = conn.execute(
         "SELECT id FROM source.emr_patients WHERE chart_no = ?", (args["chart_no"],)
     ).fetchone()

@@ -120,6 +120,7 @@ def test_draft_tool_rejects_bad_slot(conn):
 
 
 def test_draft_tool_records_conversation_turn(conn):
+    _call(conn, "c-1", "2026-11-26 15:00:00", NEW)
     got = call(conn, "draft_appointment", **_draft_args(source_call_uid="c-1"))
     assert got["status"] == "draft" and got["staff_id"] == HYGIENIST
     row = conn.execute("SELECT * FROM ax_emr_writes").fetchone()
@@ -163,3 +164,9 @@ def test_prep_rows_includes_approved_ax(conn):
 @pytest.mark.parametrize("kind", ["appeal_soon", "adjusted", "pre_claim_warning"])
 def test_claim_items_empty(conn, kind):
     assert call(conn, "claim_items", kind=kind) == {"kind": kind, "count": 0, "items": []}
+
+
+def test_draft_tool_unknown_source_call(conn):
+    got = call(conn, "draft_appointment", **_draft_args(source_call_uid="c-없음"))
+    assert got == {"error": ["unknown_call"]}
+    assert conn.execute("SELECT COUNT(*) FROM ax_emr_writes").fetchone()[0] == 0

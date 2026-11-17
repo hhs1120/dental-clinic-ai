@@ -2,10 +2,13 @@
 한 턴은 도구 단계(하네스 실행, 끝내는 도구 done_tools) → ③ 위임(ask_records에 남긴 질문마다 chat.chat) → 답 단계
 (게이트웨이 1회, 구조화 출력 {text, cards, cited_ids}, 같은 실행에 ref로 묶음)다. 두 단계의 별칭을 따로 받는다
 (TOOL_ALIAS·REPLY_ALIAS — 다음 묶음에서 도구 단계만 로컬 모델로). 답의 숫자·인용이 이번 턴 도구 결과·입력 밖이면
-이유를 붙여 답 단계를 한 번 다시 부르고, 또 어긋나면 고정 문구로 끝낸다(③과 같은 규칙). 카드는 이번 턴 결과에 나온
-대상만 남기고 내용은 코드가 채운다. 대화·메시지(그 턴의 도구 호출 포함)는 ax_assistant_* 에 저장한다(§6)."""
+이유를 붙여 답 단계를 한 번 다시 부르고, 또 어긋나면 고정 문구로 끝낸다(③과 같은 규칙). 이번 턴에 성공한 초안이
+없는데 답이 초안·예약을 만든 것처럼 쓰면(DRAFT_CLAIM_RE) 같은 방식으로 다시 부른다. 카드는 이번 턴 결과에 나온
+대상만 남기고 내용은 코드가 채우며, 성공한 초안 카드는 답이 빠뜨려도·답 단계가 실패해도 코드가 붙인다.
+대화·메시지(그 턴의 도구 호출 포함)는 ax_assistant_* 에 저장한다(§6)."""
 
 import json
+import re
 import sqlite3
 from datetime import datetime
 
@@ -42,11 +45,18 @@ ID_KEYS = {
     "claim_id": "claim",
 }
 CITE, NUMBER = "assistant.cite_outside", "assistant.number_unverified"
-FAILED_STATUS = {CITE: "cite_failed", NUMBER: "number_failed"}
+DRAFT_CLAIM = "assistant.draft_unbacked"
+FAILED_STATUS = {CITE: "cite_failed", NUMBER: "number_failed", DRAFT_CLAIM: "draft_failed"}
+# 초안·예약을 만든(잡은·넣은) 것처럼 쓴 말 — 이번 턴에 성공한 draft_appointment가 없는데 이 말이 있으면 어긋남.
+# "예약을 원했습니다"·"초안을 만들까요?"처럼 일을 끝냈다는 말이 아니면 걸리지 않게 끝난 동작 어미만 본다
+DRAFT_CLAIM_RE = re.compile(
+    r"(초안|예약)\s*(을|를|도)?\s*(만들었|잡았|잡아\s*(두었|뒀|놓았|놨)|넣었|등록했|했습니다|했어요)"
+)
 EVIDENCE_SKIP = (*chat.EVIDENCE_SKIP, "question")  # 모델이 쓴 자유 글은 숫자 근거가 아니다
 RETRY_REASON = {
     CITE: "cited_ids가 이번 턴 기록 검색·차트 조회 결과 밖임.",
     NUMBER: "답의 숫자가 이번 턴 도구 결과·입력에 없음.",
+    DRAFT_CLAIM: "이번 턴에 만든 예약 초안이 없는데 답이 초안·예약을 만든 것처럼 씀.",
 }
 RETRY_HINT = " 이번 턴 결과에 있는 사실·숫자만 그대로 써서 다시 답한다."
 REPLY_SCHEMA = {
@@ -109,7 +119,8 @@ def spec(names: tuple) -> AgentSpec:
 
 
 def card_detail(conn: sqlite3.Connection, type_: str, id_: str, clinic: Clinic | None = None):
-    """카드 내용(코드가 채움) — 대상이 없으면 None. recon_day만 clinic이 필요하다"""
+    """카드 내용(코드가 채움) — 대상이 없으면 None. recon_day만 clinic이 필요하다. 초안의 source_call_pool은 근거
+    통화가 판정 풀이면 1 — 판정 풀 통화는 통화 화면에 없어 화면이 링크를 걸지 않는다(AI 비서 설계 §8)"""
     if type_ == "patient":
         r = conn.execute(
             "SELECT chart_no, name, birth_date FROM source.emr_patients WHERE chart_no = ?", (id_,)
@@ -129,11 +140,13 @@ def card_detail(conn: sqlite3.Connection, type_: str, id_: str, clinic: Clinic |
             id_.isdigit()
             and conn.execute(
                 "SELECT w.id, w.scheduled_at, w.duration_min, w.type, w.chair_no, w.status, w.reason,"
-                " w.source_call_uid, w.decided_by, w.decided_at, p.chart_no, p.name, s.name AS staff,"
+                " w.source_call_uid, COALESCE(c.in_eval_pool, 0) AS source_call_pool,"
+                " w.decided_by, w.decided_at, p.chart_no, p.name, s.name AS staff,"
                 " s.role AS staff_role, r.name AS procedure FROM ax_emr_writes w"
                 " JOIN source.emr_patients p ON p.id = w.patient_id"
                 " JOIN source.emr_staff s ON s.id = w.staff_id"
-                " LEFT JOIN source.emr_procedures r ON r.code = w.procedure_code WHERE w.id = ?",
+                " LEFT JOIN source.emr_procedures r ON r.code = w.procedure_code"
+                " LEFT JOIN source.ax_calls c ON c.call_uid = w.source_call_uid WHERE w.id = ?",
                 (int(id_),),
             ).fetchone()
         )
@@ -205,7 +218,10 @@ def _tool_log(steps: list[dict]) -> list[dict]:
         {
             "name": s["tool"],
             "args": s["args"],
-            "ok": not s["is_error"] and s["hook_status"] == "pass",
+            # 성공 = 예외·훅 막힘이 없고 결과가 {error: [...]}가 아님(초안 검사에 걸린 호출도 실패)
+            "ok": not s["is_error"]
+            and s["hook_status"] == "pass"
+            and not (isinstance(s["result"], dict) and "error" in s["result"]),
             "result_summary": _dump(s["result"])[:SUMMARY_LEN],
         }
         for s in steps
@@ -264,11 +280,13 @@ def _allowed(prompt: str, ok: list[dict], records: list[dict]) -> set[int]:
     return allowed_numbers(sources, results, True)
 
 
-def _check(data: dict, nums: set[int], cites: set[str]) -> str | None:
+def _check(data: dict, nums: set[int], cites: set[str], drafted: bool) -> str | None:
     if not set(data["cited_ids"]) <= cites:
         return CITE
     if not numbers_ok(data["text"], nums):
         return NUMBER
+    if not drafted and DRAFT_CLAIM_RE.search(data["text"]):
+        return DRAFT_CLAIM
     return None
 
 
@@ -314,7 +332,7 @@ def _reply(conn, gw, store, run_id, prompt, steps, records, clinic) -> tuple[str
         if not r.ok or not r.data:
             return "failed", FAILED_TEXT, []
         data = r.data
-        rule = _check(data, nums, targets["source"])
+        rule = _check(data, nums, targets["source"], bool(targets["draft"]))
         if rule is None:
             break
         with conn:
@@ -339,6 +357,20 @@ def _reply(conn, gw, store, run_id, prompt, steps, records, clinic) -> tuple[str
     if rule is not None:
         return FAILED_STATUS[rule], FAILED_TEXT, cards
     return "ok", data["text"], cards
+
+
+def _with_drafts(conn, cards: list, steps: list[dict]) -> list:
+    """이번 턴에 성공한 초안은 답의 상태와 상관없이 카드로 붙인다(답이 이미 넣었으면 그대로) — 답이 빠뜨리거나
+    답 단계가 예산·실패로 끝나도 만든 초안이 보이고 승인·취소할 수 있게(§5.2)"""
+    out, have = list(cards), {(c["type"], c["id"]) for c in cards}
+    for s in _ok_steps(steps):
+        if s["tool"] != DRAFT or "error" in s["result"]:
+            continue
+        id_ = str(s["result"]["id"])
+        if ("draft", id_) not in have and (detail := card_detail(conn, "draft", id_)):
+            have.add(("draft", id_))
+            out.append({"type": "draft", "id": id_, "data": detail})
+    return out
 
 
 def _save(
@@ -379,7 +411,8 @@ def turn(
     on_event=None,
 ) -> dict:
     """사용자 말 1개 → {conversation_id, seq, status, text, cards, tool_calls, run_id}(seq = 어시스턴트 메시지).
-    상태: ok · number_failed · cite_failed · failed · budget · cost_limit"""
+    상태: ok · number_failed · cite_failed · draft_failed · failed · budget · cost_limit. 이번 턴에 성공한 초안은
+    상태와 상관없이 카드로 붙는다(_with_drafts)"""
     if conversation_id is None:
         conversation_id = conn.execute(
             "INSERT INTO ax_assistant_conversations (title, part, created_at) VALUES (?, ?, ?)",
@@ -392,30 +425,37 @@ def turn(
     target = f"{conversation_id}:{seq}"
     try:
         out = _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_event)
-    except Exception:  # 실행이 running으로 남지 않게 닫고, 실패 메시지를 남긴 뒤 다시 던진다
+    except Exception:
+        # 실행이 running으로 남지 않게 닫고, 실패 메시지를 남긴 뒤 원래 예외를 다시 던진다
         conn.rollback()
-        conn.execute(
-            "UPDATE ax_agent_runs SET status = 'failed', reason = '예외', locked_by = NULL"
-            " WHERE agent = ? AND target = ? AND status = 'running'",
-            (AGENT, target),
-        )
-        run = conn.execute(
-            "SELECT id FROM ax_agent_runs WHERE agent = ? AND target = ?", (AGENT, target)
-        ).fetchone()
-        run_id = run["id"] if run else None
-        steps = RunStore(conn).steps(run_id) if run_id else []
-        _save(
-            conn,
-            conversation_id,
-            seq + 1,
-            "assistant",
-            FAILED_TEXT,
-            [],
-            _tool_log(steps),
-            run_id,
-            "failed",
-        )
-        conn.commit()
+        try:
+            conn.execute(
+                "UPDATE ax_agent_runs SET status = 'failed', reason = '예외', locked_by = NULL"
+                " WHERE agent = ? AND target = ? AND status = 'running'",
+                (AGENT, target),
+            )
+            run = conn.execute(
+                "SELECT id FROM ax_agent_runs WHERE agent = ? AND target = ?", (AGENT, target)
+            ).fetchone()
+            run_id = run["id"] if run else None
+            steps = RunStore(conn).steps(run_id) if run_id else []
+            try:
+                _save(
+                    conn,
+                    conversation_id,
+                    seq + 1,
+                    "assistant",
+                    FAILED_TEXT,
+                    _with_drafts(conn, [], steps),
+                    _tool_log(steps),
+                    run_id,
+                    "failed",
+                )
+            except sqlite3.IntegrityError:
+                pass  # 같은 대화에 동시에 보낸 말이 그 자리를 먼저 썼다 — 실행만 닫는다
+            conn.commit()
+        except Exception:  # 정리가 실패해도 열린 트랜잭션을 남기지 않고 원래 예외를 던진다
+            conn.rollback()
         raise
     if on_event:
         on_event({"type": "reply", **out})
@@ -460,6 +500,7 @@ def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_ev
         status, reply_text, cards = _reply(
             conn, gw, store, outcome.run_id, prompt, steps, records, clinic
         )
+    cards = _with_drafts(conn, cards, steps)
     tool_calls = _tool_log(steps)
     _save(
         conn,
