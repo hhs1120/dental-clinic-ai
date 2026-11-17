@@ -29,7 +29,7 @@ tags:
 | 평가 하네스 | `evaluation/` — 정답 DB를 앱 DB와 분리, dev/test 분할, 조건 간 비교(프롬프트 v1/vN, 리랭커 on/off) | 완성 |
 | 검색 | SQLite FTS5(키워드) + sqlite-vec(벡터) 하이브리드 + 리랭커·임베딩 Voyage(모델은 `backend/rag_search.py` `DEFAULT_RERANKER`·`DEFAULT_EMBEDDING`) | 색인·검색 구현 |
 | 앱 백엔드 | FastAPI · 에이전트 하네스(상태·도구·피드백·제약·재발 방지) · SSE(챗·AI 비서 진행) · 작업 폴링(배치) | 하네스 코어·조회 도구·① 분류·판정 일괄(명령)·① 자동 종결·① 후속 에이전트·FastAPI 검색·EMR 조회·통화·판정·블라인드 API·③ 챗 에이전트·챗 SSE·AI 비서(EMR 연동·도구·두 단계·대화 저장)·④ 준비표(작업 폴링)·오늘 화면 집계·⑨ 미예약 환자(칩·점수·연락 기록)·⑤ 청구 점검(규칙 판단·AI 점검·근거 찾기·재심 사유서 초안)·⑥ 경영 리포트·⑧ 재무 대조(조사·증빙 탐색 에이전트)·야간 실행(`make nightly`)·⑦ 브리핑(템플릿) 구현 |
-| 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier, 레이아웃·동작은 클릭 와이어프레임으로 먼저 잡은 뒤 앱으로 옮김(지금은 앱이 기준) | 앱 셸(아이콘 줄·목록 칸)·AI 비서·자료실(기록 검색·문서함)·일별 예약표·전환 전 EMR·통화·준비표·오늘·미예약 환자·청구 점검·재무 대조·경영 리포트·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
+| 앱 프론트 | Next.js · TypeScript strict · Tailwind CSS + shadcn/ui · ESLint · Prettier | 앱 셸(아이콘 줄·목록 칸)·AI 비서·자료실(기록 검색·문서함)·일별 예약표·전환 전 EMR·통화·준비표·오늘·미예약 환자·청구 점검·재무 대조·경영 리포트·AI 평가(판정·블라인드·정확도 표) 구현, 화면 E2E(Playwright) |
 | 에이전트 프레임워크 비교 | **LangGraph**(`StateGraph`·조건 분기·SQLite 체크포인터) — 같은 조사 에이전트를 한 벌 더 만들어 직접 만든 하네스와 실측 비교(아래 §4 "하네스 vs 랭그래프") | 비교 끝(실험 모듈, 앱은 하네스) |
 | 품질 | ruff(PEP 8) · pytest · GitHub Actions CI | 운영 중 |
 | 배포 | `docker compose` 로컬 배포 | 착수 전([[치과 AX - 기능 정의]] §7) |
