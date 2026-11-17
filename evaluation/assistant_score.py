@@ -21,11 +21,8 @@ def _wants_draft(gold_turn: dict) -> bool:
 
 
 def _args_match(gold_args: dict, args: dict) -> bool:
-    """호출 인자가 gold와 같은 키에서 모두 같고, 겹치는 키가 하나는 있다(gold 인자가 없으면 참)"""
-    common = [k for k in gold_args if k in args]
-    if not gold_args:
-        return True
-    return bool(common) and all(_norm(gold_args[k]) == _norm(args[k]) for k in common)
+    """gold 인자의 모든 키가 호출에 있고 값이 같다(gold 인자가 없으면 참)"""
+    return all(k in args and _norm(v) == _norm(args[k]) for k, v in gold_args.items())
 
 
 def score_call(gold_turn: dict, call: dict) -> dict:

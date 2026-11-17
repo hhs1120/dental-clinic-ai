@@ -59,7 +59,8 @@ def run(
 ) -> dict:
     """줄이 없는 시나리오만 run_one(시나리오) → {turns: [...]}로 돌려 한 줄씩 덧붙인다(이어 돎)"""
     meta = {"version": version, "tool_alias": tool_alias, "reply_alias": reply_alias}
-    done = {_key(r) for r in load_runs(out)}
+    # 오류로 끊긴 줄은 끝난 것으로 치지 않는다 — 이어 돌 때 다시 돌린다(같은 id는 나중 줄이 채점에 쓰임)
+    done = {_key(r) for r in load_runs(out) if not any("error" in t for t in r["turns"])}
     n = skipped = 0
     for sc in scenarios:
         if _key({"id": sc["id"], **meta}) in done:

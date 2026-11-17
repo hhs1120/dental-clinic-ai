@@ -31,7 +31,10 @@ def test_score_call_reward_values():
     draft = {"name": "draft_appointment", "args": {"chart_no": "C-1"}}
     assert score_call(FREE, draft)["reward"] == -1.0  # 범위 밖 초안
     assert score_call(REFUSE, draft)["reward"] == -1.0
-    assert score_call(BOOK, draft)["reward"] == 1.0 + 0.5  # 정답 초안은 쓰기 감점 없음
+    partial = {"name": "draft_appointment", "args": {"chart_no": "C-1"}}
+    assert score_call(BOOK, partial)["reward"] == 1.0  # 빠진 인자는 도구 점수만
+    full = {"name": "draft_appointment", "args": {"chart_no": "C-1", "date": "2026-12-04"}}
+    assert score_call(BOOK, full)["reward"] == 1.0 + 0.5  # 정답 초안은 쓰기 감점 없음
 
 
 def draft_end(start="14:30", **kw):
@@ -126,3 +129,21 @@ def test_run_resumes_skips_done(tmp_path):
     assert [r["id"] for r in rows] == ["a", "b", "c"]
     # 별칭이 다르면 새 실행
     assert ev.run(SCENARIOS[:1], **{**kw, "tool_alias": "local"})["done"] == 1
+
+
+def test_run_retries_scenarios_that_errored(tmp_path):
+    out = tmp_path / "runs.jsonl"
+    calls = []
+
+    def one(sc):
+        calls.append(sc["id"])
+        if len(calls) == 1:
+            return {"turns": [{"tool_calls": [], "end_state": None, "error": "boom"}]}
+        return {"turns": [_t([FREE_CALL])]}
+
+    kw = dict(out=out, version="v1/v1", tool_alias="chat", reply_alias="chat", run_one=one)
+    assert ev.run(SCENARIOS[:1], **kw) == {"done": 1, "skipped": 0}
+    assert ev.run(SCENARIOS[:1], **kw) == {"done": 1, "skipped": 0}  # 오류 줄은 다시
+    assert ev.run(SCENARIOS[:1], **kw) == {"done": 0, "skipped": 1}
+    r = score_run(SCENARIOS[:1], ev.load_runs(out))  # 나중 줄이 채점에 쓰임
+    assert r["task_success"] == 1.0
