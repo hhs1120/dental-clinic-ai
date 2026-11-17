@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report trust-eval improve
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report trust-eval improve assistant-eval
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -202,3 +202,7 @@ recon:
 # ⑧-2 증빙 탐색 에이전트(backend/expense_agent.py) — 지금 프롬프트 버전으로 조사 안 한 출금(과금, 이어 돎). MONTHS="2026-08 2026-09"로 달 제한, NO_BATCH=1이면 일반 호출만
 expense-ai:
 	uv run $(if $(wildcard .env),--env-file .env) python -m backend.expense_agent run $(foreach m,$(MONTHS),--month $(m)) $(if $(NO_BATCH),--no-batch)
+
+# AI 비서 시나리오 평가(evaluation/assistant.py, AI 비서 설계 §7.1) — dev 시나리오를 시나리오마다 새 임시 앱 DB에서 돌려 evaluation/assistant_runs.jsonl에(과금, 이어 돎). TOOL_ALIAS=·REPLY_ALIAS=로 모델 별칭, BASELINE=1이면 lookup 첫 턴 ③ 기준선도. test는 python -m evaluation.assistant score --split test(사람)
+assistant-eval:
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.assistant run --split dev $(if $(TOOL_ALIAS),--tool-alias $(TOOL_ALIAS)) $(if $(REPLY_ALIAS),--reply-alias $(REPLY_ALIAS)) $(if $(BASELINE),--baseline)

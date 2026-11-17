@@ -28,6 +28,7 @@ from backend import prep as backend_prep
 from backend.calls import active_versions
 from evaluation import (
     EvalRefused,
+    assistant,
     autoclose,
     call_actions,
     claim_appeal,
@@ -419,6 +420,9 @@ def run(
     if dev and _has_recon(conn):
         # ⑧-1 규칙 기준선 vs 조사 에이전트(평가 설계 §5) — 과금 없음(실행은 make recon). test는 python -m evaluation.recon score --split test(사람)
         result["recon"] = recon.score(conn, split, load_clinic().today)
+    if dev and assistant.RUNS["dev"].exists():
+        # AI 비서 시나리오(AI 비서 설계 §7.1) — 과금 없음(기록은 make assistant-eval). test는 python -m evaluation.assistant score --split test(사람)
+        result["assistant"] = assistant.score("dev")
     if dev and _has_expense(conn):
         # ⑧-2 규칙 기준선 vs 증빙 탐색 에이전트(평가 설계 §5) — 과금 없음(실행은 make expense-ai). test는 python -m evaluation.expense score --split test(사람)
         result["expense"] = expense.score_agent(conn, split)
@@ -536,6 +540,8 @@ def render(r: dict, started: datetime, app_missing: bool = False) -> str:
         out += _render_recon(r["recon"])
     if r.get("expense") is not None:
         out += _render_expense(r["expense"])
+    if r.get("assistant") is not None:
+        out += assistant.render(r["assistant"])
     if r["rag"] is not None or app_missing:
         out += _render_rag(r["rag"])
     return "\n".join(out) + "\n"

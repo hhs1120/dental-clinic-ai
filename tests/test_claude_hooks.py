@@ -813,6 +813,8 @@ def test_review_lookalikes_pass(command, monkeypatch):
         "uv run python -m evaluation.input_trust run --split dev",
         "uv run --group langgraph python -m evaluation.langgraph_recon run",
         "make trust-eval",
+        "make assistant-eval",
+        "uv run python -m evaluation.assistant run --split dev",
         "make improve TASK=classify ITEM=has_todo",
         "uv run python -m evaluation.improve run --task classify --item has_todo",
         "uv run python -m evaluation.improve hard-check --a v2 --b v2-imp1",
