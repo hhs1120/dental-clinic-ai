@@ -29,6 +29,7 @@ from generator.master import (
     RETREATMENT_REQUIREMENT,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    SLOT_MIN,
     VENDORS,
 )
 from generator.verify.common import check_master_values
@@ -128,7 +129,8 @@ def test_check_master_values_flags_missing_and_wrong(tmp_path):
 
 
 def test_master_values_has_capacity():
-    """AI 비서 슬롯 검사 기준(체어 수·원장 동시 건수)이 적재된다"""
+    """AI 비서 슬롯 검사 기준(체어 수·원장 동시 건수·예약 시작 격자)이 적재된다"""
     got = dict(master_values_rows())
     assert json.loads(got["chairs"]) == CHAIRS
     assert json.loads(got["doctor_concurrency"]) == DOCTOR_CONCURRENCY
+    assert json.loads(got["slot_min"]) == SLOT_MIN
