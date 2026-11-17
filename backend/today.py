@@ -167,8 +167,8 @@ def _prep_saved(conn, today: date) -> dict:
 
 
 def _refused(conn, now: datetime) -> list[dict]:
-    """근거 없는 질문 — 물어보기에서 문서 근거를 못 찾아 거절된 질문(챗·검색 요약, 평가 실행 제외), 실제 시계 최근
-    REFUSED_DAYS일. 비공개 정보라 거절한 챗(refuse_reason restricted)은 문서가 없어서가 아니라 뺀다"""
+    """근거 없는 질문 — ③ 챗(AI 비서의 문서 질문·자료실 검색 요약)에서 문서 근거를 못 찾아
+    거절된 질문(평가 실행 제외), 실제 시계 최근 REFUSED_DAYS일. 비공개 정보라 거절한 챗(refuse_reason restricted)은 문서가 없어서가 아니라 뺀다"""
     since = (now - timedelta(days=REFUSED_DAYS)).isoformat(sep=" ", timespec="seconds")
     return [
         dict(r)

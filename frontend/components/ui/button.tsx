@@ -31,8 +31,6 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
-        // 화면 구석에 떠 있는 둥근 버튼(물어보기)
-        fab: "h-12 gap-2 rounded-full px-5 text-base shadow-card",
       },
     },
     defaultVariants: {

@@ -387,7 +387,7 @@ def post_chat(
 @app.get("/chat/{log_id}")
 def get_chat(log_id: int, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     """저장된 질문 1개를 POST /chat의 answer 이벤트와 같은 모양으로 — 모델을 다시 부르지 않는다
-    (기능 정의 §4 앱 구성 "물어보기 창", 앱 설계 §9). 평가 실행·검색 요약·아직 도는 질문은 404"""
+    (앱 설계 §9). 지금 화면은 쓰지 않는다. 평가 실행·검색 요약·아직 도는 질문은 404"""
     conn = _open(paths, NO_INDEX)
     try:
         row = conn.execute(
