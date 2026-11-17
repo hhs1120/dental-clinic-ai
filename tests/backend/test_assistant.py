@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from backend import assistant, chat, emr_bridge
-from shared.llm import FakeGateway
+from shared.llm import BudgetExceeded, FakeGateway
 from tests.backend.test_emr_bridge import CLINIC, WED, _approve, conn, src
 from tests.backend.test_followup import Script
 
@@ -209,3 +209,43 @@ def test_turn_exception_closes_run_and_saves_failed_message(conn):
     rows = _messages(conn, 1)
     assert [r["role"] for r in rows] == ["user", "assistant"]
     assert rows[1]["status"] == "failed" and rows[1]["text"] == assistant.FAILED_TEXT
+
+
+def test_failed_draft_time_is_not_evidence(conn):
+    draft = (
+        "tool",
+        "draft_appointment",
+        {
+            "chart_no": "C-00002",
+            "date": "2026-12-03",
+            "start": "10:30",
+            "staff": "원장",
+            "procedure": "레진",
+        },
+    )
+    bad = reply("12월 3일 10시 30분 초안을 만들었습니다, 승인 버튼을 눌러 주세요")
+    gw = Turns(conn, [[draft, DONE]], [bad, bad])
+    out = turn(conn, gw, "이영희 목요일 10시 반 레진")
+    assert conn.execute("SELECT count(*) FROM ax_emr_writes").fetchone()[0] == 0
+    assert out["status"] == "number_failed" and out["text"] == assistant.FAILED_TEXT
+    assert len([kw for _, kw in gw.calls if kw.get("schema")]) == 2
+
+
+def test_reply_budget_is_budget_status(conn):
+    class Broke(Turns):
+        def complete(self, alias, **kw):
+            if kw.get("schema") is not None:
+                raise BudgetExceeded("하루 상한")
+            return super().complete(alias, **kw)
+
+    out = turn(conn, Broke(conn, [[PATIENT, DONE]], [reply()]), "김철수 환자")
+    assert out["status"] == "budget" and out["text"] == assistant.FAILED_TEXT
+    saved = _messages(conn, out["conversation_id"])[-1]
+    assert saved["status"] == "budget"
+
+
+def test_input_states_today_and_closed_days(conn):
+    gw = Turns(conn, [[DONE]], [reply()])
+    turn(conn, gw, "내일 예약 몇 건?")
+    first = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
+    assert "오늘: 2026-12-01(화)" in first and "휴진 요일: 목·일" in first

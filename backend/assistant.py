@@ -17,6 +17,7 @@ from backend.harness.tools import Tool, ToolRegistry
 from backend.search_cards import card
 from backend.verify import allowed_numbers, numbers_ok
 from shared.clinic import Clinic
+from shared.llm import BudgetExceeded
 
 AGENT, TASK, REPLY_TASK = "assistant", "assistant", "assistant_reply"
 TOOL_ALIAS = "chat"  # 도구 단계 — 다음 묶음에서 로컬 모델 자리(§7.1)
@@ -28,6 +29,7 @@ MAX_TOOL_CALLS = (
 )  # 턴당 도구 호출(done_tools 포함) — ③ 값에서 시작, dev 실측으로 정함(§4.1)
 MAX_USD = chat.CHAT_MAX_USD
 FAILED_TEXT = "확인된 결과로 답하지 못했습니다"
+WEEKDAYS = "월화수목금토일"
 DONE, ASK, DRAFT = "done_tools", "ask_records", "draft_appointment"
 TITLE_LEN = 40  # 대화 제목 = 첫 말 앞부분(LLM 없음, §6)
 SUMMARY_LEN = 300  # 메시지에 남기는 도구 결과 요약 글자 수(§5.3 "재생성 때" 학습 재료)
@@ -173,7 +175,15 @@ def _history(conn, conversation_id: int) -> list[dict]:
     ]
 
 
-def _input(history: list[dict], today: str, text: str) -> str:
+def _today_lines(conn, clinic: Clinic) -> list[str]:
+    """기준일(요일)과 휴진 요일 — 휴진은 원본 영업시간(emr_clinic.hours_json)에서 읽는다"""
+    hours = json.loads(conn.execute("SELECT hours_json FROM emr_clinic").fetchone()[0])
+    closed = "·".join(WEEKDAYS[d] for d in sorted(hours["closed_weekdays"]))
+    today = clinic.today
+    return [f"오늘: {today.isoformat()}({WEEKDAYS[today.weekday()]})", f"휴진 요일: {closed}"]
+
+
+def _input(history: list[dict], today_lines: list[str], text: str) -> str:
     parts = []
     if history:
         lines = []
@@ -183,7 +193,7 @@ def _input(history: list[dict], today: str, text: str) -> str:
                 line += f"\n카드: {json.dumps(m['cards'], ensure_ascii=False)}"
             lines.append(line)
         parts.append("앞 대화:\n" + "\n".join(lines))
-    return "\n\n".join([*parts, f"오늘: {today}", f"이번 말: {text}"])
+    return "\n\n".join([*parts, "\n".join(today_lines), f"이번 말: {text}"])
 
 
 def _dump(value) -> str:
@@ -243,9 +253,12 @@ def _targets(ok: list[dict], records: list[dict]) -> dict[str, set]:
 
 
 def _allowed(prompt: str, ok: list[dict], records: list[dict]) -> set[int]:
-    sources = [prompt] + [
+    sources = [
+        prompt
+    ] + [  # 실패한 호출·초안의 인자는 근거가 아니다 — 초안 시각은 성공한 결과의 scheduled_at
         _dump({k: v for k, v in s["args"].items() if k not in EVIDENCE_SKIP and v is not None})
         for s in ok
+        if s["tool"] != DRAFT and not (isinstance(s["result"], dict) and "error" in s["result"])
     ]
     results = [s["result"] for s in ok] + [r["answer"] for r in records]
     return allowed_numbers(sources, results, True)
@@ -286,15 +299,18 @@ def _reply(conn, gw, store, run_id, prompt, steps, records, clinic) -> tuple[str
     system = prompts.load(REPLY_TASK, REPLY_VERSION)["system"] + TRUST_NOTICE
     messages = [{"role": "user", "content": _reply_input(prompt, steps, records)}]
     for attempt in range(2):
-        r = gw.complete(
-            REPLY_ALIAS,
-            task=REPLY_TASK,
-            system=system,
-            messages=messages,
-            schema=REPLY_SCHEMA,
-            prompt_version=REPLY_VERSION,
-            ref=("agent_run", run_id),
-        )
+        try:
+            r = gw.complete(
+                REPLY_ALIAS,
+                task=REPLY_TASK,
+                system=system,
+                messages=messages,
+                schema=REPLY_SCHEMA,
+                prompt_version=REPLY_VERSION,
+                ref=("agent_run", run_id),
+            )
+        except BudgetExceeded:  # 도구 단계와 같게 — 하루 상한이면 고정 문구로 끝낸다
+            return "budget", FAILED_TEXT, []
         if not r.ok or not r.data:
             return "failed", FAILED_TEXT, []
         data = r.data
@@ -401,7 +417,7 @@ def turn(
 
 
 def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_event) -> dict:
-    prompt = _input(history, clinic.today.isoformat(), text)
+    prompt = _input(history, _today_lines(conn, clinic), text)
     reg, names = registry(
         clinic, searcher, {"conversation_id": conversation_id, "turn": seq}, on_event
     )
