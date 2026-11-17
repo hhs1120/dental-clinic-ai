@@ -74,9 +74,8 @@ def night_line(job: dict | None, now: datetime) -> dict | None:
 
 
 def lines(conn: sqlite3.Connection, today: date, now: datetime) -> list[dict]:
-    """오늘 화면 브리핑 칸(backend/today.py) — today = 앱 기준일, now = 실제 시계"""
+    """오늘 화면 브리핑 칸(backend/today.py) — today = 앱 기준일, now = 실제 시계. 그날 아침 기준이라 그날 승인된
+    AX 예약은 넣지 않는다(AI 비서 설계 §5.3)"""
     cats = dict(conn.execute("SELECT code, category FROM source.emr_procedures").fetchall())
     night = night_line(nightly.last_run(conn), now)
-    return day_lines(prep.prep_facts(conn, today, today, include_ax=True), cats) + (
-        [night] if night else []
-    )
+    return day_lines(prep.prep_facts(conn, today, today), cats) + ([night] if night else [])

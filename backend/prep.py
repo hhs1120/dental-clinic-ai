@@ -617,7 +617,11 @@ def main(argv=None) -> None:
     db.init_schema(conn)
     today = load_clinic().today
     days = [args.date] if args.date else tab_days(today)
-    print(build(conn, make_gateway(conn), days, today, use_batch=not args.no_batch))
+    # 승인된 AX 예약도 준비표 행 — 빼면 저장된 AX 행이 정리 단계에서 지워진다(GET /prep·야간 실행과 같다)
+    out = build(
+        conn, make_gateway(conn), days, today, use_batch=not args.no_batch, include_ax=True
+    )
+    print(out)
 
 
 if __name__ == "__main__":

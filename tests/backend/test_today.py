@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from backend import autoclose, calls, claims, db, missed, prep, recon, today
+from backend import autoclose, briefing, calls, claims, db, missed, prep, recon, today
 from backend import judge_queue as jq
 from generator.clinic import master_values_rows
 from tests.backend.call_db import LABELS, TODAY, classify_row, make_call_db
@@ -62,6 +62,14 @@ def test_today_cards_count_same_day_ax(pconn):
     add_ax(pconn, at="2026-12-02 10:00:00")  # 다른 날은 안 센다
     after = _sheet(pconn)["cards"]["appointments"]
     assert after["total"] == before["total"] + 1 and after["consult"] == before["consult"] + 1
+
+
+def test_briefing_ignores_same_day_ax_while_cards_count_it(pconn):
+    before = briefing.lines(pconn, TODAY, NOW)
+    cards = _sheet(pconn)["cards"]["appointments"]["total"]
+    add_ax(pconn)
+    assert briefing.lines(pconn, TODAY, NOW) == before  # 아침 기준 — 반영 안 함(설계 §5.3)
+    assert _sheet(pconn)["cards"]["appointments"]["total"] == cards + 1
 
 
 def test_todo_counts_match_board(tconn):

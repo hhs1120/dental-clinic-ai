@@ -171,6 +171,20 @@ def test_prep_facts_include_ax_only_when_asked(aconn):
     assert prep.sheet(aconn, TODAY, TODAY, "m")["days"][-1]["count"] == 3
 
 
+def test_cli_run_includes_ax(aconn, monkeypatch):
+    """make prep(CLI)도 AX 행을 포함해 만든다 — 아니면 저장된 AX 행이 정리 단계에서 지워진다"""
+    import backend.harness.llm as harness_llm
+    import shared.clinic as shared_clinic
+
+    seen = {}
+    monkeypatch.setattr(prep.db, "connect", lambda *a: aconn)
+    monkeypatch.setattr(harness_llm, "make_gateway", lambda conn: None)
+    monkeypatch.setattr(shared_clinic, "load_clinic", lambda: type("C", (), {"today": TODAY})())
+    monkeypatch.setattr(prep, "build", lambda *a, **kw: seen.update(kw) or {})
+    prep.main(["run", "--date", "2026-12-01"])
+    assert seen["include_ax"] is True
+
+
 def test_alert_related_only_for_planned_procedure(src):
     r = rows(src)[101]
     assert [(a["code"], a["related"]) for a in r["alerts"]] == [
