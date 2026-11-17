@@ -339,6 +339,13 @@ test("assistant: 지운 대화는 읽기 전용으로 열린다", async ({ page 
             cards: [],
             tool_calls: [],
           },
+          {
+            seq: 2,
+            role: "assistant",
+            text: "초안을 만들었어요",
+            cards: [{ type: "draft", id: "7", data: DRAFT }],
+            tool_calls: [],
+          },
         ],
       },
     }),
@@ -347,4 +354,10 @@ test("assistant: 지운 대화는 읽기 전용으로 열린다", async ({ page 
   await expect(page.getByText("예전 질문")).toBeVisible();
   await expect(page.getByText("삭제된 대화 — 읽기 전용")).toBeVisible();
   await expect(page.getByLabel("말 입력")).toBeDisabled();
+  // 초안도 승인·다른 시간·취소 없이 보기만
+  await expect(page.getByText("김영철 (C0001)")).toBeVisible();
+  for (const name of ["승인", "다른 시간", "취소"])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
 });

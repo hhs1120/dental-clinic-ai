@@ -273,6 +273,7 @@ export function AssistantView() {
                 key={`${card.type}:${card.id}`}
                 card={card}
                 onRetry={retry}
+                readOnly={readOnly}
               />
             ))}
           </div>

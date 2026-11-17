@@ -4,6 +4,8 @@
 
 /* dark: 변형은 OS 설정이 아니라 data-theme을 본다(화면 테마 선택) */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* 목록 칸 접힘(넓은 화면) — 그리기 전 스크립트가 <html data-list-collapsed>를 붙인다(lib/theme.ts) */
+@custom-variant list-collapsed (&:where([data-list-collapsed] *));
 
 /* 토큰 — 앱 뼈대 설계안 '스타일'. 색·모서리·글꼴·그림자는 여기서만 정하고 화면 코드는 이름으로 쓴다.
    바탕·글자·그림자는 Graphite(oklch → sRGB), 강조색은 딥 틸. 다크는 <html data-theme="dark"> — 아이콘 줄의 테마 단추(고른 적이 없으면 OS 설정을 따른다, app/layout.tsx 스크립트) */

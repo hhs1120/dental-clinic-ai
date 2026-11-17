@@ -103,3 +103,35 @@ test("shell: 화면을 옮기는 동안 목록 칸 숫자가 남아 있다", asy
   await expect(page).toHaveURL(/\/prep$/);
   await expect(badge).toBeVisible();
 });
+
+test("shell: 접은 목록 칸은 새로 고쳐도 접힌 채로 그린다", async ({ page }) => {
+  await page.goto("/today");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await expect(menu).toBeVisible();
+  await page.getByRole("button", { name: "목록 접기" }).click();
+  await expect(menu).toBeHidden();
+  // 하이드레이션 전 서버 HTML부터 접혀 있어야 한다 — 스크립트를 끈 채 그린 첫 화면을 본다
+  await page.route("**/_next/static/**/*.js", (r) => r.abort());
+  await page.reload();
+  await expect(page.getByRole("button", { name: "목록 펴기" })).toBeVisible();
+  await expect(menu).toBeHidden();
+  await page.unrouteAll();
+  await page.reload();
+  await page.getByRole("button", { name: "목록 펴기" }).click();
+  await expect(menu).toBeVisible();
+});
+
+test("shell: 저장소가 막혀도 테마 단추가 바뀐다", async ({ page }) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("막힘");
+    };
+  });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/today");
+  await page.getByRole("button", { name: "다크 테마로 바꾸기" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(
+    page.getByRole("button", { name: "라이트 테마로 바꾸기" }),
+  ).toBeVisible();
+});

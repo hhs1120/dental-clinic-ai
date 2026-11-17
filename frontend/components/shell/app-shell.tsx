@@ -25,10 +25,13 @@ import {
 import { useClinic } from "@/lib/api";
 import { SPACES, spaceOf } from "@/lib/nav";
 import { PART_KEY, PARTS } from "@/lib/part";
-import { currentTheme, saveTheme, watchTheme } from "@/lib/theme";
+import {
+  currentTheme,
+  saveListCollapsed,
+  saveTheme,
+  watchTheme,
+} from "@/lib/theme";
 import { cn } from "@/lib/utils";
-
-const COLLAPSE_KEY = "ax.listCollapsed"; // 목록 칸 접힘(넓은 화면) — 브라우저에 둔다
 
 /** 아이콘 줄 한 칸 — 아이콘 위, 작은 이름 아래 */
 const railItem = (current = false) =>
@@ -118,25 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setPath(pathname);
     setOpen(false);
   }
-  // 목록 칸 접힘 — 첫 렌더는 서버 HTML과 같게 펴 두고 여기서 읽는다(하이드레이션 불일치 방지)
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(COLLAPSE_KEY);
-    } catch {}
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCollapsed(saved === "1");
-  }, []);
-  const collapse = (value: boolean) => {
-    setCollapsed(value);
-    try {
-      localStorage.setItem(COLLAPSE_KEY, value ? "1" : "0");
-    } catch {}
-  };
-  // 서랍(좁은 화면)에서는 접힘을 무시하고 늘 목록 칸을 보인다
-  const showPanel = open || !collapsed;
-
+  // 목록 칸 접힘은 <html data-list-collapsed>를 CSS가 읽는다(list-collapsed 변형) — 그리기 전 스크립트가 붙여
+  // 새로 고침해도 펼쳐진 채 깜빡이지 않고, 서버 HTML과 렌더가 같다. 서랍(좁은 화면)에서는 접힘을 무시한다
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -181,14 +167,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <XIcon />
             </Button>
           )}
-          {!showPanel && space !== "emr" && (
+          {!open && space !== "emr" && (
             <Button
               variant="ghost"
               size="icon-sm"
               aria-label="목록 펴기"
               title="목록 펴기"
-              onClick={() => collapse(false)}
-              className="mb-1 hidden text-muted-foreground md:inline-flex"
+              onClick={() => saveListCollapsed(false)}
+              className="mb-1 hidden text-muted-foreground md:list-collapsed:inline-flex"
             >
               <ChevronsRightIcon />
             </Button>
@@ -211,12 +197,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <PartMenu />
           </div>
         </div>
-        {showPanel && (
-          <SpacePanel
-            space={space}
-            onCollapse={open ? undefined : () => collapse(true)}
-          />
-        )}
+        <SpacePanel
+          space={space}
+          onCollapse={open ? undefined : () => saveListCollapsed(true)}
+          className={open ? undefined : "md:list-collapsed:hidden"}
+        />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b bg-header px-4 py-2 md:hidden print:hidden">

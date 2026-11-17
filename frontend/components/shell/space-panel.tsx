@@ -213,7 +213,8 @@ function ConversationList({ current }: { current: string | null }) {
                 setTarget(c);
               }}
               className={cn(
-                "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                // 터치 화면(hover 없음)에서는 늘 보인다 — 보이지 않는 단추를 눌러 지우지 않게
+                "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
                 current === String(c.id) && "opacity-100",
               )}
             >
@@ -286,9 +287,11 @@ export function MobileTabs({ space }: { space: SpaceKey }) {
 export function SpacePanel({
   space,
   onCollapse,
+  className,
 }: {
   space: SpaceKey;
   onCollapse?: () => void;
+  className?: string;
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -296,7 +299,12 @@ export function SpacePanel({
   const today = clinic === "error" ? "—" : (clinic?.today ?? "");
   if (space === "emr") return null;
   return (
-    <div className="flex w-44 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3">
+    <div
+      className={cn(
+        "flex w-44 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3",
+        className,
+      )}
+    >
       <div className="flex h-8 items-center justify-between gap-1 pl-3">
         <h2 className="text-xs font-bold text-muted-foreground">
           {TITLES[space]}

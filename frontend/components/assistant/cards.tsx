@@ -39,13 +39,16 @@ const endTime = (d: DraftData) => {
 
 const linkClass = "text-sm font-medium text-link hover:underline";
 
-/** 예약 초안 카드 — 승인 때 사람의 파트가 기록된다(AI 비서 설계 §3.2). 한 번 처리된 초안은 버튼이 사라진다 */
+/** 예약 초안 카드 — 승인 때 사람의 파트가 기록된다(AI 비서 설계 §3.2). 한 번 처리된 초안과 지운 대화(읽기 전용, §6)의
+ * 초안은 버튼이 없다 */
 function DraftCard({
   initial,
   onRetry,
+  readOnly,
 }: {
   initial: DraftData;
   onRetry: () => void;
+  readOnly: boolean;
 }) {
   const [d, setD] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -112,7 +115,7 @@ function DraftCard({
           )}
         </p>
       )}
-      {d.status === "draft" && (
+      {d.status === "draft" && !readOnly && (
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -156,9 +159,11 @@ function DraftCard({
             {reasons.map((c) => REASON[c] ?? c).join(" · ") ||
               "검사에 걸렸습니다"}
           </p>
-          <Button size="sm" variant="outline" onClick={onRetry}>
-            다른 시간으로 다시 만들기
-          </Button>
+          {!readOnly && (
+            <Button size="sm" variant="outline" onClick={onRetry}>
+              다른 시간으로 다시 만들기
+            </Button>
+          )}
         </div>
       )}
       {error && <p className="text-destructive">{error}</p>}
@@ -172,12 +177,16 @@ const money = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 export function AssistantCard({
   card,
   onRetry,
+  readOnly = false,
 }: {
   card: Card;
   onRetry: () => void;
+  readOnly?: boolean;
 }) {
   if (card.type === "draft")
-    return <DraftCard initial={card.data} onRetry={onRetry} />;
+    return (
+      <DraftCard initial={card.data} onRetry={onRetry} readOnly={readOnly} />
+    );
   if (card.type === "source") return <ResultCard card={card.data} q="" />;
   const row = (
     kind: string,
