@@ -90,8 +90,8 @@ def _copied(text: str, material: list[dict]) -> bool:
 
 
 def check_candidate(base_md: str, cand_md: str, material: list[dict]) -> list[str]:
-    """관문 전 코드 검사 — 못 넘은 이름: scope(규칙 줄 밖 변경), example(따옴표 예시 글), copy(재료 녹취와
-    연속 COPY_WORDS어절 겹침, 평가 설계 §3.1 베끼기 기준)"""
+    """관문 전 코드 검사 — 못 넘은 이름: scope(규칙 줄 밖 변경), leak(통화 id), example(따옴표 예시 글),
+    copy(재료 녹취와 연속 COPY_WORDS어절 겹침, 평가 설계 §3.1 베끼기 기준)"""
     old, new = base_md.splitlines(), cand_md.splitlines()
     rule = rule_line(base_md)
     try:
@@ -100,6 +100,10 @@ def check_candidate(base_md: str, cand_md: str, material: list[dict]) -> list[st
         return ["scope"]
     if [x for x in old if x != rule] != [x for x in new if x != new_rule]:
         return ["scope"]
+    if CALL_ID.search(
+        new_rule
+    ):  # 통화 id가 든 규칙은 관문을 넘어도 앱 프롬프트로 새어 나간다(§2.7 누출 차단)
+        return ["leak"]
     failed = []
     if QUOTES.search(new_rule):
         failed.append("example")
@@ -134,7 +138,7 @@ def _archive(name: str, root: Path, runs: Path) -> None:
 
 def improve(
     gw, conn, gold_rows: list[dict], calls: dict, *, base: str, config: dict, item: str = ITEM,
-    gate_runner=prompt_gate.run_gate, propose_fn=propose, store=None, auto_for=None,
+    gate_runner=prompt_gate.run_gate, propose_fn=propose, store=None,
     prompts_root: Path = prompts.PROMPTS_DIR, runs: Path = RUNS, report: Path = REPORT,
     gate_report: Path = prompt_gate.REPORT,
 ) -> list[dict]:  # fmt: skip
@@ -145,10 +149,14 @@ def improve(
         raise SystemExit(f"목표 항목은 지금 {ITEM}만")
     if db.get_setting(conn, "pending_prompt_version"):
         raise SystemExit("pending_exists")
+    policy = db.get_setting(conn, "auto_policy", {})
+    # 켜진 자동 처리 조건은 후보 버전의 입력 신뢰 경계 측정이 있어야 넘는다 — 막 만든 후보에는 없으니 과금·시도를
+    # 쓰기 전에 멈춘다. 그때는 사람이 후보를 재고 make prompt-gate로(자동 개선 설계 §5)
+    if any(policy.values()):
+        raise SystemExit("auto_policy_on")
     left = GATE_ATTEMPTS - len(prompt_gate.attempts(base, gate_report, report))
     if left <= 0:
         raise SystemExit("attempt_cap")
-    policy = db.get_setting(conn, "auto_policy", {})
     material = material_errors(conn, gold_rows, base)
     base_md = (prompts_root / "classify" / base / "labels.md").read_text(encoding="utf-8")
     failures = [
@@ -173,11 +181,9 @@ def improve(
             row["failed"] = check_candidate(base_md, path.read_text(encoding="utf-8"), material)
             try:
                 if not row["failed"]:
-                    on = any(policy.values())
                     g = gate_runner(gw, base, name, item, gold_rows=gold_rows, calls=calls,
                                     policy=policy, config=config, report=gate_report,
-                                    improve_report=report,
-                                    auto=auto_for(name) if on and auto_for else None)  # fmt: skip
+                                    improve_report=report)  # fmt: skip
                     row["gate"] = {k: g[k] for k in ("passed", "failed", "items")}
                     row["failed"] = list(g["failed"])
                     row["cost_usd"] = round(row["cost_usd"] + g["cost_usd"], 4)
@@ -248,7 +254,6 @@ def main(argv=None) -> None:
     rows = improve(
         prompt_gate.make_gateway(RUNS / "llm.jsonl"), conn, gold_rows, calls, base=base,
         config=load_config(), item=args.item, store=open_store(),
-        auto_for=lambda v: prompt_gate.auto_inputs(args.app, args.source, args.truth, base, v),
     )  # fmt: skip
     for x in rows:
         result = "합격 → 대기 버전" if x["adopted"] else f"탈락 {', '.join(x['failed'])}"

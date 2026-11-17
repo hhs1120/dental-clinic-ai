@@ -112,7 +112,7 @@ def get_db_paths() -> tuple[Path, Path]:
 
 
 def get_improve_report() -> Path:
-    """자동 개선 이력 — evaluation/improve.py가 쓰는 라벨 없는 집계 파일(평가 설계 §2.7, backend는 파일만 읽는다)"""
+    """자동 개선 이력 — 자동 개선 루프가 쓰는 라벨 없는 집계 파일(평가 설계 §2.7, 앱은 파일만 읽는다)"""
     return ROOT / "reports" / "improve_runs.jsonl"
 
 

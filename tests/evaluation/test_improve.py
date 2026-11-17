@@ -192,7 +192,7 @@ def _loop(tmp_path, propose, gate, pending=None, policy=None):
     out = im.improve(
         None, conn, rows, {}, base="v2", config={}, gate_runner=gate, propose_fn=propose,
         prompts_root=tmp_path / "p", runs=tmp_path / "runs", report=tmp_path / "imp.jsonl",
-        gate_report=tmp_path / "gate.jsonl", store=None, auto_for=lambda v: {"x": v},
+        gate_report=tmp_path / "gate.jsonl", store=None,
     )  # fmt: skip
     return out, conn
 
@@ -274,13 +274,6 @@ def test_previous_failures_carried(tmp_path):
     assert prop.calls[0]["failures"] == [{"rule": "- has_todo: 예전 후보", "failed": ["copy"]}]
 
 
-def test_policy_on_passes_auto(tmp_path):
-    gate = FakeGate([])
-    _loop(tmp_path, FakePropose((GOOD, [])), gate, policy={"call_autoclose": True})
-    assert gate.calls[0][3]["auto"] == {"x": "v2-imp1"}
-    assert gate.calls[0][3]["policy"] == {"call_autoclose": True}
-
-
 def test_free_text_leak_dropped(tmp_path):
     types = [{"name": "원장님께 꼭 전달해 드리겠습니다", "n": 1}]
     out, _ = _loop(tmp_path, FakePropose((GOOD, types)), FakeGate([]))
@@ -298,3 +291,17 @@ def test_plan_no_gateway(tmp_path):
     conn.execute("CREATE TABLE ax_settings (key PRIMARY KEY, value)")
     got = im._plan(conn, rows, "v2", tmp_path / "gate.jsonl", tmp_path / "imp.jsonl")
     assert got["material_errors"] > 0 and got["attempts_left"] == 2 and got["pending"] is None
+
+
+def test_check_call_id_rejected():
+    rule = "- has_todo: c-0123처럼 직원이 약속하면 참"
+    assert im.check_candidate(LABELS_MD, _cand(rule), MATERIAL) == ["leak"]
+
+
+def test_policy_on_stops_before_llm(tmp_path):
+    """켜진 자동 처리는 후보 버전의 입력 신뢰 경계 결과가 있어야 넘는데, 막 만든 후보에는 그 결과가 없다 — 과금과
+    시도만 쓰지 않게 부르기 전에 멈춘다(후보를 사람이 재고 make prompt-gate로)"""
+    prop = FakePropose()
+    with pytest.raises(SystemExit, match="auto_policy_on"):
+        _loop(tmp_path, prop, FakeGate(), policy={"call_autoclose": True})
+    assert prop.calls == []
