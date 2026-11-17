@@ -348,3 +348,45 @@ def test_unbooked_requests_definition(conn):
     assert [r["call_uid"] for r in got] == ["c-4", "c-6"]
     # 기간 밖 통화는 없다
     assert emr_bridge.unbooked_requests(conn, date(2026, 11, 28), date(2026, 11, 30)) == []
+
+
+def test_slot_off_grid(conn):
+    assert _check(conn, f"{WED} 10:10") == ["off_slot"]
+    assert _check(conn, f"{WED} 10:00:37") == ["off_slot"]
+    assert _check(conn, f"{WED} 10:30") == []
+    assert _draft(conn, f"{WED} 10:10") == {"error": ["off_slot"]}
+
+
+def test_slot_holiday_is_closed(conn):
+    path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
+        0
+    ]
+    s = sqlite3.connect(path)
+    s.execute(
+        "UPDATE ax_master_values SET value = '[\"2026-12-25\"]' WHERE name = 'bank_holidays'"
+    )
+    s.commit()
+    s.close()
+    assert _check(conn, "2026-12-25 10:00") == ["closed_day"]  # 금요일 공휴일
+    assert _check(conn, "2026-12-24 10:00") == ["closed_day"]  # 목요일 휴진(그대로)
+    assert _check(conn, "2026-12-23 10:00") == []
+
+
+def test_approve_locks_then_second_connection_rejected(conn, tmp_path):
+    a = _draft(conn, f"{WED} 10:00", code=SCALING, staff=HYGIENIST, patient=MISSED)
+    b = _draft(conn, f"{WED} 10:00", code=SCALING, staff=HYGIENIST, patient=NEW)
+    conn.commit()
+    other = db.connect(tmp_path / "a.sqlite", tmp_path / "s.sqlite")
+    try:
+        assert _approve(conn, a["id"])["ok"] is True  # 아직 커밋 전 — 쓰기 잠금을 쥐고 있다
+        other.execute("PRAGMA busy_timeout = 0")
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            _approve(other, b["id"])  # 상태 확인·재검사 전에 막힌다
+        assert not other.in_transaction
+        conn.commit()
+        assert _approve(other, b["id"]) == {"ok": False, "reasons": ["staff_busy"]}
+        other.commit()
+    finally:
+        other.close()
+    row = conn.execute("SELECT status FROM ax_emr_writes WHERE id = ?", (b["id"],)).fetchone()
+    assert row[0] == "rejected"

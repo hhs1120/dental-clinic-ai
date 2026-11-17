@@ -98,6 +98,9 @@ def _check(
 
     if start < at(h["open"]) or end > at(h["close"]):
         codes.append("outside_hours")
+    # 원본 예약은 개원 시각부터 SLOT_MIN 격자에서만 시작한다(생성기 starts) — 지어낸 시각이 초안이 되지 않게
+    if start.second or start.microsecond or (start - at(h["open"])) % timedelta(minutes=SLOT_MIN):
+        codes.append("off_slot")
     if h["lunch"] and start < at(h["lunch"][1]) and end > at(h["lunch"][0]):
         codes.append("lunch")
     if day < clinic.today:
@@ -270,9 +273,16 @@ def approve(
 ) -> dict:
     """사람의 승인(§5.2) — draft가 아니면 Conflict. 다시 검사해 걸리면 rejected(reason = 코드를 쉼표로)와
     {ok: False, reasons}, 통과하면 approved와 — 그 환자가 그날 ⑨ 미예약 환자면 연락 기록 booked(채널 call,
-    §5.3). 한 트랜잭션, 커밋은 부르는 쪽"""
+    §5.3). 한 트랜잭션 — 열린 트랜잭션이 없으면 BEGIN IMMEDIATE로 쓰기 잠금부터 잡아, 두 연결이 같은 자리의 다른
+    초안을 동시에 승인해도 상태 확인·재검사가 앞 승인의 커밋 뒤에 돈다. 커밋은 부르는 쪽(Conflict면 이 함수가 연
+    트랜잭션은 되돌린다)"""
+    began = not conn.in_transaction
+    if began:
+        conn.execute("BEGIN IMMEDIATE")
     row = _row(conn, draft_id)
     if row is None or row["status"] != "draft":
+        if began:
+            conn.rollback()
         raise Conflict(f"초안이 아님: {draft_id}")
     codes = check_slot(
         conn,
