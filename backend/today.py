@@ -17,6 +17,7 @@ from backend import (
     briefing,
     calls,
     claims,
+    emr_bridge,
     expense,
     expense_auto,
     judge_queue,
@@ -29,6 +30,7 @@ from backend import (
 
 AUTO_RECENT = 20  # "AI가 한 일" 펼친 자동 처리 목록 — 최근에 닫힌 순, 나머지는 통화 기록에서
 REFUSED_DAYS = 7  # 근거 없는 질문 — 실제 시계 기준 최근 이 날수(확인함 없이 지나면 빠진다)
+UNBOOKED_DAYS = 7  # 예약 원함 미예약 — 기준일 전 이 날수(AI 비서 설계 §5.3)
 APPT_TYPES = ("treatment", "hygiene", "consult")
 
 
@@ -192,6 +194,14 @@ def _expense(conn: sqlite3.Connection, today: date) -> dict:
     return {"expense_open": s["count"], "expense_month": s["month"]}
 
 
+def _unbooked(conn: sqlite3.Connection, today: date) -> dict:
+    """예약 원함 미예약 — emr_bridge.unbooked_requests와 같은 기준(기준일 전 7일, 오늘 제외)"""
+    rows = emr_bridge.unbooked_requests(
+        conn, today - timedelta(days=UNBOOKED_DAYS), today - timedelta(days=1)
+    )
+    return {"count": len(rows), "names": [r["name"] for r in rows]}
+
+
 def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
     """GET /today — today = 앱 기준일(shared/clinic.py), now = 실제 시계(근거 없는 질문 7일)"""
     rows = prep.prep_facts(conn, today, today, include_ax=True)
@@ -214,6 +224,7 @@ def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
             "preclaim_ai": pre[
                 "ai_missing"
             ],  # 화면 문구가 '요건 근거 못 찾음' — 누락만 있는 줄은 빼고
+            "wants_appt_unbooked": _unbooked(conn, today),
             **_recon(conn, today),
             **_expense(conn, today),
         },

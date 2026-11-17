@@ -58,6 +58,7 @@ def test_get_today_shape(client):
         "appeal_soon",
         "preclaim_warning",
         "preclaim_ai",
+        "wants_appt_unbooked",
         "recon_open",
         "recon_month",
         "expense_open",
@@ -115,3 +116,9 @@ def test_revert_then_review(client, tmp_path):
     assert [(x["call_uid"], x["ai"]) for x in after["people"]["review_calls"]] == [
         ("c-0001", "closed")
     ]
+
+
+def test_today_has_wants_appt_unbooked(client):
+    """기준일 전 7일(11-24~11-30) 예약 원함 통화 — 같은 환자는 하나, 7일 밖(박영희 11-20)은 빠진다"""
+    got = client.get("/today").json()["people"]["wants_appt_unbooked"]
+    assert got["count"] == 2 and sorted(got["names"]) == ["김철수", "이민수"]

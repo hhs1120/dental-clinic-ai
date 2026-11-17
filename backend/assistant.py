@@ -361,6 +361,12 @@ def _save(
     )
 
 
+NO_INDEX_SEARCHER = (
+    object()
+)  # 검색 색인이 없을 때 searcher 자리에 넣는다 — ask_records는 "색인 없음" 결과
+NO_INDEX_TEXT = "자료실 색인 없음 — 기록 검색을 쓸 수 없습니다"
+
+
 def turn(
     conn: sqlite3.Connection,
     gw,
@@ -433,7 +439,15 @@ def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_ev
             if (
                 s["tool"] == ASK
             ):  # 도구 단계가 끝난 뒤 ③에 맡긴다(도구 안에서 LLM을 부르지 않는 규칙)
-                got = chat.chat(conn, gw, searcher, clinic, s["result"]["queued"])
+                if searcher is NO_INDEX_SEARCHER:
+                    got = {
+                        "status": "no_index",
+                        "answer_text": NO_INDEX_TEXT,
+                        "cited_ids": [],
+                        "retrieved_ids": [],
+                    }
+                else:
+                    got = chat.chat(conn, gw, searcher, clinic, s["result"]["queued"])
                 records.append(
                     {
                         "question": s["result"]["queued"],

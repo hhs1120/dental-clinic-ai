@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from backend import (
+    assistant,
     autoclose,
     blind,
     calls,
@@ -1017,6 +1018,161 @@ def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
     conn = _open_rw(paths)
     try:
         return today.sheet(conn, clinic.today, now)
+    finally:
+        conn.close()
+
+
+# ── AI 비서 (AI 비서 설계 §6) ────────────────────────────────────────────────
+
+ASSISTANT_MAX_TEXT = 1000
+ASSISTANT_BUSY = "같은 대화에서 다른 요청이 처리 중입니다 — 잠시 뒤 다시 보내세요"
+
+
+def get_assistant_models():
+    """임베딩 모델 — 없어도 비서는 돈다(③ 위임만 '색인 없음'), 그래서 503 대신 None. 테스트가 바꾼다"""
+    try:
+        return _models()
+    except Exception:
+        return None
+
+
+class AssistantBody(BaseModel):
+    conversation_id: int | None = None
+    text: str = Field(min_length=1, max_length=ASSISTANT_MAX_TEXT)
+    part: str
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
+def _assistant_searcher(conn, models):
+    """색인·모델이 갖춰졌으면 검색기, 아니면 NO_INDEX_SEARCHER(ask_records가 색인 없음 결과를 낸다)"""
+    if models is None or not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+        return assistant.NO_INDEX_SEARCHER
+    try:
+        return Searcher(conn, _clinic(), *models)
+    except MissingVectors:
+        return assistant.NO_INDEX_SEARCHER
+
+
+def _assistant_worker(paths, models, gateway, body: AssistantBody, events: queue.Queue) -> None:
+    """작업 스레드 — 자기 연결로 한 턴을 끝까지 돌린다(스트림이 끊겨도 대화가 남게)"""
+    conn = db.connect(*paths)
+    try:
+        searcher = _assistant_searcher(conn, models)
+        assistant.turn(
+            conn,
+            gateway(conn),
+            searcher,
+            _clinic(),
+            conversation_id=body.conversation_id,
+            text=body.text,
+            part=body.part,
+            on_event=events.put,
+        )
+    except (
+        sqlite3.IntegrityError
+    ):  # 같은 대화의 (conversation_id, seq) 충돌 — 스트림이 이미 열려 오류 이벤트로
+        events.put({"type": "error", "message": ASSISTANT_BUSY})
+    except Exception as e:  # 화면에는 짧게, 실행 기록은 하네스가 남긴다
+        events.put({"type": "error", "message": f"답변 중 오류: {type(e).__name__}"})
+    finally:
+        conn.close()
+        events.put(None)
+
+
+@app.post("/assistant/turn")
+def assistant_turn(
+    body: AssistantBody,
+    paths: Paths,
+    models: Annotated[tuple | None, Depends(get_assistant_models)],
+    gateway: Annotated[object, Depends(get_chat_gateway)],
+) -> StreamingResponse:
+    """말 1개 → 진행(step)·답(reply)·오류(error) SSE — POST /chat과 같은 스레드·큐 방식"""
+    conn = _open_rw(paths)
+    try:
+        if (
+            body.conversation_id is not None
+            and assistant.conversation(conn, body.conversation_id) is None
+        ):
+            raise HTTPException(404, "없는 대화입니다")
+    finally:
+        conn.close()
+    events: queue.Queue = queue.Queue()
+    threading.Thread(target=_assistant_worker, args=(paths, models, gateway, body, events)).start()
+
+    def stream():
+        while (event := events.get()) is not None:
+            yield _sse(event)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@app.get("/assistant/conversations")
+def assistant_conversations(paths: Paths, before: int | None = None) -> list[dict]:
+    conn = _open_rw(paths)
+    try:
+        return assistant.conversations(conn, before_id=before)
+    finally:
+        conn.close()
+
+
+@app.get("/assistant/conversations/{conversation_id}")
+def assistant_conversation(conversation_id: int, paths: Paths) -> dict:
+    """저장된 대화 그대로 — 모델을 부르지 않는다"""
+    conn = _open_rw(paths)
+    try:
+        out = assistant.conversation(conn, conversation_id)
+    finally:
+        conn.close()
+    if out is None:
+        raise HTTPException(404, "없는 대화입니다")
+    return out
+
+
+def _draft_card(conn, draft_id: int, clinic: Clinic) -> dict:
+    data = assistant.card_detail(conn, "draft", str(draft_id), clinic)
+    if data is None:
+        raise HTTPException(404, "없는 초안입니다")
+    return {"type": "draft", "id": str(draft_id), "data": data}
+
+
+@app.post("/assistant/drafts/{draft_id}/approve")
+def assistant_approve(
+    draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """초안 승인(§5.2) — 승인 시각은 실제 시계, 미예약 환자 연락 기록의 날은 앱 기준일"""
+    conn = _open_rw(paths)
+    try:
+        _draft_card(conn, draft_id, clinic)  # 없으면 404
+        try:
+            got = emr_bridge.approve(
+                conn, clinic, draft_id, by=body.part, at=_stamp(now), missed_day=clinic.today
+            )
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 초안입니다") from e
+        conn.commit()
+        card = _draft_card(conn, draft_id, clinic)
+    finally:
+        conn.close()
+    if got["ok"]:
+        return {"ok": True, "card": card}
+    return {"ok": False, "reasons": got["reasons"], "card": card}
+
+
+@app.post("/assistant/drafts/{draft_id}/cancel")
+def assistant_cancel(draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        _draft_card(conn, draft_id, clinic)
+        try:
+            emr_bridge.cancel(conn, draft_id, by=body.part, at=_stamp(now))
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 초안입니다") from e
+        conn.commit()
+        return {"card": _draft_card(conn, draft_id, clinic)}
     finally:
         conn.close()
 
