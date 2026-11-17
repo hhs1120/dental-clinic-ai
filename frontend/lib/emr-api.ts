@@ -70,7 +70,7 @@ export interface PatientSummary {
   alerts: { code: string; label: string; category: string }[];
   last_visit: string | null;
   upcoming: {
-    id: number;
+    id: number | string; // 승인된 AX 예약은 "ax-<id>"
     date: string;
     time: string;
     procedure: string;

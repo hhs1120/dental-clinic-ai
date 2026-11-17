@@ -114,11 +114,18 @@ function LibraryMenu({ params }: { params: URLSearchParams }) {
 
 /** AI 비서 목록 칸 — 새 대화와 지난 대화(링크는 /?c=<번호>, 열기는 AI 비서 화면이 읽는다) */
 function ConversationList({ current }: { current: string | null }) {
-  const first = useFetch<Conversation[]>(`conv:${current}`, (s) =>
+  const key = `conv:${current}`;
+  const first = useFetch<Conversation[]>(key, (s) =>
     getJson<Conversation[]>("/assistant/conversations", undefined, s),
   );
-  const [more, setMore] = useState<Conversation[]>([]);
-  const [done, setDone] = useState(false);
+  // 더 불러온 쪽은 첫 쪽 키에 묶는다 — 첫 쪽을 다시 받으면(대화를 바꾸면) 비우고 더보기도 다시 보인다
+  const [paged, setPaged] = useState({
+    key,
+    more: [] as Conversation[],
+    done: false,
+  });
+  const { more, done } =
+    paged.key === key ? paged : { more: [] as Conversation[], done: false };
   const rows = [...(first.data ?? []), ...more];
   const loadMore = async () => {
     const last = rows[rows.length - 1];
@@ -126,8 +133,11 @@ function ConversationList({ current }: { current: string | null }) {
       "/assistant/conversations",
       new URLSearchParams({ before: String(last.id) }),
     ).catch(() => []);
-    setMore((m) => [...m, ...page]);
-    if (page.length < PAGE) setDone(true);
+    setPaged((p) => ({
+      key,
+      more: [...(p.key === key ? p.more : []), ...page],
+      done: page.length < PAGE,
+    }));
   };
   return (
     <div className="flex flex-col gap-0.5">

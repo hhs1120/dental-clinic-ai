@@ -25,7 +25,7 @@ const EMPTY = {
     recon_month: null,
     expense_open: 0,
     expense_month: null,
-    wants_appt_unbooked: { count: 0, names: [] },
+    wants_appt_unbooked: { count: 0, names: [], days: 7 },
   },
   briefing: [],
   ai: {
@@ -107,7 +107,7 @@ const FULL = {
         at: "2026-11-09 16:12:00",
       },
     ],
-    wants_appt_unbooked: { count: 0, names: [] },
+    wants_appt_unbooked: { count: 0, names: [], days: 7 },
   },
   ai: {
     autoclose_on: true,
@@ -534,7 +534,7 @@ test("예약 원함 줄과 AI 비서로 처리 링크", async ({ page }) => {
       appeal_soon: 2,
       recon_open: 3,
       recon_month: "2026-08",
-      wants_appt_unbooked: { count: 2, names: ["김영철", "박순자"] },
+      wants_appt_unbooked: { count: 2, names: ["김영철", "박순자"], days: 5 },
     },
   });
   await page.goto("/today");
@@ -546,7 +546,7 @@ test("예약 원함 줄과 AI 비서로 처리 링크", async ({ page }) => {
   const q = (t: string) => `/?${new URLSearchParams({ draft: t })}`;
   await expect(links.nth(0)).toHaveAttribute(
     "href",
-    q("지난 7일 전화로 예약 원했는데 안 잡힌 사람 보여줘"),
+    q("지난 5일 전화로 예약 원했는데 안 잡힌 사람 보여줘"), // 날수는 응답 값
   );
   await expect(
     people.locator(

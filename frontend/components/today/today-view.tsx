@@ -127,7 +127,9 @@ type Line = {
   assist?: string;
 };
 
-const ASSIST_UNBOOKED = "지난 7일 전화로 예약 원했는데 안 잡힌 사람 보여줘";
+/** 날수는 /today가 준 값(backend/today.py UNBOOKED_DAYS) — 줄의 건수와 같은 기간을 묻는다 */
+const assistUnbooked = (days: number) =>
+  `지난 ${days}일 전화로 예약 원했는데 안 잡힌 사람 보여줘`;
 const ASSIST_APPEAL = "재심 신청 기한이 얼마 안 남은 삭감 건 보여줘";
 const ASSIST_RECON = "일계표 불일치 있는 날 보여줘";
 const assistHref = (q: string) => `/?${new URLSearchParams({ draft: q })}`;
@@ -197,16 +199,19 @@ function People({ sheet }: { sheet: TodaySheet }) {
     `통화 할 일 ${p.todo_left.items}건 · 통화 ${p.todo_left.calls}건`,
     "급함 먼저 · 끝내면 빠짐",
   );
+  // 옛 응답(필드 없음)이면 줄을 숨긴다
+  const unbooked = p.wants_appt_unbooked;
+  const unbookedAsk = assistUnbooked(unbooked?.days ?? 0);
   count(
     callLines,
-    p.wants_appt_unbooked.count,
+    unbooked?.count ?? 0,
     "unbooked",
     "예약 원함",
     "warn",
-    assistHref(ASSIST_UNBOOKED),
-    `예약 원함 ${p.wants_appt_unbooked.count}명 — 전화로 원했는데 안 잡힘`,
-    p.wants_appt_unbooked.names.join(", "),
-    ASSIST_UNBOOKED,
+    assistHref(unbookedAsk),
+    `예약 원함 ${unbooked?.count ?? 0}명 — 전화로 원했는데 안 잡힘`,
+    unbooked?.names?.join(", ") ?? "",
+    unbookedAsk,
   );
   count(
     workLines,

@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { type Appt, type ScheduleDay, STATUS_LABEL } from "@/lib/emr-api";
 import { cn } from "@/lib/utils";
 
-export const SLOT_MIN = 30; // 지금 데이터의 예약 단위(시각 :00·:30, 소요 30·60·90분)
+// 지금 데이터의 예약 단위(시각 :00·:30, 소요 30·60·90분) — 화면 격자 칸. 원본 값은 generator/master.py
+// SLOT_MIN(source.ax_master_values slot_min, 백엔드 슬롯 검사가 읽음)
+export const SLOT_MIN = 30;
 const ROW = "2.75rem"; // 30분 한 칸 높이
 
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
