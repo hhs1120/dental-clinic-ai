@@ -599,6 +599,30 @@ def test_patient_record_appointments_include_own_ax(conn):
     )
 
 
+def test_summary_upcoming_includes_own_future_ax(conn):
+    extra = [
+        _ax(),
+        _ax(id="ax-8", patient_id=1),  # 다른 환자
+        _ax(id="ax-9", scheduled_at="2026-11-30 10:00:00"),  # 기준일 전
+    ]
+    up = patient_summary(conn, 2, TODAY, extra)["upcoming"]
+    ax = [u for u in up if u["id"] == "ax-7"]
+    assert ax == [
+        {
+            "id": "ax-7",
+            "date": "2026-12-01",
+            "time": "16:00",
+            "procedure": "스케일링",
+            "staff": "임재윤",
+        }
+    ]
+    assert "ax-8" not in [u["id"] for u in up] and "ax-9" not in [u["id"] for u in up]
+    assert [u["date"] + u["time"] for u in up] == sorted(u["date"] + u["time"] for u in up)
+    assert all(u["id"] != "ax-7" for u in patient_summary(conn, 2, TODAY)["upcoming"])
+    rec = patient_record(conn, "C-00002", TODAY, extra)
+    assert "ax-7" in [u["id"] for u in rec["summary"]["upcoming"]]
+
+
 def test_routes_merge_approved_ax_only_with_app_db(emr_paths, client, tmp_path):
     from backend import db
 
@@ -617,6 +641,9 @@ def test_routes_merge_approved_ax_only_with_app_db(emr_paths, client, tmp_path):
     assert day["counts"]["total"] == 4
     rec = client.get("/emr/patients/C-00002").json()
     assert [a["id"] for a in rec["appointments"] if a["source"] == "ax"] == ["ax-1"]
+    assert "ax-1" in [
+        u["id"] for u in rec["summary"]["upcoming"]
+    ]  # 예약표 패널·통화 상세 '다음 예약'
     # 앱 DB가 없으면 원본만
     only = (
         _client((tmp_path / "none" / "app.sqlite", emr_paths[1]))

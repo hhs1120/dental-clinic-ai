@@ -213,7 +213,8 @@ def _missed(clinic: Clinic, conn, args: dict) -> dict:
 
 
 def _draft(clinic: Clinic, conn, turn: dict, args: dict) -> dict:
-    """근거 통화(source_call_uid)는 있는 통화여야 한다 — 없으면 {error: [unknown_call]}(행 없음, 모델이 고쳐 다시
+    """근거 통화(source_call_uid)는 있는 통화여야 한다 — 생성 통화(source.ax_calls)나 새로 추가한 통화
+    (ax_pasted_calls, find_calls가 같이 돌려준다). 없으면 {error: [unknown_call]}(행 없음, 모델이 고쳐 다시
     부르거나 통화 없이 만든다). 지어낸 통화 id가 초안·카드 링크에 남지 않게"""
     code, err = _procedure(conn, args["procedure"])
     if err:
@@ -221,7 +222,11 @@ def _draft(clinic: Clinic, conn, turn: dict, args: dict) -> dict:
     uid = args["source_call_uid"]
     if (
         uid is not None
-        and not conn.execute("SELECT 1 FROM source.ax_calls WHERE call_uid = ?", (uid,)).fetchone()
+        and not conn.execute(
+            "SELECT 1 FROM source.ax_calls WHERE call_uid = :u"
+            " UNION ALL SELECT 1 FROM ax_pasted_calls WHERE call_uid = :u",
+            {"u": uid},
+        ).fetchone()
     ):
         return {"error": ["unknown_call"]}
     patient = conn.execute(
@@ -262,7 +267,7 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
     today = clinic.today.isoformat()
     conn = lambda ctx: ctx.store.conn  # noqa: E731
     return [
-        *query_tools(clinic, include_ax=True)[:4],
+        *(t for t in query_tools(clinic, include_ax=True) if t.name != "refuse"),
         Tool(
             "find_calls",
             f"기간(YYYY-MM-DD, 오늘 {today})의 통화 목록 — 목적·요약·예약 원함. 차트번호·예약 원함으로 거른다.",

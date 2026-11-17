@@ -122,3 +122,4 @@ def test_today_has_wants_appt_unbooked(client):
     """기준일 전 7일(11-24~11-30) 예약 원함 통화 — 같은 환자는 하나, 7일 밖(박영희 11-20)은 빠진다"""
     got = client.get("/today").json()["people"]["wants_appt_unbooked"]
     assert got["count"] == 2 and sorted(got["names"]) == ["김철수", "이민수"]
+    assert got["days"] == 7  # 화면이 비서에 보낼 질문("지난 N일")을 이 값으로 만든다

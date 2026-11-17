@@ -199,8 +199,11 @@ def search_patients(conn: sqlite3.Connection, q: str, today: date) -> list[dict]
     return [_person(r, today) for r in rows]
 
 
-def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> dict:
-    """예약표 패널·EMR이 보는 '지금 이 환자' — 기준일 기준(설계안 '데이터 규칙')"""
+def patient_summary(
+    conn: sqlite3.Connection, patient_id: int, today: date, extra: list[dict] = ()
+) -> dict:
+    """예약표 패널·EMR이 보는 '지금 이 환자' — 기준일 기준(설계안 '데이터 규칙'). extra = 승인된 AX 예약
+    (emr_bridge.ax_appointments) — 그 환자의 기준일 이후 것을 '앞으로의 예약'에 섞는다(AI 비서 설계 §5.3)"""
     day = today.isoformat()
     year_ago = date.fromordinal(today.toordinal() - 365).isoformat()
     balance = conn.execute(
@@ -219,12 +222,31 @@ def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> d
         " WHERE patient_id = ? AND status = 'completed' AND date(scheduled_at) < ?",
         (patient_id, day),
     ).fetchone()[0]
-    upcoming = conn.execute(
-        "SELECT a.id, a.scheduled_at, a.type, r.name AS procedure, s.name AS staff"
-        " FROM emr_appointments a JOIN emr_procedures r ON r.code = a.planned_procedure_code"
-        " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ? AND a.status = 'scheduled'"
-        " AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at",
-        (patient_id, day),
+    upcoming = [
+        dict(u)
+        for u in conn.execute(
+            "SELECT a.id, a.scheduled_at, a.type, r.name AS procedure, s.name AS staff"
+            " FROM emr_appointments a JOIN emr_procedures r ON r.code = a.planned_procedure_code"
+            " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
+            " AND a.status = 'scheduled' AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at",
+            (patient_id, day),
+        )
+    ]
+    names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM emr_staff")}
+    upcoming = sorted(
+        upcoming
+        + [
+            {
+                "id": x["id"],
+                "scheduled_at": x["scheduled_at"],
+                "type": x["type"],
+                "procedure": x["procedure_name"],
+                "staff": names.get(x["staff_id"]),
+            }
+            for x in extra
+            if x["patient_id"] == patient_id and x["scheduled_at"][:10] >= day
+        ],
+        key=lambda u: u["scheduled_at"],  # 같은 시각은 원본 먼저(정렬은 안정)
     )
     missed = dict(
         conn.execute(
@@ -267,7 +289,7 @@ def patient_record(
     conn: sqlite3.Connection, chart_no: str, today: date, extra: list[dict] = ()
 ) -> dict | None:
     """전환 전 EMR 한 환자 전체. 목록은 오래된 순. extra = 승인된 AX 예약(emr_bridge.ax_appointments) — 그 환자 것만
-    예약 탭에 섞는다(AI 비서 설계 §5.3)"""
+    예약 탭과 요약의 '앞으로의 예약'에 섞는다(AI 비서 설계 §5.3)"""
     p = conn.execute(
         "SELECT * FROM emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
     ).fetchone()
@@ -313,7 +335,7 @@ def patient_record(
             "family": [dict(f) for f in family],
             "guardian": dict(guardian) if guardian else None,
         },
-        "summary": patient_summary(conn, pid, today),
+        "summary": patient_summary(conn, pid, today, extra),
         "alerts": [
             {
                 "code": a["code"],

@@ -195,11 +195,12 @@ def _expense(conn: sqlite3.Connection, today: date) -> dict:
 
 
 def _unbooked(conn: sqlite3.Connection, today: date) -> dict:
-    """예약 원함 미예약 — emr_bridge.unbooked_requests와 같은 기준(기준일 전 7일, 오늘 제외)"""
+    """예약 원함 미예약 — emr_bridge.unbooked_requests와 같은 기준(기준일 전 UNBOOKED_DAYS일, 오늘 제외).
+    days는 화면이 AI 비서에 보낼 질문의 날수"""
     rows = emr_bridge.unbooked_requests(
         conn, today - timedelta(days=UNBOOKED_DAYS), today - timedelta(days=1)
     )
-    return {"count": len(rows), "names": [r["name"] for r in rows]}
+    return {"count": len(rows), "names": [r["name"] for r in rows], "days": UNBOOKED_DAYS}
 
 
 def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:

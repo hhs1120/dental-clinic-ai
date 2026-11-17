@@ -14,7 +14,6 @@ from backend.emr import _hours
 from shared.clinic import Clinic
 
 ROLE_FOR_TYPE = {"treatment": "doctor", "hygiene": "hygienist", "consult": "consultant"}
-SLOT_MIN = 30  # 빈 시간 후보 간격 — frontend/components/schedule/day-grid.tsx SLOT_MIN과 같은 단위
 PATIENT_RULES = ("patient_same_day", "unknown_patient")  # free_slots는 환자 없이 본다
 
 
@@ -99,8 +98,9 @@ def _check(
 
     if start < at(h["open"]) or end > at(h["close"]):
         codes.append("outside_hours")
-    # 원본 예약은 개원 시각부터 SLOT_MIN 격자에서만 시작한다(생성기 starts) — 지어낸 시각이 초안이 되지 않게
-    if start.second or start.microsecond or (start - at(h["open"])) % timedelta(minutes=SLOT_MIN):
+    # 원본 예약은 개원 시각부터 slot_min 격자에서만 시작한다(생성기 starts) — 지어낸 시각이 초안이 되지 않게
+    grid = timedelta(minutes=mv["slot_min"])
+    if start.second or start.microsecond or (start - at(h["open"])) % grid:
         codes.append("off_slot")
     if h["lunch"] and start < at(h["lunch"][1]) and end > at(h["lunch"][0]):
         codes.append("lunch")
@@ -110,7 +110,13 @@ def _check(
         codes.append("wrong_role")
     overlap = [b for b in busy if b["start"] < end and start < b["end"]]
     cap = {"treatment": mv["doctor_concurrency"], "hygiene": 1}.get(type_)  # 상담은 제약 없음
-    if staff and cap is not None and sum(b["staff_id"] == staff["id"] for b in overlap) >= cap:
+    # 담당 동시 건수 = 새 예약 안 각 시작 시각(새 시작·겹치는 예약의 시작)에 진행 중인 건수 + 새 예약 —
+    # 동시 건수의 최대는 어떤 시작 시각에 나온다(verify schedule._over_capacity와 같은 셈)
+    mine = [b for b in overlap if staff and b["staff_id"] == staff["id"]]
+    points = [start] + [b["start"] for b in mine if start <= b["start"]]
+    if cap is not None and any(
+        1 + sum(b["start"] <= t < b["end"] for b in mine) > cap for t in points
+    ):
         codes.append("staff_busy")
     used = {b["chair_no"] for b in overlap}
     chairs = [c for c in range(1, mv["chairs"] + 1) if c not in used]
@@ -174,7 +180,7 @@ def free_slots(
     procedure_code: str,
     staff_id: int | None = None,
 ) -> list[dict]:
-    """그날 그 시술이 들어갈 시작 시각 × 담당 — SLOT_MIN 간격, 환자 규칙을 뺀 check_slot 통과분(§5.2)"""
+    """그날 그 시술이 들어갈 시작 시각 × 담당 — master slot_min 간격, 환자 규칙을 뺀 check_slot 통과분(§5.2)"""
     type_ = appointment_type(conn, procedure_code)
     duration = _duration(conn, procedure_code)
     mv, busy, h = prep.master_values(conn), _busy(conn, day), _hours(conn, day)
@@ -209,7 +215,7 @@ def free_slots(
                         "end": end.strftime("%H:%M"),
                     }
                 )
-        start += timedelta(minutes=SLOT_MIN)
+        start += timedelta(minutes=mv["slot_min"])
     return out
 
 

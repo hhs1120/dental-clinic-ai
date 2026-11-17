@@ -166,6 +166,23 @@ def test_claim_items_empty(conn, kind):
     assert call(conn, "claim_items", kind=kind) == {"kind": kind, "count": 0, "items": []}
 
 
+def test_draft_tool_accepts_pasted_source_call(conn):
+    """새로 추가한 통화(ax_pasted_calls)도 find_calls가 돌려주는 통화 — 근거 통화로 받는다"""
+    conn.execute(
+        "INSERT INTO ax_pasted_calls (call_uid, direction, started_at, transcript, patient_id,"
+        " added_by, added_at) VALUES ('p-0001', 'inbound', '2026-11-30 10:00:00', '환자: 예약', ?,"
+        " '데스크', '2026-11-30 10:05:00')",
+        (NEW,),
+    )
+    got = call(conn, "draft_appointment", **_draft_args(source_call_uid="p-0001"))
+    assert "error" not in got and got["source_call_uid"] == "p-0001"
+    from backend.assistant import card_detail
+
+    detail = card_detail(conn, "draft", str(got["id"]))
+    assert detail["source_call_uid"] == "p-0001" and detail["source_call_pool"] == 0
+    assert card_detail(conn, "call", "p-0001")["call_uid"] == "p-0001"
+
+
 def test_draft_tool_unknown_source_call(conn):
     got = call(conn, "draft_appointment", **_draft_args(source_call_uid="c-없음"))
     assert got == {"error": ["unknown_call"]}

@@ -304,11 +304,57 @@ def test_draft_claim_without_draft_retries_then_fixed_text(conn):
     assert rule == 2
 
 
-def test_draft_claim_rule_wording():
-    claims = ["예약했습니다", "예약을 잡았어요", "초안을 만들었습니다", "예약 넣었어요"]
-    plain = ["김철수님은 예약을 원했습니다", "예약 원함 통화입니다", "초안을 만들까요?"]
-    assert all(assistant.DRAFT_CLAIM_RE.search(t) for t in claims)
-    assert not any(assistant.DRAFT_CLAIM_RE.search(t) for t in plain)
+# (답 글, 이번 턴 초안 성공 여부, 막히는가) — 초안·예약을 만든 말은 초안이 없을 때만, 확정·승인은 언제나 막는다
+CLAIM_TABLE = [
+    ("예약했습니다", False, True),
+    ("예약을 잡았어요", False, True),
+    ("초안을 만들었습니다", False, True),
+    ("예약 넣었어요", False, True),
+    ("초안을 생성했습니다", False, True),
+    ("예약 초안을 작성했습니다", False, True),
+    ("예약을 잡아 드렸습니다", False, True),
+    ("예약이 잡혔습니다", False, True),
+    ("예약되었습니다", False, True),
+    ("예약을 넣어 두었습니다", False, True),
+    ("예약을 등록해 두었습니다", False, True),
+    ("초안이 만들어졌습니다", False, True),
+    ("예약을 확정했습니다", False, True),
+    ("예약을 승인했습니다", False, True),
+    ("예약이 확정되었습니다", False, True),
+    ("예약이 완료되었습니다", False, True),
+    ("초안을 만들었습니다", True, False),
+    ("예약이 잡혔습니다", True, False),
+    ("예약 초안을 작성했습니다", True, False),
+    ("예약을 확정했습니다", True, True),
+    ("예약을 승인했습니다", True, True),
+    ("확정했습니다", True, True),
+    ("승인해 드렸습니다", True, True),
+    ("예약이 확정되었습니다", True, True),
+    ("예약이 완료됐어요", True, True),
+    ("김철수님은 예약을 원했습니다", False, False),
+    ("예약 원함 통화입니다", False, False),
+    ("초안을 만들까요?", False, False),
+    ("예약이 잡혀 있어요", False, False),
+    ("예약을 하셨습니다", False, False),
+    ("초안을 만들지 않았습니다", False, False),
+    ("12월 3일 10시 예약이 있습니다", False, False),
+    ("예약되어 있습니다", False, False),
+    ("승인하시면 예약이 확정됩니다", True, False),
+]
+
+
+@pytest.mark.parametrize(("text", "drafted", "blocked"), CLAIM_TABLE)
+def test_draft_claim_rule_wording(text, drafted, blocked):
+    got = assistant._check(reply(text), {3, 10, 12}, set(), drafted)
+    assert got == (assistant.DRAFT_CLAIM if blocked else None)
+
+
+def test_confirm_claim_blocked_even_with_draft(conn):
+    gw = Turns(conn, [[DRAFT, DONE]], [reply("예약을 확정했습니다"), reply("초안을 만들었습니다")])
+    out = turn(conn, gw, "이영희 수요일 10시 레진")
+    assert out["status"] == "ok" and out["text"] == "초안을 만들었습니다"
+    retry = [kw for _, kw in gw.calls if kw.get("schema")][1]["messages"][-1]["content"]
+    assert "카드" in retry
 
 
 def test_draft_claim_then_honest_reply_passes(conn):

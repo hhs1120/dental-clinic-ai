@@ -431,7 +431,7 @@ CREATE TABLE ax_emr_writes (
     id              INTEGER PRIMARY KEY,
     kind            TEXT NOT NULL CHECK (kind IN ('appointment')),
     patient_id      INTEGER NOT NULL,  -- source.emr_patients.id
-    staff_id        INTEGER NOT NULL,  -- source 원장 id
+    staff_id        INTEGER NOT NULL,  -- source.emr_staff.id
     scheduled_at    TEXT NOT NULL,
     duration_min    INTEGER NOT NULL,
     type            TEXT NOT NULL CHECK (type IN ('treatment', 'hygiene', 'consult')),

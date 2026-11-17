@@ -3,7 +3,8 @@
 (게이트웨이 1회, 구조화 출력 {text, cards, cited_ids}, 같은 실행에 ref로 묶음)다. 두 단계의 별칭을 따로 받는다
 (TOOL_ALIAS·REPLY_ALIAS — 다음 묶음에서 도구 단계만 로컬 모델로). 답의 숫자·인용이 이번 턴 도구 결과·입력 밖이면
 이유를 붙여 답 단계를 한 번 다시 부르고, 또 어긋나면 고정 문구로 끝낸다(③과 같은 규칙). 이번 턴에 성공한 초안이
-없는데 답이 초안·예약을 만든 것처럼 쓰면(DRAFT_CLAIM_RE) 같은 방식으로 다시 부른다. 카드는 이번 턴 결과에 나온
+없는데 답이 초안·예약을 만든 것처럼 쓰거나(DRAFT_CLAIM_RE), 초안이 있어도 예약을 확정·승인한 것처럼 쓰면
+(CONFIRM_CLAIM_RE) 같은 방식으로 다시 부른다. 카드는 이번 턴 결과에 나온
 대상만 남기고 내용은 코드가 채우며, 성공한 초안 카드는 답이 빠뜨려도·답 단계가 실패해도 코드가 붙인다.
 대화·메시지(그 턴의 도구 호출 포함)는 ax_assistant_* 에 저장한다(§6)."""
 
@@ -47,16 +48,29 @@ ID_KEYS = {
 CITE, NUMBER = "assistant.cite_outside", "assistant.number_unverified"
 DRAFT_CLAIM = "assistant.draft_unbacked"
 FAILED_STATUS = {CITE: "cite_failed", NUMBER: "number_failed", DRAFT_CLAIM: "draft_failed"}
-# 초안·예약을 만든(잡은·넣은) 것처럼 쓴 말 — 이번 턴에 성공한 draft_appointment가 없는데 이 말이 있으면 어긋남.
-# "예약을 원했습니다"·"초안을 만들까요?"처럼 일을 끝냈다는 말이 아니면 걸리지 않게 끝난 동작 어미만 본다
+_KEEP = r"\s*(두었|뒀|놓았|놨|드렸)"  # "잡아 두었습니다"·"넣어 드렸습니다"처럼 붙는 보조 동사
+# 초안·예약을 만든(잡은·넣은·생긴) 것처럼 쓴 말 — 이번 턴에 성공한 draft_appointment가 없는데 이 말이 있으면 어긋남.
+# "예약을 원했습니다"·"초안을 만들까요?"·"예약이 잡혀 있어요"·"예약을 하셨습니다"처럼 일을 끝냈다는 말이 아니면
+# 걸리지 않게 끝난 동작 어미(능동·피동)만 본다
 DRAFT_CLAIM_RE = re.compile(
-    r"(초안|예약)\s*(을|를|도)?\s*(만들었|잡았|잡아\s*(두었|뒀|놓았|놨)|넣었|등록했|했습니다|했어요)"
+    r"(초안|예약)\s*(을|를|도|이|가)?\s*("
+    rf"(만들|잡|넣|등록해|생성해|작성해)(었|았){_KEEP}?|(만들어|잡아|넣어|등록해|생성해|작성해){_KEEP}"
+    r"|생성했|작성했|등록했|했습니다|했어요|해\s*(두었|뒀|드렸)"
+    r"|만들어졌|잡혔|(생성|작성|등록)?(되었|됐)(습|어))"
+)
+# 예약을 확정·승인(완료)한 것처럼 쓴 말 — 비서에는 승인 도구가 없어(승인은 직원이 초안 카드에서, §5.2) 초안을 만든
+# 턴에도 언제나 어긋남. "승인하시면 확정됩니다"·"확정되어 있습니다"처럼 끝나지 않은 말은 걸리지 않는다
+CONFIRM_CLAIM_RE = re.compile(
+    rf"(확정|승인)(했|해{_KEEP})"
+    r"|(예약|초안)\s*(을|를|이|가|도|은|는)?\s*(확정|승인|완료)\s*(처리)?\s*(되었|됐)"
 )
 EVIDENCE_SKIP = (*chat.EVIDENCE_SKIP, "question")  # 모델이 쓴 자유 글은 숫자 근거가 아니다
 RETRY_REASON = {
     CITE: "cited_ids가 이번 턴 기록 검색·차트 조회 결과 밖임.",
     NUMBER: "답의 숫자가 이번 턴 도구 결과·입력에 없음.",
-    DRAFT_CLAIM: "이번 턴에 만든 예약 초안이 없는데 답이 초안·예약을 만든 것처럼 씀.",
+    DRAFT_CLAIM: "이번 턴에 만든 예약 초안이 없는데 답이 초안·예약을 만든 것처럼 썼거나, 예약을 확정·승인한"
+    " 것처럼 씀. 지난 예약·이미 있는 예약은 그대로 설명해도 되지만, 이번 턴 결과에 초안 카드가 없으면 무엇도 새로"
+    " 만들었다·잡았다고 쓰지 않는다. 확정·승인은 직원이 초안 카드에서 하므로 했다고 쓰지 않는다.",
 }
 RETRY_HINT = " 이번 턴 결과에 있는 사실·숫자만 그대로 써서 다시 답한다."
 REPLY_SCHEMA = {
@@ -285,7 +299,9 @@ def _check(data: dict, nums: set[int], cites: set[str], drafted: bool) -> str | 
         return CITE
     if not numbers_ok(data["text"], nums):
         return NUMBER
-    if not drafted and DRAFT_CLAIM_RE.search(data["text"]):
+    if CONFIRM_CLAIM_RE.search(data["text"]) or (
+        not drafted and DRAFT_CLAIM_RE.search(data["text"])
+    ):
         return DRAFT_CLAIM
     return None
 

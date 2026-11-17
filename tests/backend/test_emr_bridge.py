@@ -172,6 +172,35 @@ def test_slot_doctor_concurrency(conn):
     assert _check(conn, f"{WED} 10:00") == ["staff_busy"]
 
 
+INLAY = "U0007"  # 60분 진료 — 겹치는 예약이 새 예약 안에서 서로 이어질 수 있다
+
+
+def test_slot_doctor_concurrency_counts_at_start_points(conn):
+    """동시 건수는 새 예약 안 각 시작 시각에서 센다(verify _over_capacity와 같다) — 겹치는 건수 합이 아니다"""
+    path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
+        0
+    ]
+    s = sqlite3.connect(path)
+    cols = list(PROCEDURES[0])
+    s.execute(
+        f"INSERT INTO emr_procedures ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+        next(tuple(p[c] for c in cols) for p in PROCEDURES if p["code"] == INLAY),
+    )
+    _appt(s, MISSED, DOCTOR, "2025-02-10 10:00:00", "treatment", INLAY, 1, "completed", 60)
+    s.commit()
+    s.close()
+    cap = emr_bridge.prep.master_values(conn)["doctor_concurrency"]
+    rows = [
+        (MISSED, DOCTOR, f"{WED} {hhmm}:00", "treatment", RESIN, c)
+        for hhmm in ("10:00", "10:30")
+        for c in range(1, cap)
+    ]
+    _src_add(conn, *rows)  # 10:00·10:30 각각 cap-1건 — 어느 시각에도 새 예약까지 cap건
+    assert _check(conn, f"{WED} 10:00", code=INLAY) == []
+    _src_add(conn, (MISSED, DOCTOR, f"{WED} 10:30:00", "treatment", RESIN, cap))
+    assert _check(conn, f"{WED} 10:00", code=INLAY) == ["staff_busy"]
+
+
 def test_slot_no_chair(conn):
     chairs = emr_bridge.prep.master_values(conn)["chairs"]
     _src_add(
