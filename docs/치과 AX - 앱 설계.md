@@ -75,6 +75,8 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - 호출 상한 6회/질문(`backend/chat.py` `CHAT_MAX_TOOL_CALLS` — 채점 상수와 같음을 테스트가 비교), `answer`는 세지 않는다. 넘는 호출은 훅 `chat.call_limit`이 막고 그 자리에서 실행을 끝낸다(`AgentSpec.stop_rules`, 상태 `call_limit`). 경계: 건수·목록 → `query_*`, 기간·간격 조건이 있는 차트 → `query_charts`, 절차·규정·과거 대화·차트 내용 → `search_docs`, 근거가 없거나 비공개 정보면 `refuse`
 - **검색은 버킷 분리**: `document`와 `call/message_thread/chart_note`를 따로 찾아 각각 상위 `CANDIDATES`(`backend/rag_search.py`) → 리랭커 → `manual_results` / `case_results`. `event_date ≤ TODAY` 강제. 리랭커 뒤에 옛 공지(같은 제목에서 시행일이 이른 것) 자리에 후보의 최신 공지를 올리고 옛 공지를 바로 뒤에 둔다. 날짜 필터를 주면 시행일 없는 문서는 빠지고, 환자 필터를 주면 환자 기록만 찾는다
 
+**질문 입구**: 화면에서 질문하는 곳은 AI 비서(§3b)다. AI 비서가 도구 `ask_records`로 질문을 남기면 도구 단계가 끝난 뒤 `chat.chat`을 부르고 그 답·출처·거절을 답 단계에 그대로 넘긴다. 색인이 없으면 `no_index` 결과로 답 단계에 넘어간다. `POST /chat`·`GET /chat/{log_id}`·평가는 그대로다(화면 입구만 옮김). ③ 조회 도구(`query_tools`)는 기본이 원본 예약만이고, AI 비서만 AX 예약 합치기 인자를 켠다
+
 **문서 초안 에이전트의 입력** = `ax_search_logs` 중 `refuse(not_found)`로 끝난 질문. 오늘 화면에는 초안이 오른다. **문서함**은 `ax_documents`를 그대로 보여 주고, 공지는 최신 버전만(`GET /documents`·`/documents/{id}`, `backend/documents.py` — 최신 규칙은 검색의 옛 공지 정렬과 같다. 본문에는 같은 제목 공지의 모든 버전과 `latest_id`). `source.sqlite`만 읽어 색인 없이도 열린다.
 
 ## 3b. 에이전트 하네스
@@ -97,6 +99,8 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_doc_drafts` | ③ 문서 초안 — 원 질문·초안·근거·게시 결정. 게시한 초안은 문서함과 색인에 합쳐 보인다(`ax_documents`는 쓰지 않음) |
 | `ax_failure_cases` | 재발 방지 — 출처(되돌리기·훅 차단·표본 오류·관문 탈락)·실행 id(문자열 참조, 외래 키 없음)·원인 분류(enum)·재현 테스트 경로·고칠 곳·승인 상태. 라벨·녹취 인용은 넣지 않는다(쓰기 전 검사는 [[치과 AX - 평가 설계]] §2.7) |
 | `ax_rule_counts` | 규칙 id별 차단 누계 |
+| `ax_emr_writes` | AI 비서가 만든 EMR 쓰기 — 지금은 예약(`kind='appointment'`): 환자·담당·시각·소요·종류·시술·체어·근거 통화·대화 id·턴, 상태 `draft/approved/cancelled/rejected`·사유·승인 파트·시각(실제 시계). 원본과 같은 모양이라 예약표·준비표가 그대로 그린다. 쓰기는 `backend/emr_bridge.py`만 한다. 환자·통화 id가 원본 키라 재생성 때 버린다(§7.3) |
+| `ax_assistant_conversations` · `ax_assistant_messages` | AI 비서 대화(제목 = 첫 말 앞부분, LLM 없음·파트·만든 시각)와 메시지(순번·역할·글·카드 JSON·그 턴의 도구 호출 JSON·실행 id·턴 상태). UNIQUE (대화, 순번). 모두가 같은 목록을 본다(로그인 없음), 삭제 기능 없음. 도구 호출을 메시지에 같이 남겨 실행 기록(§7.3 "다시 만듦")에 매이지 않는 학습 재료가 된다 |
 
 **에이전트별 도구** (호출 상한·세부 인자는 착수 시)
 | 에이전트 | 도구 |
@@ -109,6 +113,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | ⑧-1 원인 | 조회 도구(`backend/recon_tools.py` `LOOKUPS` — 그날 장부·카드 승인·정산 입금·통장·그날 내원·환자 미수·가족·구강용품 가격표·금액으로 다른 날 찾기, 읽기 전용), `submit_cause`(끝내는 도구 — 인자는 `backend/recon_agent.py` `SubmitArgs`, 근거 조회 번호를 훅 `recon.evidence`가 검사). `request_auto_action`은 주지 않는다 — 자동 마감은 코드 경로(`backend/recon_auto.py`) |
 | ⑧-2 증빙 | 조회 도구(`backend/expense_tools.py` `LOOKUPS` — 증빙 검색·증빙 본문·거래처 표·계정 과목 목록, 그 출금의 확정 후보 범위만, 읽기 전용), `submit_match`(끝내는 도구 — 인자는 `backend/expense_agent.py` `SubmitArgs`, 과목·후보 범위·근거 조회 번호를 훅 `expense.evidence`가 검사). 입력에 규칙 답을 넣지 않는다. `request_auto_action`은 주지 않는다 — 자동 확정은 코드 경로(`backend/expense_auto.py`) |
 | ⑨ 근거 | `query_patient`, `search_docs`, `request_auto_action` |
+| AI 비서 | ③ 조회 4개(`query_patient`·`query_schedule`·`query_claims`·`query_charts`, AX 예약 합침), `find_calls`·`unbooked_requests`·`free_slots`·`prep_rows`·`claim_items`·`recon_days`·`missed_patients`(`backend/assistant_tools.py`, 각 화면 함수 재사용 — 목록은 `LIST_CAP`행, `count`는 전체), `ask_records`(질문만 남김), `draft_appointment`(초안만 — 같은 슬롯 검사를 통과해야 초안, 승인 도구는 없음), `done_tools`(끝내는 도구). 도구 버전은 `TOOLS_VERSION` — 이름·인자를 바꾸면 올린다 |
 | 운영 | 신호 조회, 기능 에이전트 호출, `flag_patient` |
 | 개선(`evaluation/`, 실행 기록은 `evaluation/runs/`) | 재료 오류 통화 읽기(`read_call` — 재료 오류 통화만, 훅 `improve.material_only`), 오류 유형 내기(`submit_types`), 규칙 한 줄 후보 내기(`submit_rule`, 끝내는 도구) — `evaluation/improve_agent.py`. 후보 파일 쓰기·검사·관문은 코드(`evaluation/improve.py`). `ground_truth/`·`reports/`·`data.json`을 직접 읽는 도구는 주지 않는다 |
 
@@ -120,6 +125,8 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 - **재생**: `ax_agent_steps`의 모델 응답·도구 결과로 실행을 다시 돌린다. 도구는 저장된 결과로 대신하고 호출·훅 결과·종료 상태를 비교한다. 훅·권한·인자·상한의 변화를 잡고 프롬프트 변화는 잡지 못한다. 저장된 응답을 `Gateway.complete()`와 같은 인터페이스로 내고(`backend/harness/replay.py`) 테스트 기록은 `tests/fixtures/agent_runs/`
 - **재개**: 잠금이 만료되고 끝나지 않은 `ax_agent_runs`는 마지막 단계 다음부터 이어 간다. 쓸 때마다 잠금 소유자를 확인해 잠금을 뺏긴 쪽은 멈춘다. 일반 재시도의 호출 최악 시간은 잠금 만료보다 짧아야 한다(`backend/harness/llm.py`). 서버가 준 `Retry-After` 대기는 상한이 없어 이 계산 밖이고, 그동안 잠금이 만료되면 소유자 확인으로 멈춘다. 모든 앱 쓰기는 중복 방지 키로 한 번만 들어간다
 - **컨텍스트**: 에이전트별 결과 크기 상한은 `AgentSpec.result_limit`, 도구별 상한은 착수 시. 기능 에이전트는 운영 에이전트에 요약과 실행 id만 돌려준다
+- **AI 비서**(`backend/assistant.py`): 대화 1턴 = 실행 1개(`ax_agent_runs` `agent='assistant'`, `target` = `대화 id:턴`). 입력 = 앞 턴의 말·답 글·카드가 가리킨 대상 id + 이번 말(앞 턴 도구 결과는 다시 넣지 않고 필요하면 다시 조회). 한 턴은 **도구 단계**(하네스 실행, 끝내는 도구 `done_tools` — 글로 끝나면 한 번 되돌림) → **③ 위임**(`ask_records` 질문마다 `chat.chat`) → **답 단계**(게이트웨이 1회, 구조화 출력 `{text, cards, cited_ids}`, LLM 호출 기록은 같은 실행에 `ref`로 묶음). 두 단계의 별칭을 따로 받는다(`TOOL_ALIAS`·`REPLY_ALIAS`, §7.1). 후검증은 ③과 같다 — 답의 숫자는 이번 턴 도구 결과·입력에 있어야 하고(`backend/verify.py`) `cited_ids`는 이번 턴 기록 검색·차트 조회 결과 안이어야 한다. 첫 어긋남은 이유를 붙여 답 단계를 한 번 다시 부르고 두 번째는 고정 문구(`FAILED_TEXT`)로 끝나며 상태는 `cite_failed`·`number_failed`, 답 단계 예산 초과는 `budget`이다. 카드는 이번 턴 결과에 나온 대상 id만 남기고 내용은 코드가 채운다(종류 `CARD_TYPES`). 상한은 `MAX_TOOL_CALLS`·`MAX_USD`
+- **EMR 연동**(`backend/emr_bridge.py`): 슬롯 검사(`check_slot` — 원본 예약의 운영 규칙 전부, 값은 `ax_master_values`: 영업시간·점심·휴진일·공휴일(`bank_holidays`)·30분 격자 `off_slot`·기준일 이후·시술 소요·담당 역할·담당 동시 건수·체어·같은 환자 같은 날 1건, 하루 방문 상한은 보지 않음)·`free_slots`(같은 검사로 빈 시작 시각×담당)·`create_draft`(통과해야 행이 생김, 걸리면 코드 목록)·`approve`(쓰기 잠금부터 다시 검사해 걸리면 `rejected`, 통과하면 `approved`와 그 환자가 ⑨ 미예약이면 연락 기록 `booked`(채널 `call`) — 한 트랜잭션)·`cancel`(초안만)·`ax_appointments`(승인된 AX 예약을 원본 예약 행과 같은 키로, id `ax-<id>`)·`unbooked_requests`(예약 원함 미예약 — 오늘 화면 줄·도구·시나리오 정답이 같은 함수). 초안이 아닌 행의 승인·취소는 `Conflict`(409)
 - **재발 방지**: 훅·정책 규칙은 코드에 id를 달아 두고, 차단이 날 때 `ax_rule_counts`에 더한다(자동 처리 거절은 `auto.<이유>`, 챗·검색 요약 규칙 id는 §3). 승인 규칙은 [[치과 AX - 평가 설계]] §2.7
 
 ## 4. 준비표·오늘 화면·리포트
@@ -170,6 +177,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **게이트웨이**: 모듈 1개 `shared/llm.py`(생성기 7·9·9b·9e단계의 API 채우기도 경유). 프로바이더마다 공식 SDK를 직접 쓴다 — Anthropic, Upstage·OpenAI(둘 다 openai SDK — Upstage는 OpenAI 호환 API), 로컬 MLX(파인튜닝 판정기 — `mlx-lm`, `finetune` 그룹이라 `make judge`·`make dev`가 `uv run --group finetune`으로 띄운다. 그룹 없이 띄우면 판정만 실패로 남는다). 모델의 프로바이더는 `config/llm.yaml` 모델 항목의 `provider`. 넷뿐이라 LiteLLM 같은 변환 계층을 두지 않는다
 - **설정** `config/llm.yaml`: 별칭 → 모델 순서(앞 모델이 일시 오류(재시도 소진)·거절이면 다음 모델로 폴백, `fallback_used` 기록), 모델별 단가, 일일 비용 상한(`daily_usd_limit` — 넘으면 즉시 호출을 하지 않음. Batch는 상한 밖 — [[치과 AX - 기능 정의]] §7). 서버 측 거절 폴백을 지원하는 모델은 켠다(`server_fallback`)
+- **별칭 자리**: AI 비서의 도구 단계(`backend/assistant.py` `TOOL_ALIAS`)와 답 단계(`REPLY_ALIAS`)는 각각 별칭을 받고 지금 둘 다 `chat`이다. 도구 단계만 로컬 MLX 별칭으로 바꿀 수 있고 하네스는 고치지 않는다(`python -m evaluation.assistant run --tool-alias --reply-alias`)
 - **구조화 출력**: JSON 스키마(Anthropic `output_config.format`, Upstage·OpenAI `response_format` `json_schema` strict). 로컬 MLX는 구조화 출력이 없어 출력의 첫 JSON 객체를 읽고, 판정기는 라벨로 맞는 객체를 다시 찾는다(`backend/classify.py` `first_labels`)
 - **로컬 모델(MLX) 보기 강제**: 로컬 생성은 구조화 출력을 강제하지 못해, 결과가 스키마(보기·불)에 맞지 않으면 같은 입력을 다시 생성하지 않고 칸마다 허용 값 중 모델 확률이 가장 높은 것을 고르는 제약 디코딩으로 다시 낸다(`shared/llm.py` `_mlx_constrain`). 맞게 나온 결과는 그대로라 판정기 수치가 바뀌지 않는다. 보기 밖 값은 막지만 보기 중 틀린 값은 막지 못한다
 - **기록**: 호출 1건 = 기록 1행 — 생성기와 골드가 든 `evaluation/` 호출(평가 설계 §2.3·§2.7)은 jsonl, 앱은 `ax_llm_calls`
@@ -179,7 +187,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 ### 7.2 프롬프트
 
-- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `followup`(후속 에이전트), `call_actions`(처리 정답 라벨 — `evaluation/`에서만), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
+- **앱**: `prompts/<task>/<version>.md` — 파일명이 곧 `prompt_version`. task: `classify`(분류기 — 호출이 둘이라 버전 폴더 `prompts/classify/<version>/`의 `labels.md`·`summary.md`, 폴더명이 `prompt_version`이고 둘 중 하나의 텍스트나 모델이 바뀌면 버전을 올린다), `chat`(챗 시스템), `prep`(준비표 제안), `assistant`(AI 비서 도구 단계 — `PROMPT_VERSION`)·`assistant_reply`(답 단계 — `REPLY_VERSION`), `judge`(판정기 — 판정 기준 포함), `blind_judge`(요약 쌍 비교 — 평가 설계 §2.4), `followup`(후속 에이전트), `call_actions`(처리 정답 라벨 — `evaluation/`에서만), `gold_audit`(골드 점검 중재 — 평가 설계 §2.3, `evaluation/`에서만 읽고 버전은 `evaluation/gold_audit.py` `PROMPT_VERSION`), 에이전트마다 task 하나
   - 버전 파일은 고치지 않고 새 버전으로 추가(비교 재현성) — 모델만 바꿔도 같은 텍스트로 새 버전(§1 `prompt_version` 정의 — 모델 별칭이 있는 classify)
   - 호출 설정: 버전 파일 머리말(`---` 사이 YAML)의 `effort`(추론 단계 — Anthropic `output_config.effort`, Upstage·OpenAI `reasoning_effort`)를 호출에 넘기고, 추론 토큰 몫만큼 출력 상한을 늘린다(`backend/classify.py` `REASONING_MAX_TOKENS`). 없으면 모델 기본값. 지금은 judge·gold_audit·call_actions만 읽는다. judge 버전 파일 머리말의 `model`은 그 버전을 낸 모델이다 — 지금 `judge` 별칭의 첫 모델과 다르면 그 버전은 다시 판정하지 않는다(`backend/classify.py` `judge_model_ok`, 옛 기록을 다른 모델로 덮지 않게)
   - 쓰는 버전: classify는 `ax_settings.active_prompt_version`, 나머지는 `prompt_versions`. 새 버전 파일은 관문(`make prompt-gate`)을 넘은 것만 쓴다. 자동 개선이 대기 버전으로 올리는 규칙은 평가 설계 §2.7 전환
@@ -204,7 +212,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - **그대로 둠**: 실수 후보(승인 상태 포함, 실행 id는 끊겨도 된다)·`ax_rule_counts`·게시한 문서 초안·`ax_settings`(`auto_policy` 제외)
 - **강제로 끔**: 앱 기동과 `make nightly` 시작 때 `source.sqlite` 지문을 `source_fingerprint`와 비교해, 다르면 `auto_policy`를 전부 끄고 지문을 갱신한다. 다시 측정한 뒤 사람이 켠다
-- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록·재심 사유서(`ax_claim_judgments`·`ax_claim_appeals` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`
+- **버림**: 할 일 체크·확인할 통화 확인함(`ax_call_checks` — 재생성 뒤 확인할 통화가 다시 뜬다)·⑧ 확정·⑨ 연락 기록(`ax_missed_contacts`)·⑤ 판단 기록·재심 사유서(`ax_claim_judgments`·`ax_claim_appeals` — 재생성 뒤 청구 id가 다른 청구를 가리킬 수 있다)·게시 전 문서 초안·새로 추가한 통화·`ax_search_logs`·`ax_llm_calls`·`ax_emr_writes`·`ax_assistant_conversations`·`ax_assistant_messages`(환자·통화·예약 id가 다른 실체를 가리킬 수 있어 ⑨ 연락 기록과 같은 이유로 버린다)
 
 ## 8. 미결
 
@@ -218,13 +226,13 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 | 라우트 | 화면 | API 원본 |
 |---|---|---|
-| `/` | 시작 화면 | 없음 |
+| `/` | AI 비서 — 시작(예시 칩)·대화·지난 대화. `?c=<대화 id>`로 지난 대화, `?draft=`는 바로 보내고 `?prefill=`은 입력창만 채움(새 대화일 때만) | 여기: `POST /assistant/turn`(SSE — `step`·`reply`·`error`, 말 길이 `ASSISTANT_MAX_TEXT`)·`GET /assistant/conversations`(`before`)·`GET /assistant/conversations/{id}`(저장된 그대로, 모델을 부르지 않음)·`POST /assistant/drafts/{id}/approve`·`cancel`(파트 — 승인은 검사에 걸리면 `{ok: false, reasons, card}`, 이미 처리됐으면 409) |
 | `/today` | 오늘 — 요약 카드, 아침 브리핑(머리말·내용 2열, 코드 줄이라 AI 배지 없음), 사람이 볼 일, AI가 한 일(접힌 요약 + 펼치기) | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 내원 확인 전(기준일만)·예약 확인(`confirm` — 직전 진료일 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`, 판정 풀이면 `pool` — 화면이 링크·분류를 보이지 않는다). 응급 여부는 API가 앱 DB의 활성 분류로 붙인다(`backend/calls.py` `call_emergency` — `emr.py`는 원본만 읽는다, 분류 전·앱 DB 없음이면 null)), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준)와 최근 통화 `GET /calls/patient/{chart_no}`([[치과 AX - 기능 정의]] §4 ①) |
 | `/prep` | 준비표·체어 보기(`?view=chair`) — 회의 보기는 두지 않는다(기능 정의 §4 ④ 제외) | `GET /prep?date=`·`POST /jobs/prep-regenerate`·`GET /jobs/{id}`(`backend/prep.py`) |
 | `/missed` | 미예약 환자(칩·연락함 숨기기 `?chip=…&hide=1`, 행마다 연락 결과) | §5 ⑨ |
-| `/ask` | 메뉴에 없음([[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창"). 질문하기(`?tab=chat&log=<id>`는 저장된 그 질문·답·출처를 다시 묻지 않고 첫 줄에 보인다, `?draft=`는 입력칸만 채운다), 기록 검색(결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "이걸로 질문하기"는 검색어를 질문 입력칸에 넣기만 한다), 문서함(종류 칩 — 처음은 공지, 상태는 `?tab=docs&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다 | [[치과 AX - 기능 정의]] §4 ③, 여기: `GET /chat/{log_id}`(저장된 질문 1개를 답 이벤트 모양으로 — 평가·요약·아직 도는 질문은 404, `backend/api.py` `get_chat`) |
+| `/ask` | 자료실([[치과 AX - 기능 정의]] §4 앱 구성) — 기록 검색(`?tab=search`, 결과 위에 AI 요약 — 결과가 1건 이상일 때만, 본문 `[n]`과 같은 번호의 출처 칩, "AI 비서에게 묻기"는 AI 비서 새 대화 입력창에 검색어를 채우기만 한다 `/?prefill=`), 문서함(`?tab=docs`, 종류 칩 — 처음은 공지, 상태는 `&doc=<id>`, 옛 공지를 열면 최신 보기 줄). 문서는 검색 결과 문서 카드의 "문서함에서 보기"·요약 출처 칩에서 연다. | [[치과 AX - 기능 정의]] §4 ③ |
 | `/eval` | 판정, 블라인드, 정확도, 자동 개선 | [[치과 AX - 기능 정의]] §4 ② |
 | `/emr` | 전환 전 EMR(데스크·예약·전자차트) + 설명 카드 | 여기: `GET /emr/patients?q=`, `GET /emr/patients/{chart_no}`(`patient_record`), `GET /emr/schedule?date=`, `GET /emr/tour`(따라 보기 기준 환자 — `tour_patient`) |
 | `/claims` | 삭감 대응(조정 목록 5칸·칩·행 펼침·판단 기록), 청구 전 점검(상병 확인 경고·AI 점검), 주소 `?tab=pre&chip=…` | §5 ⑤ — `GET /claims`·`GET /claims/pre`·`POST /claims/{claim_id}/judgment`·`POST /jobs/claim-check`·`GET /jobs/{id}`·`GET /claims/standards`(`backend/claims.py`·`backend/claim_check.py`·`backend/claim_omission.py`·`backend/claim_evidence.py`·`backend/claim_search.py`) — 맨 위 청구 기준 찾기 검색칸, 펼친 곳 기준 조항 카드(본문은 문서함과 같은 마크다운 — 고시 발췌는 인용 블록·출처 줄), 재심 신청 건 ③ 재심 사유서(`POST /claims/{claim_id}/appeal`·`/appeal/review`·`/appeal/submit`, `backend/claim_appeal.py`) |
@@ -233,7 +241,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 - `/emr/*`은 `source.sqlite`만 읽기 전용으로 연다(색인 없이도 동작). 탭·패널 이동 수는 화면 상태이고 저장하지 않는다.
 
-**공통 레이아웃**: 상단에 로고(시작 화면으로) + 메뉴 + 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`) + 담당 파트 선택 + 기준일. 병원 이름·기준일은 `GET /clinic`. 시작 화면은 메뉴가 없고, `/eval`·`/emr`은 메뉴 자리에 공간 이름과 돌아가기가 나온다. 포털 layout에 떠 있는 물어보기 버튼·창(`frontend/components/ask/ask-floating.tsx` — 규칙은 [[치과 AX - 기능 정의]] §4 앱 구성 "물어보기 창")을 두어 메뉴를 옮겨도 창이 남고, 창 안은 물어보기 화면과 같은 `ChatPanel`이다.
+**공통 레이아웃**(앱 셸 — `frontend/components/shell/`, 목록은 `frontend/lib/nav.ts`): 맨 왼쪽 아이콘 줄(공간 5개 `SPACES` + 아래쪽 화면 테마(시스템·라이트·다크, 브라우저에 저장 — `frontend/lib/theme.ts`)·담당 파트 선택) + 고른 공간의 목록 칸(AI 비서 대화 목록 / 업무 `MENU` + 건수 / 자료실 탭 / AI 평가 탭 `EVAL_TABS`, EMR은 없음) + 기준일. 목록 칸의 업무 건수는 `GET /today` 하나를 공유해 읽고 화면이 처리하면 다시 읽는다. 병원 이름·기준일은 `GET /clinic`. 위쪽 헤더 띠와 떠 있는 물어보기 창은 없다. 좁은 화면은 아이콘 줄·목록 칸이 ☰ 서랍으로 접힌다. 공간은 경로로 정한다(`spaceOf` — `/` AI 비서, `/ask` 자료실, `/eval`·`/emr`, 나머지 업무).
 
 **배치**: 하는 일·결과는 왼쪽, 근거 자료(녹취록)는 오른쪽 — 통화 상세 넓게 보기·판정·블라인드. 화면 말은 하는 일로 짓고(시스템 말·코드 값을 보이지 않는다) 라벨 이름은 `GET /labels`(`shared/call_labels.py` `*_KO`, 처리 종류는 `shared/followup.py` `ACTION_KO`).
 

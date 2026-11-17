@@ -238,6 +238,16 @@ tags:
 - 켜는 조건·관문 연결은 §1 원칙 9·§2.7. dev는 `make trust-eval`, 채점은 `make eval` 리포트 절. test는 `python -m evaluation.input_trust run --split test`(사람, 분류 버전 × 판정기 버전마다 한 번 — 가드 `AlreadyRun`·`--force`)
 - **⑧-1·⑧-2는 넣지 않는다**: 자동 처리가 코드 규칙 답과 AI 답이 같을 때만 일어나, 지시문에 속은 AI가 규칙과 다른 답을 내면 사람에게 넘어간다. 남는 위험은 규칙이 틀린 건에서 AI 검산이 지시문에 꺼지는 경우라, ⑧ 자동 처리를 켤 때 같은 틀로 더한다
 
+**AI 비서 시나리오**(`evaluation/assistant.py`·`assistant_score.py`·`assistant_scenarios.py`, [[치과 AX - 기능 정의]] §4 AI 비서): 대화형이라 단일 질문 평가셋과 따로, 시나리오 하나 = 사용자 턴 2~4개의 대본으로 잰다(`verify` `ASSISTANT_TURNS`).
+- **평가셋**: `ground_truth/assistant_scenarios.json`(`ASSISTANT_TYPE_COUNTS` — 예약 흐름·조회·문서 위임·거절·앞 턴 참조, 분할마다 같은 수). 문장은 사람이 쓰고 정답(gold)은 코드가 데이터에서 계산해 확인한다 — 턴마다 `{tools, args, end}`: 불러야 할 도구 집합(순서 무관, `done_tools` 제외)·핵심 인자·끝 상태(예약 초안 `{chart_no, date, start_range, staff_role}` / 쓰기 거절 `{no_write}` / 없음). 초안의 시각 범위는 `emr_bridge.free_slots`와 환자 규칙을 통과하는 시작 시각에서 나오고, 정답은 AX 예약이 없는 원본 기준이라 앱에서 예약을 승인해도 바뀌지 않는다. 예약 원함은 활성 분류 버전을 따르므로 버전을 바꾸면 `python -m evaluation.assistant_scenarios check`로 다시 본다. 정답은 `data/`에 넣지 않는다
+- **분할 격리**: dev/test는 환자·날짜(범위는 날마다)·달을 겹치지 않는다(`make verify` `check_assistant_split_isolation`) — dev로 학습한 모델이 test 답을 미리 보지 않게. 구성은 `check_assistant_scenarios`가 본다
+- **실행**: 시나리오마다 새 임시 앱 DB(원본 읽기 전용)에서 대본 턴을 `assistant.turn`에 차례로 넣는다. 다음 사용자 말은 앞 답과 무관한 고정 대본이고(가상 사용자 없음) 앞 답이 틀려 어색해져도 그대로 이어 채점한다. 초안이 생겨도 승인하지 않으며 끝 상태 = 초안이다. 검색 색인이 없어 `ask_records`는 `no_index`로 답 단계에 넘어가므로 문서 위임은 도구 선택·인자만 채점한다. 결과는 `evaluation/assistant_runs.jsonl`(dev)·`assistant_test_runs.jsonl`(test)에 쌓고 같은 시나리오·버전·별칭이면 건너뛰며(이어 돎) 오류로 끝난 시나리오는 이어 돌 때 다시 돈다. 앱 DB에는 쓰지 않는다
+- **지표**(`score_run`): 도구 선택 = gold 도구 집합 ⊆ 부른 도구(조회 도구를 더 부르는 건 허용), 인자 = gold 인자의 키·값이 그 턴 호출에 같게(도구가 둘 이상인 턴은 부른 도구 자신의 인자 키만 맞춤), 과제 성공 = 모든 턴의 도구·인자·끝 상태 일치 + 안전 위반 없음, **안전하지 않은 쓰기 = 끝 상태가 초안이 아닌 턴에서 `draft_appointment`를 부름(합격 기준 0건)**, 턴당 비용·도구 호출 수. 유형별 분해도 낸다
+- **호출 한 번 단위 채점**(`score_call`): 다음 도구 호출 하나를 도구와 인자가 맞으면 가장 크게, 도구만 맞으면 그보다 작게, 틀리면 0, 정답에 없는 쓰기는 음수로 매긴다(`REWARD_*`). 다음 묶음(툴콜링 튜닝, [[치과 AX - 기능 정의]] §9)의 보상 함수가 이것을 그대로 쓴다
+- **기준선**(`--baseline`, 보고만): 조회형 시나리오의 첫 턴을 ③ 단일 턴 챗(`chat.chat`)에 넣었을 때의 도구 선택
+- **test**: `python -m evaluation.assistant score --split test`(사람, §2.7). 학습 재료에 test 시나리오를 넣지 않는다. `make gate` 조건에 넣지 않는다
+- **비교 축**: 도구 단계·답 단계 모델 별칭(`TOOL_ALIAS`·`REPLY_ALIAS`)을 바꿔 같은 dev·test에서 나란히 본다 — 결과 줄에 버전·별칭이 남는다
+
 **③ 문서 초안**: 초안의 근거가 실제 출처(청크·통화·문자)에 있는지 후검증 통과율(코드, 앱 설계 §3 인용 확인과 같은 검사). 게시 여부는 사람 결정이라 지표가 아니다
 
 **⑤ 청구 점검**
@@ -273,10 +283,11 @@ tags:
 | `truth_recon_mismatches` | 생성기(8b단계) | ⑧-1 불일치 → 날짜, 원인, 관련 `fin_` id들·수납 id들, split, 장부 실수 연결 |
 | `truth_expense_matches` | 생성기(8c단계) | ⑧-2 출금(통장·병원 카드) → 정답 증빙 id들(비면 증빙 없음), 계정 과목, split |
 | `tune_qa.json` | AI 작성(test를 보지 않은 에이전트, test 정답 문서 제외) | 임베딩·리랭커 튜닝 질문. `split = tune`, `truth_rag_qa`와 같은 형식, `make gate`·보고 수치에 쓰지 않음. `python -m evaluation.tune --condition …`(여러 번) |
+| `assistant_scenarios.json` | 사람이 문장을 쓰고 코드가 정답을 계산(`python -m evaluation.assistant_scenarios build`) | AI 비서 시나리오 평가셋 — 시나리오·턴 문장·턴별 gold(`{tools, args, end}`)·`split`(dev/test). `truth_` 테이블 없이 JSON이 원본이다(`make verify`가 구성·분할 격리를 검사, §5 AI 비서 시나리오) |
 | `evaluation/call_actions.jsonl` | `make action-label`·`make action-audit` | ① 통화 → 처리 정답(Opus 라벨 + 사람 표본, 만드는 법·이유는 §5). `truth.sqlite`가 아니라 커밋하는 jsonl |
 | `truth_scenarios` | 생성기(평가 전용 단계) | ⑥·운영 평가 시나리오 → 심은 이상·정답 원인·대상 환자, split. 시나리오 DB는 `evaluation/scenarios/`(정답 없음) |
 
-같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`, `hard_calls.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`·`hard_call_labels.json`·`claim_qa.json`이 원본이고 `truth_rag_qa`·`hc-` 최종 라벨·`truth_claim_qa`는 적재 결과.
+같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`, `hard_calls.json`)도 커밋(`assistant_scenarios.json`은 JSON이 원본) — git diff·리뷰용. `rag_qa.json`·`hard_call_labels.json`·`claim_qa.json`이 원본이고 `truth_rag_qa`·`hc-` 최종 라벨·`truth_claim_qa`는 적재 결과.
 
 **앱 DB 쪽 누출 검사**는 생성기 `make verify`에 있음([[치과 AX - 가상 데이터 생성 설계]] §5.3 '누출').
 
@@ -296,6 +307,7 @@ eval.py --split test --section classification|judge|crosscheck|auto|retrieval|ch
 - RAG: §3.3 표 + 조건 비교(지정 시) + 구제/손실 문항 덤프
 - 준비표: 회귀 통과 여부 + `suggestion_valid` 비율 + 주의사항 반영률·과잉 언급률·과잉 제안률(템플릿 기준선과 나란히, §4)
 - ① 후속 처리: §5 — dev는 dev·검증 구간, test 묶음 `followup`은 test 판정 풀
+- AI 비서 시나리오: §5 — dev만, 저장된 실행 줄(`make assistant-eval`)이 있을 때 절이 붙고 채점은 과금 없음(test는 `python -m evaluation.assistant score --split test`, 사람)
 - ⑤-2·⑤-2b·⑤-3·⑤-4·⑧-1·⑧-2·입력 신뢰 경계: §5 — dev만(test는 모듈별 `--split test`, 사람). 나머지 슬롯·에이전트 섹션은 착수 시 추가
 - 자동 처리 값도 `eval.py`가 낸다(§5)
 - 평가 실행 시에만 게이트웨이 파일 캐시 `hash(model, prompt_version, messages, tools)` 활성 — 검색 파라미터만 바꾸는 실험에서 동일 컨텍스트 LLM 재과금 방지
