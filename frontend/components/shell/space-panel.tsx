@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronsLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -68,9 +69,15 @@ function WorkMenu({ pathname }: { pathname: string }) {
   );
 }
 
-function EvalMenu({ tab }: { tab: string }) {
+/** 목록 칸은 세로 메뉴, 좁은 화면 본문 위에서는 가로 탭 줄(MobileTabs) */
+const menuClass = (row: boolean) =>
+  row
+    ? "flex gap-1 overflow-x-auto *:shrink-0 *:whitespace-nowrap"
+    : "flex flex-col gap-0.5";
+
+function EvalMenu({ tab, row = false }: { tab: string; row?: boolean }) {
   return (
-    <nav aria-label="메뉴" className="flex flex-col gap-0.5">
+    <nav aria-label={row ? "탭" : "메뉴"} className={menuClass(row)}>
       {EVAL_TABS.map(([key, label], i) => {
         const current =
           (EVAL_TABS.some(([k]) => k === tab) ? tab : "judge") === key;
@@ -90,10 +97,16 @@ function EvalMenu({ tab }: { tab: string }) {
 }
 
 /** 자료실 목록 칸 — 기록 검색·문서함(?tab=). 탭을 바꿔도 검색어 등 나머지 주소 값은 남긴다 */
-function LibraryMenu({ params }: { params: URLSearchParams }) {
+function LibraryMenu({
+  params,
+  row = false,
+}: {
+  params: URLSearchParams;
+  row?: boolean;
+}) {
   const tab = params.get("tab") === "docs" ? "docs" : "search";
   return (
-    <nav aria-label="메뉴" className="flex flex-col gap-0.5">
+    <nav aria-label={row ? "탭" : "메뉴"} className={menuClass(row)}>
       {LIBRARY_TABS.map(([key, label]) => {
         const next = new URLSearchParams(params);
         next.set("tab", key);
@@ -144,6 +157,11 @@ function ConversationList({ current }: { current: string | null }) {
       <Link href="/" className={itemClass(current === null)}>
         + 새 대화
       </Link>
+      {first.data?.length === 0 && (
+        <p className="mt-2 px-3 text-xs text-muted-foreground">
+          지난 대화가 아직 없습니다. 물어본 대화는 여기에 쌓입니다.
+        </p>
+      )}
       <nav aria-label="지난 대화" className="mt-2 flex flex-col gap-0.5">
         {rows.map((c) => (
           <Link
@@ -178,18 +196,54 @@ const TITLES: Record<SpaceKey, string> = {
   emr: "EMR",
 };
 
-/** 목록 칸 — 공간마다 내용이 다르다(AI 비서 설계 §3.1). 기준일은 맨 아래. EMR은 목록 칸이 없다 */
-export function SpacePanel({ space }: { space: SpaceKey }) {
+/** 좁은 화면(md 미만) 본문 위 가로 탭 줄 — 자료실·AI 평가는 탭이 목록 칸에만 있어 서랍 없이도 닿게 한다 */
+export function MobileTabs({ space }: { space: SpaceKey }) {
+  const params = useSearchParams();
+  if (space !== "eval" && space !== "library") return null;
+  return (
+    <div className="mb-4 border-b pb-2 md:hidden print:hidden">
+      {space === "eval" ? (
+        <EvalMenu tab={params.get("tab") ?? ""} row />
+      ) : (
+        <LibraryMenu params={params} row />
+      )}
+    </div>
+  );
+}
+
+/** 목록 칸 — 공간마다 내용이 다르다(AI 비서 설계 §3.1). 기준일은 맨 아래. EMR은 목록 칸이 없다.
+ * onCollapse가 있으면(넓은 화면) 제목 옆 « 단추로 접는다 — 펴는 단추는 아이콘 줄(app-shell) */
+export function SpacePanel({
+  space,
+  onCollapse,
+}: {
+  space: SpaceKey;
+  onCollapse?: () => void;
+}) {
   const pathname = usePathname();
   const params = useSearchParams();
   const clinic = useClinic();
   const today = clinic === "error" ? "—" : (clinic?.today ?? "");
   if (space === "emr") return null;
   return (
-    <div className="flex w-56 flex-col gap-3 border-r bg-card p-3">
-      <h2 className="px-3 pt-1 text-xs font-bold text-muted-foreground">
-        {TITLES[space]}
-      </h2>
+    <div className="flex w-44 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3">
+      <div className="flex h-8 items-center justify-between gap-1 pl-3">
+        <h2 className="text-xs font-bold text-muted-foreground">
+          {TITLES[space]}
+        </h2>
+        {onCollapse && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="목록 접기"
+            title="목록 접기"
+            onClick={onCollapse}
+            className="text-muted-foreground"
+          >
+            <ChevronsLeftIcon />
+          </Button>
+        )}
+      </div>
       <div className="flex-1 overflow-y-auto">
         {space === "assistant" && (
           <ConversationList current={params.get("c")} />

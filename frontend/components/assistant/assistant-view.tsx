@@ -240,7 +240,8 @@ export function AssistantView() {
     );
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    // 본문 아래 여백(main pb-12)을 상쇄해 맨 끝에서도 입력 칸이 화면 바닥에 붙는다
+    <div className="mx-auto -mb-12 flex max-w-3xl flex-col gap-6">
       <h1 className="sr-only">AI 비서 대화</h1>
       {items.map((it) =>
         it.role === "user" ? (
@@ -266,7 +267,7 @@ export function AssistantView() {
         ),
       )}
       <div ref={bottom} />
-      <div className="sticky bottom-0 bg-background pb-2">{form}</div>
+      <div className="sticky bottom-0 bg-background pb-6">{form}</div>
     </div>
   );
 }

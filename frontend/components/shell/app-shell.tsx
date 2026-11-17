@@ -1,35 +1,51 @@
 "use client";
 
-import { MenuIcon, SunIcon, XIcon } from "lucide-react";
+import {
+  ChevronsRightIcon,
+  MenuIcon,
+  MoonIcon,
+  SunIcon,
+  UserIcon,
+  XIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { SpacePanel } from "@/components/shell/space-panel";
+import { MobileTabs, SpacePanel } from "@/components/shell/space-panel";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useClinic } from "@/lib/api";
 import { SPACES, spaceOf } from "@/lib/nav";
 import { PART_KEY, PARTS } from "@/lib/part";
-import { readTheme, saveTheme, type Theme, THEMES } from "@/lib/theme";
+import { currentTheme, saveTheme, watchTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
+const COLLAPSE_KEY = "ax.listCollapsed"; // 목록 칸 접힘(넓은 화면) — 브라우저에 둔다
+
+/** 아이콘 줄 한 칸 — 아이콘 위, 작은 이름 아래 */
+const railItem = (current = false) =>
+  cn(
+    "flex w-full flex-col items-center gap-1 rounded-md px-1 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+    current && "bg-accent font-bold text-accent-foreground",
+  );
+
 /** 담당 파트 — 화면은 바뀌지 않는다(기능 정의 §4). 저장소가 막힌 브라우저에서도 동작한다 */
-function PartSelect() {
-  // 빈 문자열로 시작 — undefined면 비제어로 시작했다가 값이 들어가며 제어로 바뀌어 React 경고가 난다
+function PartMenu() {
+  // 빈 문자열로 시작 — 첫 렌더는 서버 HTML과 같게 비워 두고 아래 효과에서 읽는다(하이드레이션 불일치 방지)
   const [part, setPart] = useState("");
   useEffect(() => {
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(PART_KEY);
     } catch {}
-    // 첫 렌더는 서버 HTML과 같게 비워 두고 여기서 읽는다(하이드레이션 불일치 방지)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPart(saved && PARTS.includes(saved) ? saved : "데스크");
   }, []);
@@ -40,58 +56,55 @@ function PartSelect() {
     } catch {}
   };
   return (
-    <Select value={part} onValueChange={change}>
-      <SelectTrigger
-        aria-label="담당 파트"
-        className="w-full bg-card px-2 shadow-control"
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {PARTS.map((p) => (
-          <SelectItem key={p} value={p}>
-            {p}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="rail"
+          size="rail"
+          aria-label={`담당 파트: ${part}`}
+          title="담당 파트"
+        >
+          <UserIcon />
+          {part || "\u00a0"}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="end">
+        <DropdownMenuLabel>담당 파트</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={part} onValueChange={change}>
+          {PARTS.map((p) => (
+            <DropdownMenuRadioItem key={p} value={p}>
+              {p}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
-/** 화면 테마 — 시스템·라이트·다크(lib/theme) */
-function ThemeSelect() {
-  const [theme, setTheme] = useState<Theme | "">(""); // 빈 문자열 — PartSelect와 같은 이유
-  useEffect(() => {
-    // 첫 렌더는 서버 HTML과 같게 비워 두고 여기서 읽는다(하이드레이션 불일치 방지)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTheme(readTheme());
-  }, []);
-  const change = (value: string) => {
-    setTheme(value as Theme);
-    saveTheme(value as Theme);
-  };
+/** 화면 테마 — 라이트↔다크 단추(lib/theme). 고른 적이 없으면 OS 설정을 따른다 */
+function ThemeToggle() {
+  // 서버 HTML에는 테마가 없어 빈 값 — 그리기 전 스크립트가 붙인 data-theme을 하이드레이션 뒤 읽는다
+  const theme = useSyncExternalStore(watchTheme, currentTheme, () => null);
+  const dark = theme === "dark";
+  const Icon = dark ? MoonIcon : SunIcon;
   return (
-    <Select value={theme} onValueChange={change}>
-      <SelectTrigger
-        aria-label="화면 테마"
-        className="w-full bg-card px-2 shadow-control"
-      >
-        <SunIcon />
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {THEMES.map(([v, l]) => (
-          <SelectItem key={v} value={v}>
-            {l}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Button
+      variant="rail"
+      size="rail"
+      aria-label={dark ? "라이트 테마로 바꾸기" : "다크 테마로 바꾸기"}
+      title={dark ? "라이트 테마로 바꾸기" : "다크 테마로 바꾸기"}
+      onClick={() => saveTheme(dark ? "light" : "dark")}
+    >
+      <Icon />
+      {theme === null ? "\u00a0" : dark ? "다크" : "라이트"}
+    </Button>
   );
 }
 
 /** 앱 셸 — 왼쪽 아이콘 줄(공간 5개, 아래에 테마·파트)과 목록 칸, 오른쪽 본문(AI 비서 설계 §3.1).
- * 좁은 화면에서는 둘 다 서랍으로 접고 위 띠의 버튼으로 연다 */
+ * 넓은 화면에서는 목록 칸을 «·» 단추로 접고 편다. 좁은 화면에서는 둘 다 서랍으로 접고 위 띠의 버튼으로 연다
+ * (자료실·AI 평가 탭은 본문 위 가로 줄로도 보인다) */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const space = spaceOf(pathname);
@@ -105,6 +118,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setPath(pathname);
     setOpen(false);
   }
+  // 목록 칸 접힘 — 첫 렌더는 서버 HTML과 같게 펴 두고 여기서 읽는다(하이드레이션 불일치 방지)
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(COLLAPSE_KEY);
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(saved === "1");
+  }, []);
+  const collapse = (value: boolean) => {
+    setCollapsed(value);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, value ? "1" : "0");
+    } catch {}
+  };
+  // 서랍(좁은 화면)에서는 접힘을 무시하고 늘 목록 칸을 보인다
+  const showPanel = open || !collapsed;
+
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -130,36 +162,61 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             : "hidden md:sticky md:top-0 md:flex md:h-screen",
         )}
       >
-        <div className="flex w-22 shrink-0 flex-col items-center gap-1 border-r bg-header px-2 py-3">
+        <div className="flex w-18 shrink-0 flex-col items-center gap-1 border-r bg-header px-1.5 pt-6 pb-3">
           <Link
             href="/"
             aria-label={name || "홈"}
-            className="mb-2 flex size-8 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground"
+            className="mb-2 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground"
           >
             AX
           </Link>
+          {open && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="메뉴 닫기"
+              onClick={() => setOpen(false)}
+              className="mb-1 md:hidden"
+            >
+              <XIcon />
+            </Button>
+          )}
+          {!showPanel && space !== "emr" && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="목록 펴기"
+              title="목록 펴기"
+              onClick={() => collapse(false)}
+              className="mb-1 hidden text-muted-foreground md:inline-flex"
+            >
+              <ChevronsRightIcon />
+            </Button>
+          )}
           <nav aria-label="공간" className="flex w-full flex-col gap-1">
             {SPACES.map(({ key, label, icon: Icon, href }) => (
               <Link
                 key={key}
                 href={href}
                 aria-current={key === space ? "page" : undefined}
-                className={cn(
-                  "flex flex-col items-center gap-1 rounded-md px-1 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  key === space && "bg-accent font-bold text-accent-foreground",
-                )}
+                className={railItem(key === space)}
               >
                 <Icon className="size-5" />
                 {label}
               </Link>
             ))}
           </nav>
-          <div className="mt-auto flex w-full flex-col gap-2">
-            <ThemeSelect />
-            <PartSelect />
+          <div className="mt-auto flex w-full flex-col gap-1">
+            <ThemeToggle />
+            <PartMenu />
           </div>
         </div>
-        <SpacePanel space={space} />
+        {showPanel && (
+          <SpacePanel
+            space={space}
+            onCollapse={open ? undefined : () => collapse(true)}
+          />
+        )}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b bg-header px-4 py-2 md:hidden print:hidden">
@@ -173,7 +230,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
           <span className="font-bold">{name}</span>
         </div>
-        <main className="mx-auto w-full max-w-[90rem] px-4 pt-8 pb-12 sm:px-6 print:pb-0">
+        <main className="mx-auto w-full max-w-[90rem] px-4 pt-6 pb-12 sm:px-6 print:pb-0">
+          <MobileTabs space={space} />
           {children}
         </main>
       </div>
