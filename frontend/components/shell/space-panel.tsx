@@ -53,7 +53,10 @@ function WorkMenu({ pathname }: { pathname: string }) {
   const { data } = useFetch<TodaySheet>(`shell-today:${pathname}`, () =>
     fetchToday(),
   );
-  const n = counts(data);
+  // 화면을 옮겨 다시 불러오는 동안(data null) 지난 숫자를 보인다 — 숫자가 깜박이지 않게
+  const [last, setLast] = useState(data);
+  if (data && data !== last) setLast(data);
+  const n = counts(data ?? last);
   return (
     <nav aria-label="메뉴" className="flex flex-col gap-0.5">
       {MENU.map((m) => {

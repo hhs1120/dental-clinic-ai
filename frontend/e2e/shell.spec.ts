@@ -79,3 +79,27 @@ test("shell: 떠 있는 물어보기 버튼 없음", async ({ page }) => {
     page.getByRole("complementary", { name: "물어보기" }),
   ).toHaveCount(0);
 });
+
+test("shell: 화면을 옮기는 동안 목록 칸 숫자가 남아 있다", async ({ page }) => {
+  const sheet = {
+    cards: {
+      appointments: { total: 0 },
+      todo: { items: 7 },
+    },
+    people: { urgent_calls: [], appeal_soon: 0, recon_open: 0 },
+  };
+  let slow = false;
+  await page.route("**/api/today", async (r) => {
+    // 숫자가 한 번 뜬 뒤의 요청은 늦게 답한다 — 그 사이에도 숫자가 보여야 한다
+    if (slow) await new Promise((ok) => setTimeout(ok, 1500));
+    await r.fulfill({ json: sheet });
+  });
+  await page.goto("/report");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const badge = menu.getByRole("link", { name: /^오늘/ }).getByText("7");
+  await expect(badge).toBeVisible();
+  slow = true;
+  await menu.getByRole("link", { name: "준비표" }).click();
+  await expect(page).toHaveURL(/\/prep$/);
+  await expect(badge).toBeVisible();
+});
