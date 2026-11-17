@@ -203,3 +203,52 @@ def test_judge_batch_refuses_model_mismatch(bconn):
     with pytest.raises(SystemExit):
         classify_batch.run(bconn, gw, "judge", "v2", use_batch=False)
     assert not bconn.execute("SELECT COUNT(*) FROM ax_model_judgments").fetchone()[0]
+
+
+# ── 대기 버전 전환(앱 설계 §7.2, 자동 개선 설계 §4) ──
+def _pend(conn, active="v1", pending="v2", judge=None):
+    db.set_setting(conn, "active_prompt_version", active)
+    db.set_setting(conn, "pending_prompt_version", pending)
+    if judge:
+        db.set_setting(conn, "prompt_versions", {"judge": judge})
+    conn.commit()
+
+
+def test_no_switch_with_failed(bconn):
+    _pend(bconn)
+    gw = BatchFake(SqliteLlmLog(bconn), fail_uids={"c-0002"})
+    classify_batch.run(bconn, gw, "classify", "v2", use_batch=False)
+    assert classify_batch.switch_if_ready(bconn, "v2") is False
+    assert db.get_setting(bconn, "active_prompt_version") == "v1"
+    assert db.get_setting(bconn, "pending_prompt_version") == "v2"
+
+
+def test_switch_needs_all_calls_ok_across_runs(bconn):
+    _pend(bconn)
+    gw = BatchFake(SqliteLlmLog(bconn))
+    classify_batch.run(bconn, gw, "classify", "v2", use_batch=False, shard=(0, 2))
+    assert classify_batch.switch_if_ready(bconn, "v2") is False
+    classify_batch.run(bconn, gw, "classify", "v2", use_batch=False, shard=(1, 2))
+    assert classify_batch.switch_if_ready(bconn, "v2") is True
+    assert db.get_setting(bconn, "active_prompt_version") == "v2"
+    assert db.get_setting(bconn, "pending_prompt_version") is None
+
+
+def test_switch_only_pending_version(bconn):
+    _pend(bconn, pending="v9")
+    classify_batch.run(bconn, BatchFake(SqliteLlmLog(bconn)), "classify", "v2", use_batch=False)
+    assert classify_batch.switch_if_ready(bconn, "v2") is False
+    assert db.get_setting(bconn, "active_prompt_version") == "v1"
+
+
+def test_switch_recomputes_disagreements(bconn, monkeypatch):
+    _pend(bconn, judge="v1")
+    gw = BatchFake(SqliteLlmLog(bconn))
+    classify_batch.run(bconn, gw, "judge", "v1", use_batch=False)
+    classify_batch.run(bconn, gw, "classify", "v2", use_batch=False)
+    calls = []
+    real = classify_batch.disagreements.compute
+    monkeypatch.setattr(classify_batch.disagreements, "compute",
+                        lambda conn, a, b: calls.append((a, b)) or real(conn, a, b))  # fmt: skip
+    assert classify_batch.switch_if_ready(bconn, "v2") is True
+    assert calls == [("v2", "v1")]
