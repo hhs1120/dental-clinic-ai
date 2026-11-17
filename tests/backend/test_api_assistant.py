@@ -147,3 +147,15 @@ def test_cancel_409_when_approved(client, conn):
     r = client.post(f"/assistant/drafts/{b}/cancel", json={"part": "데스크"})
     assert r.status_code == 200 and r.json()["card"]["data"]["status"] == "cancelled"
     assert client.post(f"/assistant/drafts/{b}/cancel", json={"part": "데스크"}).status_code == 409
+
+
+def test_deleted_conversation_drafts_are_read_only(client, conn):
+    _script([PATIENT, DONE])
+    client.post("/assistant/turn", json={"text": "김철수 환자", "part": "데스크"})
+    a, b = _new_draft(conn), _new_draft(conn, f"{WED} 11:00")  # 둘 다 대화 1의 초안
+    client.post("/assistant/conversations/1/delete", json={"part": "데스크"})
+    for did, action in ((a, "approve"), (b, "cancel")):
+        r = client.post(f"/assistant/drafts/{did}/{action}", json={"part": "데스크"})
+        assert r.status_code == 409 and r.json()["detail"] == "삭제된 대화의 초안"
+    rows = conn.execute("SELECT DISTINCT status FROM ax_emr_writes").fetchall()
+    assert [tuple(r) for r in rows] == [("draft",)]

@@ -1155,6 +1155,18 @@ def _draft_card(conn, draft_id: int, clinic: Clinic) -> dict:
     return {"type": "draft", "id": str(draft_id), "data": data}
 
 
+def _live_draft(conn, draft_id: int, clinic: Clinic) -> None:
+    """없는 초안은 404, 지운 대화의 초안은 409 — 지운 대화는 읽기 전용(AI 비서 설계 §6)"""
+    _draft_card(conn, draft_id, clinic)
+    deleted = conn.execute(
+        "SELECT 1 FROM ax_emr_writes w JOIN ax_assistant_conversations c"
+        " ON c.id = w.conversation_id WHERE w.id = ? AND c.deleted_at IS NOT NULL",
+        (draft_id,),
+    ).fetchone()
+    if deleted:
+        raise HTTPException(409, "삭제된 대화의 초안")
+
+
 @app.post("/assistant/drafts/{draft_id}/approve")
 def assistant_approve(
     draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now
@@ -1162,7 +1174,7 @@ def assistant_approve(
     """초안 승인(§5.2) — 승인 시각은 실제 시계, 미예약 환자 연락 기록의 날은 앱 기준일"""
     conn = _open_rw(paths)
     try:
-        _draft_card(conn, draft_id, clinic)  # 없으면 404
+        _live_draft(conn, draft_id, clinic)
         try:
             got = emr_bridge.approve(
                 conn, clinic, draft_id, by=body.part, at=_stamp(now), missed_day=clinic.today
@@ -1182,7 +1194,7 @@ def assistant_approve(
 def assistant_cancel(draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
     conn = _open_rw(paths)
     try:
-        _draft_card(conn, draft_id, clinic)
+        _live_draft(conn, draft_id, clinic)
         try:
             emr_bridge.cancel(conn, draft_id, by=body.part, at=_stamp(now))
         except emr_bridge.Conflict as e:

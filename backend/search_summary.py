@@ -19,6 +19,7 @@ from shared.llm import BudgetExceeded
 
 TASK, ALIAS = "search_summary", "chat"
 PROMPT_VERSION = "v1"
+CACHE_SCAN = 20  # 다시 쓸 끝난 행을 찾을 때 같은 검색 인자의 최근 몇 행까지 보나
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -137,8 +138,9 @@ def summarize(
                 for r in conn.execute(
                     "SELECT id, status, answer_text, cited_ids, retrieved_ids FROM ax_search_logs"
                     " WHERE kind = 'search_summary' AND is_eval = 0"
-                    " AND status IN ('answered', 'refused') AND tool_calls = ? ORDER BY id DESC",
-                    (key,),
+                    " AND status IN ('answered', 'refused') AND tool_calls = ?"
+                    " ORDER BY id DESC LIMIT ?",
+                    (key, CACHE_SCAN),
                 )
                 if sorted(json.loads(r[4])) == same
             ),
