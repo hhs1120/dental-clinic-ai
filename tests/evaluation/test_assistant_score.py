@@ -147,3 +147,20 @@ def test_run_retries_scenarios_that_errored(tmp_path):
     assert ev.run(SCENARIOS[:1], **kw) == {"done": 0, "skipped": 1}
     r = score_run(SCENARIOS[:1], ev.load_runs(out))  # 나중 줄이 채점에 쓰임
     assert r["task_success"] == 1.0
+
+
+def test_score_call_two_tool_turn_checks_only_that_tools_keys():
+    gold = {
+        "tools": ["draft_appointment", "free_slots"],
+        "args": {"chart_no": "C-1", "date": "2026-12-04", "procedure": "레진"},
+        "end": DRAFT_END,
+    }
+    free = {"name": "free_slots", "args": {"date": "2026-12-04", "procedure": "레진"}}
+    draft = {
+        "name": "draft_appointment",
+        "args": {"chart_no": "C-1", "date": "2026-12-04", "procedure": "레진", "start": "14:00"},
+    }
+    assert score_call(gold, free)["reward"] == 1.5
+    assert score_call(gold, draft)["reward"] == 1.5
+    no_chart = {**draft, "args": {k: v for k, v in draft["args"].items() if k != "chart_no"}}
+    assert score_call(gold, no_chart)["reward"] == 1.0
