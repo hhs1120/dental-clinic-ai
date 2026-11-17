@@ -1,8 +1,12 @@
-// AI 비서 시작 화면 — 자리만. 대화 화면은 AI 비서 설계 §3.2 (뒤 작업이 채운다)
+import { Suspense } from "react";
+
+import { AssistantView } from "@/components/assistant/assistant-view";
+
+// AI 비서 — 시작 화면이자 대화 화면(AI 비서 설계 §3.2). useSearchParams는 Suspense 안에 있어야 빌드된다
 export default function AssistantPage() {
   return (
-    <div className="flex flex-col items-center gap-2 py-16 text-center">
-      <h1 className="text-3xl font-bold">무엇을 도와드릴까요?</h1>
-    </div>
+    <Suspense fallback={null}>
+      <AssistantView />
+    </Suspense>
   );
 }
