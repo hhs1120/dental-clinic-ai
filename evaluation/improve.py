@@ -2,7 +2,8 @@
 (evaluation/prompt_gate.py)이 거른다. 넘으면 대기 버전(ax_settings.pending_prompt_version), 전환은 사람이 재분류로.
 원본: 평가 설계 §2.7, 설계 docs/superpowers/specs/2026-11-17-auto-improve-design.md.
 골드를 보므로 evaluation/에서만 돌고, 에이전트 실행 기록·탈락 후보는 RUNS(커밋 안 함), 앱으로 넘기는 것은
-REPORT(라벨 없는 집계)와 대기 버전 설정뿐이다. test·dev·hard 행은 읽지 않는다."""
+REPORT(라벨 없는 집계)와 대기 버전 설정뿐이다. 루프는 silver만 읽고 test·dev·hard 행은 읽지 않는다.
+hard_check는 관문 밖 사람의 한 번 점검으로 hard만 읽는다(결과로 후보를 고르지 않는다)."""
 
 import hashlib
 import json
@@ -19,7 +20,7 @@ from evaluation.metrics import GATE_ATTEMPTS
 from evaluation.prompt_gate import IMPROVE_REPORT
 from evaluation.splits import silver_split
 
-ITEM = "has_todo"  # 첫 목표 항목(기능 정의 §9) — 고치는 곳은 labels.md의 이 규칙 줄 하나
+ITEM = "has_todo"  # 첫 목표 항목(평가 설계 §2.7) — 고치는 곳은 labels.md의 이 규칙 줄 하나
 RUNS = Path(
     "evaluation/runs/improve"
 )  # 에이전트 실행 기록·LLM 로그·탈락 후보 — 골드와 엮여 커밋하지 않는다
@@ -28,7 +29,7 @@ RULE_PREFIX = f"- {ITEM}:"
 QUOTES = re.compile(
     r"[\"“”'‘’「」]"
 )  # 예시 문장 삽입 — 규칙에는 따옴표 글을 넣지 않는다(평가 설계 §2.7 재료)
-CALL_ID = re.compile(r"\b(?:c|hc)-\d+")
+CALL_ID = re.compile(r"(?<![A-Za-z0-9])(?:c|hc)-\d+")  # 한글 바로 뒤에 붙어도 잡는다
 
 
 def material_errors(conn, gold_rows: list[dict], base: str) -> list[dict]:
@@ -218,6 +219,12 @@ def hard_check(gw, gold_rows: list[dict], calls: dict, a: str, b: str, *, config
     다시 쓰지 않는다(hard는 관문·자동 개선 재료가 아니다). 저장된 벌은 다시 쓴다"""
     if any(r["split"] != "hard" for r in gold_rows):
         raise SystemExit("not_hard")
+    if not all(
+        re.fullmatch(r"[\w-]+", v) for v in (a, b)
+    ):  # 실행 폴더 밖을 지우지 않게(관문과 같은 검사)
+        raise SystemExit("버전 이름은 글자·숫자·-·_만")
+    if set(calls) != {r["call_uid"] for r in gold_rows}:
+        raise SystemExit("calls_mismatch")
     spent = prompt_gate._Spent(gw)
     maj = {
         v: prompt_gate.majority(prompt_gate.fill_runs(
@@ -237,6 +244,9 @@ def _plan(conn, gold_rows: list[dict], base: str, gate_report: Path, report: Pat
         "material_errors": len(material_errors(conn, gold_rows, base)),
         "attempts_left": GATE_ATTEMPTS - len(prompt_gate.attempts(base, gate_report, report)),
         "pending": db.get_setting(conn, "pending_prompt_version"),
+        "auto_policy_on": any(
+            db.get_setting(conn, "auto_policy", {}).values()
+        ),  # 켜져 있으면 run은 멈춘다
         "last_gate_usd": costs[-1] if costs else None,
         "agent_max_usd": MAX_USD,
     }

@@ -18,7 +18,7 @@
 
 `make improve TASK=classify ITEM=has_todo` — `evaluation/`에서만 돈다(과금, 훅 과금 목록에 등록). 평가 설계 §2.7의 규칙을 모두 따르고 아래는 이번에 정한 모양이다.
 
-1. **멈춤 먼저**(LLM 부르기 전): 대기 버전(`ax_settings.pending_prompt_version`)이 있으면, 같은 기준·같은 관문 값의 시도가 `GATE_ATTEMPTS`에 닿았으면 돌지 않는다. 자동 처리가 켜져 있으면 §5의 조건으로 간다(지금처럼 무조건 멈추지 않는다)
+1. **멈춤 먼저**(LLM 부르기 전): 대기 버전(`ax_settings.pending_prompt_version`)이 있으면, 같은 기준·같은 관문 값의 시도가 `GATE_ATTEMPTS`에 닿았으면 돌지 않는다. 자동 처리가 켜져 있어도 LLM 전에 멈춘다(막 만든 후보에는 입력 신뢰 경계 측정이 없다 — 최종 리뷰 반영, §5의 조건은 사람이 돌리는 `make prompt-gate`에 적용)
 2. **재료 모으기**(무료): 기준 = 활성 버전(지금 v2). silver 재료 구간(`evaluation/splits.py` `silver_split`)에서 앱 DB에 저장된 기준 버전 분류(`ax_call_classifications`, `ok`)의 `has_todo`가 골드와 다른 통화. 다시 분류하지 않는다(Claude 판단 — 저장된 것이 곧 기준 버전의 답이고 무료). 입력에 dev·test·hard 행이 있으면 실패
 3. **개선 에이전트**(과금): 하네스(`backend/harness/`)로 돈다. 실행 기록·LLM 로그는 `evaluation/runs/improve/`(커밋 안 함)에 — 저장소 주입(앱 설계 §3b). 모델 별칭 `improve`(새로 — 분류 모델보다 상위, Claude 판단으로 Opus 5.5, 폴백 없음)
    - 받는 것: 기준 버전의 `has_todo` 규칙 줄, 오류 통화 목록(통화 id·모델 값·골드 값), 같은 기준의 앞선 탈락 후보 기록(바꾼 규칙·못 넘은 조건 이름 enum만 — §2.7 실패 기록)

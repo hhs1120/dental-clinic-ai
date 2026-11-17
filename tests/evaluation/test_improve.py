@@ -332,3 +332,23 @@ def test_hard_check_compares_majority(monkeypatch, tmp_path):
     assert (
         got["items"]["has_todo"]["base_wrong"] == 4 and got["items"]["has_todo"]["cand_wrong"] == 0
     )
+
+
+def test_hard_check_rejects_bad_version_and_missing_calls(tmp_path):
+    rows = [{"call_uid": "hc-0001", "split": "hard"} | lab()]
+    with pytest.raises(SystemExit, match="버전 이름"):
+        im.hard_check(None, rows, {"hc-0001": ("직원: 네", "inbound")}, "../x", "v2", config={})
+    with pytest.raises(SystemExit, match="calls_mismatch"):
+        im.hard_check(None, rows, {}, "v2", "v2-imp1", config={}, root=tmp_path)
+
+
+def test_plan_shows_policy(tmp_path):
+    rows = gold_rows()
+    conn = app_db(rows)
+    conn.execute("CREATE TABLE ax_settings (key PRIMARY KEY, value)")
+    conn.execute("""INSERT INTO ax_settings VALUES ('auto_policy', '{"call_autoclose": true}')""")
+    assert im._plan(conn, rows, "v2", tmp_path / "g.jsonl", tmp_path / "i.jsonl")["auto_policy_on"]
+
+
+def test_call_id_after_hangul():
+    assert im.leaks("통화c-0123에서", MATERIAL)
