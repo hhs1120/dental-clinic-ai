@@ -111,6 +111,11 @@ def get_db_paths() -> tuple[Path, Path]:
     return data / "app.sqlite", data / "source.sqlite"
 
 
+def get_improve_report() -> Path:
+    """자동 개선 이력 — 자동 개선 루프가 쓰는 라벨 없는 집계 파일(평가 설계 §2.7, 앱은 파일만 읽는다)"""
+    return ROOT / "reports" / "improve_runs.jsonl"
+
+
 @lru_cache
 def _models():
     return GuardedEmbedder(make_embedder(DEFAULT_EMBEDDING)), voyage_rerank(DEFAULT_RERANKER)
@@ -1099,6 +1104,21 @@ def blind_vote(body: BlindVote, paths: Paths, clinic: ClinicDep, now: Now) -> di
         raise HTTPException(422, "보여 준 비교 쌍이 아닙니다") from e
     except sqlite3.IntegrityError as e:
         raise HTTPException(409, "이미 투표한 쌍입니다") from e
+    finally:
+        conn.close()
+
+
+@app.get("/improve/runs")
+def improve_runs(paths: Paths, report: Annotated[Path, Depends(get_improve_report)]) -> dict:
+    """자동 개선 실행 이력(최신 먼저)·대기 버전·활성 버전 — 읽기 전용(기능 정의 §4 ② "자동 개선")"""
+    rows = [json.loads(x) for x in report.read_text().splitlines()] if report.exists() else []
+    conn = _open(paths, NO_DATA)
+    try:
+        return {
+            "runs": sorted(rows, key=lambda r: r["at"], reverse=True),
+            "pending": db.get_setting(conn, "pending_prompt_version"),
+            "active": calls.active_versions(conn)[0],
+        }
     finally:
         conn.close()
 

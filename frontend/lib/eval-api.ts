@@ -76,3 +76,26 @@ export const saveBlindVote = (body: {
 }) => postJson<{ left: string; right: string }>("/blind-votes", body);
 export const fetchAccuracy = (signal?: AbortSignal) =>
   getJson<Accuracy>("/metrics/accuracy", undefined, signal);
+
+// 자동 개선 이력 — 원본은 evaluation/improve.py 행(reports/improve_runs.jsonl), backend/api.py /improve/runs
+export interface ImproveRun {
+  at: string;
+  base: string;
+  candidate: string;
+  attempt: number;
+  error_types: { name: string; n: number }[] | null;
+  changed_rule: string | null;
+  gate: { passed: boolean; failed: string[] } | null;
+  failed: string[];
+  adopted: boolean;
+  cost_usd: number;
+}
+
+export interface ImproveRuns {
+  runs: ImproveRun[];
+  pending: string | null;
+  active: string;
+}
+
+export const fetchImproveRuns = (signal?: AbortSignal) =>
+  getJson<ImproveRuns>("/improve/runs", undefined, signal);

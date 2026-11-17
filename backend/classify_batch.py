@@ -126,6 +126,24 @@ def run(
     return out
 
 
+def switch_if_ready(conn, version: str) -> bool:
+    """classify 전환(앱 설계 §7.2) — version이 대기 버전이고 녹취록 있는 생성 통화 전체의 그 버전 행이 모두 ok면 한
+    트랜잭션에서 활성 버전을 바꾸고 대기를 비우고 엇갈림·판정 큐를 다시 계산한다. 샤드·이어 돌기로 나눠 돌아도
+    이번 실행 결과가 아니라 DB 전체를 본다. failed가 남으면 바꾸지 않는다"""
+    if db.get_setting(conn, "pending_prompt_version") != version:
+        return False
+    if targets(conn, "classify", version, None):
+        return False
+    with conn:
+        db.set_setting(conn, "active_prompt_version", version)
+        conn.execute("DELETE FROM ax_settings WHERE key = 'pending_prompt_version'")
+        _, judge = active_versions(conn)
+        if judge:
+            disagreements.compute(conn, version, judge)
+            judge_queue.refresh_if_active(conn, version, judge)
+    return True
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="python -m backend.classify_batch")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -173,6 +191,10 @@ def main(argv=None) -> None:
         shard=args.shard,
     )
     print(out)
+    if args.cmd == "classify" and switch_if_ready(conn, args.version):
+        print(
+            f"대기 버전 {args.version} 전환 — 활성 분류 버전이 바뀌었다(자동 종결은 make autoclose로 다시)"
+        )
 
 
 if __name__ == "__main__":

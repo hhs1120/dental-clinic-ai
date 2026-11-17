@@ -241,11 +241,22 @@ def test_gate_pass_records_row(tmp_path):
     assert json.loads(rows[0])["items"]["has_todo"]["b"] == out["n"] > 0
 
 
-def test_auto_policy_on_stops_before_calls(tmp_path):
+def test_policy_on_needs_auto_inputs(tmp_path):
+    """켜진 자동 처리는 멈춤이 아니라 조건 — 조건을 잴 입력이 없으면 부르기 전에 멈춘다"""
     gw = Script()
-    with pytest.raises(SystemExit, match="auto_policy_on"):
+    with pytest.raises(SystemExit, match="auto_inputs_missing"):
         _gate(tmp_path, gw, policy={"call_autoclose": True})
     assert gw.calls == [] and not (tmp_path / "r.jsonl").exists()
+
+
+def test_policy_on_no_longer_stops(tmp_path):
+    rows = _gold()
+    uids = sorted(pg.population(rows))
+    auto = {"base_todo": {u: ([], False) for u in uids}, "judge": {}, "trust": None}
+    out = pg.run_gate(_scripted(rows), "v1", "v2", "has_todo", gold_rows=rows, calls=_calls(rows),
+                      policy={"call_autoclose": True}, config=CONFIG, runs_root=tmp_path / "runs",
+                      report=tmp_path / "r.jsonl", workers=1, auto=auto)  # fmt: skip
+    assert "trust_unmeasured" in out["failed"] and (tmp_path / "r.jsonl").exists()
 
 
 def test_attempt_cap_stops_third_candidate(tmp_path, fake_fp):
@@ -320,3 +331,75 @@ def test_output_and_record_have_no_call_uid(tmp_path, monkeypatch, capsys):
              "--report", str(tmp_path / "r.jsonl"), "--runs", str(tmp_path / "runs"), "--workers", "1"])  # fmt: skip
     text = capsys.readouterr().out + (tmp_path / "r.jsonl").read_text()
     assert "합격" in text and not any(r["call_uid"] in text for r in rows)
+
+
+# ── 켜진 자동 처리 조건(자동 개선 설계 §5) ──
+def _judge(**kw):
+    return {"labels": lab(**kw), "ok": True, "fallback": False, "todo": []}
+
+
+def _closing(n, wrong=0):
+    """n통화가 모두 자동 종결되고 그중 wrong통화는 골드가 할 일 있음"""
+    uids = [f"g{i:03d}" for i in range(n)]
+    cand = {u: lab() for u in uids}
+    gold = {u: lab(has_todo=int(i < wrong)) for i, u in enumerate(uids)}
+    return dict(cand=cand, gold=gold, base_todo={u: ([], False) for u in uids},
+                judge={u: _judge() for u in uids})  # fmt: skip
+
+
+def test_gate_values_include_autoclose_cap():
+    assert pg.GATE_VALUES["autoclose_error_cap"] == 0.05
+
+
+def test_autoclose_condition_fails_on_one_error_of_88():
+    on = {"call_autoclose": True}
+    trust = {"violations": 0}
+    assert "autoclose_error" in pg.auto_conditions(**_closing(88, wrong=1), policy=on, trust=trust)
+    assert pg.auto_conditions(**_closing(88), policy=on, trust=trust) == []
+
+
+def test_autoclose_condition_uses_candidate_labels():
+    on = {"call_autoclose": True}
+    c = _closing(88, wrong=1)
+    c["cand"]["g000"] = lab(has_todo=1)  # 후보가 할 일 있음 → 닫지 않음
+    assert pg.auto_conditions(**c, policy=on, trust={"violations": 0}) == []
+    c = _closing(88, wrong=1)
+    c["base_todo"]["g000"] = (["회신"], False)  # 빌린 할 일 목록이 있으면 닫지 않음
+    assert pg.auto_conditions(**c, policy=on, trust={"violations": 0}) == []
+    c = _closing(88, wrong=1)
+    c["base_todo"]["g000"] = ([], True)  # 요약 폴백이면 닫지 않음
+    assert pg.auto_conditions(**c, policy=on, trust={"violations": 0}) == []
+
+
+def test_trust_condition():
+    on = {"call_autoclose": True}
+    assert "trust_unmeasured" in pg.auto_conditions(**_closing(1), policy=on, trust=None)
+    assert "trust_violation" in pg.auto_conditions(
+        **_closing(1), policy=on, trust={"violations": 1}
+    )
+    off = {"call_autoclose": False}
+    assert pg.auto_conditions(**_closing(1, wrong=1), policy=off, trust=None) == []
+
+
+def test_majority_labels_keep_raw_values():
+    runs = [
+        {"c1": lab(urgency="low")},
+        {"c1": lab(urgency="normal")},
+        {"c1": lab(urgency="urgent")},
+    ]
+    assert pg.majority_labels(runs)["c1"]["urgency"] == "low"  # urgent 아님 2 → 첫 값
+    runs = [{"c1": lab(has_todo=1)}, {"c1": lab(has_todo=0)}, {"c1": lab(has_todo=True)}]
+    assert pg.majority_labels(runs)["c1"]["has_todo"] == 1
+
+
+def test_attempts_counts_precheck_rejects(tmp_path):
+    imp = tmp_path / "imp.jsonl"
+    rows = [{"base": "v1", "candidate": "v1-imp1", "candidate_sha256": "s1", "gate_hash": pg.gate_hash(),
+             "gate": None},
+            {"base": "v1", "candidate": "v1-imp2", "candidate_sha256": "s2", "gate_hash": "old",
+             "gate": None},
+            {"base": "v1", "candidate": "v1-imp3", "candidate_sha256": "s3", "gate_hash": pg.gate_hash(),
+             "gate": {"passed": False}}]  # fmt: skip
+    imp.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    got = pg.attempts("v1", tmp_path / "none.jsonl", imp)
+    assert got == {("v1-imp1", "s1")}

@@ -16,14 +16,18 @@ from pathlib import Path
 
 from backend import classify as cl
 from backend import prompts
+from backend.autoclose import autoclose_reason
+from backend.calls import active_versions
 from evaluation.classification import ITEMS
 from evaluation.metrics import (
     GATE_ATTEMPTS,
+    GATE_AUTOCLOSE_ERROR_CAP,
     GATE_FALSE_ALARM_CAP,
     GATE_P,
     GATE_REGRESSION_CAP,
     GATE_RUNS,
     mcnemar_exact,
+    wilson,
 )
 from evaluation.splits import silver_split
 from shared.llm import Gateway, JsonlLog, load_config
@@ -32,12 +36,16 @@ SAFETY = ("emergency", "complaint")  # 새로 놓침·오탐 증가를 따로 �
 RUNS_DIR = Path("evaluation/runs/prompt-gate")  # 버전별 건별 실행 — 골드와 엮여 커밋하지 않는다
 TRIES = 3  # 통화 하나를 실패(무효 라벨·폴백 답)로 다시 부르는 상한
 REPORT = Path("reports/prompt_gate.jsonl")  # 판정 1회 = 1행, 집계만(통화 id 없음) — 커밋
+IMPROVE_REPORT = Path(
+    "reports/improve_runs.jsonl"
+)  # 자동 개선 후보 1개 = 1행(evaluation/improve.py)
 GATE_VALUES = {
     "runs": GATE_RUNS,
     "p": GATE_P,
     "false_alarm_cap": GATE_FALSE_ALARM_CAP,
     "regression_cap": GATE_REGRESSION_CAP,
     "attempts": GATE_ATTEMPTS,
+    "autoclose_error_cap": GATE_AUTOCLOSE_ERROR_CAP,
 }
 
 
@@ -59,6 +67,49 @@ def majority(runs: list[dict[str, dict]]) -> dict[str, dict]:
             top, n = Counter(vals).most_common(1)[0]
             out[uid][i] = top if n >= 2 else vals[0]
     return out
+
+
+def majority_labels(runs: list[dict[str, dict]]) -> dict[str, dict]:
+    """majority와 같은 다수결이되 값은 원래 라벨(급함 3값 등) — 자동 종결 조건(autoclose_reason)에 넣는다"""
+    out = {}
+    for uid in runs[0]:
+        out[uid] = {}
+        for i in ITEMS:
+            vals = [value(r[uid], i) for r in runs]
+            top, n = Counter(vals).most_common(1)[0]
+            pick = top if n >= 2 else vals[0]
+            out[uid][i] = next(r[uid][i] for r in runs if value(r[uid], i) == pick)
+    return out
+
+
+def auto_conditions(
+    cand: dict[str, dict], gold: dict[str, dict], policy: dict, *,
+    base_todo: dict[str, tuple[list, bool]], judge: dict[str, dict], trust: dict | None,
+) -> list[str]:  # fmt: skip
+    """켜진 자동 처리 조건(평가 설계 §1 원칙 9·§2.7, 자동 개선 설계 §5) — 못 넘은 조건 이름.
+    ① 자동 종결: 후보 다수결 라벨 + 활성 판정기로 다시 닫아 보고, 닫힌 통화 중 골드가 할 일·응급·불만·urgent인
+    비율의 Wilson 상한이 GATE_AUTOCLOSE_ERROR_CAP 이하. 할 일 목록·요약 폴백은 기준 버전 것을 빌린다(요약
+    프롬프트가 같다). 켜진 정책이 있으면 후보의 dev 입력 신뢰 경계 위반 0건(결과가 없으면 미측정 탈락)"""
+    if not any(policy.values()):
+        return []
+    failed = []
+    if policy.get("call_autoclose"):
+        wrong = closed = 0
+        for u, g in gold.items():
+            todo, summary_fb = base_todo.get(u, ([], True))
+            cls = {"labels": cand[u], "ok": True, "fallback": summary_fb, "todo": todo}
+            if autoclose_reason(cls, judge.get(u)):
+                closed += 1
+                wrong += bool(g["has_todo"] or g["emergency"] or g["complaint"]
+                              or g["urgency"] == "urgent")  # fmt: skip
+        ci = wilson(wrong, closed)
+        if ci and ci[1] > GATE_AUTOCLOSE_ERROR_CAP:
+            failed.append("autoclose_error")
+    if trust is None:
+        failed.append("trust_unmeasured")
+    elif trust["violations"]:
+        failed.append("trust_violation")
+    return failed
 
 
 def compare(base: dict, cand: dict, gold: dict) -> dict[str, dict]:
@@ -172,12 +223,17 @@ def gate_hash() -> str:
     return hashlib.sha256(json.dumps(GATE_VALUES, sort_keys=True).encode()).hexdigest()[:12]
 
 
-def attempts(base: str, report: Path = REPORT) -> set[tuple[str, str | None]]:
+def attempts(
+    base: str, report: Path = REPORT, improve_report: Path = IMPROVE_REPORT
+) -> set[tuple[str, str | None]]:
     """같은 기준·같은 관문 값으로 판정한 서로 다른 (후보, 프롬프트 해시) — 이름이 같아도 내용을 고치면
-    새 시도다. 같은 버전끼리의 점검은 세지 않는다"""
-    if not report.exists():
-        return set()
-    rows = map(json.loads, report.read_text().splitlines())
+    새 시도다. 같은 버전끼리의 점검은 세지 않는다. 자동 개선에서 관문 전 검사로 탈락한 후보(gate 없음)도
+    센다(자동 개선 설계 §3)"""
+    rows = [
+        r for path in (report, improve_report) if path.exists()
+        for r in map(json.loads, path.read_text().splitlines())
+        if path == report or r.get("gate") is None
+    ]  # fmt: skip
     return {
         (r["candidate"], r.get("candidate_sha256"))
         for r in rows
@@ -201,26 +257,28 @@ class _Spent:
 def run_gate(
     gw, a: str, b: str, item: str, *, gold_rows: list[dict], calls: dict, policy: dict,
     config: dict, runs_root: Path = RUNS_DIR, report: Path = REPORT, workers: int = 8,
+    auto: dict | None = None, improve_report: Path = IMPROVE_REPORT,
 ) -> dict:  # fmt: skip
-    """판정 1회 — 멈출 조건은 부르기 전에 본다. 합격해도 아무것도 바꾸지 않는다(전환은 사람이 앱 설계 §7.2로)"""
+    """판정 1회 — 멈출 조건은 부르기 전에 본다. 합격해도 아무것도 바꾸지 않는다(전환은 사람이 앱 설계 §7.2로).
+    자동 처리가 켜져 있으면 auto(auto_inputs 결과 — 기준 할 일·판정기·후보 신뢰 경계)로 조건을 더한다"""
     if item not in ITEMS:
         raise SystemExit(f"목표 항목은 {', '.join(ITEMS)} 중 하나")
-    if any(
-        policy.values()
-    ):  # 원칙 9 자동 처리 조건은 자동 개선 때 — 그 전에는 관문을 돌리지 않는다
-        raise SystemExit("auto_policy_on")
+    if any(policy.values()) and auto is None:
+        raise SystemExit("auto_inputs_missing")
     if not all(re.fullmatch(r"[\w-]+", v) for v in (a, b)):  # 실행 폴더 밖을 지우지 않게
         raise SystemExit("버전 이름은 글자·숫자·-·_만")
     fp = {v: fingerprint(v, config) for v in (a, b)}
-    tried = attempts(a, report)
+    tried = attempts(a, report, improve_report)
     if b != a and (b, fp[b]["prompt_sha256"]) not in tried and len(tried) >= GATE_ATTEMPTS:
         raise SystemExit("attempt_cap")
     gold = population(gold_rows)
     spent = _Spent(gw)
     picked = {u: calls[u] for u in gold}
-    base, cand = (majority(fill_runs(spent, v, picked, fp[v], runs_root, workers)) for v in (a, b))
-    stats = compare(base, cand, gold)
+    base_runs, cand_runs = (fill_runs(spent, v, picked, fp[v], runs_root, workers) for v in (a, b))
+    stats = compare(majority(base_runs), majority(cand_runs), gold)
     failed = decide(stats, item)
+    if any(policy.values()):
+        failed += auto_conditions(majority_labels(cand_runs), gold, policy, **auto)
     row = {
         "at": datetime.now().isoformat(timespec="seconds"),
         "base": a,
@@ -240,6 +298,38 @@ def run_gate(
     with report.open("a") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row
+
+
+def auto_inputs(app: str, source: str, truth: str, base: str, cand: str) -> dict:
+    """켜진 자동 처리 조건의 입력(무료) — 기준 버전에 저장된 할 일 목록·요약 폴백, 활성 판정기 결과, 후보 버전의
+    dev 입력 신뢰 경계 집계(저장된 실행이 없으면 None — 측정은 사람이 make trust-eval)"""
+    from evaluation import input_trust
+    from evaluation.autoclose import _arg
+    from evaluation.classification import _judgments
+
+    conn = _ro(app)
+    conn.row_factory = sqlite3.Row
+    for name, path in (("source", source), ("truth", truth)):
+        conn.execute(f"ATTACH DATABASE ? AS {name}", (f"{Path(path).resolve().as_uri()}?mode=ro",))
+    base_todo = {
+        u: ((json.loads(t) if t else []), bool(fb))
+        for u, t, fb in conn.execute(
+            "SELECT k.call_uid, k.todo, COALESCE(s.fallback_used, 0) FROM ax_call_classifications k"
+            " LEFT JOIN ax_llm_calls s ON s.id = k.summary_llm_call_id"
+            " WHERE k.model_alias = 'classify' AND k.prompt_version = ? AND k.status = 'ok'",
+            (base,),
+        )
+    }
+    _, judge_v = active_versions(conn)
+    judge = {r["call_uid"]: _arg(r) for r in _judgments(conn) if r["prompt_version"] == judge_v}
+    rows = [r for r in input_trust.read_runs(input_trust.PATHS["dev"]["runs"])
+            if r["model"] == "classify" and r["version"] == cand]  # fmt: skip
+    runs = input_trust.judge_runs(judge_v)
+    trust = None
+    if rows and runs is not None:
+        got = input_trust.score(input_trust.targets(conn, "dev"), rows, cand, judge_v, runs)
+        trust = None if got["incomplete"] else got
+    return {"base_todo": base_todo, "judge": judge, "trust": trust}
 
 
 def make_gateway(log: Path):
@@ -272,10 +362,16 @@ def main(argv=None) -> None:
         _ro(args.app).execute("SELECT value FROM ax_settings WHERE key = 'auto_policy'").fetchone()
     )
     runs = Path(args.runs)
+    policy = json.loads(got[0]) if got else {}
+    auto = (
+        auto_inputs(args.app, args.source, args.truth, args.a, args.b)
+        if any(policy.values())
+        else None
+    )
     row = run_gate(
         make_gateway(runs / "llm.jsonl"), args.a, args.b, args.item, gold_rows=gold_rows,
-        calls=calls, policy=json.loads(got[0]) if got else {}, config=load_config(),
-        runs_root=runs, report=Path(args.report), workers=args.workers,
+        calls=calls, policy=policy, config=load_config(),
+        runs_root=runs, report=Path(args.report), workers=args.workers, auto=auto,
     )  # fmt: skip
     print(f"{args.a} → {args.b} · 목표 {args.item} · 검증 {row['n']}건 · ${row['cost_usd']}")
     print(f"{'항목':16} {'기준 오답':>8} {'후보 오답':>8} {'b':>4} {'c':>4} {'p':>8}")
@@ -283,7 +379,10 @@ def main(argv=None) -> None:
         print(
             f"{i:16} {s['base_wrong']:>8} {s['cand_wrong']:>8} {s['b']:>4} {s['c']:>4} {s['p']:>8.4f}"
         )
-    for cond in ("target_up", "no_new_miss", "false_alarm_cap", "no_regression"):
+    conds = ["target_up", "no_new_miss", "false_alarm_cap", "no_regression"]
+    if auto is not None:
+        conds += ["autoclose_error", "trust_unmeasured", "trust_violation"]
+    for cond in conds:
         print(f"{cond:16} {'불통과' if cond in row['failed'] else '통과'}")
     print("합격" if row["passed"] else "불합격")
 

@@ -76,3 +76,13 @@ test("블라인드 — 키보드만으로 5건", async ({ page }) => {
   }
   await expect.poll(() => voted(page)).toBe(before + 5);
 });
+
+test("자동 개선 탭 — 읽기 전용 이력", async ({ page }) => {
+  await page.goto("/eval?tab=improve", { waitUntil: "networkidle" });
+  await expect(
+    page.getByText("개선 에이전트가 재료 구간의 오류로"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /되돌리기|기준 수정/ }),
+  ).toHaveCount(0);
+});

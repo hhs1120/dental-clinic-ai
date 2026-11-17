@@ -15,7 +15,7 @@
 - `docs/치과 AX - 기술 소개.md` — 포트폴리오용 기술 소개: 기술 스택·데이터 규모·기능별 AI·구조·보여 주는 것 (구현 스펙 아님)
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·(착수 때) 자동 개선
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·자동 개선 improve.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기·LLM 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
 - `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
@@ -23,7 +23,7 @@
 ## 절대 규칙
 - `backend/`는 `ground_truth/`·`generator/`·`evaluation/`를 참조하지 않는다 (`tests/test_no_ground_truth_import.py`가 검사)
 - 정답은 `data/`(source.sqlite·app.sqlite)에 한 줄도 넣지 않는다
-- 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트(착수 전)의 실행 기록은 `app.sqlite`에 쓰지 않고 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만(평가 설계 §2.7)
+- 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트의 실행 기록은 `app.sqlite`에 쓰지 않고 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만(평가 설계 §2.7)
 - 앱의 도구 설명·권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보·재현 테스트까지만, 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
 - 테이블 접두어는 소속 시스템 기준: `emr_` 전자차트 원본 · `fin_` 재무 원본 · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다(가상 데이터 생성 설계 §0)
 - 시드 고정(`config/generator.yaml`), 생성기는 단계마다 `seed`와 단계 이름으로 따로 만든 난수 생성기를 쓴다 — 단계를 더해도 기존 결과가 그대로(가상 데이터 생성 설계 §5.1)
@@ -49,6 +49,7 @@
 - ① `make trust-eval`(과금, 이어 돎, 입력 신뢰 경계 `evaluation/input_trust.py` — 판정기 확인 `check-judge` 먼저, test는 `python -m evaluation.input_trust run --split test`(사람))
 - ① `make followups`(과금, `backend/followup.py`) · `make action-label`(과금, 이어 돎) / `action-audit`(`evaluation/call_actions.py`) · `make followup-eval`(과금, 이어 돎, `evaluation/followup.py` — test는 `python -m evaluation.followup run --split test` 뒤 `python -m evaluation.eval --split test --section followup`(사람))
 - ② `make blind-judge A= B= V=`(과금, 이어 돎, 평가 설계 §2.4) · `make gold-arbitrate`(과금, 이어 돎) / `gold-audit`(평가 설계 §2.3) · `make prompt-gate A= B= ITEM=`(과금, 이어 돎, 평가 설계 §2.7 — 같은 기준에 후보 `metrics.GATE_ATTEMPTS`개까지)
+- ② `make improve TASK=classify ITEM=has_todo`(과금, 평가 설계 §2.7 — 개선 에이전트가 재료 오류로 후보를 쓰고 관문에 넣는다, `evaluation/improve.py`. 먼저 `python -m evaluation.improve run --plan`. 넘으면 대기 버전, 전환은 사람이 `make classify V=<대기 버전>`. 관문 밖 어려운 통화 점검은 `python -m evaluation.improve hard-check --a <기준> --b <후보>`(과금, 저장된 벌 재사용))
 - ④ `make prep [DATE=] [NO_BATCH=1]`(과금, 이어 돎, `backend/prep.py`)
 - ⑤ `make claim-check [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, `backend/claim_check.py`) · `make claim-check-sample [N=] [BATCH=1]`(과금, 이어 돎, dev 고정 표본 — 프롬프트 고칠 때) / `claim-check-dev [NO_BATCH=1]`(과금, 이어 돎, dev 전부 — 버전을 정한 뒤, `evaluation/claim_check.py`) · `make claim-omission [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, ⑤-2b 추가 처치 누락 `backend/claim_omission.py`) · `make claim-evidence [SCOPE=all] [NO_BATCH=1]`(과금, 이어 돎, ⑤-3 서류 사유 차트 문장) · `make claim-appeal-dev`(과금, 이어 돎, ⑤-4 재심 사유서 dev 초안 `evaluation/claim_appeal.py` — 채점은 `make eval`, test는 `python -m evaluation.claim_appeal run --split test`(사람)) · `make claim-qa-draft`(과금, 이어 돎) / `claim-qa-review`(사람, 브라우저) — ⑤-3 청구 기준 질문(`evaluation/claim_qa.py`, test는 `python -m evaluation.claim_qa score --split test`(사람)) · `make claim-omission-cases`(과금, 이어 돎, 합성 사례 문장) / `claim-omission-synth`(과금, 이어 돎, 합성 dev — test는 `python -m evaluation.claim_omission synth·real --split test`(사람))
 - `make nightly [PLAN=1] [NO_BATCH=1] [FORCE=1]`(과금, 이어 돎, `backend/nightly.py` — 고정 순서로 모든 화면의 AI 결과를 최신으로. `PLAN=1`은 LLM 없이 단계별 건수·에이전트 예상 비용, Batch는 하루 상한 밖이라 첫 실행·버전 교체 전에 본다. `FORCE=1`은 죽은 실행이 남긴 running 행을 넘긴다)

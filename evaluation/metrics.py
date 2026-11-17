@@ -24,6 +24,9 @@ GATE_P = 0.05  # 목표 항목 오름의 McNemar 기준
 GATE_FALSE_ALARM_CAP = 2  # 응급·불만 오탐 증가 상한(건)
 GATE_REGRESSION_CAP = 3  # 목표 밖 항목의 다수결 오답 증가 상한(건)
 GATE_ATTEMPTS = 2  # 같은 기준에 판정할 수 있는 서로 다른 후보 수
+GATE_AUTOCLOSE_ERROR_CAP = (
+    0.05  # 켜진 ① 자동 종결 오류율의 Wilson 95% 상한(사용자 결정, 자동 개선 설계 §5)
+)
 
 # 코어 합격 기준 make gate(기능 정의 §6 — evaluation/gate.py). dev 비율 하한
 CORE_TOOL_MIN = 0.5  # ③ 데이터형 도구 선택
