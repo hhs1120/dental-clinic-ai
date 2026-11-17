@@ -196,6 +196,29 @@ def test_same_search_reuses_row(conn):
     assert r["cited_ids"] == [NEW] and len(_rows(conn)) == 1
 
 
+def test_same_results_in_other_order_reuse_row(conn):
+    """질문 임베딩이 호출마다 아주 조금 달라 점수가 비슷한 결과의 순서가 바뀐다 — 같은 결과 묶음이면 다시 쓴다"""
+    first, _ = run(conn, out())
+    assert len(first["retrieved_ids"]) > 1
+    conn.execute(
+        "UPDATE ax_search_logs SET retrieved_ids = ?",
+        (json.dumps(first["retrieved_ids"][::-1]),),
+    )
+    r, gw = run(conn)
+    assert r["reused"] is True and gw.calls == [] and r["cited_ids"] == [NEW]
+    assert r["retrieved_ids"] == first["retrieved_ids"] and len(_rows(conn)) == 1
+
+
+def test_other_results_make_new_row(conn):
+    first, _ = run(conn, out())
+    conn.execute(
+        "UPDATE ax_search_logs SET retrieved_ids = ?",
+        (json.dumps(first["retrieved_ids"][:1]),),
+    )
+    r, gw = run(conn, out())
+    assert r["reused"] is False and len(gw.calls) == 1
+
+
 def test_prompt_version_change_makes_new_row(conn, monkeypatch):
     run(conn, out())
     monkeypatch.setattr(search_summary, "PROMPT_VERSION", "v2")
