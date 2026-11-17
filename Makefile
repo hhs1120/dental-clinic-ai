@@ -1,6 +1,6 @@
 # 출력 경로는 generator/paths.py
 
-.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report trust-eval
+.PHONY: data verify test lint fmt eval index fixture llm-import llm-fill-api llm-prune dev classify judge disagreements blind-judge gold-arbitrate gold-audit hard-label hard-review autoclose auto-policy action-label action-audit followups followup-eval e2e prompt-gate gate prep claim-check claim-omission claim-evidence claim-appeal-dev claim-qa-draft claim-qa-review claim-omission-cases claim-omission-synth claim-check-sample claim-check-dev recon expense-ai report trust-eval improve
 
 data:
 	PYTHONHASHSEED=0 uv run python -m generator $(if $(FAKE_LLM),--fake-llm)
@@ -121,6 +121,11 @@ claim-appeal-dev:
 # uv run --group finetune python -m evaluation.input_trust check-judge --split dev. test는 사람: python -m evaluation.input_trust run --split test
 trust-eval:
 	uv run $(if $(wildcard .env),--env-file .env) --group finetune python -m evaluation.input_trust run --split dev
+
+# ② 자동 개선 — 개선 에이전트가 재료 오류로 후보를 쓰고 관문이 거른다(과금, 평가 설계 §2.7, evaluation/improve.py)
+improve:
+	$(if $(and $(TASK),$(ITEM)),,$(error TASK=classify ITEM=has_todo 필요))
+	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.improve run --task $(TASK) --item $(ITEM)
 
 # ⑤-2b 평가 전용 합성 사례 — 코드가 정한 명세로 LLM이 차트 문장만(과금, 이어 돎, 설계 §2b)
 claim-omission-cases:
