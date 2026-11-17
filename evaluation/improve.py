@@ -211,6 +211,24 @@ def improve(
     return out
 
 
+def hard_check(gw, gold_rows: list[dict], calls: dict, a: str, b: str, *, config: dict,
+               root: Path = RUNS / "hard", workers: int = 8) -> dict:  # fmt: skip
+    """관문 밖 점검 — 어려운 통화(hc-, 평가 설계 §2.1 hard: 다른 모델이 쓴 녹취·확정 라벨)에서 두 버전을 관문과 같은
+    GATE_RUNS벌 다수결로 견준다. 같은 생성기에 맞춘 후보인지 보는 사람의 한 번 점검이고, 결과로 후보를 고르거나
+    다시 쓰지 않는다(hard는 관문·자동 개선 재료가 아니다). 저장된 벌은 다시 쓴다"""
+    if any(r["split"] != "hard" for r in gold_rows):
+        raise SystemExit("not_hard")
+    spent = prompt_gate._Spent(gw)
+    maj = {
+        v: prompt_gate.majority(prompt_gate.fill_runs(
+            spent, v, calls, prompt_gate.fingerprint(v, config), root, workers))
+        for v in (a, b)
+    }  # fmt: skip
+    gold = {r["call_uid"]: r for r in gold_rows}
+    return {"n": len(gold), "items": prompt_gate.compare(maj[a], maj[b], gold),
+            "cost_usd": round(spent.cost, 4)}  # fmt: skip
+
+
 def _plan(conn, gold_rows: list[dict], base: str, gate_report: Path, report: Path) -> dict:
     """LLM 없이 — 재료 오류 수, 남은 시도, 최근 관문 1회 비용"""
     costs = [r["cost_usd"] for r in _rows(gate_report) if r["base"] != r["candidate"]]
@@ -235,10 +253,28 @@ def main(argv=None) -> None:
     r.add_argument("--task", default="classify", choices=["classify"])
     r.add_argument("--item", default=ITEM)
     r.add_argument("--plan", action="store_true")
-    r.add_argument("--truth", default="ground_truth/truth.sqlite")
-    r.add_argument("--source", default="data/source.sqlite")
     r.add_argument("--app", default="data/app.sqlite")
+    h = sub.add_parser("hard-check")  # 관문 밖 어려운 통화 점검(과금 — 저장된 벌은 다시 쓴다)
+    h.add_argument("--a", required=True, help="기준 버전")
+    h.add_argument("--b", required=True, help="후보 버전")
+    for x in (r, h):
+        x.add_argument("--truth", default="ground_truth/truth.sqlite")
+        x.add_argument("--source", default="data/source.sqlite")
     args = p.parse_args(argv)
+    if args.cmd == "hard-check":
+        rows = [dict(x) for x in prompt_gate._ro(args.truth).execute(
+            "SELECT * FROM truth_call_labels WHERE split = 'hard'")]  # fmt: skip
+        uids = {x["call_uid"] for x in rows}
+        calls = {u: (t, d) for u, t, d in prompt_gate._ro(args.source).execute(
+            "SELECT call_uid, transcript, direction FROM ax_calls") if u in uids}  # fmt: skip
+        got = hard_check(prompt_gate.make_gateway(RUNS / "hard" / "llm.jsonl"), rows, calls,
+                         args.a, args.b, config=load_config())  # fmt: skip
+        print(f"어려운 통화 {got['n']}건 · {args.a} → {args.b} · ${got['cost_usd']}")
+        for i, x in got["items"].items():
+            print(
+                f"{i:16} {x['base_wrong']:>4} → {x['cand_wrong']:<4} b {x['b']} c {x['c']} p {x['p']:.3f}"
+            )
+        return
     gold_rows = [dict(x) for x in prompt_gate._ro(args.truth).execute(
         "SELECT * FROM truth_call_labels WHERE split = 'silver'")]  # fmt: skip
     conn = db.connect(Path(args.app), Path(args.source))

@@ -485,7 +485,7 @@ PAID_MODULES = {
     "evaluation.claim_omission": {"cases", "synth", "real"},
     "evaluation.claim_check": {"sample", "run"}, "evaluation.claim_appeal": {"run"},
     "evaluation.input_trust": {"run"}, "evaluation.langgraph_recon": {"run"},
-    "evaluation.improve": {"run"},
+    "evaluation.improve": {"run", "hard-check"},
 }  # fmt: skip
 FREE_FLAGS = {"--plan", "--stats", "--help", "-h"}
 # 확인 창에 모듈 이름 대신 보일 말

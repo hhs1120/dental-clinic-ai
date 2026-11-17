@@ -305,3 +305,30 @@ def test_policy_on_stops_before_llm(tmp_path):
     with pytest.raises(SystemExit, match="auto_policy_on"):
         _loop(tmp_path, prop, FakeGate(), policy={"call_autoclose": True})
     assert prop.calls == []
+
+
+# ── 어려운 통화 점검(관문 밖, 사람이 한 번) ──
+def test_hard_check_rejects_other_splits():
+    rows = [
+        {"call_uid": "hc-0001", "split": "hard"} | lab(),
+        {"call_uid": "c-0001", "split": "silver"} | lab(),
+    ]
+    with pytest.raises(SystemExit, match="not_hard"):
+        im.hard_check(None, rows, {}, "v2", "v2-imp1", config={})
+
+
+def test_hard_check_compares_majority(monkeypatch, tmp_path):
+    rows = [{"call_uid": f"hc-{i:04d}", "split": "hard"} | lab(has_todo=1) for i in range(4)]
+    calls = {r["call_uid"]: ("직원: 네", "inbound") for r in rows}
+    runs = {
+        "v2": [{u: lab() for u in calls}] * 3,
+        "v2-imp1": [{u: lab(has_todo=1) for u in calls}] * 3,
+    }
+    monkeypatch.setattr(im.prompt_gate, "fingerprint", lambda v, config: {"v": v})
+    monkeypatch.setattr(im.prompt_gate, "fill_runs",
+                        lambda gw, v, c, fp, root, workers: runs[v])  # fmt: skip
+    got = im.hard_check(None, rows, calls, "v2", "v2-imp1", config={}, root=tmp_path)
+    assert got["n"] == 4
+    assert (
+        got["items"]["has_todo"]["base_wrong"] == 4 and got["items"]["has_todo"]["cand_wrong"] == 0
+    )

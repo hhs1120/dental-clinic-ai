@@ -815,6 +815,7 @@ def test_review_lookalikes_pass(command, monkeypatch):
         "make trust-eval",
         "make improve TASK=classify ITEM=has_todo",
         "uv run python -m evaluation.improve run --task classify --item has_todo",
+        "uv run python -m evaluation.improve hard-check --a v2 --b v2-imp1",
         "uv run python backend/prep.py run",
         "python3 evaluation/prompt_gate.py --a v2 --b v3 --item purpose",
         "./backend/report.py",
