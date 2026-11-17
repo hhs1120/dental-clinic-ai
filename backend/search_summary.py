@@ -1,7 +1,7 @@
 """③ 기록 검색 AI 요약 (기능 정의 §4 ③ 기록 검색, 설계 docs/superpowers/specs/2026-11-09-search-summary-docs-design.md).
 검색 결과가 무엇을 말하는지 몇 문장으로 묶고 문장마다 끝에 출처 번호 [n](= cited_ids[n-1])을 붙인다. 하네스 없이 게이트웨이
 호출 한 번이고, 인용·문장 번호·숫자 검사에 어긋나면 한 번 다시 부른다. 두 번째도 어긋나면 고정 문구로 끝낸다. 옛 공지는
-입력에서 뺀다. 같은 검색 인자·같은 결과·같은 프롬프트 버전이면 끝난 행을 다시 쓴다. 검색 요약 1회 = ax_search_logs 1행."""
+입력에서 뺀다. 같은 검색 인자·같은 결과 묶음(순서 무관)·같은 프롬프트 버전이면 끝난 행을 다시 쓴다. 검색 요약 1회 = ax_search_logs 1행."""
 
 import json
 import re
@@ -19,6 +19,7 @@ from shared.llm import BudgetExceeded
 
 TASK, ALIAS = "search_summary", "chat"
 PROMPT_VERSION = "v1"
+CACHE_SCAN = 20  # 다시 쓸 끝난 행을 찾을 때 같은 검색 인자의 최근 몇 행까지 보나
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -128,12 +129,23 @@ def summarize(
 
     key, retrieved = _key(args), json.dumps(input_ids, ensure_ascii=False)
     if not is_eval:
-        row = conn.execute(
-            "SELECT id, status, answer_text, cited_ids FROM ax_search_logs"
-            " WHERE kind = 'search_summary' AND is_eval = 0 AND status IN ('answered', 'refused')"
-            " AND tool_calls = ? AND retrieved_ids = ? ORDER BY id DESC LIMIT 1",
-            (key, retrieved),
-        ).fetchone()
+        # 결과 묶음이 같으면 순서는 보지 않는다 — 질문 임베딩이 호출마다 아주 조금 달라 점수가 비슷한
+        # 결과끼리 자리가 바뀌고, 그때마다 요약을 새로 부르게 된다(인용은 같은 묶음 안이라 그대로 맞다)
+        same = sorted(input_ids)
+        row = next(
+            (
+                r
+                for r in conn.execute(
+                    "SELECT id, status, answer_text, cited_ids, retrieved_ids FROM ax_search_logs"
+                    " WHERE kind = 'search_summary' AND is_eval = 0"
+                    " AND status IN ('answered', 'refused') AND tool_calls = ?"
+                    " ORDER BY id DESC LIMIT ?",
+                    (key, CACHE_SCAN),
+                )
+                if sorted(json.loads(r[4])) == same
+            ),
+            None,
+        )
         if row:
             return _result(
                 row[1],

@@ -63,9 +63,13 @@ class Ctx:
     rag_qa: Path | None = (
         None  # 이 DB와 짝인 ground_truth/rag_qa.json (make verify만 — verify 테스트 DB는 None)
     )
+    # AI 비서 시나리오 ground_truth/assistant_scenarios.json (make verify만 — verify 테스트 DB는 None)
+    assistant_scenarios: Path | None = None
 
 
-def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
+def load_ctx(
+    config_path: Path, conn, rag_qa: Path | None = None, assistant_scenarios: Path | None = None
+) -> Ctx:
     """설정 + truth_gen_meta(생성기가 남긴 기간·통화 건수). 메타 키가 없으면 KeyError."""
     cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     holidays = json.loads((ROOT / cfg["holidays"]).read_text(encoding="utf-8"))
@@ -92,6 +96,7 @@ def load_ctx(config_path: Path, conn, rag_qa: Path | None = None) -> Ctx:
         non_clinical_multi=int(meta.get("non_clinical_multi", 0)),
         settlement_errors=json.loads(meta.get("settlement_errors", "{}")),
         rag_qa=rag_qa,
+        assistant_scenarios=assistant_scenarios,
     )
 
 

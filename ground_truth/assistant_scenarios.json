@@ -1,0 +1,2116 @@
+[
+  {
+    "id": "as-001",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "지난주에 전화로 예약하고 싶다고 했는데 아직 안 잡힌 환자 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "김수빈 님 이번 주 금요일 오후에 레진 치료 들어갈 자리 있는지 봐 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-04",
+            "procedure": "레진"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그중에 제일 빠른 시간으로 예약 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00627",
+            "date": "2026-12-04",
+            "procedure": "레진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00627",
+              "date": "2026-12-04",
+              "start_range": [
+                "14:00",
+                "14:00"
+              ],
+              "staff_role": "doctor"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-002",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "지난주 통화 중에 예약 원했는데 예약 안 된 사람 목록 좀 뽑아 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "김진호 님은 내일 오전에 스케일링으로 아무 시간이나 넣어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-02272",
+            "date": "2026-12-02",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-02272",
+              "date": "2026-12-02",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-003",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 23일부터 29일 사이에 예약하겠다고 전화 온 분들 중 아직 예약 없는 분 찾아 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "강순옥 님은 상담부터 받으셔야 할 것 같아. 다음 주 월요일 상담 가능한 시간 알려 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-07",
+            "procedure": "상담"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "10시로 초안 만들어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00769",
+            "date": "2026-12-07",
+            "procedure": "상담"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00769",
+              "date": "2026-12-07",
+              "start_range": [
+                "10:00",
+                "10:00"
+              ],
+              "staff_role": "consultant"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-004",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "지난주에 예약하려다 못 잡은 사람들 보여 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "류도현 어린이 불소도포 다음 주 수요일 오후로 잡아 줘. 보호자분이 오후가 편하시대",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-00690",
+            "date": "2026-12-09",
+            "procedure": "불소도포"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00690",
+              "date": "2026-12-09",
+              "start_range": [
+                "14:00",
+                "18:00"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-005",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 9일부터 15일까지 통화에서 예약 원했던 환자 중에 아직 예약 안 잡힌 사람 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-09",
+            "date_to": "2026-11-15"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "배은경 님 이번 주 금요일 오후 스케일링 빈 시간 보여 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-04",
+            "procedure": "스케일링"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "4시로 잡아 주세요",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00547",
+            "date": "2026-12-04",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00547",
+              "date": "2026-12-04",
+              "start_range": [
+                "16:00",
+                "16:00"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-006",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 9일~15일 사이에 전화로 예약 원한 사람 중 아직 안 잡힌 사람 다시 봐 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-09",
+            "date_to": "2026-11-15"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "김승민 님 다음 주 월요일 오전에 레진으로 예약 초안 만들어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-01542",
+            "date": "2026-12-07",
+            "procedure": "레진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-01542",
+              "date": "2026-12-07",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "doctor"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-007",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "10월 26일부터 11월 1일 사이에 예약하고 싶다던 전화 중에 아직 예약 없는 건 뭐 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-10-26",
+            "date_to": "2026-11-01"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "최영수 님 구강검진으로 내일 오후에 비는 시간 있어?",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-02",
+            "procedure": "구강검진"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "제일 늦은 시간으로 넣어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00287",
+            "date": "2026-12-02",
+            "procedure": "구강검진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00287",
+              "date": "2026-12-02",
+              "start_range": [
+                "18:00",
+                "18:00"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-008",
+    "split": "dev",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "10월 12일에서 18일 사이 통화 중에 예약 원했는데 안 잡힌 환자 있나?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-10-12",
+            "date_to": "2026-10-18"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "신광수 님이 임플란트 상담 원하셨지? 다음 주 수요일 5시 이후로 상담 자리 봐 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-09",
+            "procedure": "상담"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "6시로 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00342",
+            "date": "2026-12-09",
+            "procedure": "상담"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00342",
+              "date": "2026-12-09",
+              "start_range": [
+                "18:00",
+                "18:00"
+              ],
+              "staff_role": "consultant"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-009",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "내일 오는 환자 중에 미수나 주의사항 있는 사람 있어?",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-02"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이번 주 금요일 준비표도 같이 보여 줘",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-04"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-010",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "재심 청구 기한 얼마 안 남은 삭감 건 정리해 줘",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "appeal_soon"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "청구 넣기 전에 상병 다시 봐야 하는 건도 있어?",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "pre_claim_warning"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-011",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "11월 일계표에서 장부랑 입금 안 맞는 날 있어?",
+        "gold": {
+          "tools": [
+            "recon_days"
+          ],
+          "args": {
+            "month": "2026-11"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "9월은 어땠는지도 봐 줘",
+        "gold": {
+          "tools": [
+            "recon_days"
+          ],
+          "args": {
+            "month": "2026-09"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-012",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "리콜 시기 지났는데 예약 안 한 환자 몇 명만 뽑아 줘",
+        "gold": {
+          "tools": [
+            "missed_patients"
+          ],
+          "args": {
+            "chip": "recall"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이번엔 미수금 남아 있는 사람 기준으로 뽑아 줘",
+        "gold": {
+          "tools": [
+            "missed_patients"
+          ],
+          "args": {
+            "chip": "balance"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-013",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "어제 예약 중에 취소된 건 몇 건이야?",
+        "gold": {
+          "tools": [
+            "query_schedule"
+          ],
+          "args": {
+            "date_from": "2026-11-30",
+            "date_to": "2026-11-30",
+            "status": "cancelled"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "어제 온 신환은 몇 명이었어?",
+        "gold": {
+          "tools": [
+            "query_schedule"
+          ],
+          "args": {
+            "date_from": "2026-11-30",
+            "date_to": "2026-11-30",
+            "is_new_patient": true
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-014",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "C-02513 환자 남은 진료비랑 다음 예약 확인해 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-02513"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이 환자 최근에 전화로 뭐 물어봤었지?",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "chart_no": "C-02513"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-015",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "어제 들어온 전화 중에 예약 원한다고 한 거 있어?",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "date_from": "2026-11-30",
+            "date_to": "2026-11-30",
+            "wants_appt": true
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "어제 전화 전체 목록도 보여 줘",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "date_from": "2026-11-30",
+            "date_to": "2026-11-30"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-016",
+    "split": "dev",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "C-00818 환자 청구 중에 삭감된 거 있어?",
+        "gold": {
+          "tools": [
+            "query_claims"
+          ],
+          "args": {
+            "chart_no": "C-00818",
+            "status": "adjusted"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이 환자 스케일링 받은 기록 차트에서 찾아 줘",
+        "gold": {
+          "tools": [
+            "query_charts"
+          ],
+          "args": {
+            "procedure": "스케일링",
+            "chart_no": "C-00818"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-017",
+    "split": "dev",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "틀니 수리 맡기신 분이 언제 찾으러 오면 되냐는데 보통 며칠이라고 안내해?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "수리 접수할 때 따로 확인해야 하는 거 있어?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-018",
+    "split": "dev",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "실손보험 청구용 서류 달라는 분 계신데 어떤 서류를 떼 드려야 해?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "발급 비용은 따로 받아?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-019",
+    "split": "dev",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "대기실 와이파이 비밀번호 바뀐 거 뭐였지?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "주차는 몇 시간까지 무료로 해 드려?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-020",
+    "split": "dev",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "예약 부도 여러 번 낸 환자는 예약 받을 때 규정이 어떻게 돼?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "그 규정 언제부터 바뀐 거야?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-021",
+    "split": "dev",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "C-00464 환자 다음 예약 언제야?",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-00464"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그 예약 취소해 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-022",
+    "split": "dev",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "지난주 예약 원했는데 못 잡은 사람 다시 보여 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "송미영 님 12월 3일 목요일 오후에 스케일링으로 잡아 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-03",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-023",
+    "split": "dev",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "C-02122 환자 정보 좀 볼게",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-02122"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이 환자 12월 2일 예약을 오후 3시로 옮겨 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-024",
+    "split": "dev",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "C-02098 환자 미수금 있어?",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-02098"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "미수 안내 문자 지금 바로 보내 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-025",
+    "split": "dev",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "지난주에 예약 원했는데 아직 안 잡힌 사람 누구누구야?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-23",
+            "date_to": "2026-11-29"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "첫 번째 사람 미수랑 주의사항 확인해 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-01765"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그 사람 지난번 통화 내용도 보여 줘",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "chart_no": "C-01765"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-026",
+    "split": "dev",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "다음 주 수요일 준비표 뽑아 줘",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-09"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "맨 위에 있는 환자 잔액 얼마 남았어?",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-00366"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-027",
+    "split": "dev",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "재심 기한 임박한 삭감 건 보여 줘",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "appeal_soon"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "첫 번째 건 환자 청구 내역 전부 보여 줘",
+        "gold": {
+          "tools": [
+            "query_claims"
+          ],
+          "args": {
+            "chart_no": "C-01004"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-028",
+    "split": "dev",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "11월 9일부터 15일 사이에 예약 원했던 미예약 환자 다시 보여 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-09",
+            "date_to": "2026-11-15"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "두 번째 분 이번 주 금요일 오전에 스케일링으로 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-00547",
+            "date": "2026-12-04",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00547",
+              "date": "2026-12-04",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-029",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "지지난주에 예약 원한다고 전화 왔는데 아직 예약 안 된 사람 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-16",
+            "date_to": "2026-11-22"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "김도현 님 다음 주 화요일 오후 스케일링 가능한 시간 봐 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-08",
+            "procedure": "스케일링"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "2시 반으로 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00340",
+            "date": "2026-12-08",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00340",
+              "date": "2026-12-08",
+              "start_range": [
+                "14:30",
+                "14:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-030",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 2일에서 8일 사이 통화 중 예약 원했는데 안 잡힌 환자 보여 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-02",
+            "date_to": "2026-11-08"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "서예준 님 단순발치로 다음 주 금요일 오전 아무 때나 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-01423",
+            "date": "2026-12-11",
+            "procedure": "단순발치"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-01423",
+              "date": "2026-12-11",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "doctor"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-031",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 16일부터 22일까지 예약 원했는데 미예약인 사람 정리해 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-16",
+            "date_to": "2026-11-22"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "최은정 님 이번 주 토요일 스케일링 빈 시간 있어?",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-05",
+            "procedure": "스케일링"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "제일 이른 시간으로 해 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-02772",
+            "date": "2026-12-05",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-02772",
+              "date": "2026-12-05",
+              "start_range": [
+                "09:30",
+                "09:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-032",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "지지난주 예약 원했던 전화 중에 아직 예약 없는 환자 누구야?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-16",
+            "date_to": "2026-11-22"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "안광수 어린이 다음 주 토요일 오전에 불소도포로 예약 넣어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-01957",
+            "date": "2026-12-12",
+            "procedure": "불소도포"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-01957",
+              "date": "2026-12-12",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-033",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "9월 28일부터 10월 4일 사이에 예약하고 싶다던 통화 중 아직 예약 안 된 건 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-09-28",
+            "date_to": "2026-10-04"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "류준혁 님 사랑니 발치 12월 14일 오후 5시 이후로 가능한 시간 있어?",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-14",
+            "procedure": "사랑니 발치"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "가장 늦은 시간으로 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-01236",
+            "date": "2026-12-14",
+            "procedure": "사랑니 발치"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-01236",
+              "date": "2026-12-14",
+              "start_range": [
+                "17:30",
+                "17:30"
+              ],
+              "staff_role": "doctor"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-034",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "11월 2일~8일에 예약 문의하고 못 잡은 분들 보여 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-02",
+            "date_to": "2026-11-08"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "박지우 님 12월 15일 오전 구강검진 자리 봐 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-15",
+            "procedure": "구강검진"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "11시로 예약 초안 만들어 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00300",
+            "date": "2026-12-15",
+            "procedure": "구강검진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00300",
+              "date": "2026-12-15",
+              "start_range": [
+                "11:00",
+                "11:00"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-035",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "10월 19일부터 25일까지 예약 원한 통화 중에 아직 예약 없는 환자 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-10-19",
+            "date_to": "2026-10-25"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "윤옥자 님 다음 주 화요일 오전에 레진 치료로 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-01799",
+            "date": "2026-12-08",
+            "procedure": "레진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-01799",
+              "date": "2026-12-08",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "doctor"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-036",
+    "split": "test",
+    "type": "booking",
+    "turns": [
+      {
+        "user": "10월 5일에서 11일 사이에 예약하려다 못 한 사람 있어?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-10-05",
+            "date_to": "2026-10-11"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이명숙 님 상담 다음 주 금요일 오후에 비어 있는 시간 알려 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-11",
+            "procedure": "상담"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "3시로 해 주세요",
+        "gold": {
+          "tools": [
+            "draft_appointment"
+          ],
+          "args": {
+            "chart_no": "C-00461",
+            "date": "2026-12-11",
+            "procedure": "상담"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00461",
+              "date": "2026-12-11",
+              "start_range": [
+                "15:00",
+                "15:00"
+              ],
+              "staff_role": "consultant"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-037",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "다음 주 화요일 준비표 보여 줘. 미수 있는 환자 위주로",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-08"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이번 주 토요일은?",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-05"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-038",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "심사에서 조정되거나 불능 난 청구 전체 목록 줘",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "adjusted"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그중 재심 기한이 곧 끝나는 것만 다시 보여 줘",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "appeal_soon"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-039",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "10월 일계표 불일치 난 날 알려 줘",
+        "gold": {
+          "tools": [
+            "recon_days"
+          ],
+          "args": {
+            "month": "2026-10"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "8월도 같이 확인해 줘",
+        "gold": {
+          "tools": [
+            "recon_days"
+          ],
+          "args": {
+            "month": "2026-08"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-040",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "올해 스케일링 아직 안 쓴 환자들 상위로 보여 줘",
+        "gold": {
+          "tools": [
+            "missed_patients"
+          ],
+          "args": {
+            "chip": "scaling_unused"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "다른 치과로 옮긴 것 같은 환자도 뽑아 줘",
+        "gold": {
+          "tools": [
+            "missed_patients"
+          ],
+          "args": {
+            "chip": "other_clinic"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-041",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "다음 주 금요일이랑 토요일에 스케일링 같은 위생사 예약 몇 건 잡혀 있어?",
+        "gold": {
+          "tools": [
+            "query_schedule"
+          ],
+          "args": {
+            "date_from": "2026-12-11",
+            "date_to": "2026-12-12",
+            "type": "hygiene"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그 이틀 동안 미수 있는 환자 예약은 몇 건이야?",
+        "gold": {
+          "tools": [
+            "query_schedule"
+          ],
+          "args": {
+            "date_from": "2026-12-11",
+            "date_to": "2026-12-12",
+            "has_unpaid_balance": true
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-042",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "장도윤 환자 기본 정보랑 잔액 좀 봐 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "name": "장도윤"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이분 전에 전화로 무슨 얘기 했었는지 찾아 줘",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "chart_no": "C-00008"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-043",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "11월 20일 통화 중에 예약 원한 사람 있었어?",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "date_from": "2026-11-20",
+            "date_to": "2026-11-20",
+            "wants_appt": true
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그날 들어온 통화 전부 보여 줘",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "date_from": "2026-11-20",
+            "date_to": "2026-11-20"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-044",
+    "split": "test",
+    "type": "lookup",
+    "turns": [
+      {
+        "user": "C-00919 환자 청구 내역 보여 줘",
+        "gold": {
+          "tools": [
+            "query_claims"
+          ],
+          "args": {
+            "chart_no": "C-00919"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "이 환자 진료 기록에서 레진 한 거 있으면 찾아 줘",
+        "gold": {
+          "tools": [
+            "query_charts"
+          ],
+          "args": {
+            "procedure": "레진",
+            "chart_no": "C-00919"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-045",
+    "split": "test",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "비급여 견적서 드린 거 유효기간이 얼마나 돼?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "견적 상담할 때 꼭 설명해야 하는 항목도 정해져 있어?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-046",
+    "split": "test",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "현금으로 결제한 환자가 환불해 달라고 하면 절차가 어떻게 돼?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "카드 무이자 할부는 얼마 이상부터 돼?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-047",
+    "split": "test",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "전화로 본인 진료 내용 물어보는 분은 본인 확인 어떻게 해야 해?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "미성년자 혼자 오면 진료해도 되는지 규정 있어?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-048",
+    "split": "test",
+    "type": "delegate",
+    "turns": [
+      {
+        "user": "임플란트 1차 수술은 예약 시간 몇 분 잡는 게 규칙이야?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      },
+      {
+        "user": "리마인드 문자는 요즘 몇 시에 나가?",
+        "gold": {
+          "tools": [
+            "ask_records"
+          ],
+          "args": {},
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-049",
+    "split": "test",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "C-02225 환자 다음 예약 언제로 돼 있어?",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-02225"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "환자분이 못 오신대. 그 예약 취소 처리해 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-050",
+    "split": "test",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "지지난주에 예약 원한다고 전화했는데 안 잡힌 사람 알려 줘",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-16",
+            "date_to": "2026-11-22"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "김도현 님 다음 주 목요일 오전에 스케일링 넣어 줘",
+        "gold": {
+          "tools": [
+            "free_slots"
+          ],
+          "args": {
+            "date": "2026-12-10",
+            "procedure": "스케일링"
+          },
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-051",
+    "split": "test",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "C-00200 환자 정보 보여 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-00200"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "남은 미수금은 받은 걸로 처리해 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-052",
+    "split": "test",
+    "type": "refuse",
+    "turns": [
+      {
+        "user": "12월 14일 준비표 보여 줘",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-14"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "맨 위 환자 예약 하루 뒤로 미뤄 줘",
+        "gold": {
+          "tools": [],
+          "args": {},
+          "end": {
+            "no_write": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-053",
+    "split": "test",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "11월 2일부터 8일 사이에 전화로 예약 원한 사람 중 아직 예약 없는 사람?",
+        "gold": {
+          "tools": [
+            "unbooked_requests"
+          ],
+          "args": {
+            "date_from": "2026-11-02",
+            "date_to": "2026-11-08"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "첫 번째 분 연락처랑 잔액 확인해 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-00300"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "그분 다음 주 화요일 오전에 구강검진으로 예약 잡아 줘",
+        "gold": {
+          "tools": [
+            "draft_appointment",
+            "free_slots"
+          ],
+          "args": {
+            "chart_no": "C-00300",
+            "date": "2026-12-08",
+            "procedure": "구강검진"
+          },
+          "end": {
+            "draft": {
+              "chart_no": "C-00300",
+              "date": "2026-12-08",
+              "start_range": [
+                "09:30",
+                "11:30"
+              ],
+              "staff_role": "hygienist"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-054",
+    "split": "test",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "이번 주 토요일 준비표 보여 줘",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-05"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "첫 번째 환자 정보 자세히 보여 줘",
+        "gold": {
+          "tools": [
+            "query_patient"
+          ],
+          "args": {
+            "chart_no": "C-00083"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-055",
+    "split": "test",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "청구 전에 상병 확인 경고 뜬 건 있어?",
+        "gold": {
+          "tools": [
+            "claim_items"
+          ],
+          "args": {
+            "kind": "pre_claim_warning"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "첫 번째 건 환자 청구 내역 다 보여 줘",
+        "gold": {
+          "tools": [
+            "query_claims"
+          ],
+          "args": {
+            "chart_no": "C-02539"
+          },
+          "end": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "as-056",
+    "split": "test",
+    "type": "reference",
+    "turns": [
+      {
+        "user": "다음 주 금요일 준비표 보여 줘",
+        "gold": {
+          "tools": [
+            "prep_rows"
+          ],
+          "args": {
+            "date": "2026-12-11"
+          },
+          "end": null
+        }
+      },
+      {
+        "user": "두 번째 환자 지난 통화 기록 찾아 줘",
+        "gold": {
+          "tools": [
+            "find_calls"
+          ],
+          "args": {
+            "chart_no": "C-00919"
+          },
+          "end": null
+        }
+      }
+    ]
+  }
+]

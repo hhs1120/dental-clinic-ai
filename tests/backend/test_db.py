@@ -111,3 +111,31 @@ def test_search_logs_status_is_checked(conn):
     conn.execute(sql, ("running",))
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute(sql, ("weird",))
+
+
+def test_assistant_tables_created(conn):
+    """AI 비서 설계 §5.2·§6 — 예약 쓰기·대화 테이블, 기존 DB에 다시 불러도 오류 없음"""
+    tables = ("ax_emr_writes", "ax_assistant_conversations", "ax_assistant_messages")
+
+    def present():
+        return {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM main.sqlite_master WHERE type = 'table' AND name IN (?, ?, ?)",
+                tables,
+            )
+        }
+
+    assert present() == set(tables)
+    db.init_schema(conn)
+    for t in tables:
+        conn.execute(f"DROP TABLE {t}")
+    conn.commit()
+    db.init_schema(conn)
+    assert present() == set(tables)
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO ax_assistant_conversations (id, created_at) VALUES (1, 'x')")
+        conn.execute(
+            "INSERT INTO ax_assistant_messages (conversation_id, seq, role, text, created_at)"
+            " VALUES (1, 1, 'bot', 't', 'x')"
+        )

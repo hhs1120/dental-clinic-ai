@@ -64,6 +64,8 @@ export interface TodaySheet {
     expense_open: number;
     /** 줄 링크가 가는 달(기준일의 지난달), 0건이면 null */
     expense_month: string | null;
+    /** 지난 days일 전화로 예약을 원했는데 안 잡힌 사람(backend/today.py _unbooked) — 0이면 줄을 숨긴다 */
+    wants_appt_unbooked?: { count: number; names: string[]; days: number };
   };
   /** ⑦ 아침 브리핑(backend/briefing.py) — 코드 템플릿 줄, 해당 없는 줄은 빠지고 다 없으면 빈 목록. 챙길 환자는 한 명에 한 줄(같은 head) */
   briefing: { head: string; text: string }[];
@@ -116,8 +118,16 @@ export interface TodaySheet {
   };
 }
 
-export const fetchToday = (signal?: AbortSignal) =>
-  getJson<TodaySheet>("/today", undefined, signal);
+let todayInflight: Promise<TodaySheet> | null = null;
+
+/** 오늘 화면과 셸 목록 칸이 같은 순간에 부르면 요청 하나를 나눠 쓴다(SQLite 쓰기 잠금 경합을 줄이려고).
+ * 나눠 쓰는 요청은 한 호출자의 중단으로 끊기지 않게 signal을 넘기지 않는다 */
+export const fetchToday = (): Promise<TodaySheet> => {
+  todayInflight ??= getJson<TodaySheet>("/today").finally(() => {
+    todayInflight = null;
+  });
+  return todayInflight;
+};
 
 export const checkCall = (uid: string, part: string) =>
   postJson(`/calls/${encodeURIComponent(uid)}/check`, { part });

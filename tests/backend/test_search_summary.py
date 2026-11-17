@@ -196,6 +196,29 @@ def test_same_search_reuses_row(conn):
     assert r["cited_ids"] == [NEW] and len(_rows(conn)) == 1
 
 
+def test_same_results_in_other_order_reuse_row(conn):
+    """질문 임베딩이 호출마다 아주 조금 달라 점수가 비슷한 결과의 순서가 바뀐다 — 같은 결과 묶음이면 다시 쓴다"""
+    first, _ = run(conn, out())
+    assert len(first["retrieved_ids"]) > 1
+    conn.execute(
+        "UPDATE ax_search_logs SET retrieved_ids = ?",
+        (json.dumps(first["retrieved_ids"][::-1]),),
+    )
+    r, gw = run(conn)
+    assert r["reused"] is True and gw.calls == [] and r["cited_ids"] == [NEW]
+    assert r["retrieved_ids"] == first["retrieved_ids"] and len(_rows(conn)) == 1
+
+
+def test_other_results_make_new_row(conn):
+    first, _ = run(conn, out())
+    conn.execute(
+        "UPDATE ax_search_logs SET retrieved_ids = ?",
+        (json.dumps(first["retrieved_ids"][:1]),),
+    )
+    r, gw = run(conn, out())
+    assert r["reused"] is False and len(gw.calls) == 1
+
+
 def test_prompt_version_change_makes_new_row(conn, monkeypatch):
     run(conn, out())
     monkeypatch.setattr(search_summary, "PROMPT_VERSION", "v2")
@@ -274,3 +297,17 @@ def test_marker_must_end_sentence():
     assert (
         search_summary.check("주차[1]는 무료입니다.", ids, ids, []) == search_summary.CITE_MISSING
     )
+
+
+def test_reuse_scans_only_recent_rows(conn, monkeypatch):
+    """같은 검색 인자의 끝난 행은 최근 CACHE_SCAN개만 본다 — 더 옛 행이 같은 묶음이어도 새로 부른다"""
+    first, _ = run(conn, out())
+    full, part = json.dumps(first["retrieved_ids"]), json.dumps(first["retrieved_ids"][:1])
+    conn.execute("UPDATE ax_search_logs SET retrieved_ids = ?", (part,))
+    run(conn, out())  # 묶음이 달라 새 행
+    old, new = (r[0] for r in conn.execute("SELECT id FROM ax_search_logs ORDER BY id"))
+    conn.execute("UPDATE ax_search_logs SET retrieved_ids = ? WHERE id = ?", (full, old))
+    conn.execute("UPDATE ax_search_logs SET retrieved_ids = ? WHERE id = ?", (part, new))
+    monkeypatch.setattr(search_summary, "CACHE_SCAN", 1)
+    r, gw = run(conn, out())
+    assert r["reused"] is False and len(gw.calls) == 1

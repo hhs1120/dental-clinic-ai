@@ -199,19 +199,58 @@ def _confirm(a: sqlite3.Row, day: date, today: date) -> str | None:
     return "not_sent" if day > today and state == "no_message" else state
 
 
-def prep_facts(conn: sqlite3.Connection, day: date, today: date) -> list[dict]:
-    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 내원 확인 전 칩·예약 확인 상태 판단에만"""
+def _ax_rows(conn: sqlite3.Connection, day: date) -> list[dict]:
+    """그날 승인된 AX 예약을 원본 행(prep_facts가 읽는 칸)과 같은 모양으로 — id는 "ax-<n>"(원본 id와 안 겹침).
+    내원 확인은 확인 문자 전이라 confirmed False, 치료계획 항목에는 묶이지 않아 plan_item_id None, 체어는 승인 때 정해진 값"""
+    from backend import emr_bridge  # emr_bridge가 prep을 읽는다 — 순환을 피해 쓸 때 가져온다
+
+    out = []
+    for x in emr_bridge.ax_appointments(conn, day, day):
+        staff = conn.execute(
+            "SELECT name FROM source.emr_staff WHERE id = ?", (x["staff_id"],)
+        ).fetchone()
+        out.append(
+            {
+                "id": x["id"],
+                "patient_id": x["patient_id"],
+                "scheduled_at": x["scheduled_at"],
+                "duration_min": x["duration_min"],
+                "chair_no": x["chair_no"],
+                "type": x["type"],
+                "code": x["planned_procedure_code"],
+                "procedure": x["procedure_name"],
+                "staff": staff["name"],
+                "status": x["status"],
+                "confirmed": 0,
+                "plan_item_id": None,
+                "reminders": 0,
+            }
+        )
+    return out
+
+
+def prep_facts(
+    conn: sqlite3.Connection, day: date, today: date, include_ax: bool = False
+) -> list[dict]:
+    """그날 예약(취소 제외) 한 건 = 한 행, 시각순. 사실은 그날 개원 전 기준. today는 내원 확인 전 칩·예약 확인 상태 판단에만.
+    include_ax = 승인된 AX 예약도 행으로(AI 비서 설계 §5.3) — 평가 경로는 원본만 본다(기본 False)"""
     mv, d = master_values(conn), day.isoformat()
     out = []
-    for a in conn.execute(
-        "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, a.chair_no, a.type,"
-        " a.planned_procedure_code AS code, r.name AS procedure, s.name AS staff, a.status,"
-        " a.confirmed, a.plan_item_id," + CONFIRM_SQL + " FROM source.emr_appointments a"
-        " JOIN source.emr_procedures r ON r.code = a.planned_procedure_code"
-        " JOIN source.emr_staff s ON s.id = a.staff_id"
-        " WHERE date(a.scheduled_at) = ? AND a.status != 'cancelled' ORDER BY a.scheduled_at, a.id",
-        (d,),
-    ).fetchall():
+    appts = [
+        dict(a)
+        for a in conn.execute(
+            "SELECT a.id, a.patient_id, a.scheduled_at, a.duration_min, a.chair_no, a.type,"
+            " a.planned_procedure_code AS code, r.name AS procedure, s.name AS staff, a.status,"
+            " a.confirmed, a.plan_item_id," + CONFIRM_SQL + " FROM source.emr_appointments a"
+            " JOIN source.emr_procedures r ON r.code = a.planned_procedure_code"
+            " JOIN source.emr_staff s ON s.id = a.staff_id"
+            " WHERE date(a.scheduled_at) = ? AND a.status != 'cancelled' ORDER BY a.scheduled_at, a.id",
+            (d,),
+        ).fetchall()
+    ]
+    if include_ax:
+        appts = sorted(appts + _ax_rows(conn, day), key=lambda a: a["scheduled_at"])
+    for a in appts:
         p = conn.execute(
             "SELECT id, chart_no, name, birth_date, sex, family_id FROM source.emr_patients"
             " WHERE id = ?",
@@ -389,7 +428,14 @@ def _batchable(gw) -> bool:
 
 
 def build(
-    conn, gw, days: list[date], today: date, *, use_batch: bool, poll_seconds: int = 30
+    conn,
+    gw,
+    days: list[date],
+    today: date,
+    *,
+    use_batch: bool,
+    poll_seconds: int = 30,
+    include_ax: bool = False,
 ) -> dict:
     """그날들 준비표를 만든다. 해시·버전·모델이 같고 통과한 행은 사실만 새로 쓰고 부르지 않는다.
     첫 답은 use_batch면 Batch 한 번, 아니면 일반 호출. 후검증에 실패하거나 Batch에서 빠진 행만 일반 호출로 한 번 더,
@@ -398,7 +444,7 @@ def build(
     out = {"rows": 0, "called": 0, "skipped": 0, "failed": 0}
     todo = []
     for day in days:
-        rows = prep_facts(conn, day, today)
+        rows = prep_facts(conn, day, today, include_ax)
         with conn:  # 취소·이동으로 없어진 예약의 행
             conn.execute(
                 "DELETE FROM ax_prep_sheets WHERE sheet_date = ? AND appointment_id NOT IN"
@@ -452,12 +498,12 @@ def _saved_row(conn, day: date, r: dict):
     ).fetchone()
 
 
-def todo_count(conn, days: list[date], today: date, model: str) -> int:
+def todo_count(conn, days: list[date], today: date, model: str, include_ax: bool = False) -> int:
     """build가 부를 행 수 — 같은 재사용 판정(_reusable), 쓰지 않는다(야간 실행 PLAN)"""
     return sum(
         not _reusable(_saved_row(conn, day, r), _hash(llm_facts(r)), model)
         for day in days
-        for r in prep_facts(conn, day, today)
+        for r in prep_facts(conn, day, today, include_ax)
     )
 
 
@@ -504,7 +550,9 @@ def _old_changes(saved_facts: str, now: dict) -> list[dict]:
         return []
 
 
-def sheet(conn, day: date, today: date, model: str | None = None) -> dict:
+def sheet(
+    conn, day: date, today: date, model: str | None = None, include_ax: bool = False
+) -> dict:
     """화면 한 장 — 지금 사실(prep_facts) + 저장된 제안. refresh = 갱신하면 다시 부르는 행(build와 같은 조건),
     stale = 저장 뒤 제안 입력이 바뀐 행이고 changed에 바뀐 키와 전후 값(없으면 None)을 단다"""
     model = model or load_config()["aliases"][ALIAS][0]
@@ -517,7 +565,7 @@ def sheet(conn, day: date, today: date, model: str | None = None) -> dict:
         )
     }
     rows = []
-    for r in prep_facts(conn, day, today):
+    for r in prep_facts(conn, day, today, include_ax):
         s = saved.get(r["appointment_id"])
         now = llm_facts(r)
         h = _hash(now)
@@ -543,6 +591,11 @@ def sheet(conn, day: date, today: date, model: str | None = None) -> dict:
             (tabs[0].isoformat(), tabs[-1].isoformat()),
         ).fetchall()
     )
+    if include_ax:
+        from backend import emr_bridge  # 순환 회피(_ax_rows와 같다)
+
+        for x in emr_bridge.ax_appointments(conn, tabs[0], tabs[-1]):
+            counts[x["scheduled_at"][:10]] = counts.get(x["scheduled_at"][:10], 0) + 1
     return {
         "date": day.isoformat(),
         "generated_at": max((s["created_at"] for s in saved.values()), default=None),
@@ -564,7 +617,11 @@ def main(argv=None) -> None:
     db.init_schema(conn)
     today = load_clinic().today
     days = [args.date] if args.date else tab_days(today)
-    print(build(conn, make_gateway(conn), days, today, use_batch=not args.no_batch))
+    # 승인된 AX 예약도 준비표 행 — 빼면 저장된 AX 행이 정리 단계에서 지워진다(GET /prep·야간 실행과 같다)
+    out = build(
+        conn, make_gateway(conn), days, today, use_batch=not args.no_batch, include_ax=True
+    )
+    print(out)
 
 
 if __name__ == "__main__":

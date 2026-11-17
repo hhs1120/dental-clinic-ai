@@ -26,13 +26,13 @@ function Diff({ n }: { n: number | null }) {
 }
 
 const cells = (s: Sums) => [
-  <td key="l" className="px-2 py-2 text-right">
+  <td key="l" className="px-2 py-2 text-right whitespace-nowrap">
     {won(s.ledger)}
   </td>,
-  <td key="f" className="px-2 py-2 text-right">
+  <td key="f" className="px-2 py-2 text-right whitespace-nowrap">
     {won(s.fin)}
   </td>,
-  <td key="d" className="px-2 py-2 text-right">
+  <td key="d" className="px-2 py-2 text-right whitespace-nowrap">
     <Diff n={s.diff} />
   </td>,
 ];
@@ -63,9 +63,9 @@ export function LedgerTable({
   onSaved: () => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm tabular-nums">
-        <thead className="bg-muted text-muted-foreground">
+    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <table className="w-full min-w-4xl text-sm tabular-nums">
+        <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>
             <th rowSpan={2} className="px-3 py-2 text-left">
               날짜
@@ -117,7 +117,7 @@ export function LedgerTable({
                     {dayText(d.date)}
                   </td>
                   {cells(d.card)}
-                  <td className="border-l px-2 py-2 text-right">
+                  <td className="border-l px-2 py-2 text-right whitespace-nowrap">
                     {won(d.cash.ledger)}
                   </td>
                   <td className="px-2 py-2 text-right whitespace-nowrap">
@@ -135,7 +135,7 @@ export function LedgerTable({
                       </>
                     )}
                   </td>
-                  <td className="px-2 py-2 text-right">
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
                     <Diff n={d.cash.diff} />
                   </td>
                   {cells(d.transfer)}

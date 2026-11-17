@@ -72,7 +72,16 @@ def _balance(conn, patient_id: int, before: str) -> int:
     ).fetchone()[0]
 
 
-def _schedule(clinic: Clinic, conn, args: dict) -> dict:
+# include_ax일 때 예약 원본 행 자리에 쓰는 합친 표 — 원본 + 승인된 AX 예약(ax_emr_writes, AI 비서 설계 §5.3)
+APPOINTMENTS_WITH_AX = (
+    "(SELECT id, patient_id, staff_id, scheduled_at, type, status, confirmed, planned_procedure_code,"
+    " rescheduled_from_id, 'emr' AS source FROM source.emr_appointments"
+    " UNION ALL SELECT 'ax-' || id, patient_id, staff_id, scheduled_at, type, 'scheduled', 0,"
+    " procedure_code, NULL, 'ax' FROM ax_emr_writes WHERE status = 'approved')"
+)
+
+
+def _schedule(clinic: Clinic, conn, args: dict, include_ax: bool = False) -> dict:
     where = ["date(a.scheduled_at) BETWEEN ? AND ?"]
     params = [args["date_from"], args["date_to"]]
     for name in ("status", "type"):
@@ -91,10 +100,11 @@ def _schedule(clinic: Clinic, conn, args: dict) -> dict:
     rows = _rows(
         conn,
         "SELECT a.id, a.scheduled_at, a.type, a.status, a.confirmed, p.chart_no,"
-        " p.name AS patient, r.name AS procedure,"
+        + (" a.source," if include_ax else "")
+        + " p.name AS patient, r.name AS procedure,"
         " EXISTS (SELECT 1 FROM source.emr_appointments n WHERE n.rescheduled_from_id = a.id)"
         " AS rescheduled"
-        " FROM source.emr_appointments a"
+        f" FROM {APPOINTMENTS_WITH_AX if include_ax else 'source.emr_appointments'} a"
         " JOIN source.emr_patients p ON p.id = a.patient_id"
         " JOIN source.emr_procedures r ON r.code = a.planned_procedure_code"
         f" WHERE {' AND '.join(where)} ORDER BY a.scheduled_at, a.id",
@@ -139,7 +149,7 @@ def _family_recall(conn, patient: dict, today: date, days_per_month: float) -> l
     return out
 
 
-def _summary(clinic: Clinic, conn, p: dict) -> dict:
+def _summary(clinic: Clinic, conn, p: dict, include_ax: bool = False) -> dict:
     today = clinic.today.isoformat()
     last = conn.execute(
         "SELECT MAX(date(scheduled_at)) FROM source.emr_appointments"
@@ -148,7 +158,8 @@ def _summary(clinic: Clinic, conn, p: dict) -> dict:
     ).fetchone()[0]
     upcoming = _rows(
         conn,
-        "SELECT a.scheduled_at, a.type, r.name AS procedure FROM source.emr_appointments a"
+        "SELECT a.scheduled_at, a.type, r.name AS procedure FROM"
+        f" {APPOINTMENTS_WITH_AX if include_ax else 'source.emr_appointments'} a"
         " JOIN source.emr_procedures r ON r.code = a.planned_procedure_code"
         " WHERE a.patient_id = ? AND a.status = 'scheduled' AND date(a.scheduled_at) >= ?"
         " ORDER BY a.scheduled_at LIMIT 1",
@@ -193,7 +204,7 @@ def _summary(clinic: Clinic, conn, p: dict) -> dict:
     }
 
 
-def _patient(clinic: Clinic, conn, args: dict) -> dict:
+def _patient(clinic: Clinic, conn, args: dict, include_ax: bool = False) -> dict:
     key, value = ("chart_no", args["chart_no"]) if args["chart_no"] else ("name", args["name"])
     found = _rows(
         conn, f"SELECT * FROM source.emr_patients WHERE {key} = ? ORDER BY chart_no", value
@@ -205,7 +216,7 @@ def _patient(clinic: Clinic, conn, args: dict) -> dict:
         ]
     }
     if len(found) == 1:
-        out["summary"] = _summary(clinic, conn, found[0])
+        out["summary"] = _summary(clinic, conn, found[0], include_ax)
     return out
 
 
@@ -326,7 +337,8 @@ def _charts(clinic: Clinic, conn, args: dict) -> dict:
     return {"count": len(out), "matched": matched, "results": out[: args["limit"]]}
 
 
-def query_tools(clinic: Clinic) -> list[Tool]:
+def query_tools(clinic: Clinic, include_ax: bool = False) -> list[Tool]:
+    """include_ax = query_schedule·query_patient(다음 예약)가 승인된 AX 예약도 본다 — ③ 챗은 원본만(기본)"""
     today = clinic.today.isoformat()
     return [
         Tool(
@@ -334,14 +346,14 @@ def query_tools(clinic: Clinic) -> list[Tool]:
             "환자 한 명의 기본정보·주의사항·마지막 내원·잔액·다음 예약·가족 리콜·열린 치료계획."
             " 동명이인이면 후보만 돌려준다. chart_no 또는 name 중 하나 필수.",
             PatientArgs,
-            lambda ctx, args: _patient(clinic, ctx.store.conn, args),
+            lambda ctx, args: _patient(clinic, ctx.store.conn, args, include_ax),
         ),
         Tool(
             "query_schedule",
             f"예약 건수·목록. 날짜는 YYYY-MM-DD, 오늘은 {today}. 단일 날짜는 date_from과 date_to에"
             " 같은 값. count는 조건에 맞는 전체 행이고 status를 주지 않으면 취소·변경도 든다.",
             ScheduleArgs,
-            lambda ctx, args: _schedule(clinic, ctx.store.conn, args),
+            lambda ctx, args: _schedule(clinic, ctx.store.conn, args, include_ax),
         ),
         Tool(
             "query_claims",

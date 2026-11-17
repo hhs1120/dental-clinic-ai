@@ -68,7 +68,8 @@ export function DocsPanel() {
         ))}
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[20rem_minmax(0,1fr)]">
-        <Card className="max-h-[45rem] gap-0 overflow-y-auto p-2 shadow-card">
+        {/* 넓은 화면은 목록 높이를 문서 카드에 맞춘다 — 크기 봉쇄로 목록 길이가 줄 높이를 늘리지 않고 안에서 민다 */}
+        <Card className="max-h-[45rem] gap-0 overflow-y-auto p-2 shadow-card md:max-h-none md:min-h-96 md:contain-size">
           <nav aria-label="문서 목록" className="flex flex-col">
             <p className="px-3 pt-2 pb-1 text-xs font-bold text-muted-foreground">
               {DOC_TYPE[type]} {shown.length}

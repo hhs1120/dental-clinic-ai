@@ -20,9 +20,9 @@ import {
 
 // 이미 다시 연 건(다른 창에서 먼저 누름) — 오류가 아니라 다시 조회만 한다(backend/api.py revert_auto 409)
 
-/** 오늘 화면 — 요약 카드 → 사람이 볼 일 → AI가 한 일(기능 정의 §4 오늘 화면). 보여 주고 보내기만 하고, 예외는 다시 열기 */
+/** 오늘 화면 — 요약 카드 → 아침 브리핑 → AI가 한 일 → 사람이 볼 일(기능 정의 §4 오늘 화면). 보여 주고 보내기만 하고, 예외는 다시 열기 */
 export function TodayView() {
-  const today = useFetch("today", (s) => fetchToday(s));
+  const today = useFetch("today", () => fetchToday());
   if (today.error)
     return (
       <p className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger-fg">
@@ -39,8 +39,8 @@ export function TodayView() {
     <div className="flex flex-col gap-6">
       <Cards sheet={today.data} />
       <Briefing lines={today.data.briefing} />
-      <People sheet={today.data} />
       <AiDone sheet={today.data} reload={today.reload} />
+      <People sheet={today.data} />
     </div>
   );
 }
@@ -123,7 +123,16 @@ type Line = {
   href: string;
   title: string;
   meta?: string;
+  /** 있으면 줄 끝에 "AI 비서로 처리" — 비서 첫 화면에 이 질문을 바로 보낸다 */
+  assist?: string;
 };
+
+/** 날수는 /today가 준 값(backend/today.py UNBOOKED_DAYS) — 줄의 건수와 같은 기간을 묻는다 */
+const assistUnbooked = (days: number) =>
+  `지난 ${days}일 전화로 예약 원했는데 안 잡힌 사람 보여줘`;
+const ASSIST_APPEAL = "재심 신청 기한이 얼마 안 남은 삭감 건 보여줘";
+const ASSIST_RECON = "일계표 불일치 있는 날 보여줘";
+const assistHref = (q: string) => `/?${new URLSearchParams({ draft: q })}`;
 
 function People({ sheet }: { sheet: TodaySheet }) {
   const names = useLabels();
@@ -158,7 +167,8 @@ function People({ sheet }: { sheet: TodaySheet }) {
     href: string,
     title: string,
     meta: string,
-  ) => n > 0 && lines.push({ key, tag, tone, href, title, meta });
+    assist?: string,
+  ) => n > 0 && lines.push({ key, tag, tone, href, title, meta, assist });
   count(
     workLines,
     p.unconfirmed,
@@ -189,6 +199,20 @@ function People({ sheet }: { sheet: TodaySheet }) {
     `통화 할 일 ${p.todo_left.items}건 · 통화 ${p.todo_left.calls}건`,
     "급함 먼저 · 끝내면 빠짐",
   );
+  // 옛 응답(필드 없음)이면 줄을 숨긴다
+  const unbooked = p.wants_appt_unbooked;
+  const unbookedAsk = assistUnbooked(unbooked?.days ?? 0);
+  count(
+    callLines,
+    unbooked?.count ?? 0,
+    "unbooked",
+    "예약 원함",
+    "warn",
+    assistHref(unbookedAsk),
+    `예약 원함 ${unbooked?.count ?? 0}명 — 전화로 원했는데 안 잡힘`,
+    unbooked?.names?.join(", ") ?? "",
+    unbookedAsk,
+  );
   count(
     workLines,
     p.appeal_soon,
@@ -198,6 +222,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "/claims?chip=soon",
     `재심 신청 기한 임박 ${p.appeal_soon}건`,
     "30일 이내 · 상병 착오 제외",
+    ASSIST_APPEAL,
   );
   count(
     workLines,
@@ -228,6 +253,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     p.recon_month ? `/finance?month=${p.recon_month}` : "/finance",
     `일계표 불일치 ${p.recon_open}건`,
     "장부와 카드·통장 입금이 안 맞는 건 확정",
+    ASSIST_RECON,
   );
   count(
     workLines,
@@ -256,7 +282,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
       key: `q-${q.id}`,
       tag: "근거 없음",
       tone: "muted",
-      href: `/ask?${new URLSearchParams({ tab: "chat", draft: q.question })}`,
+      href: `/?${new URLSearchParams({ prefill: q.question })}`,
       title: `“${q.question}”`,
       meta: `${shortAt(q.at)} · 문서에서 근거를 못 찾은 질문`,
     });
@@ -274,14 +300,29 @@ function People({ sheet }: { sheet: TodaySheet }) {
   const list = (lines: Line[]) => (
     <ul className="flex flex-col divide-y rounded-xl border bg-card">
       {lines.map((l) => (
-        <li key={l.key} className="flex items-start gap-3 px-4 py-3">
+        // 좁은 화면은 꼬리표·"AI 비서로 처리"를 윗줄에, 제목을 아랫줄 전체 너비로
+        <li
+          key={l.key}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:flex-nowrap sm:items-start"
+        >
           <Tag tone={l.tone}>{l.tag}</Tag>
-          <Link href={l.href} className="min-w-0 flex-1 hover:underline">
+          <Link
+            href={l.href}
+            className="order-last min-w-0 basis-full hover:underline sm:order-none sm:flex-1 sm:basis-0"
+          >
             <div className="font-medium">{l.title}</div>
             {l.meta && (
               <div className="text-xs text-muted-foreground">{l.meta}</div>
             )}
           </Link>
+          {l.assist && (
+            <Link
+              href={assistHref(l.assist)}
+              className="ml-auto shrink-0 text-xs font-medium text-primary hover:underline sm:ml-0"
+            >
+              AI 비서로 처리
+            </Link>
+          )}
         </li>
       ))}
     </ul>
@@ -328,7 +369,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
 
 function Tag({ tone, children }: { tone: Tone; children: string }) {
   return (
-    <span className="w-28 shrink-0">
+    <span className="shrink-0 sm:w-28">
       <Badge variant={tone}>{children}</Badge>
     </span>
   );
@@ -551,7 +592,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
             <ul className="flex flex-col divide-y">
               {results.map((r) => (
                 <li key={r.title} className="flex items-center gap-3 py-2">
-                  <span className="w-28 shrink-0">
+                  <span className="shrink-0 sm:w-28">
                     {r.bad > 0 ? (
                       <Badge variant="warn">사람에게 넘김</Badge>
                     ) : (

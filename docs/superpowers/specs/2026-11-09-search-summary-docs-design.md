@@ -25,7 +25,7 @@
 
 - **`POST /search/summary`**: 본문은 `GET /search`와 같은 인자(`q`, `source_types`, `date_from`, `date_to`, `chart_no` — `to_search_args`를 같이 쓴다). 응답은 `{status, text, sources[]}`이고, `sources`는 `cited_ids`를 검색 카드 형식(`backend/search_cards.py` `card`)으로 바꾼 것이다. 스트리밍하지 않고 JSON 한 번으로 돌려준다(호출이 하나뿐이다)
 - **서버가 검색을 다시 한다**: 화면이 결과 id를 넘기지 않는다. 그러면 인용 확인의 기준(`retrieved_ids`)이 서버 안에서 정해진다. Voyage 호출은 두 번이 되지만 비용은 무시할 만하다. Voyage 사용량은 `/search`처럼 `record_voyage`로 남긴다
-- **다시 쓰기(캐시)**: `ax_search_logs`에서 `kind='search_summary'`, `is_eval=0`, `status IN ('answered','refused')`인 행 가운데 `tool_calls`(정규화한 검색 인자 + 프롬프트 버전)와 `retrieved_ids`가 이번 검색과 같은 행이 있으면, 모델을 부르지 않고 그 행을 돌려준다. 색인을 다시 만들어 결과가 바뀌면 `retrieved_ids`가 달라지고, 프롬프트 버전을 올리면 `tool_calls`가 달라져서 새로 만든다. 모델 교체(`chat` 별칭)는 키에 넣지 않는다(드물다). 실패한 행은 다시 쓰지 않는다
+- **다시 쓰기(캐시)**: `ax_search_logs`에서 `kind='search_summary'`, `is_eval=0`, `status IN ('answered','refused')`인 행 가운데 `tool_calls`(정규화한 검색 인자 + 프롬프트 버전)와 `retrieved_ids`가 이번 검색과 같은 묶음인(순서는 보지 않는다 — 질문 임베딩이 호출마다 조금 달라 비슷한 점수끼리 순서가 바뀐다) 행이 있으면, 모델을 부르지 않고 그 행을 돌려준다. 색인을 다시 만들어 결과가 바뀌면 `retrieved_ids`가 달라지고, 프롬프트 버전을 올리면 `tool_calls`가 달라져서 새로 만든다. 모델 교체(`chat` 별칭)는 키에 넣지 않는다(드물다). 실패한 행은 다시 쓰지 않는다
 - **모듈** `backend/search_summary.py` — `summarize(conn, gw, searcher, args: SearchArgs, *, is_eval=False) -> dict`. 하네스(에이전트 루프)를 쓰지 않고 게이트웨이 `complete` 한 번으로 끝낸다(`backend/chat.py` `baseline`과 같은 모양). 별칭은 `chat`, 작업 이름(task)은 `search_summary`, 프롬프트는 `prompts/search_summary/v1.md`, 출력 스키마는 `{text, cited_ids[], refused}`
 
 ### 요약 입력과 검사

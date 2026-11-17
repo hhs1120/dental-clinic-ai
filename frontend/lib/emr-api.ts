@@ -6,8 +6,9 @@ export type ApptStatus = "scheduled" | "completed" | "cancelled" | "noshow";
 /** 직전 진료일 리마인드에 대한 응답 — 답함 / 답 없음 / 리마인드가 없음(발송 시각이 지난 뒤 잡힌 예약) */
 export type Confirm = "replied" | "no_reply" | "no_message";
 
+/** AX 예약 id는 "ax-<n>"(AI 비서가 승인해 잡은 예약, 원본 id와 안 겹침) */
 export interface Appt {
-  id: number;
+  id: number | string;
   time: string;
   duration: number;
   staff_id: number;
@@ -26,6 +27,14 @@ export interface Appt {
   plan_step: { seq: number; total: number } | null;
   booked_via: "phone" | "desk";
   booked_at: string;
+  source: "emr" | "ax";
+  /** AX 예약만 — 승인한 파트·시각, 잡은 통화와 대화(AI 비서 설계 §3.3) */
+  ax: {
+    decided_by: string | null;
+    decided_at: string | null;
+    source_call_uid: string | null;
+    conversation_id: number | null;
+  } | null;
   // pool — 판정 풀 통화는 통화 화면에 없어 링크를 걸지 않는다
   // emergency — 활성 ① 분류의 응급 여부(분류 전·판정 풀이면 null)
   call: {
@@ -61,7 +70,7 @@ export interface PatientSummary {
   alerts: { code: string; label: string; category: string }[];
   last_visit: string | null;
   upcoming: {
-    id: number;
+    id: number | string; // 승인된 AX 예약은 "ax-<id>"
     date: string;
     time: string;
     procedure: string;
@@ -98,7 +107,8 @@ export interface PatientRecord {
     source: string;
   }[];
   appointments: {
-    id: number;
+    id: number | string;
+    source: "emr" | "ax";
     at: string;
     type: ApptType;
     procedure: string;

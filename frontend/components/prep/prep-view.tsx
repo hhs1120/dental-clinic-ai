@@ -3,8 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ChipRow } from "@/components/chip-row";
 import { PrepChair } from "@/components/prep/prep-chair";
 import { PrepTable } from "@/components/prep/prep-table";
+import { ScreenTabs } from "@/components/screen-tabs";
 import { StatusDot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, useClinic } from "@/lib/api";
@@ -59,7 +61,7 @@ export function PrepView() {
   }, [date, key]);
 
   // AI 제안 갱신 — 작업을 폴링하고 끝나면 다시 조회한다. 갱신 전 행을 들고 있다가 만든 시각이 바뀐 행에 "방금 갱신"
-  type Before = { date: string; rows: Map<number, PrepRow> };
+  type Before = { date: string; rows: Map<number | string, PrepRow> };
   const [job, setJob] = useState<({ id: number } & Before) | null>(null);
   const [done, setDone] = useState<Before | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
@@ -127,10 +129,21 @@ export function PrepView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div
+      <div className="print:hidden">
+        <ScreenTabs
+          tabs={[
+            { key: "table", label: "준비표" },
+            { key: "chair", label: "체어 보기" },
+          ]}
+          value={view}
+          onChange={(k) => go({ view: k === "table" ? null : k })}
+        />
+      </div>
+      <ChipRow
+        label="날짜"
         role="tablist"
-        aria-label="날짜"
-        className="flex flex-wrap gap-1.5 print:hidden"
+        selected={current.date}
+        className="print:hidden"
       >
         {current.days.map((d) => (
           <Button
@@ -145,26 +158,8 @@ export function PrepView() {
             {dayLabel(d.date)} · {d.count}명
           </Button>
         ))}
-      </div>
+      </ChipRow>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 print:hidden" aria-label="보기">
-          {(
-            [
-              ["table", "준비표"],
-              ["chair", "체어 보기"],
-            ] as const
-          ).map(([k, label]) => (
-            <Button
-              key={k}
-              size="sm"
-              variant={view === k ? "secondary" : "outline"}
-              aria-pressed={view === k}
-              onClick={() => go({ view: k === "table" ? null : k })}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <span className="text-sm text-muted-foreground">
             AI 제안:{" "}
@@ -208,7 +203,7 @@ export function PrepView() {
 }
 
 /** 갱신 뒤 행 중 제안을 만든 시각이 갱신 전과 다른 행 — 이전 제안을 붙인다 */
-function markRefreshed(rows: PrepRow[], before: Map<number, PrepRow>) {
+function markRefreshed(rows: PrepRow[], before: Map<number | string, PrepRow>) {
   return rows.map((r) => {
     const b = before.get(r.appointment_id);
     if (!r.generated || b?.made_at === r.made_at) return r;

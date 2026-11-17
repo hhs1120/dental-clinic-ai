@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   errorText,
@@ -68,15 +68,13 @@ function sourceLabel(n: number, c: SearchCard): string {
 }
 
 /** 기록 검색 AI 요약 — 결과가 있는 검색에서만 그린다. 결과가 먼저 뜨고 요약은 따로 채운다.
- * 요약이 실패해도 "이걸로 질문하기"는 보인다(설계 2026-11-09 검색 요약 "화면") */
+ * 요약이 실패해도 "AI 비서에게 묻기"는 보인다(설계 2026-11-09 검색 요약 "화면") */
 export function SearchSummary({
   search,
   requestKey,
-  onAsk,
 }: {
   search: SearchState;
   requestKey: string;
-  onAsk: (q: string) => void;
 }) {
   const [state, setState] = useState<State | null>(null);
   useEffect(() => {
@@ -128,30 +126,46 @@ export function SearchSummary({
                 {now.data.sources.map((c, i) => {
                   const docId = docIdOf(c.id);
                   const label = sourceLabel(i + 1, c);
+                  // 긴 문서 제목은 칩 안에서 줄인다(좁은 화면에서 카드 밖으로 나가지 않게), 전체는 title로
+                  const chip = (
+                    <Badge
+                      variant="outline"
+                      title={label}
+                      className={
+                        docId !== null
+                          ? "max-w-full hover:bg-muted"
+                          : "max-w-full"
+                      }
+                    >
+                      <span className="truncate">{label}</span>
+                    </Badge>
+                  );
                   return docId !== null ? (
-                    <Link key={c.id} href={docHref(docId)}>
-                      <Badge variant="outline" className="hover:bg-muted">
-                        {label}
-                      </Badge>
+                    <Link
+                      key={c.id}
+                      href={docHref(docId)}
+                      className="max-w-full min-w-0"
+                    >
+                      {chip}
                     </Link>
                   ) : (
-                    <Badge key={c.id} variant="outline">
-                      {label}
-                    </Badge>
+                    <Fragment key={c.id}>{chip}</Fragment>
                   );
                 })}
               </div>
             )}
           </>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="self-start"
-          onClick={() => onAsk(search.q)}
+        <Link
+          href={`/?${new URLSearchParams({ prefill: search.q })}`}
+          className={buttonVariants({
+            size: "sm",
+            variant: "outline",
+            className: "self-start",
+          })}
         >
-          이걸로 질문하기
-        </Button>
+          AI 비서에게 묻기
+        </Link>
       </Card>
     </section>
   );

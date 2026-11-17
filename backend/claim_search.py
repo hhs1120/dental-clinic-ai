@@ -1,4 +1,4 @@
-"""⑤-3 청구 기준 찾기 — ③ 물어보기의 검색 엔진(backend/rag_search.py 하이브리드 + 리랭커)을 청구 기준 문서(doc_type
+"""⑤-3 청구 기준 찾기 — ③ 자료실의 검색 엔진(backend/rag_search.py 하이브리드 + 리랭커)을 청구 기준 문서(doc_type
 claim_standard)의 절 청크로 좁혀 절 원문을 돌려준다. AI가 답 문장을 쓰지 않는다. 문서 머리 청크(제목·머리말 — 첫 줄에
 ' > '가 없는 것)는 뺀다(설계 docs/superpowers/specs/2026-11-10-claim-review-design.md §3)."""
 

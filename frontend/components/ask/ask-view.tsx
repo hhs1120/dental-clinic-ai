@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ChatPanel } from "@/components/ask/chat-panel";
 import { DocsPanel } from "@/components/ask/docs-panel";
 import { SearchForm } from "@/components/ask/search-form";
 import { SearchSummary } from "@/components/ask/search-summary";
@@ -11,15 +10,8 @@ import {
   SearchResults,
   type SearchStatus,
 } from "@/components/ask/search-results";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, getJson, type SearchResponse } from "@/lib/api";
 import { readSearch, toApiParams, writeSearch } from "@/lib/search-query";
-
-const TABS = [
-  { value: "chat", label: "질문하기" },
-  { value: "search", label: "기록 검색" },
-  { value: "docs", label: "문서함" },
-];
 
 type Answer =
   { key: string; data: SearchResponse } | { key: string; error: string };
@@ -27,9 +19,8 @@ type Answer =
 export function AskView() {
   const params = useSearchParams();
   const router = useRouter();
-  const tab = TABS.some((t) => t.value === params.get("tab"))
-    ? params.get("tab")!
-    : "search";
+  // 탭은 목록 칸의 링크가 ?tab=으로 바꾼다(AI 비서 설계 §3.1)
+  const tab = params.get("tab") === "docs" ? "docs" : "search";
 
   // 검색은 URL이 바뀔 때 돈다 — 새로고침·뒤로 가기·공유 링크가 같은 경로를 탄다.
   // 화면에 쓰는 검색은 URL을 한 번 정리한 값이다(공백만 있는 q는 검색 없음)
@@ -75,71 +66,24 @@ export function AskView() {
         ? { kind: "error", message: answer.error }
         : { kind: "done", data: answer.data };
 
-  // 질문하기 입력 — 탭을 바꿔도 남고, "이걸로 질문하기"가 검색어를 넣는다(보내지는 않는다)
-  // 오늘 화면의 근거 없는 질문은 ?draft=로 온다 — 입력칸에 채우기만 하고(실행 안 함) 주소에서는 지운다
-  const [question, setQuestion] = useState(() => params.get("draft") ?? "");
-  const hasDraft = params.has("draft");
-  useEffect(() => {
-    if (!hasDraft) return;
-    const next = new URLSearchParams(params);
-    next.delete("draft");
-    router.replace(`/ask?${next}`);
-  }, [hasDraft, params, router]);
-  // 물어보기 창의 "전체 화면으로"는 ?log=<저장 번호>로 온다 — 같은 질문·답을 다시 묻지 않고 읽는다
-  const logParam = params.get("log");
-  const log = logParam && /^\d+$/.test(logParam) ? Number(logParam) : undefined;
   const hasResults =
     status.kind === "done" &&
     status.data.manual_results.length + status.data.case_results.length > 0;
 
-  const changeTab = (value: string) => {
-    const next = new URLSearchParams(params);
-    next.set("tab", value);
-    router.replace(`/ask?${next}`);
-  };
-
+  if (tab === "docs") return <DocsPanel />;
   return (
-    <Tabs value={tab} onValueChange={changeTab} className="gap-6">
-      <TabsList variant="line" className="w-full justify-start border-b">
-        {TABS.map((t) => (
-          <TabsTrigger key={t.value} value={t.value} className="flex-none px-4">
-            {t.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <TabsContent value="search" className="flex flex-col gap-6">
-        <SearchForm
-          draft={draft}
-          onChange={setDraft}
-          onSubmit={() => {
-            const next = writeSearch(draft).toString();
-            if (next === key) setAttempt((n) => n + 1);
-            else router.push(`/ask?${next}`);
-          }}
-        />
-        {hasResults && (
-          <SearchSummary
-            search={search}
-            requestKey={request}
-            onAsk={(q) => {
-              setQuestion(q);
-              changeTab("chat");
-            }}
-          />
-        )}
-        <SearchResults status={status} search={search} />
-      </TabsContent>
-      {/* 질문하기는 탭을 바꿔도 입력·답이 남게 숨기기만 한다(기능 정의 §4 ③) */}
-      <TabsContent
-        value="chat"
-        forceMount
-        className="data-[state=inactive]:hidden"
-      >
-        <ChatPanel draft={question} onDraftChange={setQuestion} log={log} />
-      </TabsContent>
-      <TabsContent value="docs">
-        <DocsPanel />
-      </TabsContent>
-    </Tabs>
+    <div className="flex flex-col gap-6">
+      <SearchForm
+        draft={draft}
+        onChange={setDraft}
+        onSubmit={() => {
+          const next = writeSearch(draft).toString();
+          if (next === key) setAttempt((n) => n + 1);
+          else router.push(`/ask?${next}`);
+        }}
+      />
+      {hasResults && <SearchSummary search={search} requestKey={request} />}
+      <SearchResults status={status} search={search} />
+    </div>
   );
 }

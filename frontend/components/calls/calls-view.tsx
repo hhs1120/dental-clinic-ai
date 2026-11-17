@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AddCallDialog } from "@/components/calls/add-call-dialog";
 import { CallDetail } from "@/components/calls/call-detail";
@@ -28,6 +28,12 @@ export function CallsView() {
   const tab = params.get("tab") === "history" ? "history" : "today";
   const call = params.get("call");
   const wide = params.get("wide") === "1" && call !== null;
+  // 좁은 화면(lg 미만)에서 통화를 열면 위에 놓인 상세로 옮긴다 — 넓은 화면은 옆에 붙어 있어 그대로
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (call && !matchMedia("(min-width: 64rem)").matches)
+      panelRef.current?.scrollIntoView({ block: "start" });
+  }, [call]);
   const go = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(patch)) {
@@ -200,7 +206,15 @@ export function CallsView() {
               />
             )}
           </div>
-          {panel && <div className="lg:sticky lg:top-4">{panel}</div>}
+          {panel && (
+            // 좁은 화면은 상세를 목록 위에 두고 열 때 그리로 옮긴다(목록 아래 멀리 열리지 않게)
+            <div
+              ref={panelRef}
+              className="order-first scroll-mt-4 lg:sticky lg:top-4 lg:order-none"
+            >
+              {panel}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -100,7 +100,7 @@ export function EmrWindow({
 
   return (
     <div className="overflow-x-auto rounded-md border">
-      <div className="relative min-w-[68rem] bg-emr-chrome text-xs leading-4 text-emr-fg">
+      <div className="relative min-w-[68rem] bg-emr-chrome text-xs leading-4 text-emr-fg scheme-light">
         {/* 따라 보기 중에는 inert — 마우스뿐 아니라 키보드(Tab·Enter)로도 창 안을 건드리지 못하게 */}
         <div inert={locked}>
           <div className="flex items-center justify-between bg-emr-title px-2.5 py-1 text-emr-title-fg">
@@ -175,7 +175,8 @@ export function EmrWindow({
             </div>
           </div>
 
-          <div className="min-h-[40rem] p-1.5">
+          {/* 모드를 바꿔도 창 높이가 튀지 않게 가장 긴 데스크에 맞춘다 */}
+          <div className="min-h-[42rem] p-1.5">
             {nav.mode === "book" ? (
               <EmrBook today={today} onPickPatient={onPickPatient} />
             ) : nav.mode === "chart" ? (

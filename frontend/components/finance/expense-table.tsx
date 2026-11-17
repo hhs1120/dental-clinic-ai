@@ -321,11 +321,13 @@ function Row({
             {row.vendor && row.vendor !== row.label && ` · ${row.vendor}`}
           </div>
         </td>
-        <td className="px-2 py-2 text-right">{won(row.amount)}</td>
+        <td className="px-2 py-2 text-right whitespace-nowrap">
+          {won(row.amount)}
+        </td>
         <td className="px-2 py-2">
           <DocsText docs={row.docs} confirmed={!!row.confirmed} />
         </td>
-        <td className="px-2 py-2 text-right">
+        <td className="px-2 py-2 text-right whitespace-nowrap">
           <Diff n={row.diff} />
         </td>
         <td className="px-2 py-2">
@@ -438,9 +440,9 @@ export function ExpenseTable({
 }) {
   const rows = chip ? sheet.rows.filter(keep[chip]) : sheet.rows;
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm tabular-nums">
-        <thead className="bg-muted text-muted-foreground">
+    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <table className="w-full min-w-4xl text-sm tabular-nums">
+        <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>
             <th className="px-3 py-2 text-left">출금일</th>
             <th className="px-2 py-2 text-left">출금처</th>

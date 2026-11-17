@@ -125,8 +125,8 @@ class Ctx:
         self.store = RunStore(conn)
 
 
-def run(conn, tool_name, **args):
-    tool = {t.name: t for t in query_tools(CLINIC)}[tool_name]
+def run(conn, tool_name, include_ax=False, **args):
+    tool = {t.name: t for t in query_tools(CLINIC, include_ax)}[tool_name]
     parsed = tool.args.model_validate(args).model_dump(mode="json")
     return tool.fn(Ctx(conn), parsed)
 
@@ -477,3 +477,34 @@ def test_charts_category_word_matches_all_procedures_containing_it(clinic):
 def test_charts_unknown_name_is_reported(clinic):
     out = run(clinic, "query_charts", procedure="치주치료", prev_procedure="교정")
     assert out["count"] == 0 and out["unknown"] == ["교정"]
+
+
+def _approved_ax(conn, patient_id=3, at="2026-12-01 16:30:00", status="approved"):
+    conn.execute(
+        "INSERT INTO ax_emr_writes (kind, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " procedure_code, chair_no, status, decided_by, decided_at, created_at)"
+        " VALUES ('appointment', ?, 1, ?, 30, 'hygiene', 'U0001', 1, ?, '데스크', ?, ?)",
+        (patient_id, at, status, at, at),
+    )
+    conn.commit()
+
+
+def test_query_schedule_include_ax(clinic):
+    _approved_ax(clinic)
+    _approved_ax(clinic, at="2026-12-01 17:00:00", status="draft")  # 초안·취소는 안 센다
+    day = {"date_from": "2026-12-01", "date_to": "2026-12-01"}
+    base = run(clinic, "query_schedule", **day)  # ③ 기본은 원본만
+    assert base["count"] == 5 and all("source" not in a for a in base["appointments"])
+    both = run(clinic, "query_schedule", include_ax=True, **day)
+    assert both["count"] == 6 and both["by_status"]["scheduled"] == 4
+    [ax] = [a for a in both["appointments"] if a["source"] == "ax"]
+    assert ax["patient"] == "김철수" and ax["procedure"] == "스케일링"
+    assert ax["id"].startswith("ax-")
+
+
+def test_query_patient_next_appointment_include_ax(clinic):
+    _approved_ax(clinic, patient_id=2, at="2026-12-02 10:00:00")
+    base = run(clinic, "query_patient", chart_no="C-00002")["summary"]["next_appointment"]
+    assert base is None
+    got = run(clinic, "query_patient", include_ax=True, chart_no="C-00002")
+    assert got["summary"]["next_appointment"]["scheduled_at"] == "2026-12-02 10:00:00"

@@ -351,9 +351,34 @@ test("갱신 뒤 — 다시 만든 행에만 방금 갱신과 이전 제안", as
     "방금 갱신",
   );
   // 체어 보기도 같은 제안 칸
-  await page.getByRole("button", { name: "체어 보기" }).click();
+  await page.getByRole("tab", { name: "체어 보기" }).click();
   await page.getByRole("button", { name: /^상담실/ }).click();
   await expect(page.getByRole("region", { name: "지금 환자" })).toContainText(
     "방금 갱신",
   );
+});
+
+test("인쇄 — A4 너비에서 표가 가로로 넘치지 않는다", async ({ page }) => {
+  await fakePrep(page);
+  // A4 세로 인쇄 영역(여백 뺀 약 190mm ≈ 718px)
+  await page.setViewportSize({ width: 718, height: 1000 });
+  await page.goto("/prep?date=2026-12-01");
+  await expect(page.getByRole("table")).toContainText("김철수");
+  await page.emulateMedia({ media: "print" });
+  const overflow = await page.evaluate(() => {
+    const table = document.querySelector("table")!;
+    const box = table.parentElement!;
+    return {
+      page:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      box: box.scrollWidth - box.clientWidth,
+      right:
+        table.getBoundingClientRect().right -
+        document.documentElement.clientWidth,
+    };
+  });
+  expect(overflow.page).toBeLessThanOrEqual(0);
+  expect(overflow.box).toBeLessThanOrEqual(0);
+  expect(overflow.right).toBeLessThanOrEqual(0);
 });

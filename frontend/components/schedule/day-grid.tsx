@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { type Appt, type ScheduleDay, STATUS_LABEL } from "@/lib/emr-api";
 import { cn } from "@/lib/utils";
 
-export const SLOT_MIN = 30; // 지금 데이터의 예약 단위(시각 :00·:30, 소요 30·60·90분)
+// 지금 데이터의 예약 단위(시각 :00·:30, 소요 30·60·90분) — 화면 격자 칸. 원본 값은 generator/master.py
+// SLOT_MIN(source.ax_master_values slot_min, 백엔드 슬롯 검사가 읽음)
+export const SLOT_MIN = 30;
 const ROW = "2.75rem"; // 30분 한 칸 높이
 
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -26,8 +28,8 @@ export function DayGrid({
 }: {
   day: ScheduleDay;
   showAll: boolean;
-  selected: number | null;
-  onSelect: (id: number) => void;
+  selected: number | string | null;
+  onSelect: (id: number | string) => void;
 }) {
   if (day.hours.closed) {
     return (
@@ -58,6 +60,9 @@ export function DayGrid({
   const weight = (id: number) =>
     Math.max(1, ...(byStaff.get(id) ?? []).map((x) => x.lanes));
   const lunch = day.hours.lunch;
+  // 열 최소 너비 — 한 줄이면 5.5rem, 동시 진료 줄이 있으면 줄마다 7rem(시각·이름과 배지 하나가 한 줄에 들게).
+  // 옆 패널을 연 넓은 화면(1440)에서도 가로로 밀리지 않는 폭
+  const minRem = (id: number) => (weight(id) > 1 ? weight(id) * 7 : 5.5);
 
   return (
     <div className="overflow-x-auto">
@@ -65,14 +70,15 @@ export function DayGrid({
         className="grid gap-x-1.5 px-3 pb-3"
         style={{
           // 원장은 체어 여러 개를 오가며 동시에 진료한다 — 동시 진료 수만큼 열을 넓힌다
-          gridTemplateColumns: `3.5rem ${day.staff.map((st) => `minmax(${Math.max(7, weight(st.id) * 6)}rem, ${weight(st.id)}fr)`).join(" ")}`,
+          gridTemplateColumns: `3.5rem ${day.staff.map((st) => `minmax(${minRem(st.id)}rem, ${weight(st.id)}fr)`).join(" ")}`,
           gridTemplateRows: `2.5rem repeat(${slots}, ${ROW})`,
         }}
       >
         {day.staff.map((st, i) => (
           <span
             key={st.id}
-            className="self-center text-sm font-bold"
+            className="min-w-0 self-center truncate text-sm font-bold"
+            title={`${st.role} ${st.name}`}
             style={{ gridColumn: i + 2, gridRow: 1 }}
           >
             {st.role} {st.name}
@@ -99,13 +105,16 @@ export function DayGrid({
         )}
         {lunch && (
           <span
-            className="z-10 flex items-center justify-center rounded-md bg-muted text-xs text-muted-foreground"
+            className="z-10 flex items-center rounded-md bg-muted text-xs text-muted-foreground"
             style={{
               gridColumn: "2 / -1",
               gridRow: `${row(lunch[0])} / span ${span(lunch[0], toMin(lunch[1]) - toMin(lunch[0]))}`,
             }}
           >
-            {lunch[0]} – {lunch[1]} 점심시간
+            {/* 좁은 화면에서 가로로 밀어도 글자가 보이게 왼쪽에 붙여 둔다 */}
+            <span className="sticky left-16 px-3">
+              {lunch[0]} – {lunch[1]} 점심시간
+            </span>
           </span>
         )}
         {day.staff.map((st, i) => (
@@ -154,7 +163,13 @@ function lanes(appts: Appt[]): Placed[] {
       lane: 0,
       lanes: 1,
     }))
-    .sort((a, b) => a.start - b.start || a.appt.id - b.appt.id);
+    .sort(
+      (a, b) =>
+        a.start - b.start ||
+        String(a.appt.id).localeCompare(String(b.appt.id), "en", {
+          numeric: true,
+        }),
+    );
   let group: Placed[] = [];
   let groupEnd = -1;
   const laneEnds: number[] = [];
@@ -206,14 +221,19 @@ function ApptCard({
       )}
       style={{ ...style, height: `calc(${span} * ${ROW} - 0.25rem)` }}
     >
-      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 이름을 줄이며, 배지는 낮게 */}
+      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 배지는 낮게. 칸이 좁으면 시각·이름은 두고 뒤 배지가 잘린다 */}
       <span className="flex min-w-0 items-center gap-1">
-        <b className={cn("min-w-0 truncate", off && "line-through")}>
+        <b className={cn("shrink-0", off && "line-through")}>
           {appt.time} {appt.name}
         </b>
         {off && (
           <Badge variant="danger" className="h-4 shrink-0 py-0">
             {STATUS_LABEL[appt.status]}
+          </Badge>
+        )}
+        {appt.source === "ax" && (
+          <Badge variant="kind" className="h-4 shrink-0 py-0">
+            AX
           </Badge>
         )}
         {appt.new_patient && (

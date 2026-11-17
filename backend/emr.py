@@ -55,7 +55,40 @@ def _procedure(name: str, kind: str) -> str:
     return "진찰" if kind == "treatment" and name == "상담" else name
 
 
-def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: date) -> dict:
+def _ax_row(conn: sqlite3.Connection, x: dict) -> dict:
+    """승인된 AX 예약(emr_bridge.ax_appointments)에 원본 행이 갖는 칸을 채운다 — 계획 단계·리마인드는 없고(AX 예약은
+    치료계획 항목에 묶이지 않고 문자 리마인드 전), 신환 판정용 등록일·이전 완료 수와 잡은 통화는 원본에서 찾는다(AI 비서 설계 §5.3)"""
+    registered_at = conn.execute(
+        "SELECT registered_at FROM emr_patients WHERE id = ?", (x["patient_id"],)
+    ).fetchone()[0]
+    done_before = conn.execute(
+        "SELECT COUNT(*) FROM emr_appointments WHERE patient_id = ? AND status = 'completed'"
+        " AND scheduled_at < ?",
+        (x["patient_id"], x["scheduled_at"]),
+    ).fetchone()[0]
+    call = conn.execute(
+        "SELECT started_at, in_eval_pool FROM ax_calls WHERE call_uid = ?", (x["source_call_uid"],)
+    ).fetchone()
+    # 출처가 붙여 넣은 통화(앱 DB ax_pasted_calls — 판정 풀 밖이라 통화 화면에서 열린다)면 원본에 없다
+    pasted = None if call else x.get("pasted_call_started_at")
+    return x | {
+        "registered_at": registered_at,
+        "seq": None,
+        "tooth_no": None,
+        "plan_total": None,
+        "reminders": 0,
+        "done_before": done_before,
+        "call_uid": x["source_call_uid"] if call or pasted else None,
+        "call_pool": call["in_eval_pool"] if call else 0,
+        "call_started_at": call["started_at"] if call else pasted,
+    }
+
+
+def schedule_day(
+    conn: sqlite3.Connection, day: date, today: date, range_start: date, extra: list[dict] = ()
+) -> dict:
+    """extra = 합쳐 보일 승인된 AX 예약(emr_bridge.ax_appointments, 그날 것) — 원본과 같은 모양으로 섞고 건수에도
+    센다. 각 예약에 source(emr·ax)를 달고 AX면 ax에 승인·통화 출처를 단다"""
     staff = _staff(conn)
     names = {s["id"]: s for s in staff}
     rows = conn.execute(
@@ -74,6 +107,10 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
         " WHERE date(a.scheduled_at) = ? ORDER BY a.scheduled_at, a.id",
         (day.isoformat(),),
     ).fetchall()
+    rows = sorted(
+        [dict(r) | {"source": "emr"} for r in rows] + [_ax_row(conn, x) for x in extra],
+        key=lambda r: r["scheduled_at"],  # 같은 시각은 원본 먼저(정렬은 안정)
+    )
     is_today = day == today
     appointments = []
     for r in rows:
@@ -96,6 +133,15 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 "name": r["name"],
                 "new_patient": r["registered_at"] >= range_start.isoformat()
                 and r["done_before"] == 0,
+                "source": r["source"],
+                "ax": {
+                    "decided_by": r["decided_by"],
+                    "decided_at": r["decided_at"],
+                    "source_call_uid": r["source_call_uid"],
+                    "conversation_id": r["conversation_id"],
+                }
+                if r["source"] == "ax"
+                else None,
                 "plan_step": {"seq": r["seq"], "total": r["plan_total"]}
                 if r["seq"] is not None
                 else None,
@@ -105,7 +151,7 @@ def schedule_day(conn: sqlite3.Connection, day: date, today: date, range_start: 
                 # pool — 판정 풀 통화는 통화 화면에 없어 화면이 링크를 걸지 않는다
                 "call": {
                     "uid": r["call_uid"],
-                    "started_at": r["created_at"][:16],
+                    "started_at": (r.get("call_started_at") or r["created_at"])[:16],
                     "pool": bool(r["call_pool"]),
                 }
                 if r["call_uid"]
@@ -155,8 +201,11 @@ def search_patients(conn: sqlite3.Connection, q: str, today: date) -> list[dict]
     return [_person(r, today) for r in rows]
 
 
-def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> dict:
-    """예약표 패널·EMR이 보는 '지금 이 환자' — 기준일 기준(설계안 '데이터 규칙')"""
+def patient_summary(
+    conn: sqlite3.Connection, patient_id: int, today: date, extra: list[dict] = ()
+) -> dict:
+    """예약표 패널·EMR이 보는 '지금 이 환자' — 기준일 기준(설계안 '데이터 규칙'). extra = 승인된 AX 예약
+    (emr_bridge.ax_appointments) — 그 환자의 기준일 이후 것을 '앞으로의 예약'에 섞는다(AI 비서 설계 §5.3)"""
     day = today.isoformat()
     year_ago = date.fromordinal(today.toordinal() - 365).isoformat()
     balance = conn.execute(
@@ -175,12 +224,31 @@ def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> d
         " WHERE patient_id = ? AND status = 'completed' AND date(scheduled_at) < ?",
         (patient_id, day),
     ).fetchone()[0]
-    upcoming = conn.execute(
-        "SELECT a.id, a.scheduled_at, a.type, r.name AS procedure, s.name AS staff"
-        " FROM emr_appointments a JOIN emr_procedures r ON r.code = a.planned_procedure_code"
-        " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ? AND a.status = 'scheduled'"
-        " AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at",
-        (patient_id, day),
+    upcoming = [
+        dict(u)
+        for u in conn.execute(
+            "SELECT a.id, a.scheduled_at, a.type, r.name AS procedure, s.name AS staff"
+            " FROM emr_appointments a JOIN emr_procedures r ON r.code = a.planned_procedure_code"
+            " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
+            " AND a.status = 'scheduled' AND date(a.scheduled_at) >= ? ORDER BY a.scheduled_at",
+            (patient_id, day),
+        )
+    ]
+    names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM emr_staff")}
+    upcoming = sorted(
+        upcoming
+        + [
+            {
+                "id": x["id"],
+                "scheduled_at": x["scheduled_at"],
+                "type": x["type"],
+                "procedure": x["procedure_name"],
+                "staff": names.get(x["staff_id"]),
+            }
+            for x in extra
+            if x["patient_id"] == patient_id and x["scheduled_at"][:10] >= day
+        ],
+        key=lambda u: u["scheduled_at"],  # 같은 시각은 원본 먼저(정렬은 안정)
     )
     missed = dict(
         conn.execute(
@@ -219,8 +287,11 @@ def patient_summary(conn: sqlite3.Connection, patient_id: int, today: date) -> d
     }
 
 
-def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict | None:
-    """전환 전 EMR 한 환자 전체. 목록은 오래된 순"""
+def patient_record(
+    conn: sqlite3.Connection, chart_no: str, today: date, extra: list[dict] = ()
+) -> dict | None:
+    """전환 전 EMR 한 환자 전체. 목록은 오래된 순. extra = 승인된 AX 예약(emr_bridge.ax_appointments) — 그 환자 것만
+    예약 탭과 요약의 '앞으로의 예약'에 섞는다(AI 비서 설계 §5.3)"""
     p = conn.execute(
         "SELECT * FROM emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
     ).fetchone()
@@ -238,6 +309,24 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
     guardian = conn.execute(
         "SELECT chart_no, name FROM emr_patients WHERE id = ?", (p["guardian_patient_id"],)
     ).fetchone()
+    names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM emr_staff")}
+    ax_appts = [
+        {
+            "id": x["id"],
+            "at": x["scheduled_at"][:16],
+            "type": x["type"],
+            "procedure": _procedure(x["procedure_name"], x["type"]),
+            "status": x["status"],
+            "staff": names.get(x["staff_id"]),
+            "chair": x["chair_no"],
+            "confirmed": False,  # 리마인드 전 — 원본의 '내원 확인 전'과 같다
+            "confirm": "no_message",
+            "plan_item_id": None,
+            "source": "ax",
+        }
+        for x in extra
+        if x["patient_id"] == pid
+    ]
     return {
         "patient": _person(p, today)
         | {
@@ -248,7 +337,7 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
             "family": [dict(f) for f in family],
             "guardian": dict(guardian) if guardian else None,
         },
-        "summary": patient_summary(conn, pid, today),
+        "summary": patient_summary(conn, pid, today, extra),
         "alerts": [
             {
                 "code": a["code"],
@@ -263,28 +352,33 @@ def patient_record(conn: sqlite3.Connection, chart_no: str, today: date) -> dict
                 " JOIN emr_alert_types t ON t.code = a.code WHERE a.patient_id = ? ORDER BY a.id"
             )
         ],
-        "appointments": [
-            {
-                "id": a["id"],
-                "at": a["scheduled_at"][:16],
-                "type": a["type"],
-                "procedure": _procedure(a["procedure"], a["type"]),
-                "status": a["status"],
-                "staff": a["staff"],
-                "chair": a["chair_no"],
-                "confirmed": bool(a["confirmed"]),
-                "confirm": confirm_state(a),
-                "plan_item_id": a["plan_item_id"],
-            }
-            for a in q(
-                "SELECT a.*, r.name AS procedure, s.name AS staff,"
-                + CONFIRM_SQL
-                + " FROM emr_appointments a"
-                " JOIN emr_procedures r ON r.code = a.planned_procedure_code"
-                " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
-                " ORDER BY a.scheduled_at, a.id"
-            )
-        ],
+        "appointments": sorted(
+            [
+                {
+                    "id": a["id"],
+                    "at": a["scheduled_at"][:16],
+                    "type": a["type"],
+                    "procedure": _procedure(a["procedure"], a["type"]),
+                    "status": a["status"],
+                    "staff": a["staff"],
+                    "chair": a["chair_no"],
+                    "confirmed": bool(a["confirmed"]),
+                    "confirm": confirm_state(a),
+                    "plan_item_id": a["plan_item_id"],
+                    "source": "emr",
+                }
+                for a in q(
+                    "SELECT a.*, r.name AS procedure, s.name AS staff,"
+                    + CONFIRM_SQL
+                    + " FROM emr_appointments a"
+                    " JOIN emr_procedures r ON r.code = a.planned_procedure_code"
+                    " JOIN emr_staff s ON s.id = a.staff_id WHERE a.patient_id = ?"
+                    " ORDER BY a.scheduled_at, a.id"
+                )
+            ]
+            + ax_appts,
+            key=lambda a: a["at"],  # 안정 정렬 — 같은 시각은 원본 먼저
+        ),
         "treatments": [
             {
                 "at": t["performed_at"][:10],

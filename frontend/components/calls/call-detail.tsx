@@ -329,7 +329,7 @@ export function CallDetail({
     );
   return (
     <aside
-      className="flex max-h-[calc(100vh-10rem)] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-4 shadow-card"
+      className="flex flex-col gap-1 rounded-lg border bg-card p-4 shadow-card lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto"
       aria-label="통화 상세"
     >
       {head}

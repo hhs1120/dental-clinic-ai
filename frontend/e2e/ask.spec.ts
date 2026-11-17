@@ -120,45 +120,33 @@ test("빈 결과면 요약을 부르지 않는다", async ({ page }) => {
   expect(calls).toBe(0);
 });
 
-test("요약 실패 문구에도 이걸로 질문하기가 있고 누르면 질문 입력에 들어간다", async ({
-  page,
-}) => {
+test("자료실 제목, 질문하기 탭 없음, AI 비서에게 묻기", async ({ page }) => {
   await fakeSearch(page);
   await page.route("**/api/search/summary", (r) =>
     r.fulfill({
       json: { status: "failed", text: "요약을 만들지 못했습니다", sources: [] },
     }),
   );
-  let chats = 0;
-  await page.route("**/api/chat", (r) => {
-    chats++;
-    return r.abort();
-  });
   await page.goto("/ask?tab=search&q=틀니");
+  await expect(
+    page.getByRole("heading", { name: "자료실", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "질문하기" })).toHaveCount(0);
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await expect(menu.getByRole("link", { name: "기록 검색" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(menu.getByRole("link", { name: "문서함" })).toBeVisible();
   await expect(page.getByRole("region", { name: "AI 요약" })).toContainText(
     "요약을 만들지 못했습니다",
   );
-  await page.getByRole("button", { name: "이걸로 질문하기" }).click();
-  await expect(page.getByLabel("질문 입력")).toHaveValue("틀니");
-  expect(chats).toBe(0);
-});
-
-test("근거 더 보기는 같은 질문으로 기록 검색을 연다", async ({ page }) => {
-  await page.route("**/api/chat", (r) =>
-    r.fulfill({
-      contentType: "text/event-stream",
-      body: `event: answer\ndata: ${JSON.stringify({ status: "refused", text: "문서함에 없음", sources: [] })}\n\n`,
-    }),
+  const ask = page.getByRole("link", { name: "AI 비서에게 묻기" });
+  await expect(ask).toHaveAttribute(
+    "href",
+    `/?${new URLSearchParams({ prefill: "틀니" })}`,
   );
-  await fakeSearch(page);
-  await page.route("**/api/search/summary", (r) =>
-    r.fulfill({ json: { status: "refused", text: "", sources: [] } }),
-  );
-  await page.goto("/ask?tab=chat");
-  await page.getByLabel("질문 입력").fill("주말 응급 치과");
-  await page.getByRole("button", { name: "묻기" }).click();
-  await page.getByRole("link", { name: "근거 더 보기" }).click();
-  await expect(page).toHaveURL(/tab=search&q=%EC%A3%BC%EB%A7%90/);
 });
 
 test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 부르지 않는다", async ({
@@ -176,26 +164,26 @@ test("검색 한 번에 요약은 한 번만 부르고 탭을 오가도 다시 �
   const summary = page.getByRole("region", { name: "AI 요약" });
   await expect(summary).toContainText("접수한다");
   // 탭은 URL로 바뀐다 — 앞 전환이 끝나기 전에 누르면 그 클릭이 묻힌다
-  const chatTab = page.getByRole("tab", { name: "질문하기" });
-  await chatTab.click();
-  await expect(chatTab).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "기록 검색" }).click();
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const docsTab = menu.getByRole("link", { name: "문서함" });
+  await docsTab.click();
+  await expect(docsTab).toHaveAttribute("aria-current", "page");
+  await menu.getByRole("link", { name: "기록 검색" }).click();
   await expect(summary).toContainText("접수한다");
   expect(calls).toBe(1);
 });
 
-test("draft로 오면 질문하기 입력칸만 채움", async ({ page }) => {
-  // 오늘 화면의 근거 없는 질문 — 입력칸만 채우고 보내지 않는다(기능 정의 §4 오늘 화면)
-  let chats = 0;
-  await page.route("**/api/chat", (r) => {
-    chats++;
-    return r.abort();
-  });
-  await page.goto(
-    `/ask?tab=chat&draft=${encodeURIComponent("유치는 언제 빠져?")}`,
-  );
-  await expect(page.getByLabel("질문 입력")).toHaveValue("유치는 언제 빠져?");
-  await expect(page).toHaveURL(/\/ask\?tab=chat$/); // 채운 뒤 주소에서 draft를 지운다
-  await page.waitForTimeout(500);
-  expect(chats).toBe(0);
+test("목록 칸의 기록 검색·문서함 링크로 전환, 상단 탭 없음", async ({
+  page,
+}) => {
+  await page.goto("/ask");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const search = menu.getByRole("link", { name: "기록 검색" });
+  const docs = menu.getByRole("link", { name: "문서함" });
+  await expect(search).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await docs.click();
+  await expect(page).toHaveURL(/tab=docs/);
+  await expect(docs).toHaveAttribute("aria-current", "page");
+  await expect(search).not.toHaveAttribute("aria-current", "page");
 });

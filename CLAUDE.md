@@ -15,9 +15,9 @@
 - `docs/치과 AX - 기술 소개.md` — 포트폴리오용 기술 소개: 기술 스택·데이터 규모·기능별 AI·구조·보여 주는 것 (구현 스펙 아님)
 
 ## 폴더
-- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·자동 개선 improve.py
+- `generator/` 데이터 생성기 + verify (테스트는 `tests/generator/`, 게이트웨이는 `tests/shared/`, 평가는 `tests/evaluation/`, 앱 테스트는 `tests/backend/`에) · `shared/` 스키마·LLM 게이트웨이(`shared/llm.py`, 설정 `config/llm.yaml`)·앱 기준 날짜(`shared/clinic.py`) · `evaluation/` eval.py·튜닝 비교 tune.py·프롬프트 관문 prompt_gate.py·자동 개선 improve.py·AI 비서 시나리오 assistant.py
 - `ground_truth/` 정답(truth.sqlite + JSON) · `data/` source.sqlite(생성기 출력)·app.sqlite(앱 테이블·FTS5·벡터) · `config/` 생성기·LLM 설정 · `generator/llm/` LLM 단계 캐시·작업(라벨이 들어 있어 `data/` 밖) · `prompts/` 프롬프트(앱은 버전 파일, 생성기는 작업당 파일 하나)
-- `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
+- `backend/` 에이전트 하네스(`backend/harness/`)·검색(`rag_index`·`rag_search`)·조회 도구(`query_tools`)·AI 비서(`assistant`·`assistant_tools`)·EMR 연동(`emr_bridge` — 예약 쓰기는 여기서만)·FastAPI 앱(`backend/api.py`) · `frontend/` Next.js(Tailwind + shadcn/ui)
 - `.claude/` Claude Code 설정 — `agents/`(리뷰어·문서 점검, 읽기 전용 훅), `commands/`(`/fill-llm-jobs`), 훅 `settings.json` → `hooks/guard.py`(막기·확인 창·알림 목록은 그 모듈 독스트링, 테스트 `tests/test_claude_hooks.py`)·권한 허용 목록
 
 ## 절대 규칙
@@ -25,6 +25,7 @@
 - 정답은 `data/`(source.sqlite·app.sqlite)에 한 줄도 넣지 않는다
 - 프롬프트 관문과 자동 개선 루프는 `evaluation/`에서만 돌고 test 분할을 읽지 않는다. 개선 에이전트의 실행 기록은 `app.sqlite`에 쓰지 않고 앱에는 라벨 없는 집계·실수 후보만 넘긴다. 관문 기준 수정과 `--split test` 실행은 사람만(평가 설계 §2.7)
 - 앱의 도구 설명·권한·훅·정책·입력 제한 변경은 개선 에이전트가 후보·재현 테스트까지만, 반영은 사람이 승인한다. 안전장치를 푸는 변경은 자동으로 만들지 않는다(평가 설계 §2.7)
+- AI 비서의 쓰기(예약)는 `backend/emr_bridge.py`만 하고 `emr_*`에는 쓰지 않는다 — `ax_emr_writes`에만. 승인은 사람(`POST /assistant/drafts/{id}/approve`), 에이전트 도구에는 승인이 없다. 승인된 AX 예약을 합쳐 읽는 곳은 기능 정의 §4 AI 비서, 평가 경로는 원본만 읽는다
 - 테이블 접두어는 소속 시스템 기준: `emr_` 전자차트 원본 · `fin_` 재무 원본 · `ax_` AX 시스템 · `truth_` 정답(별도 DB). `emr_`·`fin_`은 backend가 쓰지 않는다(가상 데이터 생성 설계 §0)
 - 시드 고정(`config/generator.yaml`), 생성기는 단계마다 `seed`와 단계 이름으로 따로 만든 난수 생성기를 쓴다 — 단계를 더해도 기존 결과가 그대로(가상 데이터 생성 설계 §5.1)
 - 데이터 상태(가상 데이터 생성 설계 §0)가 **고정**이면 기존 `emr_*`·`fin_*`를 수정하지 않고 추가 데이터는 새 테이블이나, 기존 행을 바꾸지 않는 새 단계로(번호 체계·분할을 따로 — 예: 어려운 통화 `hc-`). **재설계**로 여는 것은 사람이 정하고, 다시 고정하기 전에 전체 재생성·`make verify`·RAG 평가셋 재확인
@@ -56,6 +57,7 @@
 - ⑥ `make report [NO_BATCH=1]`(과금, 이어 돎, `backend/report.py` — 채점은 `make eval`)
 - ⑧ 랭그래프 비교 `uv run --env-file .env --group langgraph python -m evaluation.langgraph_recon run [--plan]`(과금, 이어 돎 — ⑧-1 조사 에이전트를 랭그래프로, dev만) / `… score`(무료, 하네스와 나란히)
 - ⑧ `make recon [MONTHS="2026-08 2026-09"] [NO_BATCH=1]`(과금, 이어 돎, `backend/recon_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.recon score --split test`(사람)) · `make expense-ai [MONTHS=] [NO_BATCH=1]`(과금, 이어 돎, `backend/expense_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.expense score --split test`(사람))
+- AI 비서 `make assistant-eval`(과금, 이어 돎, dev 시나리오 `evaluation/assistant.py` — `TOOL_ALIAS=`·`REPLY_ALIAS=`·`BASELINE=1`, 채점은 `make eval`, test는 `python -m evaluation.assistant score --split test`(사람)) · 정답 `python -m evaluation.assistant_scenarios build|check`
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)

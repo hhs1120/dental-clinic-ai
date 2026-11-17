@@ -423,3 +423,54 @@ CREATE TABLE ax_expense_confirmations (
     judged_at     TEXT NOT NULL,
     PRIMARY KEY (outflow_table, outflow_id)
 );
+
+-- AI 비서 예약 쓰기(AI 비서 설계 §5.2, backend/emr_bridge.py) — 초안 → 사람 승인 때만 EMR에 들어간다.
+-- draft → approved/cancelled/rejected, reason = 반려 사유. patient_id·staff_id·procedure_code는
+-- source id(DB가 달라 FOREIGN KEY 없음). 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_emr_writes (
+    id              INTEGER PRIMARY KEY,
+    kind            TEXT NOT NULL CHECK (kind IN ('appointment')),
+    patient_id      INTEGER NOT NULL,  -- source.emr_patients.id
+    staff_id        INTEGER NOT NULL,  -- source.emr_staff.id
+    scheduled_at    TEXT NOT NULL,
+    duration_min    INTEGER NOT NULL,
+    type            TEXT NOT NULL CHECK (type IN ('treatment', 'hygiene', 'consult')),
+    procedure_code  TEXT,
+    chair_no        INTEGER,
+    source_call_uid TEXT,
+    conversation_id INTEGER,
+    turn            INTEGER,
+    status          TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'cancelled', 'rejected')),
+    reason          TEXT,
+    decided_by      TEXT,
+    decided_at      TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE INDEX ix_emr_writes_status_day ON ax_emr_writes(status, date(scheduled_at));
+
+-- AI 비서 대화(AI 비서 설계 §6, backend/assistant.py) — 대화 한 줄기. part = 파트(frontend/lib/part.ts).
+-- 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_assistant_conversations (
+    id         INTEGER PRIMARY KEY,
+    title      TEXT,
+    part       TEXT,
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
+);
+
+-- AI 비서 대화 메시지(AI 비서 설계 §6) — status = 그 턴의 결과(ok·failed·number_failed 등),
+-- cards·tool_calls = JSON. 재생성 때 버림(앱 설계 §7.3)
+CREATE TABLE ax_assistant_messages (
+    id              INTEGER PRIMARY KEY,
+    conversation_id INTEGER NOT NULL,
+    seq             INTEGER NOT NULL,
+    role            TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    text            TEXT NOT NULL,
+    cards           TEXT,  -- JSON
+    tool_calls      TEXT,  -- JSON
+    run_id          INTEGER,
+    status          TEXT NOT NULL DEFAULT 'ok',
+    created_at      TEXT NOT NULL,
+    UNIQUE (conversation_id, seq)
+);

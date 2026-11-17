@@ -55,7 +55,7 @@ export function AccuracyTab() {
         <div className="overflow-x-auto rounded-lg border bg-card p-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-muted-foreground">
+              <tr className="text-left whitespace-nowrap text-muted-foreground">
                 <th className="pb-2 font-medium">항목</th>
                 {versions.map((v) => (
                   <th key={v} className="pb-2 font-medium">

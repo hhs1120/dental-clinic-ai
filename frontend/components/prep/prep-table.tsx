@@ -49,7 +49,7 @@ export function PrepTable({
     : "appointment";
   const type = params.get("type");
   const todoOnly = params.get("todo") === "1";
-  const open = Number(params.get("open")) || null;
+  const open = params.get("open") || null;
   const past = today !== null && sheet.date < today;
   const rows = all
     .filter((r) => r.chips.includes(chip))
@@ -105,9 +105,9 @@ export function PrepTable({
         </Button>
       </div>
       <BusyHours rows={all} />
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-muted-foreground">
+      <div className="scroll-shadow-x overflow-x-auto rounded-md border print:overflow-visible">
+        <table className="w-full min-w-3xl text-sm print:min-w-0">
+          <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
               <th className="px-3 py-2">시간</th>
               <th className="px-3 py-2">환자</th>
@@ -123,12 +123,12 @@ export function PrepTable({
                 <tr
                   className={cn(
                     "cursor-pointer border-t hover:bg-muted/50",
-                    open === r.appointment_id && "bg-muted/50",
+                    open === String(r.appointment_id) && "bg-muted/50",
                   )}
                   onClick={() =>
                     go({
                       open:
-                        open === r.appointment_id
+                        open === String(r.appointment_id)
                           ? null
                           : String(r.appointment_id),
                     })
@@ -151,6 +151,9 @@ export function PrepTable({
                     {r.patient.new_patient && (
                       <Badge variant="kind">신환</Badge>
                     )}
+                    {String(r.appointment_id).startsWith("ax-") && (
+                      <Badge variant="kind">AX</Badge>
+                    )}
                     <div className="text-xs text-muted-foreground tabular-nums">
                       {r.patient.chart_no} · {r.patient.age}세{" "}
                       {r.patient.sex === "M" ? "남" : "여"}
@@ -162,7 +165,7 @@ export function PrepTable({
                       {TYPE_LABEL[r.type]} · {r.staff} · {r.duration_min}분
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-middle">
+                  <td className="min-w-36 px-3 py-2 align-middle print:min-w-0">
                     <div className="flex flex-wrap gap-1">
                       {r.chips
                         .filter((c) => c !== "appointment")
@@ -173,7 +176,7 @@ export function PrepTable({
                         ))}
                     </div>
                   </td>
-                  <td className="min-w-60 px-3 py-2 align-middle">
+                  <td className="min-w-60 px-3 py-2 align-middle print:min-w-0">
                     <SuggestionLine row={r} />
                   </td>
                   {past && (
@@ -186,7 +189,7 @@ export function PrepTable({
                     </td>
                   )}
                 </tr>
-                {open === r.appointment_id && (
+                {open === String(r.appointment_id) && (
                   <tr className="border-t bg-muted/30">
                     <td />
                     <td colSpan={past ? 5 : 4} className="px-3 py-3">

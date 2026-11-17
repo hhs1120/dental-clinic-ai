@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from backend import (
+    assistant,
     autoclose,
     blind,
     calls,
@@ -30,6 +31,7 @@ from backend import (
     db,
     documents,
     emr,
+    emr_bridge,
     expense,
     expense_auto,
     judge_queue,
@@ -385,7 +387,7 @@ def post_chat(
 @app.get("/chat/{log_id}")
 def get_chat(log_id: int, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     """저장된 질문 1개를 POST /chat의 answer 이벤트와 같은 모양으로 — 모델을 다시 부르지 않는다
-    (기능 정의 §4 앱 구성 "물어보기 창", 앱 설계 §9). 평가 실행·검색 요약·아직 도는 질문은 404"""
+    (앱 설계 §9). 지금 화면은 쓰지 않는다. 평가 실행·검색 요약·아직 도는 질문은 404"""
     conn = _open(paths, NO_INDEX)
     try:
         row = conn.execute(
@@ -439,6 +441,17 @@ def clinic(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     return {"name": name, "today": _clinic().today.isoformat()}
 
 
+def _ax_appointments(paths: tuple[Path, Path], date_from: dt.date, date_to: dt.date) -> list[dict]:
+    """승인된 AX 예약(emr_bridge) — 앱 DB가 없으면 빈 목록(색인 없이도 예약표·EMR은 나온다)"""
+    if not Path(paths[0]).exists():
+        return []
+    app_conn = _open_rw(paths)
+    try:
+        return emr_bridge.ax_appointments(app_conn, date_from, date_to)
+    finally:
+        app_conn.close()
+
+
 @app.get("/emr/schedule")
 def emr_schedule(
     paths: Annotated[tuple[Path, Path], Depends(get_db_paths)], date: str | None = None
@@ -450,7 +463,9 @@ def emr_schedule(
         raise HTTPException(422, f"date: {e}") from e
     conn = _open_source(paths)
     try:
-        out = emr.schedule_day(conn, day, clinic.today, clinic.range_start)
+        # 승인된 AX 예약은 앱 DB에 있다 — 앱 DB가 없으면 원본만(AI 비서 설계 §5.3)
+        extra = _ax_appointments(paths, day, day)
+        out = emr.schedule_day(conn, day, clinic.today, clinic.range_start, extra)
     finally:
         conn.close()
     # 잡은 통화의 응급 여부 — ① 분류는 앱 DB에 있다(emr.py는 원본만). 앱 DB가 없으면 분류 전
@@ -483,7 +498,8 @@ def emr_patients(q: str, paths: Annotated[tuple[Path, Path], Depends(get_db_path
 def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     conn = _open_source(paths)
     try:
-        record = emr.patient_record(conn, chart_no.strip(), _clinic().today)
+        extra = _ax_appointments(paths, dt.date.min, dt.date.max)
+        record = emr.patient_record(conn, chart_no.strip(), _clinic().today, extra)
     finally:
         conn.close()
     if record is None:
@@ -1006,6 +1022,189 @@ def today_sheet(paths: Paths, clinic: ClinicDep, now: Now) -> dict:
         conn.close()
 
 
+# ── AI 비서 (AI 비서 설계 §6) ────────────────────────────────────────────────
+
+ASSISTANT_MAX_TEXT = 1000
+ASSISTANT_BUSY = "같은 대화에서 다른 요청이 처리 중입니다 — 잠시 뒤 다시 보내세요"
+
+
+def get_assistant_models():
+    """임베딩 모델 — 없어도 비서는 돈다(③ 위임만 '색인 없음'), 그래서 503 대신 None. 테스트가 바꾼다"""
+    try:
+        return _models()
+    except Exception:
+        return None
+
+
+class AssistantBody(BaseModel):
+    conversation_id: int | None = None
+    text: str = Field(min_length=1, max_length=ASSISTANT_MAX_TEXT)
+    part: str
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+
+def _assistant_searcher(conn, models):
+    """색인·모델이 갖춰졌으면 검색기, 아니면 NO_INDEX_SEARCHER(ask_records가 색인 없음 결과를 낸다)"""
+    if models is None or not conn.execute("SELECT 1 FROM ax_chunks LIMIT 1").fetchone():
+        return assistant.NO_INDEX_SEARCHER
+    try:
+        return Searcher(conn, _clinic(), *models)
+    except MissingVectors:
+        return assistant.NO_INDEX_SEARCHER
+
+
+def _assistant_worker(paths, models, gateway, body: AssistantBody, events: queue.Queue) -> None:
+    """작업 스레드 — 자기 연결로 한 턴을 끝까지 돌린다(스트림이 끊겨도 대화가 남게)"""
+    conn = db.connect(*paths)
+    try:
+        searcher = _assistant_searcher(conn, models)
+        assistant.turn(
+            conn,
+            gateway(conn),
+            searcher,
+            _clinic(),
+            conversation_id=body.conversation_id,
+            text=body.text,
+            part=body.part,
+            on_event=events.put,
+        )
+    except (
+        sqlite3.IntegrityError
+    ):  # 같은 대화의 (conversation_id, seq) 충돌 — 스트림이 이미 열려 오류 이벤트로
+        events.put({"type": "error", "message": ASSISTANT_BUSY})
+    except Exception as e:  # 화면에는 짧게, 실행 기록은 하네스가 남긴다
+        events.put({"type": "error", "message": f"답변 중 오류: {type(e).__name__}"})
+    finally:
+        conn.close()
+        events.put(None)
+
+
+@app.post("/assistant/turn")
+def assistant_turn(
+    body: AssistantBody,
+    paths: Paths,
+    models: Annotated[tuple | None, Depends(get_assistant_models)],
+    gateway: Annotated[object, Depends(get_chat_gateway)],
+) -> StreamingResponse:
+    """말 1개 → 진행(step)·답(reply)·오류(error) SSE — POST /chat과 같은 스레드·큐 방식"""
+    conn = _open_rw(paths)
+    try:
+        if body.conversation_id is not None:
+            got = assistant.conversation(conn, body.conversation_id)
+            if got is None:
+                raise HTTPException(404, "없는 대화입니다")
+            if got["deleted"]:
+                raise HTTPException(409, "삭제된 대화입니다")
+    finally:
+        conn.close()
+    events: queue.Queue = queue.Queue()
+    threading.Thread(target=_assistant_worker, args=(paths, models, gateway, body, events)).start()
+
+    def stream():
+        while (event := events.get()) is not None:
+            yield _sse(event)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@app.get("/assistant/conversations")
+def assistant_conversations(paths: Paths, before: int | None = None) -> list[dict]:
+    conn = _open_rw(paths)
+    try:
+        return assistant.conversations(conn, before_id=before)
+    finally:
+        conn.close()
+
+
+@app.get("/assistant/conversations/{conversation_id}")
+def assistant_conversation(conversation_id: int, paths: Paths) -> dict:
+    """저장된 대화 그대로 — 모델을 부르지 않는다"""
+    conn = _open_rw(paths)
+    try:
+        out = assistant.conversation(conn, conversation_id)
+    finally:
+        conn.close()
+    if out is None:
+        raise HTTPException(404, "없는 대화입니다")
+    return out
+
+
+@app.post("/assistant/conversations/{conversation_id}/delete")
+def assistant_delete_conversation(
+    conversation_id: int, body: Part, paths: Paths, now: Now
+) -> dict:
+    """목록에서만 숨김(AI 비서 설계 §6) — 대화·메시지는 남아 읽기 전용으로 열린다"""
+    conn = _open_rw(paths)
+    try:
+        if not assistant.delete_conversation(conn, conversation_id, _stamp(now)):
+            raise HTTPException(404, "없는 대화입니다")
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+def _draft_card(conn, draft_id: int, clinic: Clinic) -> dict:
+    data = assistant.card_detail(conn, "draft", str(draft_id), clinic)
+    if data is None:
+        raise HTTPException(404, "없는 초안입니다")
+    return {"type": "draft", "id": str(draft_id), "data": data}
+
+
+def _live_draft(conn, draft_id: int, clinic: Clinic) -> None:
+    """없는 초안은 404, 지운 대화의 초안은 409 — 지운 대화는 읽기 전용(AI 비서 설계 §6)"""
+    _draft_card(conn, draft_id, clinic)
+    deleted = conn.execute(
+        "SELECT 1 FROM ax_emr_writes w JOIN ax_assistant_conversations c"
+        " ON c.id = w.conversation_id WHERE w.id = ? AND c.deleted_at IS NOT NULL",
+        (draft_id,),
+    ).fetchone()
+    if deleted:
+        raise HTTPException(409, "삭제된 대화의 초안")
+
+
+@app.post("/assistant/drafts/{draft_id}/approve")
+def assistant_approve(
+    draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now
+) -> dict:
+    """초안 승인(§5.2) — 승인 시각은 실제 시계, 미예약 환자 연락 기록의 날은 앱 기준일"""
+    conn = _open_rw(paths)
+    try:
+        _live_draft(conn, draft_id, clinic)
+        try:
+            got = emr_bridge.approve(
+                conn, clinic, draft_id, by=body.part, at=_stamp(now), missed_day=clinic.today
+            )
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 초안입니다") from e
+        conn.commit()
+        card = _draft_card(conn, draft_id, clinic)
+    finally:
+        conn.close()
+    if got["ok"]:
+        return {"ok": True, "card": card}
+    return {"ok": False, "reasons": got["reasons"], "card": card}
+
+
+@app.post("/assistant/drafts/{draft_id}/cancel")
+def assistant_cancel(draft_id: int, body: Part, paths: Paths, clinic: ClinicDep, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        _live_draft(conn, draft_id, clinic)
+        try:
+            emr_bridge.cancel(conn, draft_id, by=body.part, at=_stamp(now))
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 초안입니다") from e
+        conn.commit()
+        return {"card": _draft_card(conn, draft_id, clinic)}
+    finally:
+        conn.close()
+
+
 # 되돌릴 수 있는 자동 처리 — ① 자동 종결·⑧-1 일계표 자동 마감·⑧-2 지출 증빙 자동 확정
 AUTO_KINDS = autoclose.KINDS | recon_auto.KINDS | expense_auto.KINDS
 
@@ -1183,7 +1382,7 @@ def prep_sheet(paths: Paths, clinic: ClinicDep, date: str | None = None) -> dict
     day = _tab_day(date, clinic)
     conn = _open_rw(paths)
     try:
-        return prep.sheet(conn, day, clinic.today)
+        return prep.sheet(conn, day, clinic.today, include_ax=True)
     finally:
         conn.close()
 
@@ -1194,7 +1393,7 @@ def _run_prep_job(paths, gw_factory, job_id: int, day: dt.date, today: dt.date) 
     conn = None
     try:
         conn = db.connect(*paths)
-        out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False)
+        out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False, include_ax=True)
         status, done = "done", out["rows"]
     except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
         error = f"{type(e).__name__}: {e}"
@@ -1233,7 +1432,7 @@ def prep_regenerate(paths: Paths, clinic: ClinicDep, gw: GatewayFactory, date: s
         if running:
             conn.commit()
             return {"job_id": running[0]}
-        total = len(prep.prep_facts(conn, day, clinic.today))
+        total = len(prep.prep_facts(conn, day, clinic.today, include_ax=True))
         job_id = conn.execute(
             "INSERT INTO ax_jobs (kind, arg, status, total, started_at)"
             " VALUES ('prep', ?, 'running', ?, ?)",

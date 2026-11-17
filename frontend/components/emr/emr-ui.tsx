@@ -103,50 +103,53 @@ export function Grid({
   wrapLast?: boolean;
 }) {
   return (
-    <table className="w-full border-collapse text-xs">
-      <thead>
-        <tr>
-          {heads.map((h) => (
-            <th
-              key={h}
-              className="border border-emr-line-soft bg-emr-chrome px-1.5 py-0.5 text-left font-semibold whitespace-nowrap"
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length ? (
-          rows.map((r, i) => (
-            <tr key={i}>
-              {r.map((c, j) => (
-                <td
-                  key={j}
-                  className={cn(
-                    "border border-emr-line-soft px-1.5 py-0.5 align-top",
-                    wrapLast && j === r.length - 1
-                      ? "min-w-72 whitespace-normal"
-                      : "whitespace-nowrap",
-                    typeof c === "number" && "text-right tabular-nums",
-                  )}
-                >
-                  {typeof c === "number" ? commas(c) : c}
-                </td>
-              ))}
-            </tr>
-          ))
-        ) : (
+    // 상자보다 넓으면(히스토리 마지막 칸 등) 상자 안에서 가로로 민다 — 상자 밖으로 넘치지 않게
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead>
           <tr>
-            <td
-              colSpan={heads.length}
-              className="border border-emr-line-soft px-1.5 py-0.5 text-emr-fg-muted"
-            >
-              자료 없음
-            </td>
+            {heads.map((h) => (
+              <th
+                key={h}
+                className="border border-emr-line-soft bg-emr-chrome px-1.5 py-0.5 text-left font-semibold whitespace-nowrap"
+              >
+                {h}
+              </th>
+            ))}
           </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((r, i) => (
+              <tr key={i}>
+                {r.map((c, j) => (
+                  <td
+                    key={j}
+                    className={cn(
+                      "border border-emr-line-soft px-1.5 py-0.5 align-top",
+                      wrapLast && j === r.length - 1
+                        ? "min-w-72 whitespace-normal"
+                        : "whitespace-nowrap",
+                      typeof c === "number" && "text-right tabular-nums",
+                    )}
+                  >
+                    {typeof c === "number" ? commas(c) : c}
+                  </td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td
+                colSpan={heads.length}
+                className="border border-emr-line-soft px-1.5 py-0.5 text-emr-fg-muted"
+              >
+                자료 없음
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -18,6 +18,8 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // 앱 셸 아이콘 줄 칸(테마·담당 파트) — 공간 링크와 같은 모양
+        rail: "font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground",
       },
       size: {
         default:
@@ -31,8 +33,7 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
-        // 화면 구석에 떠 있는 둥근 버튼(물어보기)
-        fab: "h-12 gap-2 rounded-full px-5 text-base shadow-card",
+        rail: "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 text-xs [&_svg:not([class*='size-'])]:size-5",
       },
     },
     defaultVariants: {

@@ -13,10 +13,12 @@ from generator.master import (
     CARD_ISSUERS,
     CASH_DEPOSIT_MEMO,
     CASH_DEPOSIT_WEEKDAYS,
+    CHAIRS,
     CLINIC_NAME,
     CONDITIONAL_INSURED_MIN_AGE,
     DAYS_PER_MONTH,
     DIAGNOSES,
+    DOCTOR_CONCURRENCY,
     EXPENSE_ITEM_ACCOUNT_KINDS,
     FULL_MOUTH,
     HOURS,
@@ -27,6 +29,7 @@ from generator.master import (
     RECON_CAUSE_GROUPS,
     SCALING_CODE,
     SCALING_MIN_AGE,
+    SLOT_MIN,
     STAFF,
     VENDORS,
 )
@@ -119,6 +122,10 @@ def master_values_rows(holidays: frozenset = frozenset()) -> list[tuple[str, str
         "days_per_month": DAYS_PER_MONTH,
         # ④ 치아 단위가 아닌 시술의 치아 번호(§2.3)
         "full_mouth": FULL_MOUTH,
+        # AI 비서 슬롯 검사 — 체어 수·원장 동시 건수·예약 시작 격자(분)(AI 비서 설계 §5.2)
+        "chairs": CHAIRS,
+        "doctor_concurrency": DOCTOR_CONCURRENCY,
+        "slot_min": SLOT_MIN,
     }
     return [(name, json.dumps(v, ensure_ascii=False)) for name, v in values.items()]
 

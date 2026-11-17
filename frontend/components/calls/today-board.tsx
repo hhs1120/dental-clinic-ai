@@ -33,9 +33,10 @@ export function TodayBoard({
           (x) => x.call_uid === it.call_uid && x.item === it.after,
         )
       : undefined;
+  // 두 칸은 화면 너비가 아니라 판 자리 너비로 — 상세를 옆에 열면 좁아져 한 칸으로 쌓인다
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className="@container flex flex-col gap-4">
+      <div className="grid gap-4 @3xl:grid-cols-2">
         <Column
           title="할 일"
           hint="병원 안에서"

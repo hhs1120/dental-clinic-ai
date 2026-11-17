@@ -28,7 +28,8 @@ export interface Suggestion {
 }
 
 export interface PrepRow {
-  appointment_id: number;
+  /** AX 예약은 "ax-<n>" */
+  appointment_id: number | string;
   patient_id: number;
   time: string;
   duration_min: number;
