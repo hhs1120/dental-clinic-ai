@@ -351,7 +351,7 @@ test("갱신 뒤 — 다시 만든 행에만 방금 갱신과 이전 제안", as
     "방금 갱신",
   );
   // 체어 보기도 같은 제안 칸
-  await page.getByRole("button", { name: "체어 보기" }).click();
+  await page.getByRole("tab", { name: "체어 보기" }).click();
   await page.getByRole("button", { name: /^상담실/ }).click();
   await expect(page.getByRole("region", { name: "지금 환자" })).toContainText(
     "방금 갱신",

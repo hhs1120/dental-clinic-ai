@@ -105,9 +105,9 @@ export function PrepTable({
         </Button>
       </div>
       <BusyHours rows={all} />
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-muted-foreground">
+      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+        <table className="w-full min-w-3xl text-sm">
+          <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
               <th className="px-3 py-2">시간</th>
               <th className="px-3 py-2">환자</th>
@@ -165,7 +165,7 @@ export function PrepTable({
                       {TYPE_LABEL[r.type]} · {r.staff} · {r.duration_min}분
                     </div>
                   </td>
-                  <td className="px-3 py-2 align-middle">
+                  <td className="min-w-36 px-3 py-2 align-middle">
                     <div className="flex flex-wrap gap-1">
                       {r.chips
                         .filter((c) => c !== "appointment")

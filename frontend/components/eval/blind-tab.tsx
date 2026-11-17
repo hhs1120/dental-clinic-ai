@@ -132,8 +132,9 @@ export function BlindTab() {
           </div>
           {fail && <p className="text-sm text-status-danger-fg">{fail}</p>}
         </section>
+        {/* 넓은 화면은 녹취록 높이를 왼쪽 칸(짧으면 화면 높이)에 맞추고 안에서 민다 — 크기 봉쇄로 녹취록 길이가 줄 높이를 늘리지 않게 */}
         <section
-          className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4"
+          className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4 lg:max-h-none lg:min-h-[calc(100vh-14rem)] lg:self-stretch lg:contain-size"
           aria-label="녹취록"
         >
           <p className="mb-2 text-sm text-muted-foreground">

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { ChipRow } from "@/components/chip-row";
 import { ErrorBand } from "@/components/prep/prep-view";
+import { ScreenTabs } from "@/components/screen-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFetch } from "@/lib/api";
 import { won } from "@/lib/format";
 import {
@@ -75,9 +76,15 @@ function Stats({
     prev && pct(m[`pct.${k}`])
       ? `${prevLabel(scope, prev)} 대비 ${pct(m[`pct.${k}`])}`
       : null;
+  // 월간은 6칸을 3칸씩 두 줄, 주간·일간은 4칸 한 줄 — 빈 칸이 남지 않게
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-3",
+          monthly ? "lg:grid-cols-3" : "lg:grid-cols-4",
+        )}
+      >
         <Stat
           value={won(m.sales)}
           label="매출(진료 생산)"
@@ -98,29 +105,30 @@ function Stats({
           label="신환"
           sub={prevSub("new_patients")}
         />
+        {monthly && (
+          <>
+            <Stat
+              value={won(m.material)}
+              label="재료비"
+              sub={[
+                `기공 ${won(m.lab)}`,
+                m.material_unconfirmed > 0 &&
+                  `미확정 ${m.material_unconfirmed}건 포함`,
+                m.account_none > 0 &&
+                  `과목 없는 출금 ${won(m.account_none_amount)} 제외`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+            <Stat
+              value={won(m.profit_ex_labor)}
+              label="인건비 제외 손익"
+              sub="수금 − 출금 · 인건비는 병원 기록에 없어 빠짐"
+            />
+          </>
+        )}
       </div>
-      {monthly ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat
-            value={won(m.material)}
-            label="재료비"
-            sub={[
-              `기공 ${won(m.lab)}`,
-              m.material_unconfirmed > 0 &&
-                `미확정 ${m.material_unconfirmed}건 포함`,
-              m.account_none > 0 &&
-                `과목 없는 출금 ${won(m.account_none_amount)} 제외`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          />
-          <Stat
-            value={won(m.profit_ex_labor)}
-            label="인건비 제외 손익"
-            sub="수금 − 출금 · 인건비는 병원 기록에 없어 빠짐"
-          />
-        </div>
-      ) : (
+      {!monthly && (
         <p className="text-sm text-muted-foreground">
           재료비·손익은 월말 이체 비중이 커서 월간에서만 봅니다. 공단 지급은
           심사 결과 통보일에 잡힙니다.
@@ -187,34 +195,36 @@ function DxCard({ sheet }: { sheet: ReportSheet }) {
   const dx = sheet.dx_top;
   if (sheet.scope !== "monthly") return null;
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <Card className="py-4">
-        <CardContent className="flex flex-col gap-2 px-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold">상병 착오</h2>
-            <span className="text-xs text-muted-foreground">재청구 불가</span>
-          </div>
-          {dx ? (
-            <>
-              <p className="text-sm">
-                {sheet.metrics.dx_errors}건 · 못 받은 금액{" "}
-                {won(sheet.metrics.dx_lost)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                금액이 가장 큰 조합: {dx.name} {dx.n}건 · {won(dx.lost)}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              이 달 상병 착오 없음
+    // 한 장뿐이라 전체 너비에 가로로 — 넓은 화면에서 반쪽 카드 옆 빈칸이 남지 않게
+    <Card className="py-4">
+      <CardContent className="flex flex-col gap-2 px-4 lg:flex-row lg:items-center lg:gap-6">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold">상병 착오</h2>
+          <span className="text-xs text-muted-foreground">재청구 불가</span>
+        </div>
+        {dx ? (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm">
+              {sheet.metrics.dx_errors}건 · 못 받은 금액{" "}
+              {won(sheet.metrics.dx_lost)}
             </p>
-          )}
-          <Button asChild size="sm" variant="outline" className="w-fit">
-            <Link href="/claims?tab=pre">청구 전 점검 보기</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+            <p className="text-xs text-muted-foreground">
+              금액이 가장 큰 조합: {dx.name} {dx.n}건 · {won(dx.lost)}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">이 달 상병 착오 없음</p>
+        )}
+        <Button
+          asChild
+          size="sm"
+          variant="outline"
+          className="w-fit lg:ml-auto"
+        >
+          <Link href="/claims?tab=pre">청구 전 점검 보기</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -381,9 +391,9 @@ function Trend({
     v === null || v === undefined ? "—" : v.toLocaleString("ko-KR");
   const rows = [...sheet.trend].reverse();
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm tabular-nums">
-        <thead className="bg-muted text-muted-foreground">
+    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <table className="w-full min-w-2xl text-sm whitespace-nowrap tabular-nums">
+        <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>
             <th className="px-3 py-2 text-left">기간</th>
             <th className="px-3 py-2 text-right">매출</th>
@@ -408,7 +418,7 @@ function Trend({
                 aria-selected={r.period === sheet.period}
                 className="cursor-pointer border-t hover:bg-muted aria-selected:bg-accent"
               >
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 whitespace-nowrap">
                   {periodLabel(sheet.scope, r.period, sheet.periods[i - 1])}
                 </td>
                 <td className="px-3 py-2 text-right">{cell(r.sales)}</td>
@@ -455,21 +465,14 @@ export function ReportView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Tabs
+      <ScreenTabs
+        tabs={SCOPES.map((s) => ({ key: s, label: SCOPE_LABEL[s] }))}
         value={scope}
         // 기간 종류마다 기간 목록이 달라 기간을 비운다
-        onValueChange={(v) =>
+        onChange={(v) =>
           go({ scope: v === "monthly" ? null : v, period: null })
         }
-      >
-        <TabsList variant="line" className="w-full justify-start border-b">
-          {SCOPES.map((s) => (
-            <TabsTrigger key={s} value={s} className="flex-none px-4">
-              {SCOPE_LABEL[s]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      />
       {error && <ErrorBand text={error} />}
       {!sheet ? (
         !error && (
@@ -479,11 +482,7 @@ export function ReportView() {
         )
       ) : (
         <>
-          <div
-            className="flex flex-wrap gap-1.5"
-            role="group"
-            aria-label="기간"
-          >
+          <ChipRow label="기간" selected={sheet.period}>
             {sheet.periods.map((p, k) => (
               <Button
                 key={p}
@@ -495,7 +494,7 @@ export function ReportView() {
                 {periodLabel(sheet.scope, p, sheet.periods[k - 1])}
               </Button>
             ))}
-          </div>
+          </ChipRow>
           <Interpretation sheet={sheet} />
           <Stats
             m={sheet.metrics}

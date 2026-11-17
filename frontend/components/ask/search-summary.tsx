@@ -126,16 +126,30 @@ export function SearchSummary({
                 {now.data.sources.map((c, i) => {
                   const docId = docIdOf(c.id);
                   const label = sourceLabel(i + 1, c);
+                  // 긴 문서 제목은 칩 안에서 줄인다(좁은 화면에서 카드 밖으로 나가지 않게), 전체는 title로
+                  const chip = (
+                    <Badge
+                      variant="outline"
+                      title={label}
+                      className={
+                        docId !== null
+                          ? "max-w-full hover:bg-muted"
+                          : "max-w-full"
+                      }
+                    >
+                      <span className="truncate">{label}</span>
+                    </Badge>
+                  );
                   return docId !== null ? (
-                    <Link key={c.id} href={docHref(docId)}>
-                      <Badge variant="outline" className="hover:bg-muted">
-                        {label}
-                      </Badge>
+                    <Link
+                      key={c.id}
+                      href={docHref(docId)}
+                      className="max-w-full min-w-0"
+                    >
+                      {chip}
                     </Link>
                   ) : (
-                    <Badge key={c.id} variant="outline">
-                      {label}
-                    </Badge>
+                    <Fragment key={c.id}>{chip}</Fragment>
                   );
                 })}
               </div>

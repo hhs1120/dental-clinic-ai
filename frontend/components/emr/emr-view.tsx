@@ -217,10 +217,11 @@ export function EmrView() {
         </div>
       )}
       {stage.kind === "collapsed" && card}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+      {/* 안내 카드는 창(최소 68rem) 옆에 둘 자리가 있는 아주 넓은 화면에서만 옆에, 그 밖은 창 위에 */}
+      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start">
         <div className="min-w-0 flex-1">{emrWindow}</div>
         {stage.kind !== "collapsed" && (
-          <div className="order-first xl:order-none xl:w-80 xl:shrink-0">
+          <div className="order-first 2xl:order-none 2xl:w-72 2xl:shrink-0">
             {card}
           </div>
         )}

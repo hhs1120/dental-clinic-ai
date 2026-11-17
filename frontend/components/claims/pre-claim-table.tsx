@@ -143,9 +143,9 @@ export function PreClaimTable({
               : "AI 점검 최신"}
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-muted-foreground">
+      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+        <table className="w-full min-w-3xl text-sm">
+          <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
               <th className="px-3 py-2">진료일</th>
               <th className="px-3 py-2">환자</th>
@@ -169,15 +169,15 @@ export function PreClaimTable({
                     {r.name}
                   </Link>
                 </td>
-                <td className="px-3 py-2 align-middle">
+                <td className="min-w-32 px-3 py-2 align-middle">
                   {r.procedure_name}
                   {toothText(r.tooth_no) && ` (${toothText(r.tooth_no)})`}
                 </td>
-                <td className="px-3 py-2 text-right align-middle tabular-nums">
+                <td className="px-3 py-2 text-right align-middle whitespace-nowrap tabular-nums">
                   {won(r.claim_amount)}
                 </td>
                 <td className="px-3 py-2 align-middle">{r.dx_name ?? "-"}</td>
-                <td className="px-3 py-2 align-middle">
+                <td className="min-w-56 px-3 py-2 align-middle">
                   {r.warning || flagged(r.ai) ? (
                     <div className="flex flex-col items-start gap-1">
                       {r.warning && (

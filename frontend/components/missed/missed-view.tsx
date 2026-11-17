@@ -150,9 +150,9 @@ export function MissedView() {
         </Button>
       </div>
       {how && <Rules rules={sheet.rules} />}
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-muted-foreground">
+      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+        <table className="w-full min-w-2xl text-sm">
+          <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-right">전체 순위</th>
               <th className="px-3 py-2">환자</th>
@@ -191,10 +191,12 @@ export function MissedView() {
                 <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                   {r.last_visit}
                   <div className="text-xs text-muted-foreground">
-                    {Math.floor(r.signals.months_since_visit)}개월 전
+                    {r.signals.months_since_visit < 1
+                      ? "한 달 안"
+                      : `${Math.floor(r.signals.months_since_visit)}개월 전`}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right align-middle tabular-nums">
+                <td className="px-3 py-2 text-right align-middle whitespace-nowrap tabular-nums">
                   {r.balance ? won(r.balance) : "-"}
                 </td>
                 <td className="px-3 py-2 align-middle whitespace-nowrap">

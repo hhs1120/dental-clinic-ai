@@ -132,9 +132,9 @@ export function AdjustTable({
           못 받은 돈 합계 {won(sheet.chips[chip].amount)}
         </span>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-muted-foreground">
+      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+        <table className="w-full min-w-3xl text-sm">
+          <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
               {sortHead("deadline", "재심 신청 기한")}
               <th className="px-3 py-2">환자 · 시술</th>
@@ -164,7 +164,7 @@ export function AdjustTable({
                   <td className="px-3 py-2 align-middle whitespace-nowrap tabular-nums">
                     <Deadline row={r} sheet={sheet} />
                   </td>
-                  <td className="px-3 py-2 align-middle">
+                  <td className="min-w-44 px-3 py-2 align-middle">
                     <div className="font-bold">
                       {r.name} · {r.procedure_name}
                     </div>
@@ -181,7 +181,9 @@ export function AdjustTable({
                     {won(r.unpaid)}
                     {r.status === "denied" && " (전액)"}
                   </td>
-                  <td className="px-3 py-2 align-middle">{r.adjust_note}</td>
+                  <td className="min-w-56 px-3 py-2 align-middle">
+                    {r.adjust_note}
+                  </td>
                   <td className="px-3 py-2 align-middle whitespace-nowrap">
                     <Todo row={r} />
                   </td>

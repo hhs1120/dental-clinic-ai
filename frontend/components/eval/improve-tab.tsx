@@ -49,9 +49,9 @@ export function ImproveTab() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-card p-4">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-4xl text-sm">
             <thead>
-              <tr className="text-left text-muted-foreground">
+              <tr className="text-left whitespace-nowrap text-muted-foreground">
                 <th className="pb-2 pr-3 font-medium">시각</th>
                 <th className="pb-2 pr-3 font-medium">후보</th>
                 <th className="pb-2 pr-3 font-medium">오류 유형</th>
@@ -72,7 +72,7 @@ export function ImproveTab() {
                       기준 {r.base}
                     </span>
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="min-w-40 py-2 pr-3">
                     {r.error_types
                       ? r.error_types.map((t) => (
                           <span key={t.name} className="block">
@@ -81,10 +81,10 @@ export function ImproveTab() {
                         ))
                       : "—"}
                   </td>
-                  <td className="min-w-64 py-2 pr-3">
+                  <td className="min-w-72 py-2 pr-3">
                     {r.changed_rule ?? "—"}
                   </td>
-                  <td className="py-2 pr-3">
+                  <td className="min-w-44 py-2 pr-3">
                     {r.adopted
                       ? "합격"
                       : r.failed.map((f) => (

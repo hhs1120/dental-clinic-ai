@@ -9,8 +9,9 @@ import {
 } from "@/components/finance/expense-table";
 import { LedgerTable } from "@/components/finance/ledger-table";
 import { ErrorBand } from "@/components/prep/prep-view";
+import { ChipRow } from "@/components/chip-row";
+import { ScreenTabs } from "@/components/screen-tabs";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { errorText } from "@/lib/api";
 import {
   fetchExpenses,
@@ -21,8 +22,8 @@ import {
 import { won } from "@/lib/format";
 
 const TABS = [
-  { value: "ledger", label: "일계표" },
-  { value: "expense", label: "지출 증빙" },
+  { key: "ledger", label: "일계표" },
+  { key: "expense", label: "지출 증빙" },
 ];
 
 type Go = (patch: Record<string, string | null>) => void;
@@ -73,7 +74,7 @@ function MonthButtons({
   onPick: (m: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="달">
+    <ChipRow label="달" selected={month}>
       {months.map((m, k) => (
         <Button
           key={m}
@@ -85,7 +86,7 @@ function MonthButtons({
           {monthLabel(m, months[k - 1])}
         </Button>
       ))}
-    </div>
+    </ChipRow>
   );
 }
 
@@ -105,13 +106,12 @@ function LedgerTab({
   return (
     <div className="flex flex-col gap-3">
       {error && <ErrorBand text={error} />}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <MonthButtons
-          months={sheet.months}
-          month={sheet.month}
-          onPick={(m) => go({ month: m, day: null })}
-        />
-        <span className="flex-1" />
+      <MonthButtons
+        months={sheet.months}
+        month={sheet.month}
+        onPick={(m) => go({ month: m, day: null })}
+      />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-sm text-muted-foreground">
           영업일 {sheet.chips.days}
         </span>
@@ -217,36 +217,25 @@ export function FinanceView() {
   };
 
   return (
-    <Tabs
-      value={tab}
-      // 탭마다 달 목록이 달라 달·펼친 날·칩을 비운다
-      onValueChange={(v) =>
-        go({
-          tab: v === "ledger" ? null : v,
-          month: null,
-          day: null,
-          chip: null,
-        })
-      }
-      className="gap-4"
-    >
-      <TabsList variant="line" className="w-full justify-start border-b">
-        {TABS.map((t) => (
-          <TabsTrigger key={t.value} value={t.value} className="flex-none px-4">
-            {t.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <TabsContent value="ledger">
-        {tab === "ledger" && (
-          <LedgerTab month={month} day={params.get("day")} go={go} />
-        )}
-      </TabsContent>
-      <TabsContent value="expense">
-        {tab === "expense" && (
-          <ExpenseTab month={month} chip={params.get("chip")} go={go} />
-        )}
-      </TabsContent>
-    </Tabs>
+    <div className="flex flex-col gap-4">
+      <ScreenTabs
+        tabs={TABS}
+        value={tab}
+        // 탭마다 달 목록이 달라 달·펼친 날·칩을 비운다
+        onChange={(v) =>
+          go({
+            tab: v === "ledger" ? null : v,
+            month: null,
+            day: null,
+            chip: null,
+          })
+        }
+      />
+      {tab === "ledger" ? (
+        <LedgerTab month={month} day={params.get("day")} go={go} />
+      ) : (
+        <ExpenseTab month={month} chip={params.get("chip")} go={go} />
+      )}
+    </div>
   );
 }

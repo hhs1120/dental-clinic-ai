@@ -300,9 +300,16 @@ function People({ sheet }: { sheet: TodaySheet }) {
   const list = (lines: Line[]) => (
     <ul className="flex flex-col divide-y rounded-xl border bg-card">
       {lines.map((l) => (
-        <li key={l.key} className="flex items-start gap-3 px-4 py-3">
+        // 좁은 화면은 꼬리표·"AI 비서로 처리"를 윗줄에, 제목을 아랫줄 전체 너비로
+        <li
+          key={l.key}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:flex-nowrap sm:items-start"
+        >
           <Tag tone={l.tone}>{l.tag}</Tag>
-          <Link href={l.href} className="min-w-0 flex-1 hover:underline">
+          <Link
+            href={l.href}
+            className="order-last min-w-0 basis-full hover:underline sm:order-none sm:flex-1 sm:basis-0"
+          >
             <div className="font-medium">{l.title}</div>
             {l.meta && (
               <div className="text-xs text-muted-foreground">{l.meta}</div>
@@ -311,7 +318,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
           {l.assist && (
             <Link
               href={assistHref(l.assist)}
-              className="shrink-0 text-xs font-medium text-primary hover:underline"
+              className="ml-auto shrink-0 text-xs font-medium text-primary hover:underline sm:ml-0"
             >
               AI 비서로 처리
             </Link>
@@ -362,7 +369,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
 
 function Tag({ tone, children }: { tone: Tone; children: string }) {
   return (
-    <span className="w-28 shrink-0">
+    <span className="shrink-0 sm:w-28">
       <Badge variant={tone}>{children}</Badge>
     </span>
   );
@@ -585,7 +592,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
             <ul className="flex flex-col divide-y">
               {results.map((r) => (
                 <li key={r.title} className="flex items-center gap-3 py-2">
-                  <span className="w-28 shrink-0">
+                  <span className="shrink-0 sm:w-28">
                     {r.bad > 0 ? (
                       <Badge variant="warn">사람에게 넘김</Badge>
                     ) : (

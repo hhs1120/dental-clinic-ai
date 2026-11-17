@@ -56,7 +56,8 @@ export function ExplainCard({
         </Button>
       )}
 
-      <ol className="flex flex-col gap-1.5">
+      {/* 창 위에 놓일 때(2xl 미만)는 가로로 펼쳐 창을 덜 밀어내고, 창 옆(2xl)에서는 한 줄씩 */}
+      <ol className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-1">
         {TOUR_STEPS.map((step, i) => {
           const done = stage.kind === "done" || i < current;
           const now = i === current;
