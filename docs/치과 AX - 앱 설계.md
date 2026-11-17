@@ -100,7 +100,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 | `ax_failure_cases` | 재발 방지 — 출처(되돌리기·훅 차단·표본 오류·관문 탈락)·실행 id(문자열 참조, 외래 키 없음)·원인 분류(enum)·재현 테스트 경로·고칠 곳·승인 상태. 라벨·녹취 인용은 넣지 않는다(쓰기 전 검사는 [[치과 AX - 평가 설계]] §2.7) |
 | `ax_rule_counts` | 규칙 id별 차단 누계 |
 | `ax_emr_writes` | AI 비서가 만든 EMR 쓰기 — 지금은 예약(`kind='appointment'`): 환자·담당·시각·소요·종류·시술·체어·근거 통화·대화 id·턴, 상태 `draft/approved/cancelled/rejected`·사유·승인 파트·시각(실제 시계). 원본과 같은 모양이라 예약표·준비표가 그대로 그린다. 쓰기는 `backend/emr_bridge.py`만 한다. 환자·통화 id가 원본 키라 재생성 때 버린다(§7.3) |
-| `ax_assistant_conversations` · `ax_assistant_messages` | AI 비서 대화(제목 = 첫 말 앞부분, LLM 없음·파트·만든 시각)와 메시지(순번·역할·글·카드 JSON·그 턴의 도구 호출 JSON·실행 id·턴 상태). UNIQUE (대화, 순번). 모두가 같은 목록을 본다(로그인 없음), 삭제 기능 없음. 도구 호출을 메시지에 같이 남겨 실행 기록(§7.3 "다시 만듦")에 매이지 않는 학습 재료가 된다 |
+| `ax_assistant_conversations` · `ax_assistant_messages` | AI 비서 대화(제목 = 첫 말 앞부분, LLM 없음·파트·만든 시각)와 메시지(순번·역할·글·카드 JSON·그 턴의 도구 호출 JSON·실행 id·턴 상태). UNIQUE (대화, 순번). 모두가 같은 목록을 본다(로그인 없음). 대화 관리는 숨김 삭제뿐 — `ax_assistant_conversations.deleted_at`이 차면 목록(`GET /assistant/conversations`)에서만 빠지고 행·메시지는 남는다(승인 예약의 근거). 지운 대화도 `GET /assistant/conversations/{id}`는 `deleted: true`로 돌려주고(읽기 전용), 그 대화에 말을 보내면 409. 도구 호출을 메시지에 같이 남겨 실행 기록(§7.3 "다시 만듦")에 매이지 않는 학습 재료가 된다 |
 
 **에이전트별 도구** (호출 상한·세부 인자는 착수 시)
 | 에이전트 | 도구 |
@@ -226,7 +226,7 @@ eval.py가 읽는 칸(아래 분류·판정기 판정·투표, §2 LLM 로그)�
 
 | 라우트 | 화면 | API 원본 |
 |---|---|---|
-| `/` | AI 비서 — 시작(예시 칩)·대화·지난 대화. `?c=<대화 id>`로 지난 대화, `?draft=`는 바로 보내고 `?prefill=`은 입력창만 채움(새 대화일 때만) | 여기: `POST /assistant/turn`(SSE — `step`·`reply`·`error`, 말 길이 `ASSISTANT_MAX_TEXT`)·`GET /assistant/conversations`(`before`)·`GET /assistant/conversations/{id}`(저장된 그대로, 모델을 부르지 않음)·`POST /assistant/drafts/{id}/approve`·`cancel`(파트 — 승인은 검사에 걸리면 `{ok: false, reasons, card}`, 이미 처리됐으면 409) |
+| `/` | AI 비서 — 시작(예시 칩)·대화·지난 대화. `?c=<대화 id>`로 지난 대화, `?draft=`는 바로 보내고 `?prefill=`은 입력창만 채움(새 대화일 때만) | 여기: `POST /assistant/turn`(SSE — `step`·`reply`·`error`, 말 길이 `ASSISTANT_MAX_TEXT`)·`GET /assistant/conversations`(`before`)·`GET /assistant/conversations/{id}`(저장된 그대로, 모델을 부르지 않음)·`POST /assistant/conversations/{id}/delete`(파트 — 목록에서만 숨김, 이미 지웠으면 그대로)·`POST /assistant/drafts/{id}/approve`·`cancel`(파트 — 승인은 검사에 걸리면 `{ok: false, reasons, card}`, 이미 처리됐으면 409) |
 | `/today` | 오늘 — 요약 카드, 아침 브리핑(머리말·내용 2열, 코드 줄이라 AI 배지 없음), 사람이 볼 일, AI가 한 일(접힌 요약 + 펼치기) | [[치과 AX - 기능 정의]] §4 앱 구성 |
 | `/calls` | 오늘 할 일(할 일·연락할 사람), 통화 기록, 새 통화 추가, 상세(패널 ↔ 넓게 보기) | [[치과 AX - 기능 정의]] §4 ① |
 | `/schedule` | 일별 예약표(읽기 전용) | 여기: `GET /emr/schedule?date=`(`backend/emr.py` `schedule_day` — 영업시간·휴진, 진료 담당자 열, 그날 예약 전부(취소·노쇼 포함 — 숨김은 화면에서). 예약마다 내원 확인 전(기준일만)·예약 확인(`confirm` — 직전 진료일 리마인드 응답인 `confirmed`와 리마인드 유무)·신환·치료계획 몇 번째(대체 항목 제외)·잡은 경로와 시각·잡은 통화(같은 환자·통화 시각 = `created_at`, 판정 풀이면 `pool` — 화면이 링크·분류를 보이지 않는다). 응급 여부는 API가 앱 DB의 활성 분류로 붙인다(`backend/calls.py` `call_emergency` — `emr.py`는 원본만 읽는다, 분류 전·앱 DB 없음이면 null)), 패널은 `GET /emr/patients/{chart_no}`의 `summary`(`patient_summary` — 미수·주의사항·마지막 내원·앞으로의 예약·노쇼·취소·남은 항목(`open_items`), 모두 기준일 기준)와 최근 통화 `GET /calls/patient/{chart_no}`([[치과 AX - 기능 정의]] §4 ①) |

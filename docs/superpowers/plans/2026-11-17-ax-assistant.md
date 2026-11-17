@@ -260,7 +260,7 @@ backend가 슬롯 검사에 쓸 값을 `ax_master_values`로 내보낸다(CLAUDE
 ### Task 10: 프론트 기존 화면 연결 — 오늘·예약표·EMR·준비표·자료실
 
 **Files:**
-- Modify: `frontend/components/today/today-view.tsx`(통화에서 온 일에 "예약 원함" 줄 — `people.wants_appt_unbooked`, 0이면 숨김. 이 줄·재심 기한 임박·일계표 불일치 끝에 "AI 비서로 처리" → `/?draft=<정해진 질문>`), `frontend/components/schedule/day-grid.tsx`·`schedule-view.tsx`(AX 예약 `AX` 꼬리표, 옆 패널 "어떻게 잡혔나"에 승인 시각·파트·근거 통화·"잡은 대화 보기" `/?c=`), `frontend/components/emr/*` 예약 탭(같은 꼬리표 — `--emr-*` 토큰), `frontend/components/prep/*`(AX 행 꼬리표), `frontend/components/ask/ask-view.tsx`(질문하기 탭 제거, 제목 "자료실", "이걸로 질문하기" → "AI 비서에게 묻기" `/?prefill=`), `frontend/components/today/today-view.tsx` 근거 없는 질문 링크 → `/?prefill=`, 옛 `/ask?tab=chat…` 링크 → `/?prefill=`(남은 곳 `grep -rn "tab=chat" frontend`)
+- Modify: `frontend/components/today/today-view.tsx`(통화에서 온 일에 "예약 원함" 줄 — `people.wants_appt_unbooked`, 0이면 숨김. 이 줄·재심 기한 임박·일계표 불일치 끝에 "AI 비서로 처리" → `/?draft=<정해진 질문>`), `frontend/components/schedule/day-grid.tsx`·`schedule-view.tsx`(AX 예약 `AX` 꼬리표, 옆 패널 "어떻게 잡혔나"에 승인 시각·파트·근거 통화·"예약 대화 기록 보기" `/?c=`), `frontend/components/emr/*` 예약 탭(같은 꼬리표 — `--emr-*` 토큰), `frontend/components/prep/*`(AX 행 꼬리표), `frontend/components/ask/ask-view.tsx`(질문하기 탭 제거, 제목 "자료실", "이걸로 질문하기" → "AI 비서에게 묻기" `/?prefill=`), `frontend/components/today/today-view.tsx` 근거 없는 질문 링크 → `/?prefill=`, 옛 `/ask?tab=chat…` 링크 → `/?prefill=`(남은 곳 `grep -rn "tab=chat" frontend`)
 - 오늘 화면 정해진 질문 문구: 예약 원함 `지난 7일 전화로 예약 원했는데 안 잡힌 사람 보여줘` · 재심 `재심 신청 기한이 얼마 안 남은 삭감 건 보여줘` · 일계표 `일계표 불일치 있는 날 보여줘`
 - Test: `frontend/e2e/`(today·schedule·ask 기존 spec에 추가)
 
