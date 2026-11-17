@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { AccuracyTab } from "@/components/eval/accuracy-tab";
 import { BlindTab } from "@/components/eval/blind-tab";
+import { ImproveTab } from "@/components/eval/improve-tab";
 import { JudgeTab } from "@/components/eval/judge-tab";
 import { ScreenTabs } from "@/components/screen-tabs";
 import { useLabels } from "@/lib/calls-api";
@@ -12,9 +13,10 @@ const TABS = [
   ["judge", "판정"],
   ["blind", "블라인드 비교"],
   ["acc", "정확도 표"],
+  ["improve", "자동 개선"],
 ] as const;
 
-/** AI 평가 — 탭은 URL에(/eval?tab=…). 자동 개선 탭은 개선 에이전트 때(통화·② 판정 화면 설계) */
+/** AI 평가 — 탭은 URL에(/eval?tab=…) (통화·② 판정 화면 설계, 기능 정의 §4 ②) */
 export function EvalView() {
   const params = useSearchParams();
   const router = useRouter();
@@ -33,6 +35,7 @@ export function EvalView() {
       {tab === "judge" && <JudgeTab names={names} />}
       {tab === "blind" && <BlindTab />}
       {tab === "acc" && <AccuracyTab />}
+      {tab === "improve" && <ImproveTab />}
     </div>
   );
 }
