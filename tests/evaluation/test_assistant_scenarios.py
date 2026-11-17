@@ -118,3 +118,18 @@ def test_gold_tools_in_registry():
     for s in _scenarios():
         for t in s["turns"]:
             assert set(t["gold"]["tools"]) <= names, s["id"]
+
+
+def test_gold_conn_sees_only_copied_app_tables(conn, tmp_path):
+    # 직원이 앱에 남긴 기록(연락 기록)은 정답에 들지 않는다 — 시나리오 실행 DB처럼 빈 표, 옮기는 표만 앱에서
+    emr_bridge.missed.record_contact(
+        conn, MISSED, "booked", "call", "데스크", "2026-12-01 09:00:00", date(2026, 12, 1)
+    )
+    conn.execute("INSERT INTO ax_settings VALUES ('active_prompt_version', '\"v1\"')")
+    conn.commit()
+    gold = sc.gold_conn(tmp_path / "s.sqlite", tmp_path / "a.sqlite")
+    try:
+        assert gold.execute("SELECT COUNT(*) FROM ax_missed_contacts").fetchone()[0] == 0
+        assert gold.execute("SELECT COUNT(*) FROM ax_settings").fetchone()[0] == 1
+    finally:
+        gold.close()

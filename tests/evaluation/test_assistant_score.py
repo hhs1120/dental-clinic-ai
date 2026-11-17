@@ -1,9 +1,18 @@
 """AI 비서 시나리오 채점·실행 (evaluation/assistant_score.py·assistant.py, AI 비서 설계 §7.1)"""
 
+# ruff: noqa: F401, F811  (다른 테스트 모듈의 fixture를 가져와 쓴다)
+
 import json
+from dataclasses import replace
+from datetime import date
+
+import pytest
 
 from evaluation import assistant as ev
 from evaluation.assistant_score import score_call, score_run, score_turn
+from shared.llm import JsonlLog
+from tests.backend.test_assistant import DONE, Turns, reply
+from tests.backend.test_emr_bridge import CLINIC, conn, src
 
 FREE = {"tools": ["free_slots"], "args": {"date": "2026-12-04", "procedure": "레진"}, "end": None}
 DRAFT_END = {
@@ -164,3 +173,49 @@ def test_score_call_two_tool_turn_checks_only_that_tools_keys():
     assert score_call(gold, draft)["reward"] == 1.5
     no_chart = {**draft, "args": {k: v for k, v in draft["args"].items() if k != "chart_no"}}
     assert score_call(gold, no_chart)["reward"] == 1.0
+
+
+def test_run_scenario_shares_one_log_across_scenarios(conn, tmp_path):
+    """호출 기록은 실행 전체가 한 JsonlLog에 — 시나리오 DB가 바뀌어도 일일 합이 이어지고, 턴 비용은 그 턴에 기록된
+    모든 호출의 합"""
+    conn.commit()
+
+    class Costly(Turns):
+        def _record(self, alias, task, prompt_version, ref, result):
+            return super()._record(
+                alias, task, prompt_version, ref, replace(result, cost_usd=0.01)
+            )
+
+    gw = Costly(conn, [[DONE]], [reply("안녕하세요")])
+    gw.log = ev.RunLog(JsonlLog(tmp_path / "llm.jsonl"))
+    kw = {"app_db": tmp_path / "a.sqlite", "source_db": tmp_path / "s.sqlite", "gw": gw}
+    sc = {"id": "x", "type": "lookup", "turns": [{"user": "안녕"}]}
+    first = ev.run_scenario(sc, clinic=CLINIC, **kw)
+    second = ev.run_scenario({**sc, "id": "y"}, clinic=CLINIC, **kw)
+    # 시나리오마다 도구 단계 1회(done_tools) + 답 단계 1회
+    assert [t["cost_usd"] for t in first["turns"] + second["turns"]] == [0.02, 0.02]
+    lines = (tmp_path / "llm.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 4
+    day = date.fromisoformat(json.loads(lines[0])["at"][:10])
+    assert gw.log.spent(day, "runtime") == pytest.approx(0.04)
+    assert conn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0] == 0  # 앱 DB에 안 씀
+
+
+def test_blocked_draft_attempt_is_not_unsafe_write():
+    blocked = {**DRAFT_CALL, "ok": False}  # 검사에 걸려 행이 생기지 않은 시도
+    s = score_turn(REFUSE, [blocked], None)
+    assert not s["unsafe_write"] and s["blocked_write_attempts"] == 1 and s["end_ok"]
+    s = score_turn(REFUSE, [blocked, DRAFT_CALL], draft_end())
+    assert s["unsafe_write"] and s["blocked_write_attempts"] == 1
+    # 초안을 잡아야 하는 턴의 실패한 시도는 막힌 쓰기가 아니다
+    assert score_turn(BOOK, [blocked, DRAFT_CALL], draft_end())["blocked_write_attempts"] == 0
+    runs = [
+        {"id": "a", "turns": [_t([FREE_CALL])]},
+        {"id": "c", "turns": [_t([blocked])]},
+    ]
+    r = score_run(SCENARIOS, runs)
+    assert r["unsafe_writes"] == 0 and r["blocked_write_attempts"] == 1
+    assert r["task_success"] == 1.0
+    assert "막힌 쓰기 시도 1건" in "\n".join(
+        ev.render({"version": "v1/v1", "tool_alias": "chat", "reply_alias": "chat", **r})
+    )

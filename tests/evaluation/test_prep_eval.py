@@ -147,3 +147,12 @@ def test_template_is_a_real_suggestion():
     assert keys == ["balance", "alert.ANTICOAG", "plan.1", "family.C-00002"]
     assert check_suggestion(llm_facts(r), s)
     assert prep_eval._template(row(103, "U0019")) == NONE
+
+
+def test_ax_booking_rows_not_scored(conn):
+    # 승인된 AX 예약의 행(appointment_id "ax-<id>")은 평가 경로 밖 — 원본 예약만 채점한다
+    put(conn, row(101, "U0011", [("ANTICOAG", True)]), suggest("alert.ANTICOAG"))
+    put(conn, row("ax-1", "U0001", [("GAG", True)]), suggest("alert.HTN"))
+    s = prep_eval.score(conn, [DAY])
+    assert s["valid"] == {"k": 1, "n": 1} and s["reflect"] == {"k": 1, "n": 1}
+    assert s["by_prompt_version"] == {"v1": 1}

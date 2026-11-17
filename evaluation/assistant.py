@@ -3,6 +3,8 @@
 분류 행·설정만 앱 DB에서 읽어 옮김)에서 대본 턴을 `backend/assistant.py turn`에 차례로 넣는다. 초안이 생겨도 승인하지
 않는다 — 끝 상태 = 초안. 같은 칸을 잡는 시나리오끼리 섞이지 않는다. 결과는 evaluation/assistant_runs.jsonl(dev)·
 assistant_test_runs.jsonl(test)에 쌓고 같은 id·버전·별칭이면 건너뛴다(이어 돎). 앱 DB에는 쓰지 않는다.
+LLM 호출 기록은 시나리오 DB가 아니라 실행 전체가 함께 쓰는 LLM_LOG(JsonlLog)에 남긴다 — 일일 상한이 시나리오마다
+새로 시작하지 않고, 턴 비용은 그 턴 동안 기록된 호출 비용 합(③ 위임 호출 포함)이다(RunLog).
 검색 색인은 임시 DB에 없어 ask_records는 "색인 없음"으로 답 단계에 넘어간다(도구 선택·인자만 채점한다).
 기준선: lookup 유형 첫 턴을 ③ chat.chat에 넣은 도구 선택(보고만).
 
@@ -13,6 +15,7 @@ import argparse
 import json
 import sqlite3
 import tempfile
+from datetime import date
 from pathlib import Path
 
 from backend import assistant, chat, db
@@ -25,6 +28,10 @@ SCENARIOS = ROOT / "ground_truth" / "assistant_scenarios.json"
 RUNS = {
     "dev": ROOT / "evaluation" / "assistant_runs.jsonl",
     "test": ROOT / "evaluation" / "assistant_test_runs.jsonl",
+}
+LLM_LOG = {  # ax_llm_calls에 쓰지 않는다 — 시나리오 DB는 시나리오마다 버려진다
+    "dev": ROOT / "evaluation" / "assistant_llm.jsonl",
+    "test": ROOT / "evaluation" / "assistant_test_llm.jsonl",
 }
 PART = "데스크"
 COPIED = (
@@ -116,25 +123,30 @@ def end_state(conn, conversation_id: int, turn: int) -> dict | None:
     }
 
 
-def _cost(conn, run_id: int | None) -> float:
-    if run_id is None:
-        return 0.0
-    calls = conn.execute(
-        "SELECT COALESCE(SUM(cost_usd), 0) FROM ax_llm_calls WHERE ref_type = 'agent_run'"
-        " AND ref_id = ?",
-        (str(run_id),),
-    ).fetchone()[0]
-    row = conn.execute("SELECT cost_usd FROM ax_agent_runs WHERE id = ?", (run_id,)).fetchone()
-    return max(calls, row["cost_usd"] if row else 0.0)
+class RunLog:
+    """실행 전체가 함께 쓰는 호출 기록 — 안쪽 기록(JsonlLog)에 그대로 넘기고(일일 상한 spent도 거기서) 쓴 비용 합을
+    total에 센다. 턴 비용 = 그 턴 앞뒤 total의 차(답 단계·③ 위임 호출까지 그 턴에 기록된 모든 호출)"""
+
+    def __init__(self, inner):
+        self.inner, self.total = inner, 0.0
+
+    def write(self, record: dict):
+        self.total += record.get("cost_usd") or 0.0
+        return self.inner.write(record)
+
+    def spent(self, day: date, scope: str) -> float:
+        return self.inner.spent(day, scope)
 
 
-def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw_factory, clinic) -> dict:
-    """한 시나리오의 대본 턴을 차례로 — 한 턴이 예외로 끝나면 거기서 멈춘다(채점은 실패로 셈)"""
+def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw, clinic) -> dict:
+    """한 시나리오의 대본 턴을 차례로 — 한 턴이 예외로 끝나면 거기서 멈춘다(채점은 실패로 셈).
+    gw는 실행 전체가 함께 쓰는 게이트웨이(기록 = RunLog)"""
     with tempfile.TemporaryDirectory() as tmp:
         conn = scenario_db(Path(tmp), app_db, source_db)
         try:
-            gw, cid, turns = gw_factory(conn), None, []
+            cid, turns = None, []
             for t in sc["turns"]:
+                before = gw.log.total
                 try:
                     out = assistant.turn(
                         conn,
@@ -146,8 +158,9 @@ def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw_factory, clinic)
                         part=PART,
                     )
                 except Exception as e:
+                    cost = round(gw.log.total - before, 6)
                     turns.append(
-                        {"tool_calls": [], "end_state": None, "cost_usd": 0.0, "error": repr(e)}
+                        {"tool_calls": [], "end_state": None, "cost_usd": cost, "error": repr(e)}
                     )
                     break
                 cid = out["conversation_id"]
@@ -156,7 +169,7 @@ def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw_factory, clinic)
                         "tool_calls": out["tool_calls"],
                         "end_state": end_state(conn, cid, out["seq"] - 1),
                         "status": out["status"],
-                        "cost_usd": _cost(conn, out["run_id"]),
+                        "cost_usd": round(gw.log.total - before, 6),
                     }
                 )
             return {"turns": turns}
@@ -176,7 +189,7 @@ class _NoSearch:
         return []
 
 
-def baseline(scenarios: list[dict], *, app_db: Path, source_db: Path, gw_factory, clinic) -> dict:
+def baseline(scenarios: list[dict], *, app_db: Path, source_db: Path, gw, clinic) -> dict:
     """lookup 유형 첫 턴을 ③ chat.chat에 넣은 도구 선택 — {n, tools_ok}(보고만. gold 도구 집합이 불린 도구에 듦)"""
     ok = n = 0
     for sc in scenarios:
@@ -187,7 +200,7 @@ def baseline(scenarios: list[dict], *, app_db: Path, source_db: Path, gw_factory
             try:
                 got = chat.chat(
                     conn,
-                    gw_factory(conn),
+                    gw,
                     _NoSearch(),
                     clinic,
                     sc["turns"][0]["user"],
@@ -222,7 +235,8 @@ def render(r: dict) -> list[str]:
         f"버전 {r['version']} · 도구 {r['tool_alias']} · 답 {r['reply_alias']} · 시나리오 {r['n']}개",
         "",
         f"- 도구 선택 {pct(r['tool_selection'])} · 인자 {pct(r['arg_accuracy'])}"
-        f" · 과제 성공 {pct(r['task_success'])} · 안전하지 않은 쓰기 {r['unsafe_writes']}건",
+        f" · 과제 성공 {pct(r['task_success'])} · 안전하지 않은 쓰기 {r['unsafe_writes']}건"
+        f" (막힌 쓰기 시도 {r['blocked_write_attempts']}건)",
         f"- 턴당 비용 ${r['cost_per_turn']:.4f} · 턴당 도구 호출 {r['tool_calls_per_turn']:.1f}",
     ]
     for t, v in r["by_type"].items():
@@ -233,9 +247,18 @@ def render(r: dict) -> list[str]:
     return [*out, ""]
 
 
-def main(argv=None) -> int:
-    from backend.harness.llm import make_gateway
+def make_gateway(split: str):
+    """앱 게이트웨이와 같은 시간 제한·재시도(backend/harness/llm.py), 기록만 LLM_LOG(RunLog)"""
+    import anthropic
 
+    from backend.harness.llm import APP_RETRIES, APP_TIMEOUT
+    from shared.llm import Gateway, JsonlLog, load_config
+
+    client = anthropic.Anthropic(timeout=APP_TIMEOUT, max_retries=APP_RETRIES)
+    return Gateway(load_config(), RunLog(JsonlLog(LLM_LOG[split])), "runtime", client)
+
+
+def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m evaluation.assistant")
     p.add_argument("command", choices=("run", "score"))
     p.add_argument("--split", choices=("dev", "test"), required=True)
@@ -249,7 +272,7 @@ def main(argv=None) -> int:
         kw = {
             "app_db": paths["app"],
             "source_db": paths["source"],
-            "gw_factory": lambda c: make_gateway(c, is_eval=True),
+            "gw": make_gateway(args.split),
             "clinic": load_clinic(),
         }
         scenarios = load_scenarios(args.split)

@@ -72,8 +72,9 @@ def score(conn, days: list[date]) -> dict:
     ds = [d.isoformat() for d in days]
     marks = ", ".join("?" * len(ds))
     rows = conn.execute(
+        # 승인된 AX 예약의 행(appointment_id "ax-<id>", 글)은 빼고 원본 예약만 — 평가 경로는 원본만(AI 비서 설계 §3.3)
         f"SELECT facts, suggestion, suggestion_valid, prompt_version FROM ax_prep_sheets"
-        f" WHERE sheet_date IN ({marks})",
+        f" WHERE sheet_date IN ({marks}) AND typeof(appointment_id) = 'integer'",
         ds,
     ).fetchall()
     out = _blank()

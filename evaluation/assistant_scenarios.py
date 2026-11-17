@@ -8,8 +8,8 @@ done_tools 뺌), args: 핵심 인자(그 턴 도구 호출 어딘가에 같은 �
 - 초안의 시각 범위는 emr_bridge.free_slots(시술 → 담당 역할) 중 환자 규칙(check_slot)도 통과하는 시작 시각을 시간대로
   거른 처음~끝, 초안 턴은 같은 시나리오 앞 턴에 같은 날·시술 free_slots가 없으면 free_slots도 정답 도구
 - 초안 환자는 그 시나리오 앞 턴 결과에 나온 환자, ref=n은 앞 턴 목록 n번째 행 환자, who는 문장 속 이름 = 그 환자 이름
-데이터는 읽기 전용(source·app.sqlite를 ?mode=ro로 붙임)이고 AX 예약(ax_emr_writes)은 빈 상태로 본다 — 원본 기준이라 앱에서
-예약을 승인해도 정답이 바뀌지 않는다. 예약 원함은 활성 분류 버전(ax_settings)을 따른다 — 버전을 바꾸면 check로 다시 본다.
+데이터는 읽기 전용(source·app.sqlite를 ?mode=ro로 붙임)이고 활성 분류 밖 앱 표(AX 예약 ax_emr_writes·연락 기록 등)는 빈
+상태로 본다(gold_conn) — 시나리오 실행 DB와 같아 앱에서 예약을 승인하거나 기록을 남겨도 정답이 바뀌지 않는다. 예약 원함은 활성 분류 버전(ax_settings)을 따른다 — 버전을 바꾸면 check로 다시 본다.
 분할: dev/test가 환자·날짜(범위는 날마다)·달을 겹치지 않게 PLAN에서 나눈다(verify check_assistant_split_isolation, §7.1).
 
   python -m evaluation.assistant_scenarios build   # JSON 쓰기
@@ -26,6 +26,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from backend import assistant_tools, db, emr_bridge
+from evaluation.assistant import COPIED
 from generator.paths import output_paths
 from generator.verify.assistant_scenarios import ASSISTANT_TYPE_COUNTS
 from shared.clinic import Clinic, load_clinic
@@ -68,8 +69,9 @@ def S(split: str, type_: str, *turns: dict) -> tuple:
 
 
 def gold_conn(source: Path, app: Path) -> sqlite3.Connection:
-    """정답 계산용 연결 — 빈 메모리 main에 source·app을 읽기 전용으로 붙이고, app에 없는 표와 ax_emr_writes는 빈 표로
-    main에 만든다(이름 없는 표는 main이 먼저 — AX 예약 없는 원본 기준)"""
+    """정답 계산용 연결 — 빈 메모리 main에 source·app을 읽기 전용으로 붙이고, 시나리오 실행 DB가 앱 DB에서 옮기는 표
+    (evaluation/assistant.py COPIED — 활성 분류 설정·행) 밖의 앱 표는 모두 빈 표로 main에 만든다(이름 없는 표는 main이
+    먼저). 실행 DB와 같은 상태라 직원이 앱에 기록(연락·재심·승인 등)을 남겨도 정답이 바뀌지 않는다"""
     conn = sqlite3.connect("file::memory:", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("ATTACH DATABASE ? AS source", (f"{source.resolve().as_uri()}?mode=ro",))
@@ -81,7 +83,7 @@ def gold_conn(source: Path, app: Path) -> sqlite3.Connection:
         "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL"
         " AND sql NOT LIKE 'CREATE VIRTUAL%' ORDER BY rowid"
     ):
-        if name == "ax_emr_writes" or name not in have:
+        if name not in COPIED or name not in have:
             conn.execute(sql)
     ref.close()
     return conn
