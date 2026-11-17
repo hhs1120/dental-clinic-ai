@@ -455,7 +455,8 @@ CREATE TABLE ax_assistant_conversations (
     id         INTEGER PRIMARY KEY,
     title      TEXT,
     part       TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
 );
 
 -- AI 비서 대화 메시지(AI 비서 설계 §6) — status = 그 턴의 결과(ok·failed·number_failed 등),

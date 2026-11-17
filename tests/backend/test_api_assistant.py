@@ -96,6 +96,27 @@ def test_conversations_list_and_get(client):
     assert client.get("/assistant/conversations/99").status_code == 404
 
 
+def test_delete_hides_from_list_keeps_read_only_and_blocks_turn(client):
+    _script([PATIENT, DONE])
+    client.post("/assistant/turn", json={"text": "김철수 환자", "part": "데스크"})
+    cid = client.get("/assistant/conversations").json()[0]["id"]
+    assert client.get(f"/assistant/conversations/{cid}").json()["deleted"] is False
+    url = f"/assistant/conversations/{cid}/delete"
+    assert client.post(url, json={"part": "데스크"}).json() == {"ok": True}
+    assert client.post(url, json={"part": "데스크"}).status_code == 200  # 멱등
+    assert client.get("/assistant/conversations").json() == []
+    got = client.get(f"/assistant/conversations/{cid}").json()
+    assert got["deleted"] is True and len(got["messages"]) == 2
+    r = client.post(
+        "/assistant/turn", json={"text": "이어서", "part": "데스크", "conversation_id": cid}
+    )
+    assert r.status_code == 409
+    assert (
+        client.post("/assistant/conversations/99/delete", json={"part": "데스크"}).status_code
+        == 404
+    )
+
+
 def test_approve_ok_then_409(client, conn):
     did = _new_draft(conn)
     r = client.post(f"/assistant/drafts/{did}/approve", json={"part": "데스크"})

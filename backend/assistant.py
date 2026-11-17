@@ -547,7 +547,7 @@ def conversations(
     """대화 목록(최근 순) — before_id보다 작은 id만(다음 쪽)"""
     rows = conn.execute(
         "SELECT id, title, part, created_at FROM ax_assistant_conversations"
-        " WHERE ? IS NULL OR id < ? ORDER BY id DESC LIMIT ?",
+        " WHERE deleted_at IS NULL AND (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?",
         (before_id, before_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
@@ -556,7 +556,8 @@ def conversations(
 def conversation(conn: sqlite3.Connection, conversation_id: int) -> dict | None:
     """저장된 대화 그대로(모델을 부르지 않는다, §6) — 초안 카드만 지금 상태로 다시 채운다"""
     row = conn.execute(
-        "SELECT id, title, part, created_at FROM ax_assistant_conversations WHERE id = ?",
+        "SELECT id, title, part, created_at, deleted_at IS NOT NULL AS deleted"
+        " FROM ax_assistant_conversations WHERE id = ?",
         (conversation_id,),
     ).fetchone()
     if row is None:
@@ -575,4 +576,13 @@ def conversation(conn: sqlite3.Connection, conversation_id: int) -> dict | None:
         messages.append(
             {**dict(m), "cards": cards, "tool_calls": json.loads(m["tool_calls"] or "[]")}
         )
-    return {**dict(row), "messages": messages}
+    return {**dict(row), "deleted": bool(row["deleted"]), "messages": messages}
+
+
+def delete_conversation(conn: sqlite3.Connection, conversation_id: int, at: str) -> bool:
+    """목록에서 숨김(행·메시지는 남는다 — 승인 예약의 근거). 이미 숨겼으면 그대로, 없으면 False"""
+    cur = conn.execute(
+        "UPDATE ax_assistant_conversations SET deleted_at = coalesce(deleted_at, ?) WHERE id = ?",
+        (at, conversation_id),
+    )
+    return cur.rowcount > 0

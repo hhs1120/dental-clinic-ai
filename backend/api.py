@@ -1093,11 +1093,12 @@ def assistant_turn(
     """말 1개 → 진행(step)·답(reply)·오류(error) SSE — POST /chat과 같은 스레드·큐 방식"""
     conn = _open_rw(paths)
     try:
-        if (
-            body.conversation_id is not None
-            and assistant.conversation(conn, body.conversation_id) is None
-        ):
-            raise HTTPException(404, "없는 대화입니다")
+        if body.conversation_id is not None:
+            got = assistant.conversation(conn, body.conversation_id)
+            if got is None:
+                raise HTTPException(404, "없는 대화입니다")
+            if got["deleted"]:
+                raise HTTPException(409, "삭제된 대화입니다")
     finally:
         conn.close()
     events: queue.Queue = queue.Queue()
@@ -1130,6 +1131,21 @@ def assistant_conversation(conversation_id: int, paths: Paths) -> dict:
     if out is None:
         raise HTTPException(404, "없는 대화입니다")
     return out
+
+
+@app.post("/assistant/conversations/{conversation_id}/delete")
+def assistant_delete_conversation(
+    conversation_id: int, body: Part, paths: Paths, now: Now
+) -> dict:
+    """목록에서만 숨김(AI 비서 설계 §6) — 대화·메시지는 남아 읽기 전용으로 열린다"""
+    conn = _open_rw(paths)
+    try:
+        if not assistant.delete_conversation(conn, conversation_id, _stamp(now)):
+            raise HTTPException(404, "없는 대화입니다")
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
 
 
 def _draft_card(conn, draft_id: int, clinic: Clinic) -> dict:

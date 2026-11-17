@@ -199,6 +199,18 @@ def test_conversation_reopen_no_model_call(conn):
     assert conn.execute("SELECT count(*) FROM ax_llm_calls").fetchone()[0] == calls
     assert [c["id"] for c in assistant.conversations(conn)] == [out["conversation_id"]]
     assert assistant.conversation(conn, 999) is None
+    cid = out["conversation_id"]
+    assert got["deleted"] is False
+    assert assistant.delete_conversation(conn, cid, "2026-12-01 09:00:00") is True
+    assert assistant.delete_conversation(conn, cid, "2026-12-02 09:00:00") is True  # 멱등
+    assert assistant.delete_conversation(conn, 999, "2026-12-01 09:00:00") is False
+    assert assistant.conversations(conn) == []
+    again = assistant.conversation(conn, cid)
+    assert again["deleted"] is True and len(again["messages"]) == 2
+    assert (
+        conn.execute("SELECT deleted_at FROM ax_assistant_conversations").fetchone()[0]
+        == "2026-12-01 09:00:00"
+    )
 
 
 def test_turn_exception_closes_run_and_saves_failed_message(conn):
