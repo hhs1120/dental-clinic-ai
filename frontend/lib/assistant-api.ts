@@ -99,6 +99,7 @@ export interface SavedMessage {
 export interface SavedConversation {
   id: number;
   title: string;
+  deleted: boolean;
   messages: SavedMessage[];
 }
 
@@ -108,6 +109,10 @@ export const getConversation = (id: number, signal: AbortSignal) =>
     undefined,
     signal,
   );
+
+/** POST /assistant/conversations/{id}/delete — 목록에서만 숨김(읽기 전용으로는 열린다) */
+export const deleteConversation = (id: number, part: string) =>
+  postJson<{ ok: true }>(`/assistant/conversations/${id}/delete`, { part });
 
 export type ApproveResult =
   { ok: true; card: Card } | { ok: false; reasons: string[]; card: Card };

@@ -105,7 +105,7 @@ export function PatientSummary({
                   className="block text-link hover:underline"
                   href={`/?c=${appt.ax.conversation_id}`}
                 >
-                  잡은 대화 보기
+                  예약 대화 기록 보기
                 </Link>
               )}
             </>

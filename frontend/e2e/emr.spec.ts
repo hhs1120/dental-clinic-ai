@@ -62,7 +62,7 @@ const AX_APPT = {
   },
 };
 
-test("schedule: AX 예약 꼬리표와 잡은 대화 링크", async ({ page }) => {
+test("schedule: AX 예약 꼬리표와 예약 대화 기록 링크", async ({ page }) => {
   await page.route("**/api/emr/schedule*", (r) =>
     r.fulfill({
       json: {
@@ -137,6 +137,6 @@ test("schedule: AX 예약 꼬리표와 잡은 대화 링크", async ({ page }) =
     /call=c-0319/,
   );
   await expect(
-    card.getByRole("link", { name: "잡은 대화 보기" }),
+    card.getByRole("link", { name: "예약 대화 기록 보기" }),
   ).toHaveAttribute("href", "/?c=5");
 });

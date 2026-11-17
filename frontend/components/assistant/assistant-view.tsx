@@ -47,6 +47,7 @@ export function AssistantView() {
   );
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [readOnly, setReadOnly] = useState(false); // 목록에서 지운 대화 — 볼 수만 있다
   const convId = useRef<number | null>(null);
   const epoch = useRef(0); // 대화를 열거나 새로 시작할 때마다 올린다 — 옛 스트림의 이벤트를 가려낸다
   const next = useRef(0);
@@ -60,7 +61,7 @@ export function AssistantView() {
 
   const send = async (raw: string) => {
     const text = raw.trim();
-    if (!text || busy) return;
+    if (!text || busy || readOnly) return;
     const aid = next.current++;
     setItems((all) => [
       ...all,
@@ -128,6 +129,7 @@ export function AssistantView() {
         convId.current = null;
         setItems([]);
         setLoadError(null);
+        setReadOnly(false);
       }
       return;
     }
@@ -139,6 +141,7 @@ export function AssistantView() {
       (conv) => {
         convId.current = conv.id;
         setLoadError(null);
+        setReadOnly(conv.deleted);
         setItems(
           conv.messages.map((m) =>
             m.role === "user"
@@ -198,6 +201,7 @@ export function AssistantView() {
         rows={1}
         placeholder="물어보거나 시킬 일을 적고 Enter (줄바꿈은 Shift+Enter)"
         value={draft}
+        disabled={readOnly}
         maxLength={MAX_TEXT}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -208,7 +212,7 @@ export function AssistantView() {
         }}
         className="min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
       />
-      <Button type="submit" disabled={busy || !draft.trim()}>
+      <Button type="submit" disabled={busy || readOnly || !draft.trim()}>
         보내기
       </Button>
     </form>
@@ -243,6 +247,14 @@ export function AssistantView() {
     // 본문 아래 여백(main pb-12)을 상쇄해 맨 끝에서도 입력 칸이 화면 바닥에 붙는다
     <div className="mx-auto -mb-12 flex max-w-3xl flex-col gap-6">
       <h1 className="sr-only">AI 비서 대화</h1>
+      {readOnly && (
+        <p
+          role="status"
+          className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+        >
+          삭제된 대화 — 읽기 전용
+        </p>
+      )}
       {items.map((it) =>
         it.role === "user" ? (
           <p

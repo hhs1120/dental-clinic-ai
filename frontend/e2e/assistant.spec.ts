@@ -284,3 +284,67 @@ test("assistant: 답을 기다리는 중 다른 대화를 열면 옛 답이 섞�
   await expect.poll(() => bodies.length).toBe(2);
   expect(bodies[1]).toMatchObject({ conversation_id: 9, text: "이어서" });
 });
+
+test("assistant: 대화 삭제는 확인 뒤 목록에서만 지운다", async ({ page }) => {
+  let rows = [
+    { id: 5, title: "미예약 요청", part: "데스크", created_at: "x" },
+    { id: 4, title: "다른 대화", part: "데스크", created_at: "x" },
+  ];
+  await page.route("**/api/assistant/conversations", (r) =>
+    r.fulfill({ json: rows }),
+  );
+  const deletes: object[] = [];
+  await page.route("**/api/assistant/conversations/5/delete", (r) => {
+    deletes.push(r.request().postDataJSON());
+    rows = rows.filter((c) => c.id !== 5);
+    return r.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/assistant/conversations/5", (r) =>
+    r.fulfill({
+      json: { id: 5, title: "미예약 요청", deleted: false, messages: [] },
+    }),
+  );
+  await page.goto("/?c=5");
+  await page.getByRole("button", { name: "대화 삭제: 미예약 요청" }).click();
+  await expect(
+    page.getByText(
+      "이 대화를 목록에서 지울까요? 예약 기록에서는 계속 볼 수 있습니다.",
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "취소" }).click();
+  expect(deletes).toHaveLength(0);
+  await page.getByRole("button", { name: "대화 삭제: 미예약 요청" }).click();
+  await page.getByRole("button", { name: "삭제", exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "미예약 요청" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "다른 대화" })).toBeVisible();
+  expect(deletes).toEqual([{ part: "데스크" }]);
+});
+
+test("assistant: 지운 대화는 읽기 전용으로 열린다", async ({ page }) => {
+  await page.route("**/api/assistant/conversations", (r) =>
+    r.fulfill({ json: [] }),
+  );
+  await page.route("**/api/assistant/conversations/8", (r) =>
+    r.fulfill({
+      json: {
+        id: 8,
+        title: "지운 대화",
+        deleted: true,
+        messages: [
+          {
+            seq: 1,
+            role: "user",
+            text: "예전 질문",
+            cards: [],
+            tool_calls: [],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/?c=8");
+  await expect(page.getByText("예전 질문")).toBeVisible();
+  await expect(page.getByText("삭제된 대화 — 읽기 전용")).toBeVisible();
+  await expect(page.getByLabel("말 입력")).toBeDisabled();
+});

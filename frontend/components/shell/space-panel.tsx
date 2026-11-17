@@ -1,12 +1,22 @@
 "use client";
 
-import { ChevronsLeftIcon } from "lucide-react";
+import { ChevronsLeftIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { getJson, useClinic, useFetch } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { deleteConversation } from "@/lib/assistant-api";
+import { errorText, getJson, useClinic, useFetch } from "@/lib/api";
+import { readPart } from "@/lib/part";
 import { EVAL_TABS, MENU, type SpaceKey } from "@/lib/nav";
 import { fetchToday, type TodaySheet } from "@/lib/today-api";
 import { cn } from "@/lib/utils";
@@ -139,7 +149,26 @@ function ConversationList({ current }: { current: string | null }) {
   });
   const { more, done } =
     paged.key === key ? paged : { more: [] as Conversation[], done: false };
-  const rows = [...(first.data ?? []), ...more];
+  const router = useRouter();
+  const [target, setTarget] = useState<Conversation | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [gone, setGone] = useState<number[]>([]); // 방금 지운 대화 — 더 불러온 쪽에서도 뺀다
+  const rows = [...(first.data ?? []), ...more].filter(
+    (c) => !gone.includes(c.id),
+  );
+  const confirmDelete = async () => {
+    if (!target) return;
+    try {
+      await deleteConversation(target.id, readPart());
+    } catch (e) {
+      setFailed(errorText(e));
+      return;
+    }
+    setGone((g) => [...g, target.id]);
+    if (current === String(target.id)) router.push("/");
+    first.reload();
+    setTarget(null);
+  };
   const loadMore = async () => {
     const last = rows[rows.length - 1];
     const page = await getJson<Conversation[]>(
@@ -164,16 +193,54 @@ function ConversationList({ current }: { current: string | null }) {
       )}
       <nav aria-label="지난 대화" className="mt-2 flex flex-col gap-0.5">
         {rows.map((c) => (
-          <Link
-            key={c.id}
-            href={`/?c=${c.id}`}
-            aria-current={current === String(c.id) ? "page" : undefined}
-            className={itemClass(current === String(c.id))}
-          >
-            <span className="truncate">{c.title}</span>
-          </Link>
+          <div key={c.id} className="group relative">
+            <Link
+              href={`/?c=${c.id}`}
+              aria-current={current === String(c.id) ? "page" : undefined}
+              className={cn(itemClass(current === String(c.id)), "pr-9")}
+            >
+              <span className="truncate">{c.title}</span>
+            </Link>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`대화 삭제: ${c.title}`}
+              onClick={() => {
+                setFailed(null);
+                setTarget(c);
+              }}
+              className={cn(
+                "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                current === String(c.id) && "opacity-100",
+              )}
+            >
+              <Trash2Icon />
+            </Button>
+          </div>
         ))}
       </nav>
+      <Dialog
+        open={target !== null}
+        onOpenChange={(o) => !o && setTarget(null)}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>대화 삭제</DialogTitle>
+            <DialogDescription>
+              이 대화를 목록에서 지울까요? 예약 기록에서는 계속 볼 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          {failed && <p className="text-sm text-destructive">{failed}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTarget(null)}>
+              취소
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()}>
+              삭제
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {first.data && first.data.length >= PAGE && !done && (
         <Button variant="ghost" size="sm" onClick={loadMore}>
           더보기
