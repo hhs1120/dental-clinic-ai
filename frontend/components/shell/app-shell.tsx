@@ -115,11 +115,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       {open && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           aria-label="메뉴 닫기"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-foreground/30 md:hidden print:hidden"
+          className="fixed inset-0 z-30 h-auto rounded-none bg-foreground/30 hover:bg-foreground/30 md:hidden print:hidden"
         />
       )}
       <aside

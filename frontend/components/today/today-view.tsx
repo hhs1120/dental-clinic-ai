@@ -22,7 +22,7 @@ import {
 
 /** 오늘 화면 — 요약 카드 → 사람이 볼 일 → AI가 한 일(기능 정의 §4 오늘 화면). 보여 주고 보내기만 하고, 예외는 다시 열기 */
 export function TodayView() {
-  const today = useFetch("today", (s) => fetchToday(s));
+  const today = useFetch("today", () => fetchToday());
   if (today.error)
     return (
       <p className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger-fg">

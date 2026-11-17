@@ -116,8 +116,16 @@ export interface TodaySheet {
   };
 }
 
-export const fetchToday = (signal?: AbortSignal) =>
-  getJson<TodaySheet>("/today", undefined, signal);
+let todayInflight: Promise<TodaySheet> | null = null;
+
+/** 오늘 화면과 셸 목록 칸이 같은 순간에 부르면 요청 하나를 나눠 쓴다(SQLite 쓰기 잠금 경합을 줄이려고).
+ * 나눠 쓰는 요청은 한 호출자의 중단으로 끊기지 않게 signal을 넘기지 않는다 */
+export const fetchToday = (): Promise<TodaySheet> => {
+  todayInflight ??= getJson<TodaySheet>("/today").finally(() => {
+    todayInflight = null;
+  });
+  return todayInflight;
+};
 
 export const checkCall = (uid: string, part: string) =>
   postJson(`/calls/${encodeURIComponent(uid)}/check`, { part });

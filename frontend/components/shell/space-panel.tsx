@@ -25,7 +25,8 @@ const itemClass = (current: boolean) =>
     current && "bg-accent font-bold text-accent-foreground",
   );
 
-/** 업무 메뉴 줄 옆 건수 — 오늘 화면(GET /today)과 같은 값, 0건·못 불러온 칸은 비운다 */
+/** 업무 메뉴 줄 옆 건수 — 오늘 화면(GET /today)과 같은 값, 0건·못 불러온 칸은 비운다.
+ * 업무 안에서 화면을 옮길 때마다 다시 센다(fetchToday가 같은 순간의 요청을 나눠 쓴다) */
 function counts(sheet: TodaySheet | null): Record<string, number> {
   if (!sheet) return {};
   return {
@@ -38,7 +39,9 @@ function counts(sheet: TodaySheet | null): Record<string, number> {
 }
 
 function WorkMenu({ pathname }: { pathname: string }) {
-  const { data } = useFetch<TodaySheet>("shell-today", fetchToday);
+  const { data } = useFetch<TodaySheet>(`shell-today:${pathname}`, () =>
+    fetchToday(),
+  );
   const n = counts(data);
   return (
     <nav aria-label="메뉴" className="flex flex-col gap-0.5">
