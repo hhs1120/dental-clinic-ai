@@ -123,7 +123,14 @@ type Line = {
   href: string;
   title: string;
   meta?: string;
+  /** 있으면 줄 끝에 "AI 비서로 처리" — 비서 첫 화면에 이 질문을 바로 보낸다 */
+  assist?: string;
 };
+
+const ASSIST_UNBOOKED = "지난 7일 전화로 예약 원했는데 안 잡힌 사람 보여줘";
+const ASSIST_APPEAL = "재심 신청 기한이 얼마 안 남은 삭감 건 보여줘";
+const ASSIST_RECON = "일계표 불일치 있는 날 보여줘";
+const assistHref = (q: string) => `/?${new URLSearchParams({ draft: q })}`;
 
 function People({ sheet }: { sheet: TodaySheet }) {
   const names = useLabels();
@@ -158,7 +165,8 @@ function People({ sheet }: { sheet: TodaySheet }) {
     href: string,
     title: string,
     meta: string,
-  ) => n > 0 && lines.push({ key, tag, tone, href, title, meta });
+    assist?: string,
+  ) => n > 0 && lines.push({ key, tag, tone, href, title, meta, assist });
   count(
     workLines,
     p.unconfirmed,
@@ -190,6 +198,17 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "급함 먼저 · 끝내면 빠짐",
   );
   count(
+    callLines,
+    p.wants_appt_unbooked.count,
+    "unbooked",
+    "예약 원함",
+    "warn",
+    assistHref(ASSIST_UNBOOKED),
+    `예약 원함 ${p.wants_appt_unbooked.count}명 — 전화로 원했는데 안 잡힘`,
+    p.wants_appt_unbooked.names.join(", "),
+    ASSIST_UNBOOKED,
+  );
+  count(
     workLines,
     p.appeal_soon,
     "appeal",
@@ -198,6 +217,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     "/claims?chip=soon",
     `재심 신청 기한 임박 ${p.appeal_soon}건`,
     "30일 이내 · 상병 착오 제외",
+    ASSIST_APPEAL,
   );
   count(
     workLines,
@@ -228,6 +248,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
     p.recon_month ? `/finance?month=${p.recon_month}` : "/finance",
     `일계표 불일치 ${p.recon_open}건`,
     "장부와 카드·통장 입금이 안 맞는 건 확정",
+    ASSIST_RECON,
   );
   count(
     workLines,
@@ -256,7 +277,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
       key: `q-${q.id}`,
       tag: "근거 없음",
       tone: "muted",
-      href: `/ask?${new URLSearchParams({ tab: "chat", draft: q.question })}`,
+      href: `/?${new URLSearchParams({ prefill: q.question })}`,
       title: `“${q.question}”`,
       meta: `${shortAt(q.at)} · 문서에서 근거를 못 찾은 질문`,
     });
@@ -282,6 +303,14 @@ function People({ sheet }: { sheet: TodaySheet }) {
               <div className="text-xs text-muted-foreground">{l.meta}</div>
             )}
           </Link>
+          {l.assist && (
+            <Link
+              href={assistHref(l.assist)}
+              className="shrink-0 text-xs font-medium text-primary hover:underline"
+            >
+              AI 비서로 처리
+            </Link>
+          )}
         </li>
       ))}
     </ul>

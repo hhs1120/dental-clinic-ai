@@ -59,7 +59,7 @@ export function PrepView() {
   }, [date, key]);
 
   // AI 제안 갱신 — 작업을 폴링하고 끝나면 다시 조회한다. 갱신 전 행을 들고 있다가 만든 시각이 바뀐 행에 "방금 갱신"
-  type Before = { date: string; rows: Map<number, PrepRow> };
+  type Before = { date: string; rows: Map<number | string, PrepRow> };
   const [job, setJob] = useState<({ id: number } & Before) | null>(null);
   const [done, setDone] = useState<Before | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
@@ -208,7 +208,7 @@ export function PrepView() {
 }
 
 /** 갱신 뒤 행 중 제안을 만든 시각이 갱신 전과 다른 행 — 이전 제안을 붙인다 */
-function markRefreshed(rows: PrepRow[], before: Map<number, PrepRow>) {
+function markRefreshed(rows: PrepRow[], before: Map<number | string, PrepRow>) {
   return rows.map((r) => {
     const b = before.get(r.appointment_id);
     if (!r.generated || b?.made_at === r.made_at) return r;

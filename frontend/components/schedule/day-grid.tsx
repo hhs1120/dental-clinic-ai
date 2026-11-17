@@ -26,8 +26,8 @@ export function DayGrid({
 }: {
   day: ScheduleDay;
   showAll: boolean;
-  selected: number | null;
-  onSelect: (id: number) => void;
+  selected: number | string | null;
+  onSelect: (id: number | string) => void;
 }) {
   if (day.hours.closed) {
     return (
@@ -154,7 +154,13 @@ function lanes(appts: Appt[]): Placed[] {
       lane: 0,
       lanes: 1,
     }))
-    .sort((a, b) => a.start - b.start || a.appt.id - b.appt.id);
+    .sort(
+      (a, b) =>
+        a.start - b.start ||
+        String(a.appt.id).localeCompare(String(b.appt.id), "en", {
+          numeric: true,
+        }),
+    );
   let group: Placed[] = [];
   let groupEnd = -1;
   const laneEnds: number[] = [];
@@ -214,6 +220,11 @@ function ApptCard({
         {off && (
           <Badge variant="danger" className="h-4 shrink-0 py-0">
             {STATUS_LABEL[appt.status]}
+          </Badge>
+        )}
+        {appt.source === "ax" && (
+          <Badge variant="kind" className="h-4 shrink-0 py-0">
+            AX
           </Badge>
         )}
         {appt.new_patient && (

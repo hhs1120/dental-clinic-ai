@@ -238,7 +238,9 @@ export function HistoryPane({
             a.at,
             TYPE_LABEL[a.type],
             a.procedure,
-            STATUS_LABEL[a.status],
+            a.source === "ax"
+              ? `${STATUS_LABEL[a.status]} · AX`
+              : STATUS_LABEL[a.status],
             a.staff,
             a.chair ?? "-",
           ])}

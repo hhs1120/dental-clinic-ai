@@ -49,7 +49,7 @@ export function PrepTable({
     : "appointment";
   const type = params.get("type");
   const todoOnly = params.get("todo") === "1";
-  const open = Number(params.get("open")) || null;
+  const open = params.get("open") || null;
   const past = today !== null && sheet.date < today;
   const rows = all
     .filter((r) => r.chips.includes(chip))
@@ -123,12 +123,12 @@ export function PrepTable({
                 <tr
                   className={cn(
                     "cursor-pointer border-t hover:bg-muted/50",
-                    open === r.appointment_id && "bg-muted/50",
+                    open === String(r.appointment_id) && "bg-muted/50",
                   )}
                   onClick={() =>
                     go({
                       open:
-                        open === r.appointment_id
+                        open === String(r.appointment_id)
                           ? null
                           : String(r.appointment_id),
                     })
@@ -150,6 +150,9 @@ export function PrepTable({
                     </Link>{" "}
                     {r.patient.new_patient && (
                       <Badge variant="kind">신환</Badge>
+                    )}
+                    {String(r.appointment_id).startsWith("ax-") && (
+                      <Badge variant="kind">AX</Badge>
                     )}
                     <div className="text-xs text-muted-foreground tabular-nums">
                       {r.patient.chart_no} · {r.patient.age}세{" "}
@@ -186,7 +189,7 @@ export function PrepTable({
                     </td>
                   )}
                 </tr>
-                {open === r.appointment_id && (
+                {open === String(r.appointment_id) && (
                   <tr className="border-t bg-muted/30">
                     <td />
                     <td colSpan={past ? 5 : 4} className="px-3 py-3">

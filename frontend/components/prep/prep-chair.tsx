@@ -43,7 +43,7 @@ export function PrepChair({
   go: Go;
 }) {
   const clock = useClockMinutes();
-  const [picked, setPicked] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | string | null>(null);
   const chairs = [...new Set(sheet.rows.map(chairKey))].sort((a, b) =>
     a === CONSULT ? 1 : b === CONSULT ? -1 : Number(a) - Number(b),
   );
@@ -120,6 +120,11 @@ export function PrepChair({
                 </span>
                 <span className="text-sm">
                   <b>{r.patient.name}</b> · {r.procedure}
+                  {String(r.appointment_id).startsWith("ax-") && (
+                    <Badge variant="kind" className="ml-1.5">
+                      AX
+                    </Badge>
+                  )}
                   {r.alerts.some((a) => a.related) && (
                     <span className="block text-xs text-status-danger-fg">
                       {r.alerts

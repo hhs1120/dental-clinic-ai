@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   errorText,
@@ -68,15 +68,13 @@ function sourceLabel(n: number, c: SearchCard): string {
 }
 
 /** 기록 검색 AI 요약 — 결과가 있는 검색에서만 그린다. 결과가 먼저 뜨고 요약은 따로 채운다.
- * 요약이 실패해도 "이걸로 질문하기"는 보인다(설계 2026-11-09 검색 요약 "화면") */
+ * 요약이 실패해도 "AI 비서에게 묻기"는 보인다(설계 2026-11-09 검색 요약 "화면") */
 export function SearchSummary({
   search,
   requestKey,
-  onAsk,
 }: {
   search: SearchState;
   requestKey: string;
-  onAsk: (q: string) => void;
 }) {
   const [state, setState] = useState<State | null>(null);
   useEffect(() => {
@@ -144,14 +142,16 @@ export function SearchSummary({
             )}
           </>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="self-start"
-          onClick={() => onAsk(search.q)}
+        <Link
+          href={`/?${new URLSearchParams({ prefill: search.q })}`}
+          className={buttonVariants({
+            size: "sm",
+            variant: "outline",
+            className: "self-start",
+          })}
         >
-          이걸로 질문하기
-        </Button>
+          AI 비서에게 묻기
+        </Link>
       </Card>
     </section>
   );

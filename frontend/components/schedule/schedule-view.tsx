@@ -43,7 +43,7 @@ export function ScheduleView() {
   const router = useRouter();
   const clinic = useClinic();
   const date = params.get("date") ?? "";
-  const appt = Number(params.get("appt")) || null;
+  const appt = params.get("appt") || null;
   const showAll = params.get("all") === "1";
 
   const go = (patch: Record<string, string | null>, replace = false) => {
@@ -84,7 +84,7 @@ export function ScheduleView() {
   const selected =
     current?.appointments.find(
       (a) =>
-        a.id === appt &&
+        String(a.id) === appt &&
         (showAll || (a.status !== "cancelled" && a.status !== "noshow")),
     ) ?? null;
   const [patient, setPatient] = useState<Loaded<PatientRecord> | null>(null);

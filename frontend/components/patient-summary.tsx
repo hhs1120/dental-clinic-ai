@@ -91,9 +91,30 @@ export function PatientSummary({
 
       {appt && (
         <Section title="어떻게 잡혔나">
-          <p>
-            {appt.booked_via === "phone" ? "전화" : "데스크"} · {appt.booked_at}
-          </p>
+          {appt.ax ? (
+            <>
+              <p>
+                <Badge variant="kind">AX</Badge> AI 비서로 잡음
+              </p>
+              <p>
+                승인 {appt.ax.decided_at?.slice(0, 16) ?? "—"} ·{" "}
+                {appt.ax.decided_by ?? "—"}
+              </p>
+              {appt.ax.conversation_id !== null && (
+                <Link
+                  className="block text-link hover:underline"
+                  href={`/?c=${appt.ax.conversation_id}`}
+                >
+                  잡은 대화 보기
+                </Link>
+              )}
+            </>
+          ) : (
+            <p>
+              {appt.booked_via === "phone" ? "전화" : "데스크"} ·{" "}
+              {appt.booked_at}
+            </p>
+          )}
           {appt.call && (
             <>
               {/* 판정 풀 통화는 통화 화면에 없어 글자만 */}

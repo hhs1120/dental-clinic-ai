@@ -25,6 +25,7 @@ const EMPTY = {
     recon_month: null,
     expense_open: 0,
     expense_month: null,
+    wants_appt_unbooked: { count: 0, names: [] },
   },
   briefing: [],
   ai: {
@@ -106,6 +107,7 @@ const FULL = {
         at: "2026-11-09 16:12:00",
       },
     ],
+    wants_appt_unbooked: { count: 0, names: [] },
   },
   ai: {
     autoclose_on: true,
@@ -154,9 +156,7 @@ test("카드와 줄을 누르면 그 화면으로", async ({ page }) => {
   await expect(page).toHaveURL(/\/prep\?chip=unconfirmed$/);
   await page.goto("/today");
   await page.getByRole("link", { name: /유치는 언제 빠져/ }).click();
-  // ?draft=는 물어보기 화면이 입력칸을 채우자마자 주소에서 지우니 지운 뒤 모습을 본다
-  await expect(page.getByLabel("질문 입력")).toHaveValue(/유치는 언제 빠져/);
-  await expect(page).toHaveURL(/\/ask\?tab=chat$/);
+  await expect(page.getByLabel("말 입력")).toHaveValue(/유치는 언제 빠져/);
 });
 
 // 미예약 환자 줄은 숫자 없는 고정 링크라 0건 숨김 없이 늘 보인다 — 문구(MISSED_LINK_TEXT)는 바뀔 수 있어 링크 주소로 찾는다
@@ -524,4 +524,43 @@ test("둘 다 비면 남은 일 없음 한 번만", async ({ page }) => {
   await page.goto("/today");
   await expect(page.getByText("오늘 남은 일이 없습니다")).toBeVisible();
   await expect(page.getByText("통화에서 온 일 없음")).toHaveCount(0);
+});
+
+test("예약 원함 줄과 AI 비서로 처리 링크", async ({ page }) => {
+  await fakeToday(page, {
+    ...EMPTY,
+    people: {
+      ...EMPTY.people,
+      appeal_soon: 2,
+      recon_open: 3,
+      recon_month: "2026-08",
+      wants_appt_unbooked: { count: 2, names: ["김영철", "박순자"] },
+    },
+  });
+  await page.goto("/today");
+  const people = page.getByRole("region", { name: "사람이 볼 일" });
+  await expect(people.getByText(/예약 원함 2명/)).toBeVisible();
+  await expect(people.getByText(/김영철, 박순자/)).toBeVisible();
+  const links = people.getByRole("link", { name: "AI 비서로 처리" });
+  await expect(links).toHaveCount(3);
+  const q = (t: string) => `/?${new URLSearchParams({ draft: t })}`;
+  await expect(links.nth(0)).toHaveAttribute(
+    "href",
+    q("지난 7일 전화로 예약 원했는데 안 잡힌 사람 보여줘"),
+  );
+  await expect(
+    people.locator(
+      `a[href="${q("재심 신청 기한이 얼마 안 남은 삭감 건 보여줘")}"]`,
+    ),
+  ).toHaveCount(1);
+  await expect(
+    people.locator(`a[href="${q("일계표 불일치 있는 날 보여줘")}"]`),
+  ).toHaveCount(1);
+  await page.unroute("**/api/today");
+  await fakeToday(page, EMPTY);
+  await page.goto("/today");
+  await expect(page.getByText(/예약 원함/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "AI 비서로 처리" })).toHaveCount(
+    0,
+  );
 });
