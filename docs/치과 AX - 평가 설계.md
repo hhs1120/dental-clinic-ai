@@ -238,7 +238,7 @@ tags:
 - 켜는 조건·관문 연결은 §1 원칙 9·§2.7. dev는 `make trust-eval`, 채점은 `make eval` 리포트 절. test는 `python -m evaluation.input_trust run --split test`(사람, 분류 버전 × 판정기 버전마다 한 번 — 가드 `AlreadyRun`·`--force`)
 - **⑧-1·⑧-2는 넣지 않는다**: 자동 처리가 코드 규칙 답과 AI 답이 같을 때만 일어나, 지시문에 속은 AI가 규칙과 다른 답을 내면 사람에게 넘어간다. 남는 위험은 규칙이 틀린 건에서 AI 검산이 지시문에 꺼지는 경우라, ⑧ 자동 처리를 켤 때 같은 틀로 더한다
 
-**AI 비서 시나리오**(`evaluation/assistant.py`·`assistant_score.py`·`assistant_scenarios.py`, [[치과 AX - 기능 정의]] §4 AI 비서): 대화형이라 단일 질문 평가셋과 따로, 시나리오 하나 = 사용자 턴 2~4개의 대본으로 잰다(`verify` `ASSISTANT_TURNS`).
+**AI 비서 시나리오**(`evaluation/assistant.py`·`assistant_score.py`·`assistant_scenarios.py`, [[치과 AX - 기능 정의]] §4 AI 비서): 대화형이라 단일 질문 평가셋과 따로, 시나리오 하나 = 사용자 턴 여러 개의 대본으로 잰다(턴 수 `generator/verify/assistant_scenarios.py` `ASSISTANT_TURNS`).
 - **평가셋**: `ground_truth/assistant_scenarios.json`(`ASSISTANT_TYPE_COUNTS` — 예약 흐름·조회·문서 위임·거절·앞 턴 참조, 분할마다 같은 수). 문장은 사람이 쓰고 정답(gold)은 코드가 데이터에서 계산해 확인한다 — 턴마다 `{tools, args, end}`: 불러야 할 도구 집합(순서 무관, `done_tools` 제외)·핵심 인자·끝 상태(예약 초안 `{chart_no, date, start_range, staff_role}` / 쓰기 거절 `{no_write}` / 없음). 초안의 시각 범위는 `emr_bridge.free_slots`와 환자 규칙을 통과하는 시작 시각에서 나오고, 정답은 AX 예약이 없는 원본 기준이라 앱에서 예약을 승인해도 바뀌지 않는다. 예약 원함은 활성 분류 버전을 따르므로 버전을 바꾸면 `python -m evaluation.assistant_scenarios check`로 다시 본다. 정답은 `data/`에 넣지 않는다
 - **분할 격리**: dev/test는 환자·날짜(범위는 날마다)·달을 겹치지 않는다(`make verify` `check_assistant_split_isolation`) — dev로 학습한 모델이 test 답을 미리 보지 않게. 구성은 `check_assistant_scenarios`가 본다
 - **실행**: 시나리오마다 새 임시 앱 DB(원본 읽기 전용)에서 대본 턴을 `assistant.turn`에 차례로 넣는다. 다음 사용자 말은 앞 답과 무관한 고정 대본이고(가상 사용자 없음) 앞 답이 틀려 어색해져도 그대로 이어 채점한다. 초안이 생겨도 승인하지 않으며 끝 상태 = 초안이다. 검색 색인이 없어 `ask_records`는 `no_index`로 답 단계에 넘어가므로 문서 위임은 도구 선택·인자만 채점한다. 결과는 `evaluation/assistant_runs.jsonl`(dev)·`assistant_test_runs.jsonl`(test)에 쌓고 같은 시나리오·버전·별칭이면 건너뛰며(이어 돎) 오류로 끝난 시나리오는 이어 돌 때 다시 돈다. 앱 DB에는 쓰지 않는다
@@ -287,7 +287,7 @@ tags:
 | `evaluation/call_actions.jsonl` | `make action-label`·`make action-audit` | ① 통화 → 처리 정답(Opus 라벨 + 사람 표본, 만드는 법·이유는 §5). `truth.sqlite`가 아니라 커밋하는 jsonl |
 | `truth_scenarios` | 생성기(평가 전용 단계) | ⑥·운영 평가 시나리오 → 심은 이상·정답 원인·대상 환자, split. 시나리오 DB는 `evaluation/scenarios/`(정답 없음) |
 
-같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`, `hard_calls.json`)도 커밋(`assistant_scenarios.json`은 JSON이 원본) — git diff·리뷰용. `rag_qa.json`·`hard_call_labels.json`·`claim_qa.json`이 원본이고 `truth_rag_qa`·`hc-` 최종 라벨·`truth_claim_qa`는 적재 결과.
+같은 내용의 JSON(`call_labels.json`, `rag_qa.json`, `doc_meta.json`, `hard_calls.json`)도 커밋 — git diff·리뷰용. `rag_qa.json`·`hard_call_labels.json`·`claim_qa.json`이 원본이고 `truth_rag_qa`·`hc-` 최종 라벨·`truth_claim_qa`는 적재 결과.
 
 **앱 DB 쪽 누출 검사**는 생성기 `make verify`에 있음([[치과 AX - 가상 데이터 생성 설계]] §5.3 '누출').
 
