@@ -128,8 +128,47 @@ def src(tmp_path):
     conn.close()
 
 
+def add_ax(
+    conn, patient_id=4, staff_id=1, at="2026-12-01 16:00:00", code="U0019", type_="consult"
+):
+    """승인된 AX 예약 한 건(ax_emr_writes) — 취소·초안은 합쳐 읽지 않는다"""
+    conn.execute(
+        "INSERT INTO ax_emr_writes (kind, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " procedure_code, chair_no, status, decided_by, decided_at, created_at)"
+        " VALUES ('appointment', ?, ?, ?, 30, ?, ?, NULL, 'approved', '데스크', ?, ?)",
+        (patient_id, staff_id, at, type_, code, at, at),
+    )
+    conn.commit()
+
+
+@pytest.fixture
+def aconn(tmp_path):
+    """앱 연결(app 테이블 + source) — 승인된 AX 예약을 읽는 경로"""
+    from backend import db
+
+    make_source(tmp_path / "source.sqlite").close()
+    c = db.connect(tmp_path / "app.sqlite", tmp_path / "source.sqlite")
+    db.init_schema(c)
+    yield c
+    c.close()
+
+
 def rows(conn, day=TODAY):
     return {r["appointment_id"]: r for r in prep.prep_facts(conn, day, TODAY)}
+
+
+def test_prep_facts_include_ax_only_when_asked(aconn):
+    add_ax(aconn)
+    assert len(prep.prep_facts(aconn, TODAY, TODAY)) == 3  # 기본(평가 경로)은 원본만
+    got = prep.prep_facts(aconn, TODAY, TODAY, include_ax=True)
+    assert [r["time"] for r in got] == ["10:00", "11:00", "14:00", "16:00"]
+    ax = got[-1]
+    assert ax["appointment_id"].startswith("ax-") and ax["patient"]["name"] == "정다은"
+    assert (ax["type"], ax["staff"], ax["procedure"]) == ("consult", "강태현", "상담")
+    assert ax["confirmed"] is False and "unconfirmed" in ax["chips"]
+    assert ax["open_plan"] == [] and ax["chair_no"] is None
+    assert prep.sheet(aconn, TODAY, TODAY, "m", include_ax=True)["days"][-1]["count"] == 4
+    assert prep.sheet(aconn, TODAY, TODAY, "m")["days"][-1]["count"] == 3
 
 
 def test_alert_related_only_for_planned_procedure(src):

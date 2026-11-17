@@ -532,3 +532,95 @@ def test_schedule_route_booking_call_unclassified(client_source_only):
     """앱 DB가 없거나 분류 전이면 None — 화면은 분류 전 표시"""
     a = {x["id"]: x for x in client_source_only.get("/emr/schedule").json()["appointments"]}
     assert a[101]["call"]["emergency"] is None
+
+
+def _ax(**kw):
+    """emr_bridge.ax_appointments가 돌려주는 모양의 승인된 AX 예약 한 건"""
+    return {
+        "id": "ax-7",
+        "patient_id": 2,
+        "staff_id": 2,
+        "scheduled_at": "2026-12-01 16:00:00",
+        "duration_min": 30,
+        "type": "hygiene",
+        "planned_procedure_code": "scaling",
+        "status": "scheduled",
+        "booked_via": "ax",
+        "confirmed": 0,
+        "created_at": "2026-12-01 08:50:00",
+        "chair_no": 1,
+        "plan_item_id": None,
+        "source": "ax",
+        "source_call_uid": "c-0003",
+        "conversation_id": 5,
+        "decided_by": "데스크",
+        "decided_at": "2026-12-01 08:50:00",
+        "chart_no": "C-00002",
+        "name": "박영희",
+        "procedure_name": "스케일링",
+    } | kw
+
+
+def test_schedule_day_merges_ax_with_tag(conn):
+    d = schedule_day(conn, TODAY, TODAY, START, [_ax()])
+    by = {a["id"]: a for a in d["appointments"]}
+    assert by["ax-7"]["source"] == "ax" and by[101]["source"] == "emr"
+    assert by["ax-7"]["ax"] == {
+        "decided_by": "데스크",
+        "decided_at": "2026-12-01 08:50:00",
+        "source_call_uid": "c-0003",
+        "conversation_id": 5,
+    }
+    assert by[101]["ax"] is None
+    assert (by["ax-7"]["time"], by["ax-7"]["staff_name"], by["ax-7"]["booked_via"]) == (
+        "16:00",
+        "임재윤",
+        "ax",
+    )
+    assert by["ax-7"]["plan_step"] is None and by["ax-7"]["confirm"] == "no_message"
+    assert [a["time"] for a in d["appointments"]] == sorted(a["time"] for a in d["appointments"])
+    assert d["counts"]["total"] == 4 and d["counts"]["hygiene"] == 2
+    assert d["counts"]["unconfirmed"] == 3  # 기준일의 AX 예약도 내원 확인 전
+
+
+def test_schedule_day_ax_consult_keeps_treatment_rename(conn):
+    d = schedule_day(
+        conn, TODAY, TODAY, START, [_ax(type="treatment", procedure_name="상담", staff_id=1)]
+    )
+    assert {a["id"]: a for a in d["appointments"]}["ax-7"]["procedure"] == "진찰"
+
+
+def test_patient_record_appointments_include_own_ax(conn):
+    rec = patient_record(conn, "C-00002", TODAY, [_ax(), _ax(id="ax-8", patient_id=1)])
+    ax = [a for a in rec["appointments"] if a["source"] == "ax"]
+    assert [a["id"] for a in ax] == ["ax-7"] and ax[0]["staff"] == "임재윤"
+    assert all(
+        a["source"] == "emr" for a in patient_record(conn, "C-00002", TODAY)["appointments"]
+    )
+
+
+def test_routes_merge_approved_ax_only_with_app_db(emr_paths, client, tmp_path):
+    from backend import db
+
+    app_conn = db.connect(*emr_paths)
+    db.init_schema(app_conn)
+    app_conn.execute(
+        "INSERT INTO ax_emr_writes (kind, patient_id, staff_id, scheduled_at, duration_min, type,"
+        " procedure_code, chair_no, status, decided_by, decided_at, created_at)"
+        " VALUES ('appointment', 2, 2, '2026-12-01 16:00:00', 30, 'hygiene', 'scaling', 1,"
+        " 'approved', '데스크', '2026-12-01 08:50:00', '2026-12-01 08:40:00')"
+    )
+    app_conn.commit()
+    app_conn.close()
+    day = client.get("/emr/schedule", params={"date": "2026-12-01"}).json()
+    assert [a["id"] for a in day["appointments"] if a["source"] == "ax"] == ["ax-1"]
+    assert day["counts"]["total"] == 4
+    rec = client.get("/emr/patients/C-00002").json()
+    assert [a["id"] for a in rec["appointments"] if a["source"] == "ax"] == ["ax-1"]
+    # 앱 DB가 없으면 원본만
+    only = (
+        _client((tmp_path / "none" / "app.sqlite", emr_paths[1]))
+        .get("/emr/schedule", params={"date": "2026-12-01"})
+        .json()
+    )
+    assert only["counts"]["total"] == 3

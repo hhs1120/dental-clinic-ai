@@ -344,13 +344,20 @@ def _index_plan(ctx: Ctx) -> int:
 
 def _prep(ctx: Ctx) -> dict:
     out = prep.build(
-        ctx.conn, ctx.gw, prep.tab_days(ctx.today), ctx.today, use_batch=ctx.use_batch
+        ctx.conn,
+        ctx.gw,
+        prep.tab_days(ctx.today),
+        ctx.today,
+        use_batch=ctx.use_batch,
+        include_ax=True,
     )
     return _ok(out["called"], out["failed"])
 
 
 def _prep_plan(ctx: Ctx) -> int:
-    return prep.todo_count(ctx.conn, prep.tab_days(ctx.today), ctx.today, _model(ctx, prep.ALIAS))
+    return prep.todo_count(
+        ctx.conn, prep.tab_days(ctx.today), ctx.today, _model(ctx, prep.ALIAS), include_ax=True
+    )
 
 
 def _claim(mod) -> Step:

@@ -30,6 +30,7 @@ from backend import (
     db,
     documents,
     emr,
+    emr_bridge,
     expense,
     expense_auto,
     judge_queue,
@@ -439,6 +440,17 @@ def clinic(paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     return {"name": name, "today": _clinic().today.isoformat()}
 
 
+def _ax_appointments(paths: tuple[Path, Path], date_from: dt.date, date_to: dt.date) -> list[dict]:
+    """승인된 AX 예약(emr_bridge) — 앱 DB가 없으면 빈 목록(색인 없이도 예약표·EMR은 나온다)"""
+    if not Path(paths[0]).exists():
+        return []
+    app_conn = _open_rw(paths)
+    try:
+        return emr_bridge.ax_appointments(app_conn, date_from, date_to)
+    finally:
+        app_conn.close()
+
+
 @app.get("/emr/schedule")
 def emr_schedule(
     paths: Annotated[tuple[Path, Path], Depends(get_db_paths)], date: str | None = None
@@ -450,7 +462,9 @@ def emr_schedule(
         raise HTTPException(422, f"date: {e}") from e
     conn = _open_source(paths)
     try:
-        out = emr.schedule_day(conn, day, clinic.today, clinic.range_start)
+        # 승인된 AX 예약은 앱 DB에 있다 — 앱 DB가 없으면 원본만(AI 비서 설계 §5.3)
+        extra = _ax_appointments(paths, day, day)
+        out = emr.schedule_day(conn, day, clinic.today, clinic.range_start, extra)
     finally:
         conn.close()
     # 잡은 통화의 응급 여부 — ① 분류는 앱 DB에 있다(emr.py는 원본만). 앱 DB가 없으면 분류 전
@@ -483,7 +497,8 @@ def emr_patients(q: str, paths: Annotated[tuple[Path, Path], Depends(get_db_path
 def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_db_paths)]) -> dict:
     conn = _open_source(paths)
     try:
-        record = emr.patient_record(conn, chart_no.strip(), _clinic().today)
+        extra = _ax_appointments(paths, dt.date.min, dt.date.max)
+        record = emr.patient_record(conn, chart_no.strip(), _clinic().today, extra)
     finally:
         conn.close()
     if record is None:
@@ -1183,7 +1198,7 @@ def prep_sheet(paths: Paths, clinic: ClinicDep, date: str | None = None) -> dict
     day = _tab_day(date, clinic)
     conn = _open_rw(paths)
     try:
-        return prep.sheet(conn, day, clinic.today)
+        return prep.sheet(conn, day, clinic.today, include_ax=True)
     finally:
         conn.close()
 
@@ -1194,7 +1209,7 @@ def _run_prep_job(paths, gw_factory, job_id: int, day: dt.date, today: dt.date) 
     conn = None
     try:
         conn = db.connect(*paths)
-        out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False)
+        out = prep.build(conn, gw_factory(conn), [day], today, use_batch=False, include_ax=True)
         status, done = "done", out["rows"]
     except Exception as e:  # noqa: BLE001 — 실패를 작업 행에 남겨 화면이 보인다
         error = f"{type(e).__name__}: {e}"
@@ -1233,7 +1248,7 @@ def prep_regenerate(paths: Paths, clinic: ClinicDep, gw: GatewayFactory, date: s
         if running:
             conn.commit()
             return {"job_id": running[0]}
-        total = len(prep.prep_facts(conn, day, clinic.today))
+        total = len(prep.prep_facts(conn, day, clinic.today, include_ax=True))
         job_id = conn.execute(
             "INSERT INTO ax_jobs (kind, arg, status, total, started_at)"
             " VALUES ('prep', ?, 'running', ?, ?)",

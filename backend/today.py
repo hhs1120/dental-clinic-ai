@@ -194,7 +194,7 @@ def _expense(conn: sqlite3.Connection, today: date) -> dict:
 
 def sheet(conn: sqlite3.Connection, today: date, now: datetime) -> dict:
     """GET /today — today = 앱 기준일(shared/clinic.py), now = 실제 시계(근거 없는 질문 7일)"""
-    rows = prep.prep_facts(conn, today, today)
+    rows = prep.prep_facts(conn, today, today, include_ax=True)
     cards = _cards(rows)
     todo, urgent = _todo(calls.today_board(conn, today))
     pre = claims.pre_claim(conn, today)["counts"]

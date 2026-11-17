@@ -12,7 +12,7 @@ from generator.clinic import master_values_rows
 from tests.backend.call_db import LABELS, TODAY, classify_row, make_call_db
 from tests.backend.test_claims import NOTE, add_claim, reviewed_for
 from tests.backend.test_missed import Source
-from tests.backend.test_prep import make_source
+from tests.backend.test_prep import add_ax, make_source
 
 NOW = datetime(2026, 11, 10, 9, 0, 0)
 
@@ -54,6 +54,14 @@ def test_cards_match_prep_chips(pconn):
     assert s["cards"]["alert_patients"] == s["people"]["alert_patients"] == alert
     assert s["people"]["unconfirmed"] == unconfirmed
     assert s["cards"]["new_patients"] == sum(r["patient"]["new_patient"] for r in rows)
+
+
+def test_today_cards_count_same_day_ax(pconn):
+    before = _sheet(pconn)["cards"]["appointments"]
+    add_ax(pconn)  # 기준일 승인 AX 예약 — 상담 1건
+    add_ax(pconn, at="2026-12-02 10:00:00")  # 다른 날은 안 센다
+    after = _sheet(pconn)["cards"]["appointments"]
+    assert after["total"] == before["total"] + 1 and after["consult"] == before["consult"] + 1
 
 
 def test_todo_counts_match_board(tconn):
