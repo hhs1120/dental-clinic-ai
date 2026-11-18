@@ -85,7 +85,11 @@ export function ChartOcrView() {
 
   const open = (got: ChartImport) => {
     setItem(got);
-    setFields(got.final ?? got.fields);
+    const f = got.final ?? got.fields;
+    setFields({
+      ...f,
+      visits: f.visits.map((v, i) => ({ ...v, src: v.src ?? i })),
+    });
     setPatient(got.patient);
     setFocus(null);
     setInspect(null);
@@ -254,7 +258,8 @@ export function ChartOcrView() {
               }}
               onInspect={(kind, index, word) => {
                 setInspect({ kind, index, word });
-                setFocus(inspectBox(item, { kind, index, word }));
+                const src = fields.visits[index].src ?? index;
+                setFocus(inspectBox(item, { kind, index: src, word }));
               }}
             />
             <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-background py-3">
@@ -395,7 +400,8 @@ function InspectPanel({
   const { kind, index, word } = inspect;
   const v = fields.visits[index];
   const locked = item.status !== "draft";
-  const cell = inspectBox(item, inspect);
+  const at = v.src ?? index; // 스캔 위치는 서버가 읽은 순번으로
+  const cell = inspectBox(item, { kind, index: at, word });
   const sug = v.suggestions.find((s) => s.word === word);
   // 바로 아래로 이어지는 같은 치아 줄 중 위치를 아직 안 고른 것 — 연달아 한 치료(신경 치료 등)
   const below: number[] = [];
@@ -404,7 +410,7 @@ function InspectPanel({
     if (w.teeth !== v.teeth) break;
     if (!w.quadrant) below.push(j);
   }
-  const band = visitBand(item.fields.visits, index, item.words);
+  const band = visitBand(item.fields.visits, at, item.words);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-status-warn-border bg-card p-3 shadow-card">
       <div className="flex items-center gap-2">
@@ -533,6 +539,31 @@ function InspectPanel({
             <p className="text-xs text-muted-foreground">
               다르면 오른쪽 날짜 칸을 고치세요.
             </p>
+            {v.date_suggest && v.date_check && !locked && (
+              <div className="flex flex-col gap-1.5 rounded-md bg-status-info-bg p-2 text-xs text-status-info-fg">
+                <span>
+                  앞뒤 진료 사이 수납 장부에 <b>{v.date_suggest}</b>이 있고,
+                  아직 어느 진료와도 짝이 없습니다. 이 날짜일까요?
+                </span>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  className="self-start"
+                  onClick={() =>
+                    onChange(
+                      withVisit(fields, index, {
+                        date: v.date_suggest,
+                        date_check: false,
+                        date_note: "수납 장부 날짜로 고침",
+                        date_suggest: null,
+                      }),
+                    )
+                  }
+                >
+                  {v.date_suggest}로 고치기
+                </Button>
+              </div>
+            )}
             <Button
               size="sm"
               disabled={locked || !v.date || !v.date_check}

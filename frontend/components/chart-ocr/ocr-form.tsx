@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +86,45 @@ export function CrossPicker({
       ))}
     </div>
   );
+}
+
+/** 사람이 더한 줄 — 같은 스캔 자리(src), 날짜는 윗줄을 따르되 확인 필요 */
+function newVisit(from: Visit, treatment: string, note: string): Visit {
+  return {
+    ...from,
+    date_raw: "",
+    date_check: true,
+    date_note: note,
+    date_suggest: null,
+    location_raw: "",
+    teeth: "",
+    quadrant: null,
+    fdi: null,
+    treatment,
+    suggestions: [],
+  };
+}
+
+/** 합쳐 읽힌 진료를 커서 자리에서 둘로 — 정보 추출이 〃 줄을 윗줄에 붙이는 일이 있다 */
+function splitVisit(fields: Fields, i: number, at: number): Fields {
+  const v = fields.visits[i];
+  const head = v.treatment.slice(0, at).trim();
+  const tail = v.treatment.slice(at).trim();
+  if (!head || !tail) return fields;
+  const visits = [...fields.visits];
+  visits.splice(
+    i,
+    1,
+    { ...v, treatment: head },
+    newVisit(v, tail, "나눈 줄 — 날짜·치아 확인"),
+  );
+  return { ...fields, visits };
+}
+
+function insertVisit(fields: Fields, i: number, v: Visit): Fields {
+  const visits = [...fields.visits];
+  visits.splice(i + 1, 0, newVisit(v, "", "더한 줄 — 날짜·치아 확인"));
+  return { ...fields, visits };
 }
 
 /** 진료 한 건 고치기 — 치아·사분면이 바뀌면 FDI를 다시 정한다 */
@@ -197,6 +236,7 @@ export function OcrForm({
   ) => void;
 }) {
   const locked = item.status !== "draft";
+  const caret = useRef<Record<number, number>>({});
   const setVisit = (i: number, patch: Partial<Visit>) =>
     setFields(withVisit(fields, i, patch));
   const headFocus = (text: string) =>
@@ -214,8 +254,11 @@ export function OcrForm({
               key={key}
               className={cn("flex flex-col gap-1", long && "col-span-2")}
             >
-              <span className="text-xs font-bold text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
                 {label}
+                {fields.head_notes?.[key] && (
+                  <Badge variant="info">{fields.head_notes[key]}</Badge>
+                )}
               </span>
               {long ? (
                 <Textarea
@@ -249,13 +292,13 @@ export function OcrForm({
         {fields.visits.map((v, i) => {
           const words = glossary(v.treatment, abbr);
           const focus = () =>
-            onFocus(visitBand(item.fields.visits, i, item.words));
+            onFocus(visitBand(item.fields.visits, v.src ?? i, item.words));
           return (
             <div
               key={i}
               onFocus={focus}
               className={cn(
-                "flex flex-col gap-2 rounded-md border bg-card p-2.5",
+                "group flex flex-col gap-2 rounded-md border bg-card p-2.5",
                 v.date_check || (!v.quadrant && v.teeth && v.teeth !== "전악")
                   ? "border-status-warn-border"
                   : "border-border",
@@ -278,7 +321,11 @@ export function OcrForm({
                     onClick={() => onInspect("date", i)}
                   >
                     <Badge variant="warn">
-                      날짜 확인 · 원문 {v.date_raw} ›
+                      {v.date_suggest
+                        ? "날짜 확인 · 수납 장부 제안 있음"
+                        : (v.date_note ??
+                          `날짜 확인 · 원문 ${v.date_raw}`)}{" "}
+                      ›
                     </Badge>
                   </button>
                 ) : (
@@ -321,8 +368,45 @@ export function OcrForm({
               <Input
                 value={v.treatment}
                 disabled={locked}
+                onSelect={(e) => {
+                  caret.current[i] = e.currentTarget.selectionStart ?? 0;
+                }}
                 onChange={(e) => setVisit(i, { treatment: e.target.value })}
               />
+              {!locked && (
+                // 줄 도구는 그 카드에 올리거나 안을 누를 때만 — 늘 보이면 화면이 어지럽다
+                <div className="flex gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    title="진료 내용 칸에서 커서를 둔 자리에서 둘로 나눕니다"
+                    onClick={() =>
+                      setFields(splitVisit(fields, i, caret.current[i] ?? 0))
+                    }
+                  >
+                    커서 자리에서 줄 나누기
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setFields(insertVisit(fields, i, v))}
+                  >
+                    아래에 줄 추가
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() =>
+                      setFields({
+                        ...fields,
+                        visits: fields.visits.filter((_, j) => j !== i),
+                      })
+                    }
+                  >
+                    줄 삭제
+                  </Button>
+                </div>
+              )}
               {!locked &&
                 v.suggestions.map((s) => (
                   <div

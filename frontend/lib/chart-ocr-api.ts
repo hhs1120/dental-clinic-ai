@@ -17,6 +17,8 @@ export interface Visit {
   date_raw: string;
   date: string | null;
   date_check: boolean;
+  date_suggest: string | null; // 앞뒤 진료 사이 짝 없는 수납 날짜(바꾸지 않고 제안만)
+  src?: number; // 서버가 읽은 진료 순번 — 화면에서 줄을 나누거나 더해도 스캔 위치는 이걸로 찾는다
   date_note: string | null; // 교차검증 근거 — OCR 글자로 채움·수납 장부와 일치·수납 장부 연도로 고침·〃로 봄
   location_raw: string;
   teeth: string; // 숫자(공백 구분) 또는 "전악"
@@ -47,6 +49,7 @@ export interface Fields {
   memo: string;
   visits: Visit[];
   payments: Payment[];
+  head_notes?: Record<string, string>; // 정보 추출이 비워 OCR 글자로 채운 머리 칸
 }
 
 export type ImportStatus = "draft" | "approved" | "rejected";

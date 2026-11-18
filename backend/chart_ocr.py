@@ -363,10 +363,63 @@ def settle(f: dict, words: list[dict]) -> dict:
                 d, check, note = same.pop(), True, "수납 장부 연도로 고침"
         prev = d or prev
         visits.append(v | {"date": d, "date_check": check, "date_note": note})
+    _suggest_ledger(visits, paid)
     return f | {"visits": visits, "payments": payments}
 
 
+def _suggest_ledger(visits: list[dict], paid: set[str]) -> None:
+    """확인 필요인 진료 날짜에 수납 장부 날짜를 제안(date_suggest) — 앞뒤 진료 날짜 사이에 아직 어느 진료와도
+    짝이 안 된 수납 날짜가 하나뿐일 때(숫자를 잘못 읽은 6/11 → 5/11). 바꾸지는 않는다"""
+    used = {v["date"] for v in visits if v["date"]}
+    for i, v in enumerate(visits):
+        v["date_suggest"] = None
+        if not v["date_check"]:
+            continue
+        lo = next((w["date"] for w in reversed(visits[:i]) if w["date"]), "")
+        hi = next((w["date"] for w in visits[i + 1 :] if w["date"]), "9999")
+        spare = [d for d in paid if d not in used and lo < d < hi]
+        if len(spare) == 1:
+            v["date_suggest"] = spare[0]
+
+
+def _right_of(words: list[dict], label: str) -> str:
+    """머리 칸 글자(예: 생년월일) 오른쪽 같은 줄의 OCR 단어들 — 사이가 벌어지면 다음 칸이라 멈춘다"""
+    head = next((w for w in words if w["text"] == label), None)
+    if head is None:
+        return ""
+    x0, y0, x1, y1 = head["box"]
+    cy, h = (y0 + y1) / 2, y1 - y0
+    line = sorted(
+        (
+            w
+            for w in words
+            if abs((w["box"][1] + w["box"][3]) / 2 - cy) < h
+            and x1 - 0.002 <= w["box"][0] < x1 + 0.12
+        ),
+        key=lambda w: w["box"][0],
+    )
+    out, edge = [], x1
+    for w in line:
+        if w["box"][0] - edge > 0.03:
+            break
+        out.append(w["text"])
+        edge = w["box"][2]
+    return "".join(out)
+
+
+def _iso(value: str) -> bool:
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value or ""))
+
+
 def refresh(f: dict, words: list[dict]) -> dict:
-    """초안을 열 때 기계가 만든 부분(날짜 교차검증·약어 제안)을 원문에서 다시 — 정리 규칙이 바뀌어도 반영"""
+    """초안을 열 때 기계가 만든 부분을 원문에서 다시 — 정리 규칙이 바뀌어도 반영. 날짜 교차검증·약어 제안, 정보
+    추출이 비운 생년월일은 OCR이 "생년월일" 오른쪽에서 읽은 글자로(head_notes에 근거)"""
     f = settle(f, words)
-    return f | {"visits": [v | {"suggestions": suggest(v["treatment"])} for v in f["visits"]]}
+    notes = {}
+    if not _iso(f.get("birth_date", "")):
+        d = _parse(_right_of(words, "생년월일"))
+        if d:
+            f = f | {"birth_date": d.isoformat()}
+            notes["birth_date"] = "OCR 글자로 채움"
+    visits = [v | {"suggestions": suggest(v["treatment"])} for v in f["visits"]]
+    return f | {"visits": visits, "head_notes": notes}

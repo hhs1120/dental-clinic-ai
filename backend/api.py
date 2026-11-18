@@ -1573,18 +1573,25 @@ def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
     row = emr_bridge.chart_import(conn, import_id)
     if row is None:
         raise HTTPException(404, "이관 기록을 찾을 수 없습니다")
-    patient = None
-    if row["patient_id"] is not None:
-        p = conn.execute(
-            "SELECT id, chart_no, name FROM source.emr_patients WHERE id = ?", (row["patient_id"],)
-        ).fetchone()
-        patient = dict(p) if p else None
     ocr = row.pop("ocr")
     page = ocr["pages"][0]
     words = chart_ocr.words(ocr)
-    # 초안은 기계가 만든 부분(날짜 교차검증·약어 제안)을 원문에서 다시 — 정리 규칙이 바뀌어도 반영
+    # 초안은 기계가 만든 부분(날짜 교차검증·약어 제안·빈 생년월일)을 원문에서 다시 — 정리 규칙이 바뀌어도 반영.
+    # 환자를 못 맞춘 초안은 다시 채운 이름·생년월일로 맞춰 보인다(저장은 승인 때 사람이 고른 환자로)
+    pid = row["patient_id"]
     if row["status"] == "draft":
         row["fields"] = chart_ocr.refresh(row["fields"], words)
+        if pid is None:
+            f = row["fields"]
+            pid = emr_bridge.match_patient(
+                conn, f.get("patient_name", ""), f.get("birth_date", "")
+            )
+    patient = None
+    if pid is not None:
+        p = conn.execute(
+            "SELECT id, chart_no, name FROM source.emr_patients WHERE id = ?", (pid,)
+        ).fetchone()
+        patient = dict(p) if p else None
     return row | {
         "words": words,
         "size": [page["width"], page["height"]],

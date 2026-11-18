@@ -148,3 +148,36 @@ def test_refresh_recomputes_suggestions():
         "payments": [],
     }
     assert chart_ocr.refresh(f, [])["visits"][0]["suggestions"] == [{"word": "DHI", "abbr": "OHI"}]
+
+
+def test_settle_suggests_unused_ledger_date_between_neighbors():
+    # C-00013 실제 실패: 6/11을 5/11로 읽음 — 앞뒤 진료 사이에 아직 짝 없는 수납 날짜가 하나면 제안
+    f = {
+        "visits": [_v("12.5.28"), _v("5/11"), _v("13.6.19"), _v("5/26"), _v("14.2.11")],
+        "payments": [_p("12.5.28"), _p("12.6.11"), _p("13.6.19"), _p("14.2.11")],
+    }
+    v = chart_ocr.settle(f, [])["visits"]
+    assert (v[1]["date"], v[1]["date_check"], v[1]["date_suggest"]) == (
+        "2012-05-11",
+        True,
+        "2012-06-11",
+    )
+    assert v[3]["date_check"] is True and v[3]["date_suggest"] is None  # 그 사이 수납 없음
+    assert v[0]["date_suggest"] is None
+
+
+def test_refresh_fills_birth_date_from_ocr():
+    # C-00013 실제 실패: 정보 추출은 생년월일을 비웠고 OCR은 "1949." "7." "5"로 읽었다
+    f = {"birth_date": "", "visits": [], "payments": []}
+    words = [
+        _w("생년월일", 0.20, 0.06),
+        _w("1949.", 0.24, 0.058),
+        _w("7.", 0.265, 0.059),
+        _w("5", 0.28, 0.06),
+        _w("1544", 0.15, 0.06),  # 왼쪽 칸(차트번호)
+    ]
+    out = chart_ocr.refresh(f, words)
+    assert out["birth_date"] == "1949-07-05"
+    assert out["head_notes"] == {"birth_date": "OCR 글자로 채움"}
+    kept = chart_ocr.refresh(f | {"birth_date": "1949-07-05"}, words)
+    assert kept["head_notes"] == {}
