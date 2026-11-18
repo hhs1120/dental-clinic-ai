@@ -137,3 +137,14 @@ def test_settle_fixes_year_from_ledger():
         True,
         "수납 장부 연도로 고침",
     )
+
+
+def test_refresh_recomputes_suggestions():
+    f = {
+        "visits": [
+            _v("13.3.5")
+            | {"treatment": "Pulp ext. 1st, DHI", "suggestions": [{"word": "1st", "abbr": "set"}]}
+        ],
+        "payments": [],
+    }
+    assert chart_ocr.refresh(f, [])["visits"][0]["suggestions"] == [{"word": "DHI", "abbr": "OHI"}]

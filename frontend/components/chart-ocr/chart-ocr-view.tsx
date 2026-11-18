@@ -397,6 +397,13 @@ function InspectPanel({
   const locked = item.status !== "draft";
   const cell = inspectBox(item, inspect);
   const sug = v.suggestions.find((s) => s.word === word);
+  // 바로 아래로 이어지는 같은 치아 줄 중 위치를 아직 안 고른 것 — 연달아 한 치료(신경 치료 등)
+  const below: number[] = [];
+  for (let j = index + 1; j < fields.visits.length; j++) {
+    const w = fields.visits[j];
+    if (w.teeth !== v.teeth) break;
+    if (!w.quadrant) below.push(j);
+  }
   const band = visitBand(item.fields.visits, index, item.words);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-status-warn-border bg-card p-3 shadow-card">
@@ -487,6 +494,30 @@ function InspectPanel({
               {v.fdi ? `#${v.fdi}로 정했습니다. ` : ""}승인 전까지 다시 바꿀 수
               있습니다.
             </p>
+            {v.quadrant && below.length > 0 && !locked && (
+              <div className="flex flex-col gap-1.5 rounded-md bg-status-info-bg p-2 text-xs text-status-info-fg">
+                <span>
+                  바로 아래 같은 치아({v.teeth}) {below.length}줄도 아직 위치를
+                  안 골랐습니다. 같은 치아를 이어서 치료한 기록이면 한 번에
+                  정하세요.
+                </span>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  className="self-start"
+                  onClick={() =>
+                    onChange(
+                      below.reduce(
+                        (acc, j) => withVisit(acc, j, { quadrant: v.quadrant }),
+                        fields,
+                      ),
+                    )
+                  }
+                >
+                  {below.length}줄에도 {v.quadrant}번 칸 적용
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-2">

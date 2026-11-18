@@ -1582,10 +1582,9 @@ def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
     ocr = row.pop("ocr")
     page = ocr["pages"][0]
     words = chart_ocr.words(ocr)
-    if (
-        row["status"] == "draft"
-    ):  # 날짜 교차검증은 원문에서 다시 계산한다 — 정리 규칙이 바뀌어도 초안에 반영
-        row["fields"] = chart_ocr.settle(row["fields"], words)
+    # 초안은 기계가 만든 부분(날짜 교차검증·약어 제안)을 원문에서 다시 — 정리 규칙이 바뀌어도 반영
+    if row["status"] == "draft":
+        row["fields"] = chart_ocr.refresh(row["fields"], words)
     return row | {
         "words": words,
         "size": [page["width"], page["height"]],
@@ -1607,7 +1606,7 @@ def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -
             filename=filename,
             image=image,
             ocr=ocr_resp,
-            fields=chart_ocr.settle(chart_ocr.fields(extract_resp), chart_ocr.words(ocr_resp)),
+            fields=chart_ocr.refresh(chart_ocr.fields(extract_resp), chart_ocr.words(ocr_resp)),
             at=_stamp(now),
         )
         conn.commit()

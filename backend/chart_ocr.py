@@ -364,3 +364,9 @@ def settle(f: dict, words: list[dict]) -> dict:
         prev = d or prev
         visits.append(v | {"date": d, "date_check": check, "date_note": note})
     return f | {"visits": visits, "payments": payments}
+
+
+def refresh(f: dict, words: list[dict]) -> dict:
+    """초안을 열 때 기계가 만든 부분(날짜 교차검증·약어 제안)을 원문에서 다시 — 정리 규칙이 바뀌어도 반영"""
+    f = settle(f, words)
+    return f | {"visits": [v | {"suggestions": suggest(v["treatment"])} for v in f["visits"]]}
