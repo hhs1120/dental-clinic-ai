@@ -164,4 +164,24 @@ def test_emr_patient_shows_paper_records(client):
         "treatment": d["fields"]["visits"][0]["treatment"],
     }
     assert len(rec) == 12
-    assert client.get("/emr/patients/C-00002").json()["paper_records"] == []
+    got = client.get("/emr/patients/C-00001").json()
+    assert got["paper_notes"] == [
+        {
+            "import_id": d["id"],
+            "decided_at": "2026-12-01 09:05:00",
+            "memo": d["fields"]["memo"],
+            "present_illness": d["fields"]["present_illness"],
+            "chief_complaint": d["fields"]["chief_complaint"],
+            "treatment_plan": d["fields"]["treatment_plan"],
+        }
+    ]
+    pay = got["paper_payments"]
+    assert len(pay) == 7 and pay[4] == {
+        "import_id": d["id"],
+        "date": "2012-04-18",
+        "item": "PFM cr.",
+        "amount": 200000,
+        "balance": 300000,
+    }
+    other = client.get("/emr/patients/C-00002").json()
+    assert other["paper_records"] == other["paper_notes"] == other["paper_payments"] == []

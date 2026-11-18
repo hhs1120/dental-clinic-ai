@@ -496,6 +496,42 @@ def reject_chart_import(conn: sqlite3.Connection, import_id: int, *, by: str, at
         raise Conflict(f"초안이 아님: {import_id}")
 
 
+def _approved_finals(conn: sqlite3.Connection, patient_id: int) -> list[tuple[int, str, dict]]:
+    return [
+        (r["id"], r["decided_at"], json.loads(r["final"]))
+        for r in conn.execute(
+            "SELECT id, decided_at, final FROM ax_chart_imports"
+            " WHERE patient_id = ? AND status = 'approved' ORDER BY id",
+            (patient_id,),
+        )
+    ]
+
+
+def chart_import_notes(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
+    """그 환자의 승인된 이관 머리 칸 — EMR 메모 탭에(경고·병력·주소·치료 계획), 이관 순"""
+    keys = ("memo", "present_illness", "chief_complaint", "treatment_plan")
+    return [
+        {"import_id": i, "decided_at": at} | {k: (f.get(k) or "").strip() for k in keys}
+        for i, at, f in _approved_finals(conn, patient_id)
+    ]
+
+
+def chart_import_payments(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
+    """그 환자의 승인된 이관 수납 줄 — EMR 수납 탭에, 날짜순 {import_id, date, item, amount, balance}"""
+    out = [
+        {
+            "import_id": i,
+            "date": p.get("date"),
+            "item": p.get("item", ""),
+            "amount": p.get("amount"),
+            "balance": p.get("balance"),
+        }
+        for i, _, f in _approved_finals(conn, patient_id)
+        for p in f.get("payments", [])
+    ]
+    return sorted(out, key=lambda x: (x["date"] or "", x["import_id"]))
+
+
 def chart_imports(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
     """그 환자의 승인된 이관 진료 줄 — 날짜순(같으면 이관 순) {import_id, date, teeth, fdi, treatment}"""
     out = []

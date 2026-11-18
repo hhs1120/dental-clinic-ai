@@ -506,19 +506,26 @@ def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_d
         conn.close()
     if record is None:
         raise HTTPException(404, "환자를 찾을 수 없습니다")
-    return record | {"paper_records": _paper_records(paths, chart_no.strip())}
+    return record | _paper(paths, chart_no.strip())
 
 
-def _paper_records(paths: tuple[Path, Path], chart_no: str) -> list[dict]:
-    """승인된 종이 차트 이관 진료 줄(emr_bridge, 차트 OCR 설계 §설계 3) — 앱 DB가 없으면 빈 목록"""
+def _paper(paths: tuple[Path, Path], chart_no: str) -> dict:
+    """승인된 종이 차트 이관(emr_bridge, 차트 OCR 설계 §설계 3) — 진료 줄·메모·수납. 앱 DB가 없으면 빈 목록"""
+    empty = {"paper_records": [], "paper_notes": [], "paper_payments": []}
     if not Path(paths[0]).exists():
-        return []
+        return empty
     conn = _open_rw(paths)
     try:
         row = conn.execute(
             "SELECT id FROM source.emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
         ).fetchone()
-        return emr_bridge.chart_imports(conn, row["id"]) if row else []
+        if row is None:
+            return empty
+        return {
+            "paper_records": emr_bridge.chart_imports(conn, row["id"]),
+            "paper_notes": emr_bridge.chart_import_notes(conn, row["id"]),
+            "paper_payments": emr_bridge.chart_import_payments(conn, row["id"]),
+        }
     finally:
         conn.close()
 
