@@ -400,7 +400,7 @@ tags:
 ## 9. 다음 액션
 
 ### 할 것
-- [ ] ② `v2-imp1` 전환(사람) — `make classify V=v2-imp1`(과금, 전체 재분류 — 전부 ok면 활성 교체) 뒤 `make eval`로 dev 판정 풀 성적, `make autoclose`([[치과 AX - AI 실험 기록]] §38)
+- [ ] ① 자동 종결 켜기 보류 — `v2-imp1`에서 입력 신뢰 경계 위반 2/65(지시문에 할 일 목록 비워짐, [[치과 AX - AI 실험 기록]] §36). 분류 개선으로 0이 된 뒤 사람이 `make auto-policy KIND=call_autoclose ON=1`
 - [ ] 스타일 다듬기: `frontend/app/globals.css` 토큰 값·간격·글자 크기를 실제 화면으로 고치고, `components/ui` variant를 정리하고, 화면 코드에 직접 색·모서리 값이 없는지 확인한다
 - [ ] ⑧ test 채점(사람, 버전을 정한 뒤) — test 달(`master.recon_test_months`) 실행 `make recon MONTHS=…`·`make expense-ai MONTHS=…`(과금, 채점은 저장된 실행을 읽고 없으면 오답) 뒤 ⑧-1 `python -m evaluation.recon score --split test`, ⑧-2 `python -m evaluation.expense score --split test`
 - [ ] AI 비서 test 채점(사람, 버전을 정한 뒤) — `python -m evaluation.assistant run --split test`(과금) 뒤 `python -m evaluation.assistant score --split test`

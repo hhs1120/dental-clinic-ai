@@ -35,3 +35,4 @@
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-13T22:24:49", "report_path": "eval_dev_base_20261113-222449.md"}
 {"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-13T23:35:24", "report_path": "eval_dev_base_20261113-233524.md"}
 {"split": "test", "section": "followup", "condition": "base", "prompt_version": "v3×v2×label-v2", "started_at": "2026-11-16T19:04:58", "report_path": "eval_test_base_20261116-190458.md"}
+{"split": "dev", "section": "all", "condition": "base", "prompt_version": "all", "started_at": "2026-11-18T15:34:19", "report_path": "eval_dev_base_20261118-153419.md"}
