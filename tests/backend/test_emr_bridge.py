@@ -471,3 +471,87 @@ def test_approve_no_chair_left_rejects(conn):
     assert _approve(conn, a["id"])["ok"] is True
     assert _approve(conn, b["id"]) == {"ok": False, "reasons": ["no_chair"]}
     assert _chair(conn, a["id"]) == chairs
+
+
+# 종이 차트 이관(차트 OCR 설계 §설계 3) — 초안·승인·반려, 환자 맞추기, 승인된 진료 줄만 합쳐 읽기
+def _fields(name="김철수", birth="1980-01-01"):
+    return {
+        "patient_name": name,
+        "birth_date": birth,
+        "visits": [
+            {"date": "2012-03-21", "teeth": "6", "quadrant": 4, "fdi": "46", "treatment": "C&S"},
+            {"date": "2012-03-14", "teeth": "6", "quadrant": 4, "fdi": "46", "treatment": "C3"},
+        ],
+    }
+
+
+def _chart_draft(conn, **kw):
+    return emr_bridge.chart_import_draft(
+        conn, filename="chart.png", image=b"png", ocr={"pages": []}, fields=_fields(**kw), at=AT
+    )
+
+
+def test_chart_import_matches_patient(conn):
+    row = emr_bridge.chart_import(conn, _chart_draft(conn))
+    assert row["patient_id"] == MISSED and row["status"] == "draft"
+    assert row["fields"]["patient_name"] == "김철수"
+    assert emr_bridge.chart_import(conn, _chart_draft(conn, name="없는사람"))["patient_id"] is None
+
+
+def test_chart_import_ambiguous_patient_none(conn):
+    # 이영희(NEW)도 같은 생년월일 — 이름을 김철수로 바꿔 동명이인을 만든다
+    path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
+        0
+    ]
+    s = sqlite3.connect(path)
+    s.execute("UPDATE emr_patients SET name = '김철수' WHERE id = ?", (NEW,))
+    s.commit()
+    s.close()
+    assert emr_bridge.match_patient(conn, "김철수", "1980-01-01") is None
+
+
+def test_approve_chart_import_then_conflict(conn):
+    cid = _chart_draft(conn)
+    emr_bridge.approve_chart_import(conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT)
+    row = emr_bridge.chart_import(conn, cid)
+    assert row["status"] == "approved" and row["decided_by"] == BY and row["final"]["visits"]
+    with pytest.raises(emr_bridge.Conflict):
+        emr_bridge.approve_chart_import(
+            conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT
+        )
+    with pytest.raises(emr_bridge.Conflict):
+        emr_bridge.reject_chart_import(conn, cid, by=BY, at=AT)
+
+
+def test_approve_unknown_patient_value_error(conn):
+    cid = _chart_draft(conn)
+    with pytest.raises(ValueError):
+        emr_bridge.approve_chart_import(conn, cid, final=_fields(), patient_id=999, by=BY, at=AT)
+    assert emr_bridge.chart_import(conn, cid)["status"] == "draft"
+
+
+def test_chart_imports_lists_approved_visits_only(conn):
+    ok, rejected = _chart_draft(conn), _chart_draft(conn)
+    _chart_draft(conn)  # 초안으로 남음
+    emr_bridge.approve_chart_import(conn, ok, final=_fields(), patient_id=MISSED, by=BY, at=AT)
+    emr_bridge.reject_chart_import(conn, rejected, by=BY, at=AT)
+    rows = emr_bridge.chart_imports(conn, MISSED)
+    assert [(r["import_id"], r["date"], r["fdi"]) for r in rows] == [
+        (ok, "2012-03-14", "46"),
+        (ok, "2012-03-21", "46"),
+    ]
+    assert emr_bridge.chart_imports(conn, NEW) == []
+
+
+def test_chart_import_never_writes_emr(conn):
+    tables = [
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM source.sqlite_master WHERE type = 'table' AND name LIKE 'emr_%'"
+        )
+    ]
+    before = {t: conn.execute(f"SELECT COUNT(*) FROM source.{t}").fetchone()[0] for t in tables}
+    cid = _chart_draft(conn)
+    emr_bridge.approve_chart_import(conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT)
+    after = {t: conn.execute(f"SELECT COUNT(*) FROM source.{t}").fetchone()[0] for t in tables}
+    assert before == after
