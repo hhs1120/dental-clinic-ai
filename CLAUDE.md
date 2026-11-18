@@ -57,7 +57,7 @@
 - ⑥ `make report [NO_BATCH=1]`(과금, 이어 돎, `backend/report.py` — 채점은 `make eval`)
 - ⑧ 랭그래프 비교 `uv run --env-file .env --group langgraph python -m evaluation.langgraph_recon run [--plan]`(과금, 이어 돎 — ⑧-1 조사 에이전트를 랭그래프로, dev만) / `… score`(무료, 하네스와 나란히)
 - ⑧ `make recon [MONTHS="2026-08 2026-09"] [NO_BATCH=1]`(과금, 이어 돎, `backend/recon_agent.py` — 채점은 `make eval`, test는 test 달 `MONTHS=` 실행 뒤 `python -m evaluation.recon score --split test`(사람)) · `make expense-ai [MONTHS=] [NO_BATCH=1]`(과금, 이어 돎, `backend/expense_agent.py` — 채점은 `make eval`, test는 test 달 `MONTHS=` 실행 뒤 `python -m evaluation.expense score --split test`(사람))
-- 종이 차트 이관 `make paper-charts`(샘플 PNG, 과금 없음) — 읽기는 화면 `/chart-ocr`에서(업스테이지, `.env` `UPSTAGE_API_KEY`, 무료 크레딧 — `backend/chart_ocr.py`)
+- 종이 차트 이관 `make paper-charts`(샘플 PNG, 과금 없음) — 읽기는 화면 `/chart-ocr`에서(과금 — 업스테이지 OCR `.env` `UPSTAGE_API_KEY` + 정리 `chart_ocr` 별칭, `backend/chart_ocr.py`)
 - AI 비서 `make assistant-eval`(과금, 이어 돎, dev 시나리오 `evaluation/assistant.py` — `TOOL_ALIAS=`·`REPLY_ALIAS=`·`BASELINE=1`, 채점은 `make eval`, test는 `python -m evaluation.assistant run --split test` 뒤 `score --split test`(사람)) · 정답 `python -m evaluation.assistant_scenarios build|check`
 
 ## 코드 컨벤션
