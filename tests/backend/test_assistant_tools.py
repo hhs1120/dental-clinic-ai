@@ -58,7 +58,7 @@ TURN = {"conversation_id": 7, "turn": 3}
 def test_registry_names_fixed():
     tools = assistant_tools.assistant_tools(CLINIC, None, TURN)
     assert {t.name for t in tools} == NAMES and len(tools) == len(NAMES)
-    assert assistant_tools.TOOLS_VERSION == "v1"
+    assert assistant_tools.TOOLS_VERSION == "v2"
     assert {t.name for t in tools if t.writes} == {"draft_appointment"}
     assert [t.name for t in tools if t.ends_run] == ["done_tools"]
 
@@ -113,6 +113,29 @@ def test_free_slots_tool_open_day_and_role(conn):
     assert call(conn, "free_slots", date=WED, procedure="없는시술") == {
         "error": ["unknown_procedure"]
     }
+
+
+def test_free_slots_range_equals_days_joined(conn):
+    """기간 조회 = 날마다 부른 결과를 날짜순으로 이은 것 — 휴진일(목)은 closed, 빈 수 0"""
+    one = {"procedure": "스케일링", "staff": None}
+    got = call(conn, "free_slots", date="2026-12-02", date_to="2026-12-04", **one)
+    assert [d["date"] for d in got["days"]] == ["2026-12-02", "2026-12-03", "2026-12-04"]
+    assert got["days"][1] == {"date": "2026-12-03", "closed": True, "free": 0}
+    joined = [
+        {"date": d, **s}
+        for d in ("2026-12-02", "2026-12-04")
+        for s in call(conn, "free_slots", date=d, **one)["slots"]
+    ]
+    assert got["count"] == len(joined) == sum(d["free"] for d in got["days"])
+    assert got["slots"] == joined[: assistant_tools.LIST_CAP]
+    assert got["slots"][0]["date"] == "2026-12-02"  # 가까운 순
+
+
+def test_free_slots_range_capped(conn):
+    """기간은 FREE_SPAN_DAYS일까지만 본다"""
+    got = call(conn, "free_slots", date="2026-12-02", date_to="2027-06-30", procedure="스케일링")
+    assert len(got["days"]) == assistant_tools.FREE_SPAN_DAYS
+    assert got["date_to"] == "2027-01-01"
 
 
 def _draft_args(**kw):
