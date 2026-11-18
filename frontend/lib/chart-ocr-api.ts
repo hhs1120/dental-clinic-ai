@@ -19,7 +19,7 @@ export interface Visit {
   date_check: boolean;
   date_suggest: string | null; // 앞뒤 진료 사이 짝 없는 수납 날짜(바꾸지 않고 제안만)
   uid?: string; // 화면에서 줄을 가리키는 안정 id — 나누기·삭제 뒤에도 커서·확인 패널이 같은 줄을 본다
-  date_ocr?: string | null; // 정보 추출이 빠뜨려 OCR Date 칸 글자로 채운 원문 — 스캔에서 그 칸을 찾을 때
+  date_ocr?: string | null; // 정리가 빠뜨려 OCR Date 칸 글자로 채운 원문 — 스캔에서 그 칸을 찾을 때
   src?: number; // 서버가 읽은 진료 순번 — 화면에서 줄을 나누거나 더해도 스캔 위치는 이걸로 찾는다
   date_note: string | null; // 교차검증 근거 — OCR 글자로 채움·수납 장부와 일치·수납 장부 연도로 고침·〃로 봄
   location_raw: string;
@@ -51,7 +51,7 @@ export interface Fields {
   memo: string;
   visits: Visit[];
   payments: Payment[];
-  head_notes?: Record<string, string>; // 정보 추출이 비워 OCR 글자로 채운 머리 칸
+  head_notes?: Record<string, string>; // 정리가 비워 OCR 글자로 채운 머리 칸
 }
 
 export type ImportStatus = "draft" | "approved" | "rejected";

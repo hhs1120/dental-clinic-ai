@@ -7,12 +7,18 @@ from pathlib import Path
 import pytest
 
 from backend import chart_ocr
+from shared.llm import LLMResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _load(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _content(name: str) -> dict:
+    """정리된 항목 — 고정값은 같은 틀(SCHEMA)로 받은 업스테이지 정보 추출 실제 응답의 content"""
+    return json.loads(_load(name)["choices"][0]["message"]["content"])
 
 
 def test_written_date_carries_year():
@@ -57,7 +63,7 @@ def test_words_from_fixture():
 
 
 def test_fields_from_fixture():
-    f = chart_ocr.fields(_load("upstage_extract.json"))
+    f = chart_ocr.fields(_content("upstage_extract.json"))
     assert f["patient_name"] == "구상철" and f["birth_date"] == "1940-04-05"
     v = f["visits"]
     assert len(v) == 12
@@ -205,16 +211,15 @@ def test_fields_tolerates_nulls_and_bad_json():
         "visits": [{"date": None, "location": None, "treatment": None}],
         "payments": [{"date": None, "item": None}],
     }
-    resp = {"choices": [{"message": {"content": json.dumps(content)}}]}
-    f = chart_ocr.fields(resp)
+    f = chart_ocr.fields(content)
     assert (
         f["patient_name"] == ""
         and f["visits"][0]["date_raw"] == ""
         and f["visits"][0]["treatment"] == ""
     )
     assert f["visits"][0]["date_check"] is True and f["payments"][0]["item"] == ""
-    with pytest.raises(chart_ocr.UpstageError):
-        chart_ocr.fields({"choices": [{"message": {"content": "not json"}}]})
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.fields("not a dict")
 
 
 def test_ditto_row_gets_no_ledger_suggestion():
@@ -236,3 +241,44 @@ def test_settle_keeps_ocr_date_for_scan_lookup():
     words = HEADERS + [_w("13.3.5", 0.523, 0.25), _w("14.1.22", 0.526, 0.28)]
     v = chart_ocr.settle(f, words)["visits"]
     assert v[1]["date_ocr"] == "14.1.22" and v[0]["date_ocr"] is None
+
+
+class FakeGw:
+    """정리 모델 자리 — 부른 인자를 남기고 정해 둔 결과를 돌려준다"""
+
+    def __init__(self, data=None, ok=True):
+        self.data, self.ok, self.calls = data, ok, []
+
+    def complete(self, alias, **kw):
+        self.calls.append({"alias": alias, **kw})
+        return LLMResult(
+            ok=self.ok,
+            text="",
+            data=self.data,
+            model="m",
+            fallback_used=False,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            latency_ms=0,
+            error=None if self.ok else "boom",
+        )
+
+
+def test_structure_sends_ocr_lines_with_required_schema():
+    gw = FakeGw({"patient_name": "구상철"})
+    assert chart_ocr.structure(gw, _load("upstage_ocr.json")) == {"patient_name": "구상철"}
+    call = gw.calls[0]
+    assert call["alias"] == chart_ocr.ALIAS and call["prompt_version"] == chart_ocr.PROMPT_VERSION
+    assert call["schema"]["required"] == list(chart_ocr.SCHEMA["properties"])
+    assert call["schema"]["properties"]["visits"]["items"]["required"]
+    lines = call["messages"][0]["content"].splitlines()
+    assert len(lines) == 304 and all(len(x.split(" ", 4)) == 5 for x in lines)  # x0 y0 x1 y1 글자
+    assert call["system"]  # prompts/chart_ocr/v1.md
+
+
+def test_structure_failure_raises():
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.structure(FakeGw(ok=False), _load("upstage_ocr.json"))
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.structure(FakeGw(data=["not", "dict"]), _load("upstage_ocr.json"))

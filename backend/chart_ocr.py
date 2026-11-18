@@ -1,28 +1,27 @@
-"""옛 종이 차트 OCR — 업스테이지 Document OCR(글자·상자·신뢰도)과 Information Extraction(스키마로 항목)을 부른다
-(기능 정의 §5 종이 차트 이관). 응답은 그대로 돌려주고 저장·승인은 emr_bridge가 한다. 화면용 정리(상자 비율·날짜 이어받기·
-치아 번호·약어 제안)도 여기서 — 확정은 사람이 한다(기능 정의 §5 종이 차트 이관 정리).
+"""옛 종이 차트 OCR — 업스테이지 Document OCR(글자·상자·신뢰도)로 읽고, 그 글자·좌표를 LLM(게이트웨이 별칭
+`chart_ocr`, 프롬프트 prompts/chart_ocr/)이 SCHEMA 항목으로 정리한다(기능 정의 §5 종이 차트 이관). 저장·승인은 emr_bridge가
+한다. 화면용 정리(상자 비율·날짜 이어받기·치아 번호·약어 제안)도 여기서 — 확정은 사람이 한다.
 
 - OCR: POST https://api.upstage.ai/v1/document-digitization, multipart `document`·`model=ocr`,
-  응답 pages[].words[] = {text, confidence, boundingBox.vertices[4]}
-- 정보 추출: POST https://api.upstage.ai/v1/information-extraction/chat/completions(OpenAI 호환),
-  model `information-extract`, 이미지는 base64 data URI, 스키마는 response_format json_schema,
-  결과는 choices[0].message.content(JSON 문자열). 스키마 맨 위 칸은 string·number·integer·array만(객체 X),
-  배열 안 배열 X"""
+  응답 pages[].words[] = {text, confidence, boundingBox.vertices[4]}. LLM이 아니라 게이트웨이 밖(앱 설계 §7.1)
+- 정리: 줄마다 `x0 y0 x1 y1 글자`(이미지 비율 0~1000) — 표의 줄·칸은 모델이 좌표로 맞춘다"""
 
-import base64
+import copy
 import difflib
-import json
 import re
 from datetime import date
 
 import httpx
 
+from backend import prompts
+
 OCR_URL = "https://api.upstage.ai/v1/document-digitization"
-EXTRACT_URL = "https://api.upstage.ai/v1/information-extraction/chat/completions"
 TIMEOUT_S = 120
+TASK, ALIAS, PROMPT_VERSION = "chart_ocr", "chart_ocr", "v1"
+MAX_TOKENS = 8000  # 진료 12건·수납 7줄에 출력 약 4,600토큰(AI 실험 기록 §40)
 LOW_CONFIDENCE = 0.8  # 이보다 낮은 OCR 단어는 화면에서 강조
 DITTO = ("〃", '"', "''", "״")
-# 손글씨 〃를 OCR·정보 추출이 이렇게 읽는다(스파이크) — 〃로 보되 확인 필요
+# 손글씨 〃를 OCR이 이렇게 읽는다(스파이크) — 〃로 보되 확인 필요
 DITTO_LIKE = (",", ",,", "'", "11", "//", "„")
 
 # 치과 약어 → 뜻(화면 툴팁·제안). 한 낱말 약어만 제안에 쓴다
@@ -118,19 +117,19 @@ SCHEMA = {
 }
 
 
-class UpstageError(Exception):
-    """업스테이지 호출 실패 — 키 없음·HTTP 오류·시간 초과(메시지는 화면에 그대로)"""
+class ReadError(Exception):
+    """차트 읽기 실패 — 업스테이지 키 없음·HTTP 오류·시간 초과, 정리 모델 실패·못 읽는 결과(메시지는 화면에 그대로)"""
 
 
 def _post(url: str, key: str, **kw) -> dict:
     if not key:
-        raise UpstageError("업스테이지 API 키(UPSTAGE_API_KEY)가 없습니다")
+        raise ReadError("업스테이지 API 키(UPSTAGE_API_KEY)가 없습니다")
     try:
         r = httpx.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=TIMEOUT_S, **kw)
     except httpx.HTTPError as e:
-        raise UpstageError(f"업스테이지 연결 실패: {e}") from e
+        raise ReadError(f"업스테이지 연결 실패: {e}") from e
     if r.status_code != 200:
-        raise UpstageError(f"업스테이지 오류 {r.status_code}: {r.text[:300]}")
+        raise ReadError(f"업스테이지 오류 {r.status_code}: {r.text[:300]}")
     return r.json()
 
 
@@ -139,28 +138,44 @@ def ocr(image: bytes, filename: str, key: str) -> dict:
     return _post(OCR_URL, key, files={"document": (filename, image)}, data={"model": "ocr"})
 
 
-def extract(image: bytes, key: str) -> dict:
-    """SCHEMA 항목 — 응답 JSON 그대로(항목은 choices[0].message.content)"""
-    data = base64.b64encode(image).decode()
-    body = {
-        "model": "information-extract",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:application/octet-stream;base64,{data}"},
-                    }
-                ],
-            }
-        ],
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": "paper_dental_chart", "schema": SCHEMA},
-        },
-    }
-    return _post(EXTRACT_URL, key, json=body)
+def _required(schema: dict) -> dict:
+    """모든 칸을 필수로 — 필수 칸이 없으면 모델이 진료 경과를 통째로 빼먹었다(AI 실험 기록 §40)"""
+    out = copy.deepcopy(schema)
+
+    def walk(node: dict) -> None:
+        if node.get("type") == "object":
+            node["required"] = list(node["properties"])
+            for v in node["properties"].values():
+                walk(v)
+        elif node.get("type") == "array":
+            walk(node["items"])
+
+    walk(out)
+    return out
+
+
+def ocr_lines(ocr_resp: dict) -> str:
+    """정리 모델 입력 — OCR 단어마다 `x0 y0 x1 y1 글자`(0~1000), 위→아래·왼→오른쪽"""
+    ws = sorted(words(ocr_resp), key=lambda w: (round(w["box"][1] * 100), w["box"][0]))
+    return "\n".join(
+        " ".join(str(round(v * 1000)) for v in w["box"]) + f" {w['text']}" for w in ws
+    )
+
+
+def structure(gw, ocr_resp: dict) -> dict:
+    """OCR 글자·좌표 → SCHEMA 항목(게이트웨이 — 기록·비용·하루 상한). 실패·객체 아님은 ReadError"""
+    res = gw.complete(
+        ALIAS,
+        task=TASK,
+        system=prompts.load(TASK, PROMPT_VERSION)["system"],
+        messages=[{"role": "user", "content": ocr_lines(ocr_resp)}],
+        schema=_required(SCHEMA),
+        prompt_version=PROMPT_VERSION,
+        max_tokens=MAX_TOKENS,
+    )
+    if not res.ok or not isinstance(res.data, dict):
+        raise ReadError(f"항목 정리 실패: {res.error or '결과가 객체가 아님'}")
+    return res.data
 
 
 def _norm(word: str) -> str:
@@ -255,15 +270,11 @@ def suggest(text: str) -> list[dict]:
     return out
 
 
-def fields(extract_resp: dict) -> dict:
-    """정보 추출 결과 → 화면 폼 — 머리 칸 그대로, 진료·수납은 날짜 정리, 진료는 치아 숫자·약어 제안.
-    빈 칸은 null로 올 수 있어 빈 글로 바꾼다. 응답을 못 읽으면 UpstageError(크레딧은 이미 썼다 — 502로 알린다)"""
-    try:
-        raw = json.loads(extract_resp["choices"][0]["message"]["content"])
-    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
-        raise UpstageError(f"정보 추출 응답을 읽지 못했습니다: {e}") from e
+def fields(raw: dict) -> dict:
+    """정리한 항목(structure) → 화면 폼 — 머리 칸 그대로, 진료·수납은 날짜 정리, 진료는 치아 숫자·약어 제안.
+    빈 칸은 null로 올 수 있어 빈 글로 바꾼다. 객체가 아니면 ReadError(호출은 이미 했다 — 502로 알린다)"""
     if not isinstance(raw, dict):
-        raise UpstageError("정보 추출 응답이 객체가 아닙니다")
+        raise ReadError("정리 결과가 객체가 아닙니다")
 
     def text(d: dict, k: str) -> str:
         v = d.get(k)
@@ -320,7 +331,7 @@ def _date_column(words: list[dict]) -> list[dict]:
 
 
 def _fill_from_ocr(visits: list[dict], words: list[dict]) -> list[str | None]:
-    """정보 추출이 날짜를 못 읽은 진료(날짜도 〃도 아님)에 OCR이 Date 칸에서 읽은 글자를 채운다 — 양쪽이 같은
+    """정리 모델이 날짜를 못 읽은 진료(날짜도 〃도 아님)에 OCR이 Date 칸에서 읽은 글자를 채운다 — 양쪽이 같은
     글자로 맞는 진료 사이 틈에서, 못 읽은 진료 수와 남는 OCR 단어 수가 같을 때만 차례로 짝짓는다"""
     col = [w["text"] for w in _date_column(words)]
     out: list[str | None] = [None] * len(visits)
@@ -346,7 +357,7 @@ def _unreadable(raw: str) -> bool:
 
 
 def settle(f: dict, words: list[dict]) -> dict:
-    """날짜 정리(기능 정의 §5 종이 차트 이관 정리) — ① 정보 추출이 빠뜨린 진료 날짜는 OCR 글자로 채우고 ② 윗줄에서 연도·날짜를
+    """날짜 정리(기능 정의 §5 종이 차트 이관 정리) — ① 정리 모델이 빠뜨린 진료 날짜는 OCR 글자로 채우고 ② 윗줄에서 연도·날짜를
     이어받은 뒤 ③ 수납 장부와 맞춰 본다: 같은 날 수납이 있으면 확인됨, 연도를 이어받은 날짜가 장부에 없고 같은
     월·일 수납이 한 번이면 그 연도로 고친다(확인 필요). 원문(date_raw)에서 다시 계산해 몇 번 불러도 같다"""
     payments, prev = [], None

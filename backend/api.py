@@ -72,6 +72,7 @@ from shared.call_labels import (
 )
 from shared.clinic import Clinic, load_clinic
 from shared.followup import ACTION_KO
+from shared.llm import BudgetExceeded
 
 ROOT = Path(__file__).resolve().parents[1]
 NO_INDEX = f"검색 색인이 없습니다 — make index EMBEDDING={DEFAULT_EMBEDDING}을 먼저 실행하세요"
@@ -1547,11 +1548,10 @@ _IMAGE_TYPES = {b"\x89PNG": "image/png", b"\xff\xd8\xff": "image/jpeg"}
 
 
 def get_upstage():
-    """(이미지, 파일 이름) → (OCR 응답, 정보 추출 응답). 키는 부를 때 환경 변수에서(테스트는 가짜로 바꾼다)"""
+    """(이미지, 파일 이름) → 업스테이지 OCR 응답. 키는 부를 때 환경 변수에서(테스트는 가짜로 바꾼다)"""
 
-    def run(image: bytes, filename: str) -> tuple[dict, dict]:
-        key = os.environ.get("UPSTAGE_API_KEY", "")
-        return chart_ocr.ocr(image, filename, key), chart_ocr.extract(image, key)
+    def run(image: bytes, filename: str) -> dict:
+        return chart_ocr.ocr(image, filename, os.environ.get("UPSTAGE_API_KEY", ""))
 
     return run
 
@@ -1600,15 +1600,24 @@ def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
     }
 
 
-def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -> dict:
-    """업스테이지로 읽어 초안 하나 — 실패하면(응답을 못 읽은 것 포함) 행을 남기지 않고 502"""
+def _read_chart(paths, upstage, gw, filename: str, image: bytes, now: dt.datetime) -> dict:
+    """업스테이지 OCR → 정리 모델(게이트웨이, 호출 기록은 이 앱 DB에) → 초안 하나. 실패하면 초안을 남기지 않고 502,
+    하루 비용 상한이면 503"""
     try:
-        ocr_resp, extract_resp = upstage(image, filename)
-        fields = chart_ocr.refresh(chart_ocr.fields(extract_resp), chart_ocr.words(ocr_resp))
-    except chart_ocr.UpstageError as e:
+        ocr_resp = upstage(image, filename)
+    except chart_ocr.ReadError as e:
         raise HTTPException(502, str(e)) from e
     conn = _open_rw(paths)
     try:
+        words = chart_ocr.words(ocr_resp)
+        try:
+            raw = chart_ocr.structure(gw(conn), ocr_resp)
+            fields = chart_ocr.refresh(chart_ocr.fields(raw), words)
+        except chart_ocr.ReadError as e:
+            conn.commit()  # 호출 기록은 남긴다
+            raise HTTPException(502, str(e)) from e
+        except BudgetExceeded as e:
+            raise HTTPException(503, f"오늘 AI 비용 상한에 닿았습니다: {e}") from e
         import_id = emr_bridge.chart_import_draft(
             conn, filename=filename, image=image, ocr=ocr_resp, fields=fields, at=_stamp(now)
         )
@@ -1665,7 +1674,7 @@ def chart_ocr_sample_image(name: str, samples: PaperCharts) -> Response:
 
 @app.post("/chart-ocr/samples/{name}")
 def chart_ocr_sample(
-    name: str, paths: Paths, samples: PaperCharts, upstage: Upstage, now: Now
+    name: str, paths: Paths, samples: PaperCharts, upstage: Upstage, gw: GatewayFactory, now: Now
 ) -> dict:
     """샘플 읽기 — 같은 이미지를 읽은 행이 있으면 그것(녹화 때 업스테이지 대기·실패 없이). 샘플을 다시 그렸거나
     반려했으면 다시 읽는다"""
@@ -1673,7 +1682,7 @@ def chart_ocr_sample(
     saved = _same_image(paths, image)
     if saved is not None:
         return _detail(paths, saved)
-    return _read_chart(paths, upstage, name, image, now)
+    return _read_chart(paths, upstage, gw, name, image, now)
 
 
 class ChartUpload(BaseModel):
@@ -1682,7 +1691,9 @@ class ChartUpload(BaseModel):
 
 
 @app.post("/chart-ocr")
-def chart_ocr_upload(body: ChartUpload, paths: Paths, upstage: Upstage, now: Now) -> dict:
+def chart_ocr_upload(
+    body: ChartUpload, paths: Paths, upstage: Upstage, gw: GatewayFactory, now: Now
+) -> dict:
     try:
         image = base64.b64decode(body.image_base64, validate=True)
     except ValueError as e:
@@ -1694,7 +1705,7 @@ def chart_ocr_upload(body: ChartUpload, paths: Paths, upstage: Upstage, now: Now
     saved = _same_image(paths, image)  # 같은 스캔을 또 올리면 저장된 결과
     if saved is not None:
         return _detail(paths, saved)
-    return _read_chart(paths, upstage, body.filename, image, now)
+    return _read_chart(paths, upstage, gw, body.filename, image, now)
 
 
 @app.get("/chart-ocr")

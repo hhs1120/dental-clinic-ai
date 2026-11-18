@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import api, chart_ocr
+from tests.backend.test_chart_ocr import FakeGw
 from tests.backend.test_emr_bridge import CLINIC, MISSED, NEW, conn, src
 
 NOW = datetime(2026, 12, 1, 9, 5, 0)
@@ -20,22 +21,17 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 
 class FakeUpstage:
-    """(image, filename) → (OCR 응답, 정보 추출 응답) — 김철수(MISSED)로 바꾼 고정값, 부른 횟수를 센다"""
+    """(image, filename) → OCR 응답 고정값 — 부른 횟수를 센다"""
 
     def __init__(self, fail: bool = False):
         self.calls, self.fail = 0, fail
         self.ocr = json.loads((FIXTURES / "upstage_ocr.json").read_text(encoding="utf-8"))
-        ext = json.loads((FIXTURES / "upstage_extract.json").read_text(encoding="utf-8"))
-        content = json.loads(ext["choices"][0]["message"]["content"])
-        content |= {"patient_name": "김철수", "birth_date": "1980-01-01"}
-        ext["choices"][0]["message"]["content"] = json.dumps(content, ensure_ascii=False)
-        self.extract = ext
 
-    def __call__(self, image: bytes, filename: str) -> tuple[dict, dict]:
+    def __call__(self, image: bytes, filename: str) -> dict:
         self.calls += 1
         if self.fail:
-            raise chart_ocr.UpstageError("업스테이지 오류 500: boom")
-        return self.ocr, self.extract
+            raise chart_ocr.ReadError("업스테이지 오류 500: boom")
+        return self.ocr
 
 
 @pytest.fixture
@@ -44,7 +40,15 @@ def upstage():
 
 
 @pytest.fixture
-def client(conn, tmp_path, upstage):
+def gw():
+    """정리 모델 자리 — 같은 틀로 받은 실제 응답을 김철수(MISSED)로 바꿔 돌려준다"""
+    ext = json.loads((FIXTURES / "upstage_extract.json").read_text(encoding="utf-8"))
+    data = json.loads(ext["choices"][0]["message"]["content"])
+    return FakeGw(data | {"patient_name": "김철수", "birth_date": "1980-01-01"})
+
+
+@pytest.fixture
+def client(conn, tmp_path, upstage, gw):
     samples = tmp_path / "paper"
     samples.mkdir()
     (samples / "chart-C-00001.png").write_bytes(PNG)
@@ -55,6 +59,7 @@ def client(conn, tmp_path, upstage):
     api.app.dependency_overrides[api.get_clinic] = lambda: CLINIC
     api.app.dependency_overrides[api.get_now] = lambda: NOW
     api.app.dependency_overrides[api.get_upstage] = lambda: upstage
+    api.app.dependency_overrides[api.get_gateway_factory] = lambda: lambda conn: gw
     api.app.dependency_overrides[api.get_paper_charts] = lambda: samples
     yield TestClient(api.app)
     api.app.dependency_overrides.clear()
@@ -209,8 +214,8 @@ def test_sample_changed_image_reads_again(client, upstage, tmp_path):
     assert client.post("/chart-ocr/samples/chart-C-00001.png").json()["id"] != d["id"]
 
 
-def test_bad_extract_json_502_no_row(client, upstage):
-    upstage.extract = {"choices": [{"message": {"content": "not json"}}]}
+def test_structure_failure_502_no_row(client, gw):
+    gw.ok = False
     assert client.post("/chart-ocr/samples/chart-C-00001.png").status_code == 502
     assert client.get("/chart-ocr").json() == []
 

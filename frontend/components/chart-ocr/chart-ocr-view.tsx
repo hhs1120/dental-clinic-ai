@@ -47,7 +47,7 @@ const STATUS_VARIANT: Record<ImportStatus, "warn" | "ok" | "muted"> = {
 };
 
 // 한 번의 요청이라 진행을 알 수 없다 — 업스테이지 두 단계를 차례로 보여 준다
-const STEPS = ["글자 인식 중 (OCR)", "항목 정리 중 (정보 추출)"];
+const STEPS = ["글자 인식 중 (OCR)", "항목 정리 중 (AI)"];
 
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -537,7 +537,7 @@ function InspectPanel({
         ) : (
           <div className="flex flex-col gap-2">
             <p className="text-sm">
-              정보 추출이 읽은 글 <b>{v.date_raw || "(없음)"}</b> → 날짜{" "}
+              정리된 원문 <b>{v.date_raw || "(없음)"}</b> → 날짜{" "}
               <b>{v.date ?? "없음"}</b>.{" "}
               {v.date_note
                 ? `${v.date_note}.`

@@ -108,7 +108,7 @@ function newVisit(from: Visit, treatment: string, note: string): Visit {
   };
 }
 
-/** 합쳐 읽힌 진료를 커서 자리에서 둘로 — 정보 추출이 〃 줄을 윗줄에 붙이는 일이 있다 */
+/** 합쳐 읽힌 진료를 커서 자리에서 둘로 — 정리가 〃 줄을 윗줄에 붙이는 일이 있다 */
 function splitVisit(fields: Fields, i: number, at: number): Fields {
   const v = fields.visits[i];
   const head = v.treatment.slice(0, at).trim();
