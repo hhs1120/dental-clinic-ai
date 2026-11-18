@@ -402,7 +402,7 @@ tags:
 ### 할 것
 - [ ] ② `v2-imp1` 전환(사람) — `make classify V=v2-imp1`(과금, 전체 재분류 — 전부 ok면 활성 교체) 뒤 `make eval`로 dev 판정 풀 성적, `make autoclose`([[치과 AX - AI 실험 기록]] §38)
 - [ ] 스타일 다듬기: `frontend/app/globals.css` 토큰 값·간격·글자 크기를 실제 화면으로 고치고, `components/ui` variant를 정리하고, 화면 코드에 직접 색·모서리 값이 없는지 확인한다
-- [ ] ⑧ test 채점(사람, 버전을 정한 뒤) — ⑧-1 `python -m evaluation.recon score --split test`, ⑧-2 `python -m evaluation.expense score --split test`
+- [ ] ⑧ test 채점(사람, 버전을 정한 뒤) — test 달(`master.recon_test_months`) 실행 `make recon MONTHS=…`·`make expense-ai MONTHS=…`(과금, 채점은 저장된 실행을 읽고 없으면 오답) 뒤 ⑧-1 `python -m evaluation.recon score --split test`, ⑧-2 `python -m evaluation.expense score --split test`
 - [ ] AI 비서 test 채점(사람, 버전을 정한 뒤) — `python -m evaluation.assistant run --split test`(과금) 뒤 `python -m evaluation.assistant score --split test`
 - [ ] 다음 묶음(따로 설계) AI 비서 툴콜링 튜닝 A vs C — A는 Sonnet이 도구 고르기·답 쓰기를 모두, C는 도구 고르기를 Qwen SFT → GRPO(무료 Colab)로 학습한 로컬 모델이 맡고 답 쓰기는 Sonnet. 같은 시나리오 평가셋에서 나란히 본다(`TOOL_ALIAS`·`REPLY_ALIAS`, 보상 함수 `evaluation/assistant_score.py` `score_call`). 기준선 A는 v4 dev 실행([[치과 AX - AI 실험 기록]] §39), 튜닝 동안 `TOOLS_VERSION`·도구 지침은 고정
 - [ ] 다음 묶음(따로 설계) 옛 종이 차트 OCR 이관 — 같은 EMR 연동 함수 모듈(`backend/emr_bridge.py`)에 쓰기를 더한다
