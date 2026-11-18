@@ -250,6 +250,16 @@ export function ChartOcrView() {
           </div>
 
           <div className="flex flex-col gap-4">
+            {item.status === "draft" && (
+              // 표시 세 종류(기능 정의 §4 앱 구성) — 초안은 OCR·AI가 만든 것, 승인한 뒤는 사람이 정한 것
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="kind">AI</Badge>
+                <span className="text-muted-foreground">
+                  OCR·AI가 읽은 초안입니다. 노란 칸을 원본과 비교해 고친 뒤
+                  승인하세요.
+                </span>
+              </div>
+            )}
             <OcrForm
               item={item}
               abbr={abbr.data ?? {}}
