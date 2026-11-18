@@ -232,6 +232,7 @@ def test_slot_counts_approved_ax_not_drafts(conn):
 
 def test_free_slots_excludes_busy_and_lunch(conn):
     _src_add(conn, (MISSED, HYGIENIST, f"{WED} 10:00:00", "hygiene", SCALING, 1))
+    _src_add(conn, (NEW, DOCTOR, f"{WED} 11:00:00", "treatment", RESIN, 3))  # 11시 체어 3
     slots = emr_bridge.free_slots(conn, CLINIC, date(2026, 12, 2), SCALING)
     starts = [s["start"] for s in slots]
     assert {s["staff_id"] for s in slots} == {HYGIENIST}
@@ -240,7 +241,9 @@ def test_free_slots_excludes_busy_and_lunch(conn):
         "staff_name": "임재윤",
         "start": "09:30",
         "end": "10:00",
+        "chairs": [1, 2, 3, 4, 5],
     }
+    assert next(s for s in slots if s["start"] == "11:00")["chairs"] == [1, 2, 4, 5]
     assert "10:00" not in starts and "10:30" in starts
     assert "13:00" not in starts and "13:30" not in starts and "14:00" in starts
     assert starts[-1] == "18:00"

@@ -41,7 +41,7 @@ class FreeSlotsArgs(BaseModel):
     date: dt.date
     date_to: dt.date | None = None
     procedure: str = Field(min_length=1)
-    staff: Literal["원장", "위생사", "상담실장"] | None = None
+    staff: str | None = None  # 역할(원장·위생사·상담실장)이나 담당 이름
 
 
 class DayArgs(BaseModel):
@@ -132,16 +132,32 @@ def _unbooked(conn, args: dict) -> dict:
     return {"count": len(rows), "patients": rows[:LIST_CAP]}
 
 
-def _day_slots(clinic: Clinic, conn, day: dt.date, code: str, staff: str | None) -> list | None:
-    """그날 빈 시작 시각×담당(시각·담당 순), 휴진·공휴일이면 None"""
+def _staff_ids(conn, staff: str | None) -> list | None:
+    """역할이면 그 역할 담당들, 이름이면 그 사람, 없으면 [None](시술 역할 전부). 모르는 이름이면 None"""
+    if not staff:
+        return [None]
+    role = ROLES.get(staff)
+    ids = [
+        s["id"]
+        for s in emr_bridge._staff(conn)
+        if (s["role"] == role if role else s["name"] == staff)
+    ]
+    return ids or None
+
+
+def _day_slots(clinic: Clinic, conn, day: dt.date, code: str, ids: list) -> list | None:
+    """그날 빈 시작 시각(시각 순) — 같은 시각은 한 줄로, 그 시각 빈 체어 수(번호는 초안 때 자동). 담당은 초안 때 자동(이름을 주면 그
+    사람)이라 보이지 않는다. 휴진·공휴일이면 None"""
     mv = prep.master_values(conn)
     if _hours(conn, day)["closed"] or day.isoformat() in mv["bank_holidays"]:
         return None
-    ids = [None]
-    if staff:
-        ids = [s["id"] for s in emr_bridge._staff(conn) if s["role"] == ROLES[staff]]
-    slots = [s for i in ids for s in emr_bridge.free_slots(conn, clinic, day, code, i)]
-    return sorted(slots, key=lambda s: (s["start"], s["staff_id"]))
+    by_time: dict[str, dict] = {}
+    for i in ids:
+        for s in emr_bridge.free_slots(conn, clinic, day, code, i):
+            by_time.setdefault(
+                s["start"], {"start": s["start"], "end": s["end"], "free_chairs": len(s["chairs"])}
+            )
+    return [by_time[t] for t in sorted(by_time)]
 
 
 def _free_slots(clinic: Clinic, conn, args: dict) -> dict:
@@ -150,15 +166,18 @@ def _free_slots(clinic: Clinic, conn, args: dict) -> dict:
     code, err = _procedure(conn, args["procedure"])
     if err:
         return err
+    ids = _staff_ids(conn, args["staff"])
+    if ids is None:
+        return {"error": ["unknown_staff"]}
     first = dt.date.fromisoformat(args["date"])
     if not args.get("date_to"):
-        slots = _day_slots(clinic, conn, first, code, args["staff"])
+        slots = _day_slots(clinic, conn, first, code, ids)
         return {"date": first.isoformat(), "closed": slots is None, "slots": slots or []}
     last = min(dt.date.fromisoformat(args["date_to"]), first + dt.timedelta(FREE_SPAN_DAYS - 1))
     days, found = [], []
     for n in range((last - first).days + 1):
         day = first + dt.timedelta(n)
-        slots = _day_slots(clinic, conn, day, code, args["staff"])
+        slots = _day_slots(clinic, conn, day, code, ids)
         days.append({"date": day.isoformat(), "closed": slots is None, "free": len(slots or [])})
         found += [{"date": day.isoformat(), **s} for s in slots or []]
     return {
@@ -327,8 +346,9 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
         Tool(
             "free_slots",
             f"시술이 들어갈 빈 시작 시각×담당(date YYYY-MM-DD, 오늘 {today}). 하루면 date만, '다음 주'처럼"
-            " 기간이면 date~date_to를 한 번에(휴진일 건너뜀, 날마다 빈 수 days, 가까운 순 slots)."
-            " 예약은 이 안에서만 고른다.",
+            " 기간이면 date~date_to를 한 번에(휴진일 건너뜀, 날마다 빈 시각 수 days, 가까운 순 slots)."
+            " 시각마다 빈 체어 수 free_chairs. staff는 역할이나 담당 이름 — 없으면 그 시술 역할 전부, 담당은 초안 때"
+            " 자동. 예약은 이 안에서만 고른다.",
             FreeSlotsArgs,
             lambda ctx, a: _free_slots(clinic, conn(ctx), a),
         ),

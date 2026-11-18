@@ -106,10 +106,18 @@ def test_free_slots_tool_closed_thursday(conn):
 
 
 def test_free_slots_tool_open_day_and_role(conn):
+    """시각마다 한 줄(빈 체어 수), 담당 이름은 보이지 않는다 — 역할·이름으로 거른다"""
     got = call(conn, "free_slots", date=WED, procedure="스케일링")
     assert got["closed"] is False and got["slots"]
-    assert {s["staff_name"] for s in got["slots"]} == {"임재윤"}
+    assert got["slots"][0] == {"start": "09:30", "end": "10:00", "free_chairs": 5}
+    starts = [s["start"] for s in got["slots"]]
+    assert starts == sorted(set(starts))  # 같은 시각은 한 줄
+    by_name = call(conn, "free_slots", date=WED, procedure="스케일링", staff="임재윤")
+    assert by_name["slots"] == got["slots"]
     assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="원장")["slots"] == []
+    assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="없는사람") == {
+        "error": ["unknown_staff"]
+    }
     assert call(conn, "free_slots", date=WED, procedure="없는시술") == {
         "error": ["unknown_procedure"]
     }
