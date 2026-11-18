@@ -68,6 +68,11 @@ test("assistant: 칩을 누르면 질문이 보내지고 단계 줄 뒤 답", as
   await expect(
     page.getByText("조회하고 예약 초안까지 — 확정은 사람이 합니다"),
   ).toBeVisible();
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: /지난주 전화로 예약 원했는데/ })
     .click();
@@ -99,8 +104,17 @@ test("assistant: 초안 승인 → 확정 표시", async ({ page }) => {
   );
   await page.goto("/?draft=" + encodeURIComponent("예약 원한 사람 초안"));
   await expect(page.getByText("AI", { exact: true })).toBeVisible();
+  const pending = page.getByText("승인 전 — 아직 일정에 없습니다");
+  await expect(pending).toBeVisible();
+  // 대화 중에도 입력칸 아래에 승인해야 예약된다는 안내가 남는다
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "승인" }).click();
   await expect(page.getByText("확정", { exact: true })).toBeVisible();
+  await expect(pending).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "일정에서 보기" }),
   ).toHaveAttribute("href", "/schedule?date=2026-12-01");

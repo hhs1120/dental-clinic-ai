@@ -27,6 +27,14 @@ const MAX_TEXT = 1000; // backend/api.py ASSISTANT_MAX_TEXT
 const CUT = "응답이 끊겼습니다 — 다시 말해 주세요";
 const NO_SERVER = "서버에 연결하지 못했습니다";
 
+/** 입력칸 아래 늘 보이는 안내 — 비서의 말이 아니라 초안 카드의 승인만 예약을 만든다(AI 비서 설계 §5.2) */
+const DRAFT_NOTE = (
+  <p className="mt-2 text-center text-xs text-muted-foreground">
+    예약은 초안 카드에서 <strong className="font-bold">승인</strong>을 눌러야
+    확정됩니다. 초안 카드가 없으면 예약되지 않은 것입니다.
+  </p>
+);
+
 /** 시작 화면 오늘 요약 한 줄 — 오늘 화면(GET /today)과 같은 값, 0건은 빼고 못 불러오면 숨긴다(기능 정의 §4 AI 비서) */
 function TodayLine() {
   const { data } = useFetch<TodaySheet>("assistant-today", () => fetchToday());
@@ -293,7 +301,10 @@ export function AssistantView() {
       <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-2xl flex-col items-center justify-center gap-6 pt-8 pb-[6dvh] text-center max-md:min-h-[calc(100dvh-7.5rem)]">
         <h1 className="text-3xl font-bold">무엇을 도와드릴까요?</h1>
         {loadError && <p className="text-destructive">{loadError}</p>}
-        <div className="w-full text-left">{form}</div>
+        <div className="w-full text-left">
+          {form}
+          {DRAFT_NOTE}
+        </div>
         <div className="mt-6 flex flex-col items-center gap-2">
           <p className="text-xs text-muted-foreground">
             이렇게 물어볼 수 있어요
@@ -349,7 +360,10 @@ export function AssistantView() {
         ),
       )}
       <div ref={bottom} />
-      <div className="sticky bottom-0 bg-background pb-6">{form}</div>
+      <div className="sticky bottom-0 bg-background pb-6">
+        {form}
+        {DRAFT_NOTE}
+      </div>
     </div>
   );
 }

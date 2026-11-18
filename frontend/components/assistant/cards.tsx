@@ -92,6 +92,11 @@ function DraftCard({
         <span>
           {d.staff} · {d.procedure ?? d.type}
         </span>
+        {d.status === "draft" && (
+          <span className="text-xs text-muted-foreground">
+            승인 전 — 아직 일정에 없습니다
+          </span>
+        )}
       </div>
       <p>
         {d.name} ({d.chart_no}){d.chair_no ? ` · 의자 ${d.chair_no}` : ""}
