@@ -305,16 +305,20 @@ export function OcrForm({
                 disabled={locked}
                 onChange={(e) => setVisit(i, { treatment: e.target.value })}
               />
-              {!locked && v.suggestions.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">
-                    혹시 이 약어?
-                  </span>
-                  {v.suggestions.map((s) => (
+              {!locked &&
+                v.suggestions.map((s) => (
+                  <div
+                    key={s.word}
+                    className="flex flex-wrap items-center gap-2 rounded-md bg-status-info-bg px-2 py-1 text-xs text-status-info-fg"
+                  >
+                    <span>
+                      잘못 읽은 것 같아요: <b>{s.word}</b> → <b>{s.abbr}</b>
+                      {abbr[s.abbr] && `(${abbr[s.abbr]})`}로 고칠까요?
+                    </span>
                     <Button
-                      key={s.word}
                       size="xs"
                       variant="outline"
+                      className="ml-auto"
                       onClick={() =>
                         setVisit(i, {
                           treatment: v.treatment.replace(s.word, s.abbr),
@@ -324,11 +328,10 @@ export function OcrForm({
                         })
                       }
                     >
-                      {s.word} → {s.abbr}
+                      고치기
                     </Button>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
               {words.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   {words.map(([k, m]) => (
