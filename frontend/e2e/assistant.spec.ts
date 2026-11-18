@@ -63,11 +63,17 @@ test("assistant: 칩을 누르면 질문이 보내지고 단계 줄 뒤 답", as
   await fakeTurn(page, bodies);
   await page.goto("/");
   await expect(
-    page.getByRole("button", { name: /^(📞|🩺|🧾|💳|☎️)/ }),
-  ).toHaveCount(5);
+    page.getByRole("button", { name: /^(📞|🩺|🧾|💳|☎️|📋)/ }),
+  ).toHaveCount(6);
   await expect(
     page.getByText("조회하고 예약 초안까지 — 확정은 사람이 합니다"),
   ).toBeVisible();
+  // 시작 화면에는 입력칸 아래 예약 안내가 없다(맨 아래 문구와 겹친다)
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: /지난주 전화로 예약 원했는데/ })
     .click();
@@ -99,8 +105,17 @@ test("assistant: 초안 승인 → 확정 표시", async ({ page }) => {
   );
   await page.goto("/?draft=" + encodeURIComponent("예약 원한 사람 초안"));
   await expect(page.getByText("AI", { exact: true })).toBeVisible();
+  const pending = page.getByText("승인 전 — 아직 일정에 없습니다");
+  await expect(pending).toBeVisible();
+  // 대화 중에도 입력칸 아래에 승인해야 예약된다는 안내가 남는다
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "승인" }).click();
   await expect(page.getByText("확정", { exact: true })).toBeVisible();
+  await expect(pending).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "일정에서 보기" }),
   ).toHaveAttribute("href", "/schedule?date=2026-12-01");
@@ -360,4 +375,213 @@ test("assistant: 지운 대화는 읽기 전용으로 열린다", async ({ page 
     await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
       0,
     );
+});
+
+test("assistant: 시작 화면 오늘 요약 — 0건은 빼고 오늘 화면으로 잇는다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/today", (r) =>
+    r.fulfill({
+      json: {
+        cards: { todo: { items: 3 }, appointments: { total: 12 } },
+        people: { urgent_calls: [] },
+      },
+    }),
+  );
+  await page.goto("/");
+  const line = page.getByRole("link", { name: /오늘 화면 →/ });
+  await expect(line).toHaveText(/할 일 3건\s*· 예약 12건/);
+  await expect(line).not.toContainText("급한 통화");
+  await expect(line).toHaveAttribute("href", "/today");
+});
+
+test("assistant: 환자·통화 카드는 사람별 바로 가기 칩 하나로 묶인다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({
+              text: "2건입니다.",
+              cards: [
+                {
+                  type: "call",
+                  id: "c-1",
+                  data: {
+                    call_uid: "c-1",
+                    at: "2026-11-27 15:15:00",
+                    direction: "inbound",
+                    name: "송미영",
+                    chart_no: "C-1",
+                    purpose: "book",
+                    summary: "약 이름 확인 뒤 연락",
+                  },
+                },
+                {
+                  type: "patient",
+                  id: "C-1",
+                  data: { chart_no: "C-1", name: "송미영", birth_date: null },
+                },
+                {
+                  type: "call",
+                  id: "c-2",
+                  data: {
+                    call_uid: "c-2",
+                    at: "2026-11-25 13:45:00",
+                    direction: "inbound",
+                    name: "김지훈",
+                    chart_no: null,
+                    purpose: "emergency",
+                    summary: "잇몸 부기",
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("안 잡힌 사람"));
+  const bar = page.getByLabel("바로 가기");
+  await expect(bar).toContainText("송미영");
+  await expect(bar.getByRole("link", { name: "11/27 통화" })).toHaveAttribute(
+    "href",
+    "/calls?tab=history&q=C-1&call=c-1",
+  );
+  // 근거 통화가 있으면 통화 기록 링크는 따로 두지 않는다(날짜가 그 사람의 통화 기록으로 간다)
+  await expect(bar.getByRole("link", { name: "통화 기록" })).toHaveCount(0);
+  await expect(bar.getByRole("link", { name: "11/25 통화" })).toHaveAttribute(
+    "href",
+    `/calls?${new URLSearchParams({ tab: "history", q: "김지훈", call: "c-2" })}`,
+  );
+  await expect(page.getByText("약 이름 확인 뒤 연락")).toHaveCount(0);
+});
+
+test("assistant: 문서 출처는 카드, 사례 출처는 칩 — 누르면 발췌가 펼쳐진다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  const src = (id: string, extra: object) => ({
+    type: "source",
+    id,
+    data: {
+      id,
+      title: null,
+      body: "",
+      event_date: null,
+      chart_no: null,
+      patient_name: null,
+      caller_name: null,
+      direction: null,
+      doc_type: null,
+      version: null,
+      is_outdated: false,
+      ...extra,
+    },
+  });
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({
+              text: "만 65세 이상입니다.",
+              cards: [
+                src("doc:21:1", {
+                  source_type: "document",
+                  doc_type: "insurance_guide",
+                  title: "임플란트 건강보험 적용 > 적용 대상 나이",
+                  body: "만 65세 이상",
+                }),
+                src("call:c-9:0", {
+                  source_type: "call",
+                  direction: "수신",
+                  caller_name: "이진호",
+                  event_date: "2026-11-25",
+                  body: "임플란트 1차도 건강보험이 되는지",
+                }),
+              ],
+            }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("임플란트 보험"));
+  const docs = page.getByRole("region", { name: "문서 출처" });
+  await expect(
+    docs.getByRole("heading", {
+      name: "임플란트 건강보험 적용 › 적용 대상 나이",
+    }),
+  ).toBeVisible();
+  await expect(docs).not.toContainText("이진호");
+  const chip = page
+    .getByLabel("사례 출처")
+    .getByRole("button", { name: /통화\s*이진호 · 11\/25/ });
+  await expect(page.getByText("임플란트 1차도 건강보험이 되는지")).toHaveCount(
+    0,
+  );
+  await chip.click();
+  await expect(
+    page.getByText("임플란트 1차도 건강보험이 되는지"),
+  ).toBeVisible();
+});
+
+test("assistant: 예약 이야기가 없는 대화에는 입력칸 아래 예약 안내가 없다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({ text: "재심 기한 임박은 36건입니다.", cards: [] }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("재심 기한 임박 건"));
+  await expect(page.getByText("재심 기한 임박은 36건입니다.")).toBeVisible();
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toHaveCount(0);
+});
+
+test("assistant: 목록 뒤에 붙은 끝맺음은 마지막 항목에 붙지 않고 선 아래 따로", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  const text =
+    "2명입니다.\n\n- 송미영 — 시간을 보류했습니다.\n- 김진호 — 날짜를 비워 두었습니다.\n김지훈 님은 차트가 없어 신환 등록을 먼저 해 주셔야 합니다.";
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([["reply", { type: "reply", ...REPLY({ text, cards: [] }) }]]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("지난주 안 잡힌 사람"));
+  const items = page.getByRole("listitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(1)).toHaveText("김진호 — 날짜를 비워 두었습니다.");
+  const tail = page.getByText("김지훈 님은 차트가 없어", { exact: false });
+  await expect(tail).toBeVisible();
+  await expect(tail.locator("xpath=ancestor::li")).toHaveCount(0);
 });

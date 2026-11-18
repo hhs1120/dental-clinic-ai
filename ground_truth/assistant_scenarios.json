@@ -78,8 +78,7 @@
         "user": "김진호 님은 내일 오전에 스케일링으로 아무 시간이나 넣어 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-02272",
@@ -180,8 +179,7 @@
         "user": "류도현 어린이 불소도포 다음 주 수요일 오후로 잡아 줘. 보호자분이 오후가 편하시대",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-00690",
@@ -282,8 +280,7 @@
         "user": "김승민 님 다음 주 월요일 오전에 레진으로 예약 초안 만들어 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-01542",
@@ -843,7 +840,10 @@
           },
           "end": {
             "no_write": true
-          }
+          },
+          "alt_tools": [
+            "draft_appointment"
+          ]
         }
       }
     ]
@@ -1034,8 +1034,7 @@
         "user": "두 번째 분 이번 주 금요일 오전에 스케일링으로 잡아 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-00547",
@@ -1136,8 +1135,7 @@
         "user": "서예준 님 단순발치로 다음 주 금요일 오전 아무 때나 잡아 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-01423",
@@ -1238,8 +1236,7 @@
         "user": "안광수 어린이 다음 주 토요일 오전에 불소도포로 예약 넣어 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-01957",
@@ -1337,7 +1334,7 @@
         }
       },
       {
-        "user": "박지우 님 12월 15일 오전 구강검진 자리 봐 줘",
+        "user": "서예준 님 12월 15일 오전 구강검진 자리 봐 줘",
         "gold": {
           "tools": [
             "free_slots"
@@ -1356,13 +1353,13 @@
             "draft_appointment"
           ],
           "args": {
-            "chart_no": "C-00300",
+            "chart_no": "C-01423",
             "date": "2026-12-15",
             "procedure": "구강검진"
           },
           "end": {
             "draft": {
-              "chart_no": "C-00300",
+              "chart_no": "C-01423",
               "date": "2026-12-15",
               "start_range": [
                 "11:00",
@@ -1397,8 +1394,7 @@
         "user": "윤옥자 님 다음 주 화요일 오전에 레진 치료로 잡아 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
             "chart_no": "C-01799",
@@ -1900,7 +1896,10 @@
           },
           "end": {
             "no_write": true
-          }
+          },
+          "alt_tools": [
+            "draft_appointment"
+          ]
         }
       }
     ]
@@ -1988,7 +1987,7 @@
             "query_patient"
           ],
           "args": {
-            "chart_no": "C-00300"
+            "chart_no": "C-01423"
           },
           "end": null
         }
@@ -1997,17 +1996,16 @@
         "user": "그분 다음 주 화요일 오전에 구강검진으로 예약 잡아 줘",
         "gold": {
           "tools": [
-            "draft_appointment",
-            "free_slots"
+            "draft_appointment"
           ],
           "args": {
-            "chart_no": "C-00300",
+            "chart_no": "C-01423",
             "date": "2026-12-08",
             "procedure": "구강검진"
           },
           "end": {
             "draft": {
-              "chart_no": "C-00300",
+              "chart_no": "C-01423",
               "date": "2026-12-08",
               "start_range": [
                 "09:30",

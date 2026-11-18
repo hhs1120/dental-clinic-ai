@@ -11,10 +11,11 @@
 import json
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 
 from backend import assistant_tools, calls, chat, documents, prompts
 from backend.assistant_tools import assistant_tools as make_tools
+from backend.emr import _hours
 from backend.harness.loop import TRUST_NOTICE, AgentSpec, Runner, external
 from backend.harness.store import RunStore
 from backend.harness.tools import Tool, ToolRegistry
@@ -26,11 +27,11 @@ from shared.llm import BudgetExceeded
 AGENT, TASK, REPLY_TASK = "assistant", "assistant", "assistant_reply"
 TOOL_ALIAS = "chat"  # 도구 단계 — 다음 묶음에서 로컬 모델 자리(§7.1)
 REPLY_ALIAS = "chat"  # 답 단계
-PROMPT_VERSION = "v1"
-REPLY_VERSION = "v1"
+PROMPT_VERSION = "v5"
+REPLY_VERSION = "v3"
 MAX_TOOL_CALLS = (
     chat.CHAT_MAX_TOOL_CALLS
-)  # 턴당 도구 호출(done_tools 포함) — ③ 값에서 시작, dev 실측으로 정함(§4.1)
+)  # 턴당 도구 호출(done_tools 포함) — ③ 값, dev 실측은 AI 실험 기록 §39
 MAX_USD = chat.CHAT_MAX_USD
 FAILED_TEXT = "확인된 결과로 답하지 못했습니다"
 WEEKDAYS = "월화수목금토일"
@@ -64,13 +65,23 @@ CONFIRM_CLAIM_RE = re.compile(
     rf"(확정|승인)(했|해{_KEEP})"
     r"|(예약|초안)\s*(을|를|이|가|도|은|는)?\s*(확정|승인|완료)\s*(처리)?\s*(되었|됐)"
 )
+# 다른 사람이 한 일임을 밝힌 말 — 통화에서 있었던 일("통화에서 12월 11일로 확정했습니다")이나 환자·직원이 한 일은
+# 비서가 예약을 만들었다·확정했다는 말이 아니다. 위 두 검사는 문장마다 보고, 주장 앞에 이 말이 있으면 뺀다 — 단
+# 사람 주어와 주장 사이에 절이 끊기면("김철수 님이 원하신 대로 … 잡았습니다", "원장이 담당하도록 … 확정했습니다")
+# 주장의 주어는 비서라 빼지 않는다(CLAUSE_RE)
+OTHER_ACTOR_RE = re.compile(
+    r"(통화|전화)\s*(에서|중에?|때)|(환자|보호자|직원|원장)\s*(님)?\s*(이|가|께서)|님\s*(이|께서)\s"
+)
+CLAUSE_RE = re.compile(r"대로|도록|위해|면서|는데|해서|하여|하시|원하신|,")
+SENTENCE_RE = re.compile(r"[^.!?\n]+")
 EVIDENCE_SKIP = (*chat.EVIDENCE_SKIP, "question")  # 모델이 쓴 자유 글은 숫자 근거가 아니다
 RETRY_REASON = {
     CITE: "cited_ids가 이번 턴 기록 검색·차트 조회 결과 밖임.",
     NUMBER: "답의 숫자가 이번 턴 도구 결과·입력에 없음.",
     DRAFT_CLAIM: "이번 턴에 만든 예약 초안이 없는데 답이 초안·예약을 만든 것처럼 썼거나, 예약을 확정·승인한"
     " 것처럼 씀. 지난 예약·이미 있는 예약은 그대로 설명해도 되지만, 이번 턴 결과에 초안 카드가 없으면 무엇도 새로"
-    " 만들었다·잡았다고 쓰지 않는다. 확정·승인은 직원이 초안 카드에서 하므로 했다고 쓰지 않는다.",
+    " 만들었다·잡았다고 쓰지 않는다. 확정·승인은 직원이 초안 카드에서 하므로 했다고 쓰지 않는다. 통화에서 있었던"
+    ' 일은 "통화에서 ~했습니다"처럼 통화 내용임을 밝혀 쓴다.',
 }
 RETRY_HINT = " 이번 턴 결과에 있는 사실·숫자만 그대로 써서 다시 답한다."
 REPLY_SCHEMA = {
@@ -243,6 +254,88 @@ def _tool_log(steps: list[dict]) -> list[dict]:
     ]
 
 
+CLOSED_TEXT = (
+    "{m}월 {d}일은 {why}이라 예약할 수 없습니다. 다른 날짜를 알려 주시면 빈 시간을 찾아 드릴게요."
+)
+SAT_PM_TEXT = (
+    "토요일은 {close}까지 진료라 오후 예약은 할 수 없습니다. 오전이나 다른 날짜를 알려 주세요."
+)
+CLOSED_ONLY_TOOLS = {"free_slots", "query_patient", DRAFT}  # 휴진 확인 턴에 같이 나올 수 있는 도구
+SAT_PM_ERRORS = {
+    "no_slot",
+    "outside_hours",
+}  # 토요일 오후 초안이 마감 때문에 실패한 코드 — 다른 원인은 답 단계가
+
+
+def _code_reply(conn: sqlite3.Connection, steps: list[dict]) -> str | None:
+    """답 단계 대신 코드가 쓰는 답 — 휴진일·공휴일 하루 확인뿐인 턴, 토요일 오후 초안뿐인 턴. 아니면 None"""
+    if day := _closed_only(steps):
+        return CLOSED_TEXT.format(m=day.month, d=day.day, why=assistant_tools.day_off(conn, day))
+    if day := _saturday_afternoon(conn, steps):
+        return SAT_PM_TEXT.format(close=_hours(conn, day)["close"])
+    return None
+
+
+def _closed_only(steps: list[dict]) -> date | None:
+    """이번 턴이 휴진일 하루 확인뿐이면 그 날 — 하루짜리 free_slots가 모두 closed이고(초안은 closed_day로 실패)
+    다른 조회·성공한 초안이 없을 때. 기간 조회·다른 도구가 섞이면 None(답 단계가 쓴다)"""
+    ok = _ok_steps(steps)
+    if not ok or not _closed_turn_tools(ok):
+        return None
+    days = set()
+    for s in ok:
+        r, a = s["result"], s["args"]
+        if s["tool"] == "free_slots":
+            if a.get("date_to") or not (isinstance(r, dict) and r.get("closed") is True):
+                return None
+            days.add(a["date"])
+        elif s["tool"] == DRAFT:
+            if not (isinstance(r, dict) and "closed_day" in r.get("error", [])):
+                return None
+            days.add(a["date"])
+    return date.fromisoformat(days.pop()) if len(days) == 1 else None
+
+
+def _saturday_afternoon(conn: sqlite3.Connection, steps: list[dict]) -> date | None:
+    """이번 턴이 토요일 오후 초안 실패뿐이면 그 날 — 초안이 모두 같은 토요일에 `window` 오후이거나 마감 뒤 시각이고
+    실패했을 때(토요일은 점심 전에 마감, `backend.emr._hours`). 그날 하루 free_slots는 같이 나와도 된다"""
+    ok = _ok_steps(steps)
+    if not any(s["tool"] == DRAFT for s in ok) or not _closed_turn_tools(ok):
+        return None
+    days = set()
+    for s in ok:
+        r, a = s["result"], s["args"]
+        if s["tool"] == "free_slots" and a.get("date_to"):
+            return None
+        if s["tool"] == DRAFT:
+            day = date.fromisoformat(a["date"])
+            late = (
+                a["start"] >= _hours(conn, day)["close"]
+                if a.get("start")
+                else a.get("window") == "오후"
+            )
+            failed = set(r.get("error", [])) if isinstance(r, dict) else set()
+            if day.weekday() != 5 or not late or not failed & SAT_PM_ERRORS:
+                return None
+        if s["tool"] != "query_patient":
+            days.add(a["date"])
+    return date.fromisoformat(days.pop()) if len(days) == 1 else None
+
+
+def _closed_turn_tools(ok: list[dict]) -> bool:
+    """코드 답을 낼 수 있는 도구 묶음 — CLOSED_ONLY_TOOLS 밖이 없고, 환자 조회는 이번 턴 초안 대상 확인뿐(다른 질문의
+    조회가 섞이면 코드 문장이 그 답을 빠뜨린다)"""
+    drafted = {s["args"].get("chart_no") for s in ok if s["tool"] == DRAFT}
+    for s in ok:
+        if s["tool"] not in CLOSED_ONLY_TOOLS:
+            return False
+        if s["tool"] == "query_patient":
+            r = s["result"] if isinstance(s["result"], dict) else {}
+            if not {m.get("chart_no") for m in r.get("matches") or []} & drafted:
+                return False
+    return True
+
+
 def _ok_steps(steps: list[dict]) -> list[dict]:
     return [
         s
@@ -299,11 +392,21 @@ def _check(data: dict, nums: set[int], cites: set[str], drafted: bool) -> str | 
         return CITE
     if not numbers_ok(data["text"], nums):
         return NUMBER
-    if CONFIRM_CLAIM_RE.search(data["text"]) or (
-        not drafted and DRAFT_CLAIM_RE.search(data["text"])
-    ):
-        return DRAFT_CLAIM
+    for s in SENTENCE_RE.findall(data["text"]):
+        claims = [CONFIRM_CLAIM_RE.search(s), None if drafted else DRAFT_CLAIM_RE.search(s)]
+        if any(m and not _other_actor(s, m.start()) for m in claims):
+            return DRAFT_CLAIM
     return None
+
+
+def _other_actor(sentence: str, at: int) -> bool:
+    """주장(at) 앞이 통화 이야기이거나, 사람 주어가 절 끊김 없이 주장까지 이어진다 — 비서가 한 일이 아니다"""
+    before = sentence[:at]
+    m = None
+    for m in OTHER_ACTOR_RE.finditer(before):
+        if m.group(1):  # 통화·전화에서 — 통화에서 있었던 일
+            return True
+    return m is not None and not CLAUSE_RE.search(before[m.end() :])
 
 
 def _reply_input(prompt: str, steps: list[dict], records: list[dict]) -> str:
@@ -360,18 +463,17 @@ def _reply(conn, gw, store, run_id, prompt, steps, records, clinic) -> tuple[str
             {"role": "assistant", "content": r.text},
             {"role": "user", "content": RETRY_REASON[rule] + RETRY_HINT},
         ]
+    # 고정 문구 아래 대상 카드가 붙으면 답과 어긋나 보인다 — 초안 카드만 _with_drafts가 붙인다
+    if rule is not None:
+        return FAILED_STATUS[rule], FAILED_TEXT, []
     cards, seen = [], set()
-    for c in data[
-        "cards"
-    ]:  # 이번 턴 결과 밖 대상은 그 카드만 버린다 — 어긋난 답이어도 남는 카드는 검증된 대상
+    for c in data["cards"]:  # 이번 턴 결과 밖 대상은 그 카드만 버린다
         key = (c["type"], c["id"])
         if key in seen or c["id"] not in targets.get(c["type"], ()):
             continue
         seen.add(key)
         if (detail := card_detail(conn, c["type"], c["id"], clinic)) is not None:
             cards.append({"type": c["type"], "id": c["id"], "data": detail})
-    if rule is not None:
-        return FAILED_STATUS[rule], FAILED_TEXT, cards
     return "ok", data["text"], cards
 
 
@@ -479,12 +581,16 @@ def turn(
 
 
 def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_event) -> dict:
-    prompt = _input(history, _today_lines(conn, clinic), text)
+    today_lines = _today_lines(conn, clinic)
+    # 도구 단계에는 휴진 요일을 주지 않는다 — 휴진은 도구(free_slots·draft_appointment)가 판단하고, 미리 알면
+    # 조회 없이 끝내 코드 답(_code_reply)이 날짜를 모른다. 답 단계는 둘 다 본다
+    prompt = _input(history, today_lines[:1], text)
     reg, names = registry(
         clinic, searcher, {"conversation_id": conversation_id, "turn": seq}, on_event
     )
     store = RunStore(conn)
     outcome = Runner(spec(names), gw, store, reg).start(f"{conversation_id}:{seq}", prompt)
+    prompt = _input(history, today_lines, text)
     steps = store.steps(outcome.run_id)
     if outcome.status == "failed" or outcome.reason in ("budget", "cost_limit"):
         status = "failed" if outcome.status == "failed" else outcome.reason
@@ -513,9 +619,12 @@ def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_ev
                         "retrieved_ids": got["retrieved_ids"],
                     }
                 )
-        status, reply_text, cards = _reply(
-            conn, gw, store, outcome.run_id, prompt, steps, records, clinic
-        )
+        if fixed := _code_reply(conn, steps):  # 다른 날·시각을 권하지 않게 문장을 코드가 쓴다
+            status, reply_text, cards = "ok", fixed, []
+        else:
+            status, reply_text, cards = _reply(
+                conn, gw, store, outcome.run_id, prompt, steps, records, clinic
+            )
     cards = _with_drafts(conn, cards, steps)
     tool_calls = _tool_log(steps)
     _save(

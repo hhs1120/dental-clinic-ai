@@ -56,8 +56,8 @@
 - `make nightly [PLAN=1] [NO_BATCH=1] [FORCE=1]`(과금, 이어 돎, `backend/nightly.py` — 고정 순서로 모든 화면의 AI 결과를 최신으로. `PLAN=1`은 LLM 없이 단계별 건수·에이전트 예상 비용, Batch는 하루 상한 밖이라 첫 실행·버전 교체 전에 본다. `FORCE=1`은 죽은 실행이 남긴 running 행을 넘긴다)
 - ⑥ `make report [NO_BATCH=1]`(과금, 이어 돎, `backend/report.py` — 채점은 `make eval`)
 - ⑧ 랭그래프 비교 `uv run --env-file .env --group langgraph python -m evaluation.langgraph_recon run [--plan]`(과금, 이어 돎 — ⑧-1 조사 에이전트를 랭그래프로, dev만) / `… score`(무료, 하네스와 나란히)
-- ⑧ `make recon [MONTHS="2026-08 2026-09"] [NO_BATCH=1]`(과금, 이어 돎, `backend/recon_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.recon score --split test`(사람)) · `make expense-ai [MONTHS=] [NO_BATCH=1]`(과금, 이어 돎, `backend/expense_agent.py` — 채점은 `make eval`, test는 `python -m evaluation.expense score --split test`(사람))
-- AI 비서 `make assistant-eval`(과금, 이어 돎, dev 시나리오 `evaluation/assistant.py` — `TOOL_ALIAS=`·`REPLY_ALIAS=`·`BASELINE=1`, 채점은 `make eval`, test는 `python -m evaluation.assistant score --split test`(사람)) · 정답 `python -m evaluation.assistant_scenarios build|check`
+- ⑧ `make recon [MONTHS="2026-08 2026-09"] [NO_BATCH=1]`(과금, 이어 돎, `backend/recon_agent.py` — 채점은 `make eval`, test는 test 달 `MONTHS=` 실행 뒤 `python -m evaluation.recon score --split test`(사람)) · `make expense-ai [MONTHS=] [NO_BATCH=1]`(과금, 이어 돎, `backend/expense_agent.py` — 채점은 `make eval`, test는 test 달 `MONTHS=` 실행 뒤 `python -m evaluation.expense score --split test`(사람))
+- AI 비서 `make assistant-eval`(과금, 이어 돎, dev 시나리오 `evaluation/assistant.py` — `TOOL_ALIAS=`·`REPLY_ALIAS=`·`BASELINE=1`, 채점은 `make eval`, test는 `python -m evaluation.assistant run --split test` 뒤 `score --split test`(사람)) · 정답 `python -m evaluation.assistant_scenarios build|check`
 
 ## 코드 컨벤션
 - Python은 **PEP 8**을 ruff로 지킨다(설정 `pyproject.toml` `[tool.ruff]` — 코드 99자, 한국어 독스트링·주석은 줄 길이 검사 제외). 코드를 고치면 커밋 전 `make fmt` → `make lint` → `make test`. 동작 없는 일괄 정리 커밋은 `.git-blame-ignore-revs`에 넣는다(로컬은 `git config blame.ignoreRevsFile .git-blame-ignore-revs`)

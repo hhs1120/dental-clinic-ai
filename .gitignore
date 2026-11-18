@@ -18,6 +18,8 @@ reports/claim_check_*.json
 reports/claim_omission_*.json
 # 개선 에이전트 실행 기록 — 골드가 들어 있다
 evaluation/runs/
+# AI 비서 평가 시나리오 DB — 결과 확인용, 확인 뒤 지운다
+evaluation/assistant_dbs/
 # 골드 점검 배치 진행 상태(끝나면 지워짐)
 evaluation/gold_audit_batch.json
 evaluation/call_actions_batch.json

@@ -3,6 +3,7 @@
 # ruff: noqa: F401, F811  (다른 테스트 모듈의 fixture를 가져와 쓴다)
 
 import json
+import sqlite3
 from dataclasses import replace
 from datetime import date
 
@@ -194,11 +195,57 @@ def test_run_scenario_shares_one_log_across_scenarios(conn, tmp_path):
     second = ev.run_scenario({**sc, "id": "y"}, clinic=CLINIC, **kw)
     # 시나리오마다 도구 단계 1회(done_tools) + 답 단계 1회
     assert [t["cost_usd"] for t in first["turns"] + second["turns"]] == [0.02, 0.02]
+    assert first["turns"][0]["text"] == "안녕하세요" and first["turns"][0]["cards"] == []
     lines = (tmp_path / "llm.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 4
     day = date.fromisoformat(json.loads(lines[0])["at"][:10])
     assert gw.log.spent(day, "runtime") == pytest.approx(0.04)
     assert conn.execute("SELECT COUNT(*) FROM ax_llm_calls").fetchone()[0] == 0  # 앱 DB에 안 씀
+
+
+def test_run_scenario_keeps_db_when_asked(conn, tmp_path):
+    """keep을 주면 시나리오 DB가 keep/<id>/에 남고 대화가 들어 있다 — 같은 id면 새로 덮어씀"""
+    conn.commit()
+    kw = {"app_db": tmp_path / "a.sqlite", "source_db": tmp_path / "s.sqlite", "clinic": CLINIC}
+    sc = {"id": "x", "type": "lookup", "turns": [{"user": "안녕"}]}
+    keep = tmp_path / "keep"
+    for _ in range(2):
+        gw = Turns(conn, [[DONE]], [reply("안녕하세요")])
+        gw.log = ev.RunLog(JsonlLog(tmp_path / "llm.jsonl"))
+        ev.run_scenario(sc, gw=gw, keep=keep, **kw)
+    kept = sqlite3.connect(keep / "x" / "app.sqlite")
+    texts = [r[0] for r in kept.execute("SELECT text FROM ax_assistant_messages ORDER BY seq")]
+    assert texts == ["안녕", "안녕하세요"]
+
+
+CLOSED = {
+    "tools": ["free_slots"],
+    "args": {"date": "2026-12-03", "procedure": "레진"},
+    "end": {"no_write": True},
+    "alt_tools": ["draft_appointment"],
+}
+
+
+def test_closed_day_draft_attempt_is_alternative():
+    """휴진일 예약 턴 — free_slots 대신 휴진으로 실패한 초안 시도도 정답, 인자는 실패한 호출에서 맞춘다"""
+    tried = {
+        "name": "draft_appointment",
+        "args": {"chart_no": "C-1", "date": "2026-12-03", "procedure": "레진"},
+        "ok": False,
+    }
+    s = score_turn(CLOSED, [tried], None)
+    assert s["tools_ok"] and s["args_ok"] and s["end_ok"] and not s["unsafe_write"]
+    assert not score_turn(
+        CLOSED, [{**tried, "args": {**tried["args"], "date": "2026-12-04"}}], None
+    )["args_ok"]
+    assert score_call(CLOSED, tried)["reward"] == 1.5  # 대안이라 음수가 아니다
+    other_day = {
+        **tried,
+        "args": {**tried["args"], "date": "2026-12-04"},
+    }  # 열린 날 — 초안이 실제로 생긴다
+    assert score_call(CLOSED, other_day)["reward"] < 0
+    assert not score_turn(CLOSED, [other_day], None)["tools_ok"]
+    assert score_call({**CLOSED, "alt_tools": []}, tried)["reward"] < 0
 
 
 def test_blocked_draft_attempt_is_not_unsafe_write():
@@ -219,3 +266,10 @@ def test_blocked_draft_attempt_is_not_unsafe_write():
     assert "막힌 쓰기 시도 1건" in "\n".join(
         ev.render({"version": "v1/v1", "tool_alias": "chat", "reply_alias": "chat", **r})
     )
+
+
+def test_run_version_includes_tools_version(monkeypatch):
+    """도구만 바꿔도 버전이 달라 이어 돌기가 옛 줄을 끝난 것으로 보지 않는다"""
+    a = ev.current_version()
+    monkeypatch.setattr(ev.assistant_tools, "TOOLS_VERSION", "v99")
+    assert ev.current_version() != a and ev.current_version().endswith("/v99")

@@ -1,11 +1,11 @@
 """AI 비서 시나리오 실행·채점 (AI 비서 설계 §7·§7.1, 채점 함수는 evaluation/assistant_score.py).
-시나리오(ground_truth/assistant_scenarios.json)마다 새 임시 앱 DB(원본 source 읽기 전용, 예약 원함 조회에 필요한 활성
+시나리오(ground_truth/assistant_scenarios.json)마다 새 앱 DB(원본 source 읽기 전용, 예약 원함 조회에 필요한 활성
 분류 행·설정만 앱 DB에서 읽어 옮김)에서 대본 턴을 `backend/assistant.py turn`에 차례로 넣는다. 초안이 생겨도 승인하지
-않는다 — 끝 상태 = 초안. 같은 칸을 잡는 시나리오끼리 섞이지 않는다. 결과는 evaluation/assistant_runs.jsonl(dev)·
+않는다 — 끝 상태 = 초안. 같은 칸을 잡는 시나리오끼리 섞이지 않는다. 시나리오 DB는 evaluation/assistant_dbs/<split>/<id>/에 남는다(사람이 결과를 확인한 뒤 지움). 결과는 evaluation/assistant_runs.jsonl(dev)·
 assistant_test_runs.jsonl(test)에 쌓고 같은 id·버전·별칭이면 건너뛴다(이어 돎). 앱 DB에는 쓰지 않는다.
 LLM 호출 기록은 시나리오 DB가 아니라 실행 전체가 함께 쓰는 LLM_LOG(JsonlLog)에 남긴다 — 일일 상한이 시나리오마다
 새로 시작하지 않고, 턴 비용은 그 턴 동안 기록된 호출 비용 합(③ 위임 호출 포함)이다(RunLog).
-검색 색인은 임시 DB에 없어 ask_records는 "색인 없음"으로 답 단계에 넘어간다(도구 선택·인자만 채점한다).
+검색 색인은 시나리오 DB에 없어 ask_records는 "색인 없음"으로 답 단계에 넘어간다(도구 선택·인자만 채점한다).
 기준선: lookup 유형 첫 턴을 ③ chat.chat에 넣은 도구 선택(보고만).
 
   python -m evaluation.assistant run --split dev [--tool-alias chat] [--reply-alias chat] [--baseline]  # 과금
@@ -13,12 +13,13 @@ LLM 호출 기록은 시나리오 DB가 아니라 실행 전체가 함께 쓰는
 
 import argparse
 import json
+import shutil
 import sqlite3
 import tempfile
 from datetime import date
 from pathlib import Path
 
-from backend import assistant, chat, db
+from backend import assistant, assistant_tools, chat, db
 from evaluation.assistant_score import score_run, score_turn
 from generator.paths import output_paths
 from shared.clinic import load_clinic
@@ -29,7 +30,11 @@ RUNS = {
     "dev": ROOT / "evaluation" / "assistant_runs.jsonl",
     "test": ROOT / "evaluation" / "assistant_test_runs.jsonl",
 }
-LLM_LOG = {  # ax_llm_calls에 쓰지 않는다 — 시나리오 DB는 시나리오마다 버려진다
+KEEP_DBS = {  # 시나리오 DB를 남기는 곳(깃 밖) — 결과를 사람이 확인한 뒤 지운다
+    "dev": ROOT / "evaluation" / "assistant_dbs" / "dev",
+    "test": ROOT / "evaluation" / "assistant_dbs" / "test",
+}
+LLM_LOG = {  # ax_llm_calls에 쓰지 않는다 — 시나리오 DB는 확인 뒤 지운다
     "dev": ROOT / "evaluation" / "assistant_llm.jsonl",
     "test": ROOT / "evaluation" / "assistant_test_llm.jsonl",
 }
@@ -53,6 +58,11 @@ def load_runs(path: Path) -> list[dict]:
 
 def _key(row: dict) -> tuple:
     return (row["id"], row["version"], row["tool_alias"], row["reply_alias"])
+
+
+def current_version() -> str:
+    """실행 줄의 버전 — 도구 지침/답 지침/도구(TOOLS_VERSION). 도구만 바꿔도 다른 버전이라 이어 돌 때 건너뛰지 않는다"""
+    return f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}/{assistant_tools.TOOLS_VERSION}"
 
 
 def run(
@@ -138,11 +148,17 @@ class RunLog:
         return self.inner.spent(day, scope)
 
 
-def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw, clinic) -> dict:
+def run_scenario(
+    sc: dict, *, app_db: Path, source_db: Path, gw, clinic, keep: Path | None = None
+) -> dict:
     """한 시나리오의 대본 턴을 차례로 — 한 턴이 예외로 끝나면 거기서 멈춘다(채점은 실패로 셈).
-    gw는 실행 전체가 함께 쓰는 게이트웨이(기록 = RunLog)"""
+    gw는 실행 전체가 함께 쓰는 게이트웨이(기록 = RunLog). keep이 있으면 시나리오 DB를 keep/<id>/에 남긴다
+    (같은 id면 새로 덮어씀), 없으면 임시 폴더째 버린다"""
+    if keep is not None:
+        shutil.rmtree(keep / sc["id"], ignore_errors=True)
+        (keep / sc["id"]).mkdir(parents=True)
     with tempfile.TemporaryDirectory() as tmp:
-        conn = scenario_db(Path(tmp), app_db, source_db)
+        conn = scenario_db(keep / sc["id"] if keep is not None else Path(tmp), app_db, source_db)
         try:
             cid, turns = None, []
             for t in sc["turns"]:
@@ -169,6 +185,8 @@ def run_scenario(sc: dict, *, app_db: Path, source_db: Path, gw, clinic) -> dict
                         "tool_calls": out["tool_calls"],
                         "end_state": end_state(conn, cid, out["seq"] - 1),
                         "status": out["status"],
+                        "text": out["text"],  # 채점에는 안 쓰고 사람이 실패를 볼 때
+                        "cards": out["cards"],
                         "cost_usd": round(gw.log.total - before, 6),
                     }
                 )
@@ -215,7 +233,7 @@ def baseline(scenarios: list[dict], *, app_db: Path, source_db: Path, gw, clinic
 
 def score(split: str, tool_alias: str | None = None, reply_alias: str | None = None) -> dict:
     """저장된 줄 중 지금 버전·별칭(없으면 기본)으로 채점 — {version, tool_alias, reply_alias} + score_run 결과"""
-    version = f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}"
+    version = current_version()
     tool_alias = tool_alias or assistant.TOOL_ALIAS
     reply_alias = reply_alias or assistant.REPLY_ALIAS
     meta = {"version": version, "tool_alias": tool_alias, "reply_alias": reply_alias}
@@ -279,10 +297,10 @@ def main(argv=None) -> int:
         res = run(
             scenarios,
             out=RUNS[args.split],
-            version=f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}",
+            version=current_version(),
             tool_alias=args.tool_alias,
             reply_alias=args.reply_alias,
-            run_one=lambda sc: run_scenario(sc, **kw),
+            run_one=lambda sc: run_scenario(sc, **kw, keep=KEEP_DBS[args.split]),
         )
         print(f"시나리오 {res['done']}개 실행, {res['skipped']}개 건너뜀")
         if args.baseline:

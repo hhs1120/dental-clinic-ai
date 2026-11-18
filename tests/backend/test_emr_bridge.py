@@ -232,6 +232,7 @@ def test_slot_counts_approved_ax_not_drafts(conn):
 
 def test_free_slots_excludes_busy_and_lunch(conn):
     _src_add(conn, (MISSED, HYGIENIST, f"{WED} 10:00:00", "hygiene", SCALING, 1))
+    _src_add(conn, (NEW, DOCTOR, f"{WED} 11:00:00", "treatment", RESIN, 3))  # 11시 체어 3
     slots = emr_bridge.free_slots(conn, CLINIC, date(2026, 12, 2), SCALING)
     starts = [s["start"] for s in slots]
     assert {s["staff_id"] for s in slots} == {HYGIENIST}
@@ -240,7 +241,9 @@ def test_free_slots_excludes_busy_and_lunch(conn):
         "staff_name": "임재윤",
         "start": "09:30",
         "end": "10:00",
+        "chairs": [1, 2, 3, 4, 5],
     }
+    assert next(s for s in slots if s["start"] == "11:00")["chairs"] == [1, 2, 4, 5]
     assert "10:00" not in starts and "10:30" in starts
     assert "13:00" not in starts and "13:30" not in starts and "14:00" in starts
     assert starts[-1] == "18:00"
@@ -400,16 +403,21 @@ def test_slot_off_grid(conn):
     assert _draft(conn, f"{WED} 10:10") == {"error": ["off_slot"]}
 
 
-def test_slot_holiday_is_closed(conn):
+def _holidays(conn, *days):
+    """공휴일 목록을 바꾼다 — source는 읽기 전용으로 붙어 있어 따로 연다"""
     path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
         0
     ]
     s = sqlite3.connect(path)
     s.execute(
-        "UPDATE ax_master_values SET value = '[\"2026-12-25\"]' WHERE name = 'bank_holidays'"
+        "UPDATE ax_master_values SET value = ? WHERE name = 'bank_holidays'", (json.dumps(days),)
     )
     s.commit()
     s.close()
+
+
+def test_slot_holiday_is_closed(conn):
+    _holidays(conn, "2026-12-25")
     assert _check(conn, "2026-12-25 10:00") == ["closed_day"]  # 금요일 공휴일
     assert _check(conn, "2026-12-24 10:00") == ["closed_day"]  # 목요일 휴진(그대로)
     assert _check(conn, "2026-12-23 10:00") == []

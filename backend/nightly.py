@@ -19,6 +19,7 @@ from backend import (
     classify_batch,
     db,
     disagreements,
+    expense,
     expense_agent,
     followup,
     judge_queue,
@@ -371,13 +372,21 @@ def _claim(mod) -> Step:
     )
 
 
-def _agent(name: str, mod) -> Step:
+def _agent(name: str, mod, months: Callable[[Ctx], list[str] | None] = lambda ctx: None) -> Step:
     def run(ctx: Ctx) -> dict:
         # 대상이 없어도 run_batch가 끝에서 자동 처리를 다시 계산한다(정책을 켠 뒤의 밤)
-        out = mod.run_batch(ctx.conn, ctx.gw, ctx.today, None, batch=ctx.use_batch)
+        out = mod.run_batch(ctx.conn, ctx.gw, ctx.today, months(ctx), batch=ctx.use_batch)
         return _ok(out.get("done", 0) + out.get("handed_off", 0), out.get("failed", 0))
 
-    return Step(name, run, lambda ctx: len(mod.targets(ctx.conn, ctx.today)))
+    return Step(name, run, lambda ctx: len(mod.targets(ctx.conn, ctx.today, months(ctx))))
+
+
+NIGHTLY_EXPENSE_MONTHS = 4  # 야간 증빙 탐색은 출금이 있는 최근 달만 — 옛 달은 화면에서 규칙 결과로 둔다(돌리려면 make expense-ai MONTHS=)
+
+
+def _recent_expense_months(ctx: Ctx) -> list[str]:
+    months = sorted({o["at"][:7] for o in expense._load(ctx.conn, ctx.today)["outflows"]})
+    return months[-NIGHTLY_EXPENSE_MONTHS:]
 
 
 def _report(ctx: Ctx) -> dict:
@@ -423,7 +432,7 @@ STEPS = [
     _claim(claim_omission),
     _claim(claim_evidence),
     _agent("recon", recon_agent),
-    _agent("expense", expense_agent),
+    _agent("expense", expense_agent, _recent_expense_months),
     Step(
         "report",
         _report,

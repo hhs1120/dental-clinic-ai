@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { ExcerptNote, hasCuts, showCuts } from "@/components/ask/doc-body";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { DocType, SearchCard } from "@/lib/api";
@@ -24,6 +25,11 @@ function who(c: SearchCard): string | null {
   if (c.caller_name) return `상대: ${c.caller_name}`;
   return c.chart_no;
 }
+
+/** 문서 청크는 마크다운 원문이라 카드(평문·검색어 강조)에서는 인용 표시 ">"를 떼고, 제목 경로
+ * '문서 > 절'(backend/rag_index.py)은 기준 조항 카드처럼 ›로 보인다 */
+const plainTitle = (t: string) => t.replaceAll(" > ", " › ");
+const plainBody = (b: string) => b.replace(/^>[ \t]?/gm, "");
 
 export function ResultCard({ card, q }: { card: SearchCard; q: string }) {
   const [open, setOpen] = useState(false);
@@ -75,14 +81,14 @@ export function ResultCard({ card, q }: { card: SearchCard; q: string }) {
             card.is_outdated && "text-muted-foreground",
           )}
         >
-          {highlight(card.title, q)}
+          {highlight(isDoc ? plainTitle(card.title) : card.title, q)}
         </h4>
       )}
       <p
         ref={body}
         className={cn("text-sm whitespace-pre-line", !open && "line-clamp-3")}
       >
-        {highlight(card.body, q)}
+        {highlight(isDoc ? showCuts(plainBody(card.body)) : card.body, q)}
       </p>
       {(clamped || open) && (
         <button
@@ -93,6 +99,7 @@ export function ResultCard({ card, q }: { card: SearchCard; q: string }) {
           {open ? "접기" : "펼치기"}
         </button>
       )}
+      {isDoc && hasCuts(card.body) && <ExcerptNote />}
     </Card>
   );
 }

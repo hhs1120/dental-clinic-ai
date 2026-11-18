@@ -11,7 +11,17 @@ import pytest
 
 from backend import assistant, chat, emr_bridge
 from shared.llm import BudgetExceeded, FakeGateway
-from tests.backend.test_emr_bridge import CLINIC, MISSED, NEW, WED, _approve, _call, conn, src
+from tests.backend.test_emr_bridge import (
+    CLINIC,
+    MISSED,
+    NEW,
+    WED,
+    _approve,
+    _call,
+    _holidays,
+    conn,
+    src,
+)
 from tests.backend.test_followup import Script
 
 PATIENT = ("tool", "query_patient", {"chart_no": "C-00001"})
@@ -102,9 +112,11 @@ def test_card_outside_turn_dropped(conn):
 
 
 def test_number_mismatch_retry_then_fixed_text(conn):
-    gw = Turns(conn, [[PATIENT, DONE]], [reply("잔액 777원"), reply("잔액 777원")])
+    cards = [{"type": "patient", "id": "C-00001"}]
+    gw = Turns(conn, [[PATIENT, DONE]], [reply("잔액 777원", cards), reply("잔액 777원", cards)])
     out = turn(conn, gw, "김철수 잔액")
     assert out["status"] == "number_failed" and out["text"] == assistant.FAILED_TEXT
+    assert out["cards"] == []  # 고정 문구 아래 대상 카드를 붙이지 않는다
     replies = [kw for _, kw in gw.calls if kw.get("schema")]
     assert len(replies) == 2 and len(replies[1]["messages"]) > len(replies[0]["messages"])
     saved = _messages(conn, out["conversation_id"])[-1]
@@ -233,15 +245,15 @@ def test_failed_draft_time_is_not_evidence(conn):
         "draft_appointment",
         {
             "chart_no": "C-00002",
-            "date": "2026-12-03",
+            "date": "2026-11-25",  # 지난 날 — 휴진이 아닌 실패(휴진은 코드가 답한다)
             "start": "10:30",
             "staff": "원장",
             "procedure": "레진",
         },
     )
-    bad = reply("12월 3일 10시 30분 초안을 만들었습니다, 승인 버튼을 눌러 주세요")
+    bad = reply("11월 25일 10시 30분 초안을 만들었습니다, 승인 버튼을 눌러 주세요")
     gw = Turns(conn, [[draft, DONE]], [bad, bad])
-    out = turn(conn, gw, "이영희 목요일 10시 반 레진")
+    out = turn(conn, gw, "이영희 지난 수요일 오전 레진")
     assert conn.execute("SELECT count(*) FROM ax_emr_writes").fetchone()[0] == 0
     assert out["status"] == "number_failed" and out["text"] == assistant.FAILED_TEXT
     assert len([kw for _, kw in gw.calls if kw.get("schema")]) == 2
@@ -261,10 +273,13 @@ def test_reply_budget_is_budget_status(conn):
 
 
 def test_input_states_today_and_closed_days(conn):
+    """도구 단계는 오늘만(휴진은 도구가 판단), 답 단계는 오늘과 휴진 요일"""
     gw = Turns(conn, [[DONE]], [reply()])
     turn(conn, gw, "내일 예약 몇 건?")
-    first = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
-    assert "오늘: 2026-12-01(화)" in first and "휴진 요일: 목·일" in first
+    tool = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
+    assert "오늘: 2026-12-01(화)" in tool and "휴진" not in tool
+    answer = [kw for _, kw in gw.calls if kw.get("schema")][0]["messages"][0]["content"]
+    assert "오늘: 2026-12-01(화)" in answer and "휴진 요일: 목·일" in answer
 
 
 DRAFT = (
@@ -352,6 +367,22 @@ CLAIM_TABLE = [
     ("12월 3일 10시 예약이 있습니다", False, False),
     ("예약되어 있습니다", False, False),
     ("승인하시면 예약이 확정됩니다", True, False),
+    # 다른 사람이 한 일임을 밝힌 문장은 비서의 말이 아니다(통화 요약의 "확정함"을 옮긴 답이 막히던 것)
+    ("박서영 — 통화에서 12월 3일 10시 진료로 확정했습니다", False, False),
+    ("통화 중에 예약을 잡았습니다", False, False),
+    ("환자가 방문 일정을 확정했습니다", False, False),
+    ("김철수 님이 예약을 잡았습니다", False, False),
+    ("직원이 예약을 넣어 두었습니다", True, False),
+    # 사람 주어와 주장 사이에 절이 끊기면 주장의 주어는 비서다
+    ("김철수 님이 원하신 대로 12월 3일 10시로 예약을 잡았습니다", False, True),
+    ("원장이 담당하도록 예약을 확정했습니다", True, True),
+    ("예약을 잡았습니다, 환자가 원해서요", False, True),  # 사람 말이 주장 뒤에 있으면 빼지 않는다
+    # 문장마다 본다 — 한 문장이 통화 이야기여도 다른 문장의 비서 주장은 막는다
+    ("통화에서 안내했습니다. 예약을 잡았습니다", False, True),
+    ("통화에서 문의했습니다\n예약을 확정했습니다", True, True),
+    # 답 지침 v2가 쓰게 하는 문장(prompts/assistant_reply/v2.md)
+    ("원하시면 예약 초안을 만들어 드릴게요", False, False),
+    ("아래 카드에서 승인 버튼을 누르면 확정됩니다", True, False),
 ]
 
 
@@ -414,3 +445,96 @@ def test_tool_log_marks_error_result_failed(conn):
     gw = Turns(conn, [[closed, DONE]], [reply("그날은 휴진이에요")])
     out = turn(conn, gw, "이영희 목요일 레진")
     assert [c["ok"] for c in out["tool_calls"]] == [False, True]
+
+
+THU = "2026-12-03"  # 목요일 휴진
+CLOSED_FREE = ("tool", "free_slots", {"date": THU, "procedure": "스케일링"})
+
+
+def test_closed_day_reply_written_by_code(conn):
+    """휴진일 하루 확인뿐인 턴 — 답 단계를 부르지 않고 코드가 정한 문장(다른 날을 권하지 않는다)"""
+    gw = Turns(conn, [[CLOSED_FREE, DONE]], [])
+    out = turn(conn, gw, "송미영 님 12월 3일 오후 스케일링 잡아 줘")
+    assert out["status"] == "ok" and out["cards"] == []
+    assert out["text"] == assistant.CLOSED_TEXT.format(m=12, d=3, why="휴진일")
+    assert not [kw for _, kw in gw.calls if kw.get("schema")]  # 답 단계 호출 없음
+
+
+def test_closed_day_draft_error_also_code_reply(conn):
+    draft = (
+        "tool",
+        "draft_appointment",
+        {**DRAFT[2], "date": THU, "start": None, "window": "오후"},
+    )
+    gw = Turns(conn, [[draft, DONE]], [])
+    out = turn(conn, gw, "이영희 목요일 오후 레진")
+    assert out["text"] == assistant.CLOSED_TEXT.format(m=12, d=3, why="휴진일")
+
+
+def test_holiday_code_reply_names_holiday(conn):
+    """공휴일도 휴진과 같은 길 — 문장만 공휴일이라고"""
+    _holidays(conn, "2026-12-25")
+    xmas = ("tool", "free_slots", {"date": "2026-12-25", "procedure": "스케일링"})  # 금요일 공휴일
+    gw = Turns(conn, [[xmas, DONE]], [])
+    out = turn(conn, gw, "송미영 님 성탄절에 스케일링 잡아 줘")
+    assert out["text"] == assistant.CLOSED_TEXT.format(m=12, d=25, why="공휴일")
+    assert "공휴일이라" in out["text"]
+
+
+SAT = "2026-12-05"
+
+
+@pytest.mark.parametrize(
+    "when", [{"start": None, "window": "오후"}, {"start": "15:00"}], ids=["window", "start"]
+)
+def test_saturday_afternoon_code_reply(conn, when):
+    """토요일 오후 초안 실패뿐인 턴 — 마감 시각은 영업시간에서, 답 단계 호출 없음"""
+    free = ("tool", "free_slots", {"date": SAT, "procedure": "레진"})
+    draft = ("tool", DRAFT[1], {**DRAFT[2], "date": SAT, **when})
+    gw = Turns(conn, [[free, draft, DONE]], [])
+    out = turn(conn, gw, "이영희 토요일 오후 레진")
+    assert out["text"] == assistant.SAT_PM_TEXT.format(close="13:30")
+    assert out["status"] == "ok" and out["cards"] == []
+    assert not [kw for _, kw in gw.calls if kw.get("schema")]
+
+
+def test_saturday_morning_failure_uses_reply(conn):
+    """토요일이어도 오전 시각이 걸린 실패는 답 단계가 쓴다"""
+    draft = ("tool", DRAFT[1], {**DRAFT[2], "date": SAT, "start": "12:55"})  # 격자 밖
+    gw = Turns(conn, [[draft, DONE]], [reply("그 시각은 잡을 수 없습니다")])
+    out = turn(conn, gw, "이영희 토요일 12시 55분 레진")
+    assert out["text"] == "그 시각은 잡을 수 없습니다"
+
+
+def test_saturday_other_failure_uses_reply(conn):
+    """토요일 오후여도 마감이 아닌 이유(모르는 환자)로 실패하면 답 단계가 쓴다"""
+    draft = (
+        "tool",
+        DRAFT[1],
+        {**DRAFT[2], "chart_no": "C-99", "date": SAT, "start": None, "window": "오후"},
+    )
+    gw = Turns(conn, [[draft, DONE]], [reply("차트를 찾지 못했습니다")])
+    out = turn(conn, gw, "C-99 토요일 오후 레진")
+    assert out["text"] == "차트를 찾지 못했습니다"
+
+
+def test_closed_day_with_other_patient_lookup_uses_reply(conn):
+    """다른 질문의 환자 조회가 섞이면 코드 문장이 그 답을 빠뜨리므로 답 단계가 쓴다 — 초안 대상 확인은 괜찮다"""
+    draft = ("tool", DRAFT[1], {**DRAFT[2], "date": THU, "start": None})
+    gw = Turns(
+        conn, [[PATIENT, draft, DONE]], [reply("김철수 님 미수는 없고 목요일은 휴진입니다")]
+    )
+    out = turn(conn, gw, "김철수 미수 얼마고, 이영희 목요일 레진 돼?")
+    assert out["text"] == "김철수 님 미수는 없고 목요일은 휴진입니다"
+    target = ("tool", "query_patient", {"chart_no": "C-00002"})
+    gw = Turns(conn, [[target, draft, DONE]], [])
+    out = turn(conn, gw, "이영희 목요일 레진")
+    assert out["text"] == assistant.CLOSED_TEXT.format(m=12, d=3, why="휴진일")
+
+
+def test_closed_day_mixed_with_open_day_uses_reply(conn):
+    """휴진일과 다른 날을 같이 봤으면 답 단계가 쓴다"""
+    open_day = ("tool", "free_slots", {"date": WED, "procedure": "스케일링"})
+    gw = Turns(conn, [[CLOSED_FREE, open_day, DONE]], [reply("수요일은 빈 시간이 있습니다")])
+    out = turn(conn, gw, "목요일이랑 수요일 빈 시간")
+    assert out["text"] == "수요일은 빈 시간이 있습니다"

@@ -224,14 +224,24 @@ def _close_stuck(store: RunStore, runner: Runner, call_uid: str) -> bool:
 
 
 def targets(conn: sqlite3.Connection, today: date) -> list[str]:
-    """오늘 할 일에 오른 통화 중 그 분류 행의 처리안이 없는 것"""
+    """오늘 할 일에 오른 통화 중 그 분류 행의 처리안이 없는 것 — run_for_call과 같게 has_todo가 참인 분류만.
+    할 일 목록은 있는데 has_todo가 거짓인 통화(엇갈림 todo_mismatch, 사람 확인 큐)는 세지 않는다 — 세면 매번
+    대상으로 잡히고 run_for_call은 조용히 건너뛴다"""
     board = calls.today_board(conn, today)
     seen = {}
     for col in ("internal", "contact", "done"):
         for i in board[col]:
             seen[i["call_uid"]] = i["classification_id"]
     have = {r[0] for r in conn.execute("SELECT classification_id FROM ax_call_followups")}
-    return sorted(u for u, cid in seen.items() if cid not in have)
+    todo = {
+        cid
+        for cid, labels in conn.execute(
+            f"SELECT id, labels FROM ax_call_classifications WHERE id IN ({','.join('?' * len(seen))})",
+            list(seen.values()),
+        )
+        if json.loads(labels).get("has_todo")
+    }
+    return sorted(u for u, cid in seen.items() if cid not in have and cid in todo)
 
 
 def drop_stale(conn: sqlite3.Connection, today: date) -> int:

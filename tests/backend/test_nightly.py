@@ -277,3 +277,26 @@ def test_independent_step_plan_equals_run(tmp_path):
     (step,) = _real({"prep"})
     n = step.plan(ctx)
     assert n > 0 and step.run(ctx)["new"] == n
+
+
+def test_expense_step_only_recent_months(monkeypatch):
+    """증빙 탐색 단계는 출금이 있는 최근 NIGHTLY_EXPENSE_MONTHS달만 — 옛 달은 야간에 돌지 않는다(계획·실행 같게)"""
+    months = [f"2026-{m:02d}" for m in range(1, 12)]
+    outflows = [{"at": f"{m}-15 10:00:00"} for m in months]
+    monkeypatch.setattr(nightly.expense, "_load", lambda conn, today: {"outflows": outflows})
+    seen = {}
+    monkeypatch.setattr(
+        nightly.expense_agent, "targets", lambda conn, today, m=None: seen.setdefault("plan", m)
+    )
+
+    def run_batch(conn, gw, today, m, batch):
+        seen["run"] = m
+        return {}
+
+    monkeypatch.setattr(nightly.expense_agent, "run_batch", run_batch)
+    step = next(s for s in nightly.STEPS if s.name == "expense")
+    ctx = Ctx(None, None, TODAY, use_batch=True)
+    step.plan(ctx)
+    step.run(ctx)
+    want = months[-nightly.NIGHTLY_EXPENSE_MONTHS :]
+    assert seen == {"plan": want, "run": want}

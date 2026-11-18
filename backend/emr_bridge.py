@@ -180,7 +180,8 @@ def free_slots(
     procedure_code: str,
     staff_id: int | None = None,
 ) -> list[dict]:
-    """그날 그 시술이 들어갈 시작 시각 × 담당 — master slot_min 간격, 환자 규칙을 뺀 check_slot 통과분(§5.2)"""
+    """그날 그 시술이 들어갈 시작 시각 × 담당 — master slot_min 간격, 환자 규칙을 뺀 check_slot 통과분(§5.2).
+    chairs = 그 시각에 비어 있는 체어 번호(배정은 초안·승인 때 이 중 앞 번호)"""
     type_ = appointment_type(conn, procedure_code)
     duration = _duration(conn, procedure_code)
     mv, busy, h = prep.master_values(conn), _busy(conn, day), _hours(conn, day)
@@ -194,7 +195,7 @@ def free_slots(
     close = datetime.combine(day, time.fromisoformat(h["close"]))
     while start + timedelta(minutes=duration) <= close:
         for s in staff:
-            codes, _ = _check(
+            codes, chairs = _check(
                 conn,
                 clinic,
                 mv,
@@ -213,6 +214,7 @@ def free_slots(
                         "staff_name": s["name"],
                         "start": start.strftime("%H:%M"),
                         "end": end.strftime("%H:%M"),
+                        "chairs": chairs,
                     }
                 )
         start += timedelta(minutes=mv["slot_min"])
