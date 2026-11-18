@@ -51,6 +51,8 @@ export function EmrChart({
     (a) => a.recorded <= today && (!a.ends || today < a.ends),
   );
   const treatments = [...record.treatments].reverse();
+  // 승인된 종이 차트 이관 줄(차트 OCR 설계 §설계 3) — EMR 이전이라 진료 기록 맨 아래에, 최근 것 먼저
+  const paper = [...record.paper_records].reverse();
   const live = (todaySchedule?.appointments ?? []).filter(
     (a) => a.status !== "cancelled" && a.status !== "noshow",
   );
@@ -134,7 +136,7 @@ export function EmrChart({
     <div className="flex flex-col gap-1.5">
       <div className="grid grid-cols-[19rem_minmax(0,1fr)_15rem] gap-1.5">
         <Box title="진료 기록" className="max-h-[36rem] overflow-auto">
-          {treatments.length ? (
+          {treatments.length || paper.length ? (
             treatments.map((t, i) => (
               <article
                 key={i}
@@ -156,6 +158,30 @@ export function EmrChart({
           ) : (
             <p className="text-emr-fg-muted">진료 기록 없음</p>
           )}
+          {paper.length > 0 && (
+            <p className="mt-1 border-b border-emr-line bg-emr-surface-2 px-1 font-bold">
+              종이 차트 이관 {paper.length}건
+            </p>
+          )}
+          {paper.map((t, i) => (
+            <article
+              key={`paper-${i}`}
+              className="grid grid-cols-[4.5rem_1fr] gap-1 border-b border-emr-line-soft py-1"
+            >
+              <time className="text-emr-fg-muted">{t.date ?? "날짜 없음"}</time>
+              <div>
+                <small className="border border-emr-line px-1 text-emr-fg-muted">
+                  종이
+                </small>
+                {t.fdi ? (
+                  <span className="tabular-nums"> #{t.fdi}</span>
+                ) : (
+                  t.teeth && <span> {t.teeth}</span>
+                )}
+                <p>{t.treatment}</p>
+              </div>
+            </article>
+          ))}
         </Box>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex">

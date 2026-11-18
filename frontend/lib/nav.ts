@@ -32,6 +32,7 @@ export const MENU = [
   { href: "/claims", label: "청구 점검" },
   { href: "/finance", label: "재무 대조" },
   { href: "/report", label: "경영 리포트" },
+  { href: "/chart-ocr", label: "종이 차트 이관" },
 ];
 
 /** AI 평가 탭 — 목록 칸 링크(/eval?tab=…), 첫 탭은 주소에 ?tab이 없다 */

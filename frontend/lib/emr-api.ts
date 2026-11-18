@@ -88,6 +88,15 @@ export interface PatientHit {
   sex: string;
 }
 
+/** 승인된 종이 차트 이관 진료 줄(backend/emr_bridge.py chart_imports) */
+export interface PaperRecord {
+  import_id: number;
+  date: string | null;
+  teeth: string | null;
+  fdi: string | null;
+  treatment: string;
+}
+
 export interface PatientRecord {
   patient: PatientHit & {
     birth: string;
@@ -98,6 +107,7 @@ export interface PatientRecord {
     guardian: { chart_no: string; name: string } | null;
   };
   summary: PatientSummary;
+  paper_records: PaperRecord[];
   alerts: {
     code: string;
     label: string;

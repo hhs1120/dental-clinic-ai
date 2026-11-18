@@ -74,6 +74,7 @@ def test_sample_creates_draft_with_words_and_fields(client):
     d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
     assert d["status"] == "draft" and d["filename"] == "chart-C-00001.png"
     assert len(d["words"]) == 304 and d["low_confidence"] == chart_ocr.LOW_CONFIDENCE
+    assert d["size"] == [2400, 1700]
     assert d["fields"]["patient_name"] == "김철수" and len(d["fields"]["visits"]) == 12
     assert d["patient"] == {"id": MISSED, "chart_no": "C-00001", "name": "김철수"}
     assert client.get(f"/chart-ocr/{d['id']}/image").content == PNG
@@ -88,6 +89,8 @@ def test_sample_reuses_saved_import(client, upstage):
 
 def test_unknown_sample_404(client):
     assert client.post("/chart-ocr/samples/nope.png").status_code == 404
+    assert client.get("/chart-ocr/samples/nope.png").status_code == 404
+    assert client.get("/chart-ocr/samples/chart-C-00001.png").content == PNG
 
 
 def test_upload_creates_draft_and_lists(client):
@@ -122,7 +125,7 @@ def test_upstage_error_502_no_row(client, upstage):
 
 def test_approve_then_409(client):
     d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
-    body = {"final": _final(d), "patient_id": MISSED, "part": "데스크"}
+    body = {"final": _final(d), "chart_no": "C-00001", "part": "데스크"}
     got = client.post(f"/chart-ocr/{d['id']}/approve", json=body).json()
     assert got["status"] == "approved" and got["final"]["visits"][0]["fdi"] == "46"
     assert client.post(f"/chart-ocr/{d['id']}/approve", json=body).status_code == 409
@@ -132,9 +135,9 @@ def test_approve_then_409(client):
 
 def test_approve_without_patient_422(client):
     d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
-    body = {"final": _final(d), "patient_id": None, "part": "데스크"}
+    body = {"final": _final(d), "chart_no": None, "part": "데스크"}
     assert client.post(f"/chart-ocr/{d['id']}/approve", json=body).status_code == 422
-    body["patient_id"] = 999
+    body["chart_no"] = "C-99999"
     assert client.post(f"/chart-ocr/{d['id']}/approve", json=body).status_code == 422
 
 
@@ -150,7 +153,7 @@ def test_abbreviations(client):
 
 def test_emr_patient_shows_paper_records(client):
     d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
-    body = {"final": _final(d), "patient_id": MISSED, "part": "데스크"}
+    body = {"final": _final(d), "chart_no": "C-00001", "part": "데스크"}
     client.post(f"/chart-ocr/{d['id']}/approve", json=body)
     rec = client.get("/emr/patients/C-00001").json()["paper_records"]
     assert rec[0] == {

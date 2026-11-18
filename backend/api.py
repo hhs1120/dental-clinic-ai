@@ -1572,8 +1572,14 @@ def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
             "SELECT id, chart_no, name FROM source.emr_patients WHERE id = ?", (row["patient_id"],)
         ).fetchone()
         patient = dict(p) if p else None
-    words = chart_ocr.words(row.pop("ocr"))
-    return row | {"words": words, "patient": patient, "low_confidence": chart_ocr.LOW_CONFIDENCE}
+    ocr = row.pop("ocr")
+    page = ocr["pages"][0]
+    return row | {
+        "words": chart_ocr.words(ocr),
+        "size": [page["width"], page["height"]],
+        "patient": patient,
+        "low_confidence": chart_ocr.LOW_CONFIDENCE,
+    }
 
 
 def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -> dict:
@@ -1620,14 +1626,25 @@ def chart_ocr_samples(paths: Paths, samples: PaperCharts) -> list:
     ]
 
 
+def _sample_path(samples: Path, name: str) -> Path:
+    path = samples / name
+    if path.suffix != ".png" or path.parent != samples or not path.is_file():
+        raise HTTPException(404, "샘플을 찾을 수 없습니다")
+    return path
+
+
+@app.get("/chart-ocr/samples/{name}")
+def chart_ocr_sample_image(name: str, samples: PaperCharts) -> Response:
+    """샘플 썸네일"""
+    return Response(_sample_path(samples, name).read_bytes(), media_type="image/png")
+
+
 @app.post("/chart-ocr/samples/{name}")
 def chart_ocr_sample(
     name: str, paths: Paths, samples: PaperCharts, upstage: Upstage, now: Now
 ) -> dict:
     """샘플 읽기 — 이미 읽은 샘플은 저장된 행을 돌려준다(녹화 때 업스테이지 대기·실패 없이)"""
-    path = samples / name
-    if path.suffix != ".png" or path.parent != samples or not path.is_file():
-        raise HTTPException(404, "샘플을 찾을 수 없습니다")
+    path = _sample_path(samples, name)
     saved = _sample_ids(paths).get(name)
     if saved is not None:
         conn = _open_rw(paths)
@@ -1708,24 +1725,27 @@ def chart_ocr_image(import_id: int, paths: Paths) -> Response:
 
 class ChartApprove(BaseModel):
     final: dict
-    patient_id: int | None
+    chart_no: str | None  # 화면은 환자를 차트 번호로 고른다(/emr/patients 검색)
     part: str
 
 
 @app.post("/chart-ocr/{import_id}/approve")
 def chart_ocr_approve(import_id: int, body: ChartApprove, paths: Paths, now: Now) -> dict:
     """사람이 고친 항목·고른 환자로 승인 — 환자 없음·모르는 환자 422, 이미 처리됨 409"""
-    if body.patient_id is None:
+    if not body.chart_no:
         raise HTTPException(422, "환자를 골라야 승인할 수 있습니다")
     conn = _open_rw(paths)
     try:
         _chart_detail(conn, import_id)  # 없으면 404
+        row = conn.execute(
+            "SELECT id FROM source.emr_patients WHERE upper(chart_no) = upper(?)", (body.chart_no,)
+        ).fetchone()
         try:
             emr_bridge.approve_chart_import(
                 conn,
                 import_id,
                 final=body.final,
-                patient_id=body.patient_id,
+                patient_id=row["id"] if row else -1,
                 by=body.part,
                 at=_stamp(now),
             )
