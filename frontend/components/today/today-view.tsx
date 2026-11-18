@@ -1,10 +1,11 @@
 "use client";
 
+import { BotMessageSquareIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ApiError, errorText, useFetch } from "@/lib/api";
 import { revertAuto, shortAt, useLabels } from "@/lib/calls-api";
@@ -303,7 +304,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
         // 좁은 화면은 꼬리표·"AI 비서로 처리"를 윗줄에, 제목을 아랫줄 전체 너비로
         <li
           key={l.key}
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:flex-nowrap sm:items-start"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 sm:flex-nowrap"
         >
           <Tag tone={l.tone}>{l.tag}</Tag>
           <Link
@@ -318,8 +319,13 @@ function People({ sheet }: { sheet: TodaySheet }) {
           {l.assist && (
             <Link
               href={assistHref(l.assist)}
-              className="ml-auto shrink-0 text-xs font-medium text-primary hover:underline sm:ml-0"
+              className={buttonVariants({
+                size: "xs",
+                variant: "outline",
+                className: "ml-auto shrink-0 text-primary sm:ml-0",
+              })}
             >
+              <BotMessageSquareIcon />
               AI 비서로 처리
             </Link>
           )}
