@@ -22,12 +22,24 @@ TOOTH_W = {8: 40, 7: 42, 6: 44, 5: 34, 4: 34, 3: 32, 2: 28, 1: 34}  # 치아 그
 MID = 340  # 치아 그림 가운데 선
 
 
+def digits(rng: random.Random, text: str) -> str:
+    """숫자는 한 자씩 크기·높이·기울기를 살짝 흔든다 — 같은 숫자가 똑같은 모양이면 인쇄체처럼 보인다"""
+    return "".join(
+        f'<span class="d" style="font-size:{rng.uniform(0.94, 1.06):.2f}em;'
+        f"transform:translateY({rng.uniform(-1.2, 1.2):.1f}px)"
+        f' rotate({rng.uniform(-3.5, 3.5):.1f}deg)">{ch}</span>'
+        if ch.isdigit()
+        else html.escape(ch)
+        for ch in text
+    )
+
+
 def hw(rng: random.Random, text: str, size: int = 34, cls: str = "") -> str:
     """손글씨 한 덩어리 — 크기·기울기·위치를 조금씩 흔든다"""
     return (
         f'<span class="hw {cls}" style="font-size:{size + rng.randint(-3, 3)}px;'
         f"transform:translate({rng.randint(-3, 8)}px,{rng.randint(-3, 2)}px)"
-        f' rotate({rng.uniform(-2.0, 2.0):.1f}deg)">{html.escape(text)}</span>'
+        f' rotate({rng.uniform(-2.0, 2.0):.1f}deg)">{digits(rng, text)}</span>'
     )
 
 
@@ -100,7 +112,7 @@ def teeth(rng: random.Random, marks: list[dict]) -> str:
         '<svg viewBox="0 0 680 470" width="100%" style="margin-top:4px">'
         "<style>.num{font:15px 'Noto Sans KR';fill:#444;text-anchor:middle}"
         ".pri{font:12px 'Noto Sans KR';fill:#777;text-anchor:middle}"
-        ".mark{font:46px 'Nanum Pen Script';fill:#1d2f6b;text-anchor:middle}</style>"
+        ".mark{font:46px 'Caveat','Nanum Pen Script';fill:#1d2f6b;text-anchor:middle}</style>"
         f'<line x1="{MID}" y1="20" x2="{MID}" y2="450" stroke="#555" stroke-width="1.4"'
         ' stroke-dasharray="4 4"/>'
         '<line x1="20" y1="236" x2="660" y2="236" stroke="#777" stroke-dasharray="3 5"/>'
@@ -158,7 +170,7 @@ def progress(rng: random.Random, visits: list[dict]) -> str:
 def ledgers(rng: random.Random, payments: list[dict]) -> str:
     """수납 장부 두 칸 — 날짜·내용·금액·잔액·서명, 앞 칸부터 채운다"""
     head = (
-        '<tr><th style="width:17%">날 짜</th><th style="width:29%">내 용</th>'
+        '<tr><th style="width:21%">날 짜</th><th style="width:25%">내 용</th>'
         '<th style="width:20%">금 액</th><th style="width:20%">잔 액</th><th>서 명</th></tr>'
     )
     out = []

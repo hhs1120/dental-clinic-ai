@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;500&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Nanum+Pen+Script&family=Caveat:wght@500&family=Noto+Sans+KR:wght@400;500&display=block" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --ink: #4f9a96; --fill: #e3f1ef; --pen: #1d2f6b; --red: #b3261e; }
@@ -21,9 +21,11 @@
   .label { background: var(--fill); color: #2e5f5c; font-size: 17px; padding: 3px 10px;
            border-bottom: 1.5px solid var(--ink); font-weight: 500; }
   .sub { font-size: 16px; color: #2e5f5c; font-weight: 500; }
-  .hw { font-family: "Nanum Pen Script", cursive; color: var(--pen); display: inline-block;
+  /* 영문·숫자는 Caveat(1에 꺾임 — 나눔펜의 막대 1은 OCR이 버린다), 한글은 나눔펜 */
+  .hw { font-family: "Caveat", "Nanum Pen Script", cursive; color: var(--pen); display: inline-block;
         white-space: nowrap; line-height: 1; }
   .hw.red { color: var(--red); }
+  .hw .d { display: inline-block; }
   .brush { font-family: "Nanum Brush Script", cursive; }
   .struck { text-decoration: line-through; text-decoration-thickness: 3px; margin-right: 10px; }
   .note { position: absolute; z-index: 2; }
