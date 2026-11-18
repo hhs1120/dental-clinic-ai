@@ -190,7 +190,11 @@ export function OcrForm({
   patient: { chart_no: string; name: string } | null;
   setPatient: (p: { chart_no: string; name: string }) => void;
   onFocus: (box: Box | null) => void;
-  onInspect: (kind: "date" | "loc", index: number) => void;
+  onInspect: (
+    kind: "date" | "loc" | "word",
+    index: number,
+    word?: string,
+  ) => void;
 }) {
   const locked = item.status !== "draft";
   const setVisit = (i: number, patch: Partial<Visit>) =>
@@ -319,16 +323,9 @@ export function OcrForm({
                       size="xs"
                       variant="outline"
                       className="ml-auto"
-                      onClick={() =>
-                        setVisit(i, {
-                          treatment: v.treatment.replace(s.word, s.abbr),
-                          suggestions: v.suggestions.filter(
-                            (x) => x.word !== s.word,
-                          ),
-                        })
-                      }
+                      onClick={() => onInspect("word", i, s.word)}
                     >
-                      고치기
+                      손글씨 보고 고치기 ›
                     </Button>
                   </div>
                 ))}

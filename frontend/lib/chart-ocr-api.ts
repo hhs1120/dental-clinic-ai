@@ -156,7 +156,7 @@ export function visitBand(
   if (!start) return null;
   const next = all.slice(index + 1).find((a) => a !== null);
   const top = start.box[1] - 0.012;
-  const bottom = next ? next.box[1] + 0.004 : start.box[3] + 0.03;
+  const bottom = next ? next.box[1] + 0.004 : start.box[3] + 0.05; // 마지막 진료는 두세 줄까지
   return [start.box[0] - 0.005, top, 0.97, bottom];
 }
 
@@ -179,6 +179,29 @@ export function cellBox(
   const mid = cx((column === "Date" ? date : loc).box);
   const bottom = start.box[3] + 0.008;
   return [mid - width * 0.6, bottom - 0.036, mid + width * 0.6, bottom];
+}
+
+/** 진료 줄 안에서 그 낱말의 상자(앞뒤 글자가 보이게 조금 넓혀) — 약어 제안을 고치기 전에 확대해 본다 */
+export function wordBox(
+  visits: Visit[],
+  index: number,
+  words: OcrWord[],
+  word: string,
+): Box | null {
+  const band = visitBand(visits, index, words);
+  if (!band) return null;
+  const bare = (t: string) => t.replace(/[,.;]+$/, "");
+  const hit = words.find((w) => {
+    const cy = (w.box[1] + w.box[3]) / 2;
+    return bare(w.text) === bare(word) && cy >= band[1] && cy <= band[3];
+  });
+  if (!hit) return null;
+  return [
+    hit.box[0] - 0.02,
+    hit.box[1] - 0.008,
+    hit.box[2] + 0.02,
+    hit.box[3] + 0.008,
+  ];
 }
 
 /** 여러 상자를 감싸는 상자 */

@@ -31,11 +31,13 @@ import {
   STATUS_LABEL,
   uploadChart,
   visitBand,
+  wordBox,
 } from "@/lib/chart-ocr-api";
 import { readPart } from "@/lib/part";
 import { cn } from "@/lib/utils";
 
 type Box = [number, number, number, number];
+type Inspect = { kind: "date" | "loc" | "word"; index: number; word?: string };
 
 const STATUS_VARIANT: Record<ImportStatus, "warn" | "ok" | "muted"> = {
   draft: "warn",
@@ -68,10 +70,7 @@ export function ChartOcrView() {
   } | null>(null);
   const [focus, setFocus] = useState<Box | null>(null);
   // 노란 딱지로 연 칸 — 그 칸을 확대해 보이고, 위치는 확대 옆에서 고른다(값은 고를 때만 바뀐다)
-  const [inspect, setInspect] = useState<{
-    kind: "date" | "loc";
-    index: number;
-  } | null>(null);
+  const [inspect, setInspect] = useState<Inspect | null>(null);
   const [showBoxes, setShowBoxes] = useState(true);
   const [step, setStep] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -224,8 +223,8 @@ export function ChartOcrView() {
                 item={item}
                 fields={fields}
                 src={src}
-                kind={inspect.kind}
-                index={inspect.index}
+                abbr={abbr.data ?? {}}
+                inspect={inspect}
                 onChange={setFields}
                 onClose={() => setInspect(null)}
               />
@@ -253,10 +252,9 @@ export function ChartOcrView() {
                 setFocus(box);
                 setInspect(null);
               }}
-              onInspect={(kind, index) => {
-                setInspect({ kind, index });
-                const col = kind === "date" ? "Date" : "Location";
-                setFocus(cellBox(item.fields.visits, index, item.words, col));
+              onInspect={(kind, index, word) => {
+                setInspect({ kind, index, word });
+                setFocus(inspectBox(item, { kind, index, word }));
               }}
             />
             <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-background py-3">
@@ -350,39 +348,60 @@ export function ChartOcrView() {
   );
 }
 
-/** 노란 딱지로 연 칸 — 칸 확대 + 그 진료 줄. 날짜는 맞으면 확인, 위치는 십자에서 숫자가 있는 칸을 고른다 */
+/** 확인할 칸의 스캔 자리 — 날짜·위치는 그 칸, 약어 제안은 그 낱말 */
+function inspectBox(
+  item: ChartImport,
+  { kind, index, word }: Inspect,
+): Box | null {
+  const visits = item.fields.visits;
+  if (kind === "word") return wordBox(visits, index, item.words, word ?? "");
+  return cellBox(
+    visits,
+    index,
+    item.words,
+    kind === "date" ? "Date" : "Location",
+  );
+}
+
+const INSPECT_LABEL = {
+  date: "날짜 확인",
+  loc: "위치 고르기",
+  word: "약어 확인",
+};
+const ZOOM_LABEL = {
+  date: "Date 칸 확대",
+  loc: "Location 칸 확대",
+  word: "손글씨 확대",
+};
+
+/** 딱지·제안으로 연 칸 — 칸 확대 + 그 진료 줄. 날짜는 맞으면 확인, 위치는 십자에서 고르고, 약어는 보고 고친다 */
 function InspectPanel({
   item,
   fields,
   src,
-  kind,
-  index,
+  abbr,
+  inspect,
   onChange,
   onClose,
 }: {
   item: ChartImport;
   fields: Fields;
   src: string;
-  kind: "date" | "loc";
-  index: number;
+  abbr: Record<string, string>;
+  inspect: Inspect;
   onChange: (f: Fields) => void;
   onClose: () => void;
 }) {
+  const { kind, index, word } = inspect;
   const v = fields.visits[index];
   const locked = item.status !== "draft";
-  const cell = cellBox(
-    item.fields.visits,
-    index,
-    item.words,
-    kind === "date" ? "Date" : "Location",
-  );
+  const cell = inspectBox(item, inspect);
+  const sug = v.suggestions.find((s) => s.word === word);
   const band = visitBand(item.fields.visits, index, item.words);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-status-warn-border bg-card p-3 shadow-card">
       <div className="flex items-center gap-2">
-        <Badge variant="warn">
-          {kind === "date" ? "날짜 확인" : "위치 고르기"}
-        </Badge>
+        <Badge variant="warn">{INSPECT_LABEL[kind]}</Badge>
         <span className="text-sm font-bold">
           진료 {index + 1} · {v.date ?? v.date_raw}
         </span>
@@ -393,7 +412,7 @@ function InspectPanel({
       <div className="flex items-start gap-4">
         <div className="flex w-56 shrink-0 flex-col gap-1">
           <span className="text-xs text-muted-foreground">
-            {kind === "date" ? "Date 칸 확대" : "Location 칸 확대"}
+            {ZOOM_LABEL[kind]}
           </span>
           {cell ? (
             <OcrSnippet src={src} size={item.size} box={cell} />
@@ -403,7 +422,55 @@ function InspectPanel({
             </span>
           )}
         </div>
-        {kind === "loc" ? (
+        {kind === "word" ? (
+          <div className="flex flex-col gap-2">
+            {sug ? (
+              <>
+                <p className="text-sm">
+                  OCR이 <b>{sug.word}</b>로 읽었습니다. 확대한 손글씨가{" "}
+                  <b>{sug.abbr}</b>
+                  {abbr[sug.abbr] && `(${abbr[sug.abbr]})`}이면 고치세요.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={locked}
+                    onClick={() => {
+                      onChange(
+                        withVisit(fields, index, {
+                          treatment: v.treatment.replace(sug.word, sug.abbr),
+                          suggestions: v.suggestions.filter((x) => x !== sug),
+                        }),
+                      );
+                      onClose();
+                    }}
+                  >
+                    {sug.abbr}로 고치기
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={locked}
+                    onClick={() => {
+                      onChange(
+                        withVisit(fields, index, {
+                          suggestions: v.suggestions.filter((x) => x !== sug),
+                        }),
+                      );
+                      onClose();
+                    }}
+                  >
+                    그대로 두기
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                처리한 제안입니다.
+              </p>
+            )}
+          </div>
+        ) : kind === "loc" ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm">
               확대한 십자에서 숫자 <b>{v.teeth}</b>가 있는 칸과 같은 칸을
