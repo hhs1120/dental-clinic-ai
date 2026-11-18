@@ -63,8 +63,8 @@ test("assistant: 칩을 누르면 질문이 보내지고 단계 줄 뒤 답", as
   await fakeTurn(page, bodies);
   await page.goto("/");
   await expect(
-    page.getByRole("button", { name: /^(📞|🩺|🧾|💳|☎️)/ }),
-  ).toHaveCount(5);
+    page.getByRole("button", { name: /^(📞|🩺|🧾|💳|☎️|📋)/ }),
+  ).toHaveCount(6);
   await expect(
     page.getByText("조회하고 예약 초안까지 — 확정은 사람이 합니다"),
   ).toBeVisible();

@@ -17,9 +17,10 @@ import { fetchToday, type TodaySheet } from "@/lib/today-api";
 const CHIPS = [
   "📞 지난주 전화로 예약 원했는데 안 잡힌 사람",
   "🩺 내일 환자 중 미수·주의사항 있는 사람",
-  "🧾 재심 낼 만한 삭감 건",
+  "🧾 재심 기한이 한 달 안 남은 삭감 건",
   "💳 이번 주 카드 입금 안 맞는 날",
-  "☎️ 김영철 님 지난번에 전화로 뭐 물어봤지",
+  "☎️ 어제 온 전화 중 다시 연락할 곳",
+  "📋 임플란트 건강보험 적용 기준",
 ];
 const MAX_TEXT = 1000; // backend/api.py ASSISTANT_MAX_TEXT
 const CUT = "응답이 끊겼습니다 — 다시 말해 주세요";
@@ -264,18 +265,23 @@ export function AssistantView() {
         <h1 className="text-3xl font-bold">무엇을 도와드릴까요?</h1>
         {loadError && <p className="text-destructive">{loadError}</p>}
         <div className="w-full text-left">{form}</div>
-        <div className="flex flex-wrap justify-center gap-2">
-          {CHIPS.map((chip) => (
-            <Button
-              key={chip}
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void send(chip)}
-            >
-              {chip}
-            </Button>
-          ))}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            이렇게 물어볼 수 있어요
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {CHIPS.map((chip) => (
+              <Button
+                key={chip}
+                variant="chip"
+                size="sm"
+                disabled={busy}
+                onClick={() => void send(chip)}
+              >
+                {chip}
+              </Button>
+            ))}
+          </div>
         </div>
         <TodayLine />
         <p className="text-sm text-muted-foreground">

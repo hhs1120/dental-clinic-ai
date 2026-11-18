@@ -121,6 +121,23 @@ test("shell: 접은 목록 칸은 새로 고쳐도 접힌 채로 그린다", asy
   await expect(menu).toBeVisible();
 });
 
+test("shell: 접은 목록 칸은 같은 공간 안에선 그대로, 아이콘으로 다른 공간에 가면 펴진다", async ({
+  page,
+}) => {
+  await page.goto("/today");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  await page.getByRole("button", { name: "목록 접기" }).click();
+  await expect(menu).toBeHidden();
+  await page.goto("/schedule");
+  await expect(page.getByRole("button", { name: "목록 펴기" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "공간" })
+    .getByRole("link", { name: "자료실" })
+    .click();
+  await expect(page).toHaveURL(/\/ask/);
+  await expect(menu).toBeVisible();
+});
+
 test("shell: 저장소가 막혀도 테마 단추가 바뀐다", async ({ page }) => {
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => {

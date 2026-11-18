@@ -123,6 +123,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   // 목록 칸 접힘은 <html data-list-collapsed>를 CSS가 읽는다(list-collapsed 변형) — 그리기 전 스크립트가 붙여
   // 새로 고침해도 펼쳐진 채 깜빡이지 않고, 서버 HTML과 렌더가 같다. 서랍(좁은 화면)에서는 접힘을 무시한다
+  // 아이콘 줄로 다른 공간에 가면 목록 칸을 편다 — 같은 공간 안에서 옮길 때는 접힘을 그대로 둔다
+  const enter = (key: string) => {
+    if (key !== space) saveListCollapsed(false);
+  };
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -152,6 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link
             href="/"
             aria-label={name || "홈"}
+            onClick={() => enter("assistant")}
             className="mb-2 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground"
           >
             AX
@@ -185,6 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={key}
                 href={href}
                 aria-current={key === space ? "page" : undefined}
+                onClick={() => enter(key)}
                 className={railItem(key === space)}
               >
                 <Icon className="size-5" />

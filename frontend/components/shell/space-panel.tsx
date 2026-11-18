@@ -301,7 +301,7 @@ export function SpacePanel({
   return (
     <div
       className={cn(
-        "flex w-46 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3",
+        "flex w-48 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3",
         className,
       )}
     >
