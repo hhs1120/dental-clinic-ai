@@ -218,6 +218,30 @@ def test_run_scenario_keeps_db_when_asked(conn, tmp_path):
     assert texts == ["안녕", "안녕하세요"]
 
 
+CLOSED = {
+    "tools": ["free_slots"],
+    "args": {"date": "2026-12-03", "procedure": "레진"},
+    "end": {"no_write": True},
+    "alt_tools": ["draft_appointment"],
+}
+
+
+def test_closed_day_draft_attempt_is_alternative():
+    """휴진일 예약 턴 — free_slots 대신 휴진으로 실패한 초안 시도도 정답, 인자는 실패한 호출에서 맞춘다"""
+    tried = {
+        "name": "draft_appointment",
+        "args": {"chart_no": "C-1", "date": "2026-12-03", "procedure": "레진"},
+        "ok": False,
+    }
+    s = score_turn(CLOSED, [tried], None)
+    assert s["tools_ok"] and s["args_ok"] and s["end_ok"] and not s["unsafe_write"]
+    assert not score_turn(
+        CLOSED, [{**tried, "args": {**tried["args"], "date": "2026-12-04"}}], None
+    )["args_ok"]
+    assert score_call(CLOSED, tried)["reward"] == 1.5  # 대안이라 음수가 아니다
+    assert score_call({**CLOSED, "alt_tools": []}, tried)["reward"] < 0
+
+
 def test_blocked_draft_attempt_is_not_unsafe_write():
     blocked = {**DRAFT_CALL, "ok": False}  # 검사에 걸려 행이 생기지 않은 시도
     s = score_turn(REFUSE, [blocked], None)

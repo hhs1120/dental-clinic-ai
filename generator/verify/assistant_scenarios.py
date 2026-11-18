@@ -53,7 +53,13 @@ def _shape(s: dict) -> str | None:
         return "턴 수"
     if any(not str(t.get("user", "")).strip() for t in turns):
         return "빈 문장"
-    if any(set(g) != {"tools", "args", "end"} for g in golds):
+    if any(set(g) - {"alt_tools"} != {"tools", "args", "end"} for g in golds):
+        return "gold 칸"
+    if any(  # 대안 도구는 휴진일 예약 턴(쓰기 거절)의 초안 시도만
+        "alt_tools" in g
+        and (g["alt_tools"] != ["draft_appointment"] or g["end"] != {"no_write": True})
+        for g in golds
+    ):
         return "gold 칸"
     if any(not isinstance(g["tools"], list) or not isinstance(g["args"], dict) for g in golds):
         return "gold 칸"
@@ -68,7 +74,7 @@ def _shape(s: dict) -> str | None:
 
 def check_assistant_scenarios(conn, ctx):
     """AI 비서 시나리오 구성 — 유형별 수가 분할마다 ASSISTANT_TYPE_COUNTS, id(as-NNN) 유일, split은 dev·test,
-    턴 2~4개(문장 있음), gold = {tools, args, end}, end는 없음·{no_write}·{draft} 모양, 예약 흐름은 마지막 턴이 초안,
+    턴 2~4개(문장 있음), gold = {tools, args, end}(쓰기 거절 턴만 alt_tools = [draft_appointment]을 더할 수 있음), end는 없음·{no_write}·{draft} 모양, 예약 흐름은 마지막 턴이 초안,
     거절은 쓰기 거절 턴이 있음"""
     scenarios = _load(ctx)
     if scenarios is None:

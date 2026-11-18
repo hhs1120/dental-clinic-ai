@@ -6,7 +6,7 @@ done_tools 뺌), args: 핵심 인자(그 턴 도구 호출 어딘가에 같은 �
 문장은 PLAN에 사람이 쓴 것이고, 정답은 코드가 데이터에서 계산·확인한다(§7):
 - 조회 턴은 실제 도구(backend/assistant_tools.py)를 돌려 오류 없이 결과가 있어야 한다(쓰기 거절 턴의 free_slots는 휴진이어야)
 - 초안의 시각 범위는 emr_bridge.free_slots(시술 → 담당 역할) 중 환자 규칙(check_slot)도 통과하는 시작 시각을 시간대로
-  거른 처음~끝, 초안 턴은 같은 시나리오 앞 턴에 같은 날·시술 free_slots가 없으면 free_slots도 정답 도구
+  거른 처음~끝. 초안 턴의 정답 도구는 draft_appointment — 앞서 free_slots를 보지 않아도 된다(도구가 빈 시각을 검사·고름)
 - 초안 환자는 그 시나리오 앞 턴 결과에 나온 환자, ref=n은 앞 턴 목록 n번째 행 환자, who는 문장 속 이름 = 그 환자 이름
 데이터는 읽기 전용(source·app.sqlite를 ?mode=ro로 붙임)이고 활성 분류 밖 앱 표(AX 예약 ax_emr_writes·연락 기록 등)는 빈
 상태로 본다(gold_conn) — 시나리오 실행 DB와 같아 앱에서 예약을 승인하거나 기록을 남겨도 정답이 바뀌지 않는다. 예약 원함은 활성 분류 버전(ax_settings)을 따른다 — 버전을 바꾸면 check로 다시 본다.
@@ -190,9 +190,9 @@ def _people(r) -> dict[str, str]:
 
 
 def _turn(conn, clinic, tools, t: dict, state: dict) -> dict:
-    """턴 하나의 gold. state = 시나리오 안에서 이어지는 {seen: 앞 턴까지 나온 환자, slots: free_slots를 본 (날, 시술),
+    """턴 하나의 gold. state = 시나리오 안에서 이어지는 {seen: 앞 턴까지 나온 환자,
     prev: 바로 앞 턴 결과}"""
-    names, args, results, end = set(), {}, [], t["end"]
+    names, args, results, end, alt = set(), {}, [], t["end"], []
 
     def put(k, v):
         if v is None:
@@ -208,10 +208,10 @@ def _turn(conn, clinic, tools, t: dict, state: dict) -> dict:
         if not (r.get("closed") is True if closed else _has_result(r)):
             raise ValueError(f"{c['tool']} 결과 없음 {c['args']}: {str(r)[:200]}")
         names.add(c["tool"])
+        if closed:  # 휴진일 예약 요청 — 바로 초안을 불러 closed_day로 실패해도 정답(평가 설계 §5)
+            alt = ["draft_appointment"]
         for k, v in c["args"].items():
             put(k, v)
-        if c["tool"] == "free_slots":
-            state["slots"].add((c["args"]["date"], c["args"]["procedure"]))
         results.append(r)
         state["seen"] |= _people(r)
     for c in (c for c in t["calls"] if "draft" in c):
@@ -219,8 +219,6 @@ def _turn(conn, clinic, tools, t: dict, state: dict) -> dict:
         if d["chart_no"] not in state["seen"]:
             raise ValueError(f"앞 턴 결과에 없는 환자: {d['chart_no']}")
         names.add("draft_appointment")
-        if (d["date"], d["procedure"]) not in state["slots"]:
-            names.add("free_slots")
         for k in ("chart_no", "date", "procedure", "staff"):
             put(k, d[k])
         end = booking_end(conn, clinic, d["chart_no"], d["date"], d["procedure"], c["when"])
@@ -235,7 +233,8 @@ def _turn(conn, clinic, tools, t: dict, state: dict) -> dict:
         if t["who"] not in t["user"] or t["who"] not in known:
             raise ValueError(f"who {t['who']}: 문장·앞 결과({chart})와 다름")
     state["prev"] = results
-    return {"tools": sorted(names), "args": args, "end": end}
+    gold = {"tools": sorted(names), "args": args, "end": end}
+    return gold | {"alt_tools": alt} if alt else gold
 
 
 def build(conn, clinic: Clinic, plan=None) -> list[dict]:
@@ -244,7 +243,7 @@ def build(conn, clinic: Clinic, plan=None) -> list[dict]:
     out = []
     for i, (split, type_, *turns) in enumerate(PLAN if plan is None else plan, 1):
         sid = f"as-{i:03d}"
-        state = {"seen": {}, "slots": set(), "prev": None}
+        state = {"seen": {}, "prev": None}
         gold = []
         for n, t in enumerate(turns, 1):
             try:

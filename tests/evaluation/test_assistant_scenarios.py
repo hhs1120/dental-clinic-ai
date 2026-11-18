@@ -84,7 +84,7 @@ def test_build_turn_gold(conn):
     [s] = sc.build(conn, CLINIC, plan)
     assert s["id"] == "as-001"
     assert s["turns"][1]["gold"] == {
-        "tools": ["draft_appointment", "free_slots"],
+        "tools": ["draft_appointment"],  # 앞서 free_slots를 보지 않아도 된다
         "args": {"chart_no": "C-00002", "date": WED, "procedure": "스케일링"},
         "end": {
             "draft": {
