@@ -246,9 +246,13 @@ export function AssistantView() {
             void send(draft);
           }
         }}
-        className="min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+        className="min-h-9 min-w-0 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
       />
-      <Button type="submit" disabled={busy || readOnly || !draft.trim()}>
+      <Button
+        type="submit"
+        size="lg"
+        disabled={busy || readOnly || !draft.trim()}
+      >
         보내기
       </Button>
     </form>
