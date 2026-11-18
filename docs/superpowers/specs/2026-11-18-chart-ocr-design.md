@@ -10,7 +10,6 @@
 
 ## 제약
 - 쓰기는 `backend/emr_bridge.py`만, `ax_` 테이블에만(절대 규칙). 데이터 고정 — `emr_*`·`fin_*` 그대로
-- 튜닝 worktree와 공유 파일(`shared/app_schema.sql`·Makefile·`pyproject.toml`·기능 정의 §9)은 덧붙이기만
 - 업스테이지 API 키는 `.env`(`UPSTAGE_API_KEY`), 무료 크레딧. 실제 호출은 실행 전 사용자에게 묻는다
 
 ## 방식 (고른 것: ①)
@@ -29,13 +28,14 @@
 2. **항목 스키마**(`chart_ocr.SCHEMA` — 맨 위 칸에 객체 불가라 머리는 문자열 칸): 성명·생년월일·차트번호·초진일·C.C·P.I·치료 계획·메모 + 진료(날짜·위치·내용·서명) 배열 + 수납(날짜·내용·금액·잔액) 배열. 정리는 코드:
    - 날짜: `3/21`·`〃`는 윗줄의 연도·날짜를 이어받아 YYYY-MM-DD로, 앞 줄보다 거꾸로 가면 "확인 필요"
    - 위치: 정보 추출은 숫자만 읽고 사분면을 잃는다(스파이크). 상자 좌표로도 위아래가 갈리지 않아 사람이 십자 고르기로 정한다 — 숫자는 미리 채움, FDI 번호는 고른 사분면 + 숫자로
+   - 수납 장부 교차검증·OCR로 빈칸 채우기·빈 생년월일 채우기는 [[치과 AX - 기능 정의]] §5
    - 약어 사전 `chart_ocr.ABBREVIATIONS`(치과 약어 → 뜻, 30개 안팎): 잘못 읽힌 말과 비슷한 약어를 제안(`DHI` → `OHI`, `S10` → `S/O`) — 제안만, 확정은 사람. 뜻은 화면 툴팁
 3. **백엔드**
    - `backend/chart_ocr.py`: 업스테이지 두 API 호출(httpx), 결과를 그대로 저장. 환자 맞추기는 AI가 아니라 코드(이름 + 생년월일로 `source.emr_patients` 조회, 없으면 사람이 고름)
    - `backend/emr_bridge.py`에 `chart_import_draft`·`approve_chart_import`·`reject_chart_import` 추가
-   - 새 테이블 `ax_chart_imports`(이미지 경로, OCR 원본 JSON, 항목 JSON, 사람이 고친 항목 JSON, patient_id, status draft/approved/rejected, decided_by/at, created_at) — `ax_emr_writes`는 예약 전용 열(NOT NULL scheduled_at 등)이라 따로
+   - 새 테이블 `ax_chart_imports`(이미지(BLOB), OCR 원본 JSON, 항목 JSON, 사람이 고친 항목 JSON, patient_id, status draft/approved/rejected, decided_by/at, created_at) — `ax_emr_writes`는 예약 전용 열(NOT NULL scheduled_at 등)이라 따로
    - API: `POST /chart-ocr`(이미지 올림 → 초안), `GET /chart-ocr`·`/{id}`, `POST /chart-ocr/{id}/approve`(고친 항목 포함)·`/reject`. 승인된 이관 줄은 `/emr/patients/{chart_no}` 기록에 합쳐 내려 준다(예약 합치기와 같은 방식)
-4. **화면**: 새 포털 페이지 `종이 차트 이관` — 왼쪽 이미지(OCR 상자 덧그림, 신뢰도 낮은 글자 강조), 오른쪽 항목 폼(고칠 수 있음 — 칸을 누르면 그 부분 손글씨 조각을 옆에, 약어 제안 버튼·뜻 툴팁, 위치는 십자 고르기, "확인 필요" 표시), 환자 맞춤 표시, 승인/반려. 샘플 이미지 고르기 + 파일 올리기. EMR 창 전자차트의 진료 기록에 "종이 차트 이관" 줄(옛 프로그램 부품·`--emr-*` 토큰)
+4. **화면**: 새 포털 페이지 `종이 차트 이관` — 왼쪽 이미지(OCR 상자 덧그림, 신뢰도 낮은 글자 강조), 오른쪽 항목 폼(고칠 수 있음 — 딱지·약어 제안을 누르면 그 칸 손글씨를 확대, 규칙 원본은 [[치과 AX - 기능 정의]] §5 종이 차트 이관), 환자 맞춤 표시, 승인/반려. 샘플 이미지 고르기 + 파일 올리기. EMR 창 전자차트의 진료 기록에 "종이 차트 이관" 줄(옛 프로그램 부품·`--emr-*` 토큰)
 5. **시연 안전장치**(내 결정): 샘플 이미지는 첫 호출 결과를 `ax_chart_imports`에 남겨 다시 열면 즉시 보이게 — 녹화 때 API 대기·실패 없이
 6. **테스트**: 업스테이지 응답을 가짜로 넣은 `chart_ocr` 단위 테스트, `emr_bridge` 쓰기·승인·`emr_*` 무변경 테스트, API 테스트. 프론트는 lint·빌드
 
