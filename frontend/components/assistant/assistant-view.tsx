@@ -27,7 +27,7 @@ const MAX_TEXT = 1000; // backend/api.py ASSISTANT_MAX_TEXT
 const CUT = "응답이 끊겼습니다 — 다시 말해 주세요";
 const NO_SERVER = "서버에 연결하지 못했습니다";
 
-/** 대화 중 입력칸 아래 안내 — 비서의 말이 아니라 초안 카드의 승인만 예약을 만든다(AI 비서 설계 §5.2). 예약 이야기가
+/** 대화 중 입력칸 아래 안내 — 비서의 말이 아니라 초안 카드의 승인만 예약을 만든다(기능 정의 §4 AI 비서). 예약 이야기가
  * 나온 대화에서만(초안 카드가 떴거나 말·답에 "예약"이 있으면 — 카드 없이 "예약을 잡았다"고 쓴 답도 걸린다) */
 const DRAFT_NOTE = (
   <p className="mt-2 text-center text-xs text-muted-foreground">

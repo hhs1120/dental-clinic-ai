@@ -2,6 +2,7 @@
 
 # ruff: noqa: F401, F811  (다른 테스트 모듈의 fixture를 가져와 쓴다)
 
+import sqlite3
 from datetime import date
 
 import pytest
@@ -60,7 +61,7 @@ TURN = {"conversation_id": 7, "turn": 3}
 def test_registry_names_fixed():
     tools = assistant_tools.assistant_tools(CLINIC, None, TURN)
     assert {t.name for t in tools} == NAMES and len(tools) == len(NAMES)
-    assert assistant_tools.TOOLS_VERSION == "v4"
+    assert assistant_tools.TOOLS_VERSION == "v5"
     assert {t.name for t in tools if t.writes} == {"draft_appointment"}
     assert [t.name for t in tools if t.ends_run] == ["done_tools"]
 
@@ -116,7 +117,12 @@ def test_free_slots_tool_open_day_and_role(conn):
     assert starts == sorted(set(starts))  # 같은 시각은 한 줄
     by_name = call(conn, "free_slots", date=WED, procedure="스케일링", staff="임재윤")
     assert by_name["slots"] == got["slots"]
-    assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="원장")["slots"] == []
+    assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="원장") == {
+        "error": ["wrong_role"]  # 빈 시각 없음과 가른다
+    }
+    assert call(conn, "free_slots", date=WED, date_to="2026-12-01", procedure="스케일링") == {
+        "error": ["bad_range"]
+    }
     assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="없는사람") == {
         "error": ["unknown_staff"]
     }
@@ -188,6 +194,55 @@ def test_draft_window_closed_day_and_no_slot(conn):
         conn, "draft_appointment", **_draft_args(date="2026-12-05", start=None, window="오후")
     )
     assert sat == {"error": ["no_slot"]}  # 토요일은 점심 전에 마감 — 오후 빈 시각 없음
+    assert conn.execute("SELECT COUNT(*) FROM ax_emr_writes").fetchone()[0] == 0
+
+
+def test_free_slots_consult_has_no_chairs(conn):
+    """상담은 체어를 쓰지 않아 빈 체어 수가 없다(0으로 보이면 자리 없음으로 읽힌다)"""
+    got = call(conn, "free_slots", date=WED, procedure="상담")
+    assert got["slots"] and all(set(s) == {"start", "end"} for s in got["slots"])
+
+
+def test_draft_auto_reports_real_reason(conn):
+    """시각 없이 부를 때 담당 역할이 시술과 다르거나 지난 날이면 no_slot 대신 그 이유, 이름 오타는 unknown_staff"""
+    args = _draft_args(start=None)
+    assert call(conn, "draft_appointment", **args | {"staff": "원장"}) == {"error": ["wrong_role"]}
+    assert call(conn, "draft_appointment", **args | {"date": "2026-11-25"}) == {
+        "error": ["before_today"]
+    }
+    assert call(conn, "draft_appointment", **args | {"staff": "없는사람"}) == {
+        "error": ["unknown_staff"]
+    }
+
+
+def _add_hygienist(conn, sid):
+    path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
+        0
+    ]
+    s = sqlite3.connect(path)
+    s.execute("INSERT INTO emr_staff (id, name, role) VALUES (?, '위생사둘', 'hygienist')", (sid,))
+    s.commit()
+    s.close()
+
+
+def test_draft_auto_same_time_lower_staff_id_then_next(conn):
+    """같은 시각이면 담당 id 순 — 앞 담당이 그 시각에 막혀 있으면 같은 시각의 다음 담당"""
+    _add_hygienist(conn, 9)
+    first = call(conn, "draft_appointment", **_draft_args(start=None, staff=None))
+    assert _drafted_at(conn, first) == f"{WED} 09:30:00"
+    assert conn.execute("SELECT staff_id FROM ax_emr_writes").fetchone()[0] == HYGIENIST
+    conn.execute("DELETE FROM ax_emr_writes")
+    _src_add(conn, (MISSED, HYGIENIST, f"{WED} 09:30:00", "hygiene", SCALING, 1))
+    got = call(conn, "draft_appointment", **_draft_args(start=None, staff=None))
+    assert _drafted_at(conn, got) == f"{WED} 09:30:00"
+    assert conn.execute("SELECT staff_id FROM ax_emr_writes").fetchone()[0] == 9
+
+
+def test_draft_auto_all_candidates_fail_returns_first_error(conn):
+    """후보가 모두 검사에 걸리면(같은 환자 같은 날) 첫 실패를 돌려주고 행을 남기지 않는다"""
+    _src_add(conn, (NEW, HYGIENIST, f"{WED} 16:00:00", "hygiene", SCALING, 1))
+    got = call(conn, "draft_appointment", **_draft_args(start=None, staff=None))
+    assert "patient_same_day" in got["error"]
     assert conn.execute("SELECT COUNT(*) FROM ax_emr_writes").fetchone()[0] == 0
 
 

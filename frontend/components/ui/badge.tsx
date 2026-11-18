@@ -28,6 +28,8 @@ const badgeVariants = cva(
           "border-status-danger-border bg-status-danger-bg font-bold text-status-danger-fg",
         ok: "border-status-ok-border bg-status-ok-bg font-bold text-status-ok-fg",
         info: "border-status-info-border bg-status-info-bg font-bold text-status-info-fg",
+        // AI 비서 답 아래 바로 가기·사례 출처 칩 — 이름과 링크 여러 개가 들어가 줄바꿈된다
+        chip: "h-auto flex-wrap justify-start gap-x-2 overflow-visible rounded-md border-border bg-card px-2.5 py-1 font-normal whitespace-normal",
       },
     },
     defaultVariants: {

@@ -18,9 +18,9 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
-        // 앱 셸 아이콘 줄 칸(테마·담당 파트) — 공간 링크와 같은 모양
         // AI 비서 시작 화면 예시 칩 — 바탕에서 떠 보이고 올리면 강조색·손가락 커서(누르면 바로 보냄)
         chip: "cursor-pointer border-border bg-card font-normal shadow-card hover:border-primary hover:text-primary dark:border-input",
+        // 앱 셸 아이콘 줄 칸(테마·담당 파트) — 공간 링크와 같은 모양
         rail: "font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-expanded:bg-accent aria-expanded:text-accent-foreground",
       },
       size: {

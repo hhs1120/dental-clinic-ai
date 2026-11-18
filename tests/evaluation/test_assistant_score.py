@@ -239,6 +239,12 @@ def test_closed_day_draft_attempt_is_alternative():
         CLOSED, [{**tried, "args": {**tried["args"], "date": "2026-12-04"}}], None
     )["args_ok"]
     assert score_call(CLOSED, tried)["reward"] == 1.5  # 대안이라 음수가 아니다
+    other_day = {
+        **tried,
+        "args": {**tried["args"], "date": "2026-12-04"},
+    }  # 열린 날 — 초안이 실제로 생긴다
+    assert score_call(CLOSED, other_day)["reward"] < 0
+    assert not score_turn(CLOSED, [other_day], None)["tools_ok"]
     assert score_call({**CLOSED, "alt_tools": []}, tried)["reward"] < 0
 
 

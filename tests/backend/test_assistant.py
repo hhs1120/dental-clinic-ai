@@ -373,6 +373,10 @@ CLAIM_TABLE = [
     ("환자가 방문 일정을 확정했습니다", False, False),
     ("김철수 님이 예약을 잡았습니다", False, False),
     ("직원이 예약을 넣어 두었습니다", True, False),
+    # 사람 주어와 주장 사이에 절이 끊기면 주장의 주어는 비서다
+    ("김철수 님이 원하신 대로 12월 3일 10시로 예약을 잡았습니다", False, True),
+    ("원장이 담당하도록 예약을 확정했습니다", True, True),
+    ("예약을 잡았습니다, 환자가 원해서요", False, True),  # 사람 말이 주장 뒤에 있으면 빼지 않는다
     # 문장마다 본다 — 한 문장이 통화 이야기여도 다른 문장의 비서 주장은 막는다
     ("통화에서 안내했습니다. 예약을 잡았습니다", False, True),
     ("통화에서 문의했습니다\n예약을 확정했습니다", True, True),
@@ -500,6 +504,32 @@ def test_saturday_morning_failure_uses_reply(conn):
     gw = Turns(conn, [[draft, DONE]], [reply("그 시각은 잡을 수 없습니다")])
     out = turn(conn, gw, "이영희 토요일 12시 55분 레진")
     assert out["text"] == "그 시각은 잡을 수 없습니다"
+
+
+def test_saturday_other_failure_uses_reply(conn):
+    """토요일 오후여도 마감이 아닌 이유(모르는 환자)로 실패하면 답 단계가 쓴다"""
+    draft = (
+        "tool",
+        DRAFT[1],
+        {**DRAFT[2], "chart_no": "C-99", "date": SAT, "start": None, "window": "오후"},
+    )
+    gw = Turns(conn, [[draft, DONE]], [reply("차트를 찾지 못했습니다")])
+    out = turn(conn, gw, "C-99 토요일 오후 레진")
+    assert out["text"] == "차트를 찾지 못했습니다"
+
+
+def test_closed_day_with_other_patient_lookup_uses_reply(conn):
+    """다른 질문의 환자 조회가 섞이면 코드 문장이 그 답을 빠뜨리므로 답 단계가 쓴다 — 초안 대상 확인은 괜찮다"""
+    draft = ("tool", DRAFT[1], {**DRAFT[2], "date": THU, "start": None})
+    gw = Turns(
+        conn, [[PATIENT, draft, DONE]], [reply("김철수 님 미수는 없고 목요일은 휴진입니다")]
+    )
+    out = turn(conn, gw, "김철수 미수 얼마고, 이영희 목요일 레진 돼?")
+    assert out["text"] == "김철수 님 미수는 없고 목요일은 휴진입니다"
+    target = ("tool", "query_patient", {"chart_no": "C-00002"})
+    gw = Turns(conn, [[target, draft, DONE]], [])
+    out = turn(conn, gw, "이영희 목요일 레진")
+    assert out["text"] == assistant.CLOSED_TEXT.format(m=12, d=3, why="휴진일")
 
 
 def test_closed_day_mixed_with_open_day_uses_reply(conn):

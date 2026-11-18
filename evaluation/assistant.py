@@ -1,11 +1,11 @@
 """AI 비서 시나리오 실행·채점 (AI 비서 설계 §7·§7.1, 채점 함수는 evaluation/assistant_score.py).
-시나리오(ground_truth/assistant_scenarios.json)마다 새 임시 앱 DB(원본 source 읽기 전용, 예약 원함 조회에 필요한 활성
+시나리오(ground_truth/assistant_scenarios.json)마다 새 앱 DB(원본 source 읽기 전용, 예약 원함 조회에 필요한 활성
 분류 행·설정만 앱 DB에서 읽어 옮김)에서 대본 턴을 `backend/assistant.py turn`에 차례로 넣는다. 초안이 생겨도 승인하지
 않는다 — 끝 상태 = 초안. 같은 칸을 잡는 시나리오끼리 섞이지 않는다. 시나리오 DB는 evaluation/assistant_dbs/<split>/<id>/에 남는다(사람이 결과를 확인한 뒤 지움). 결과는 evaluation/assistant_runs.jsonl(dev)·
 assistant_test_runs.jsonl(test)에 쌓고 같은 id·버전·별칭이면 건너뛴다(이어 돎). 앱 DB에는 쓰지 않는다.
 LLM 호출 기록은 시나리오 DB가 아니라 실행 전체가 함께 쓰는 LLM_LOG(JsonlLog)에 남긴다 — 일일 상한이 시나리오마다
 새로 시작하지 않고, 턴 비용은 그 턴 동안 기록된 호출 비용 합(③ 위임 호출 포함)이다(RunLog).
-검색 색인은 임시 DB에 없어 ask_records는 "색인 없음"으로 답 단계에 넘어간다(도구 선택·인자만 채점한다).
+검색 색인은 시나리오 DB에 없어 ask_records는 "색인 없음"으로 답 단계에 넘어간다(도구 선택·인자만 채점한다).
 기준선: lookup 유형 첫 턴을 ③ chat.chat에 넣은 도구 선택(보고만).
 
   python -m evaluation.assistant run --split dev [--tool-alias chat] [--reply-alias chat] [--baseline]  # 과금
@@ -34,7 +34,7 @@ KEEP_DBS = {  # 시나리오 DB를 남기는 곳(깃 밖) — 결과를 사람�
     "dev": ROOT / "evaluation" / "assistant_dbs" / "dev",
     "test": ROOT / "evaluation" / "assistant_dbs" / "test",
 }
-LLM_LOG = {  # ax_llm_calls에 쓰지 않는다 — 시나리오 DB는 시나리오마다 버려진다
+LLM_LOG = {  # ax_llm_calls에 쓰지 않는다 — 시나리오 DB는 확인 뒤 지운다
     "dev": ROOT / "evaluation" / "assistant_llm.jsonl",
     "test": ROOT / "evaluation" / "assistant_test_llm.jsonl",
 }
@@ -180,9 +180,7 @@ def run_scenario(
                         "tool_calls": out["tool_calls"],
                         "end_state": end_state(conn, cid, out["seq"] - 1),
                         "status": out["status"],
-                        "text": out[
-                            "text"
-                        ],  # 채점에는 안 쓰고 사람이 실패를 볼 때(시나리오 DB는 버려진다)
+                        "text": out["text"],  # 채점에는 안 쓰고 사람이 실패를 볼 때
                         "cards": out["cards"],
                         "cost_usd": round(gw.log.total - before, 6),
                     }

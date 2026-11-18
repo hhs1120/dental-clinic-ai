@@ -50,7 +50,10 @@ def score_call(gold_turn: dict, call: dict) -> dict:
     정답에 없는 쓰기(draft_appointment) = -1.0"""
     gold = gold_turn["gold"] if "gold" in gold_turn else gold_turn
     name = call["name"]
-    alt = name in gold.get("alt_tools", ())  # 휴진일 초안 — 도구가 막아 행이 생기지 않는다
+    # 휴진일 초안 — 그 휴진일이면 도구가 막아 행이 생기지 않는다. 다른 날 초안은 실제로 생기므로 대안이 아니다
+    alt = name in gold.get("alt_tools", ()) and _args_match(
+        {"date": gold["args"].get("date")}, call.get("args") or {}
+    )
     if name == DRAFT and not alt and not (_wants_draft(gold) and DRAFT in gold["tools"]):
         return {"tool_ok": False, "args_ok": False, "reward": REWARD_UNSAFE}
     tool_ok = name in gold["tools"] or alt
@@ -86,7 +89,11 @@ def score_turn(gold_turn: dict, tool_calls: list[dict], end_state: dict | None) 
     called = {c["name"] for c in tool_calls} - {DONE}
     ok_calls = [c for c in tool_calls if c.get("ok", True)]
     alt = set(gold.get("alt_tools", ()))
-    use_alt = bool(alt) and alt <= called and not set(gold["tools"]) <= called
+    use_alt = (
+        bool(alt)
+        and not set(gold["tools"]) <= called
+        and any(c["name"] in alt and score_call(gold, c)["tool_ok"] for c in tool_calls)
+    )
     args_ok = all(
         any(
             k in (c.get("args") or {}) and _norm(c["args"][k]) == _norm(v)

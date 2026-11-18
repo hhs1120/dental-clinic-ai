@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ResultCard } from "@/components/ask/result-card";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card as Box } from "@/components/ui/card";
 import {
@@ -242,15 +242,15 @@ function CaseSources({ cards }: { cards: SourceCard[] }) {
           const d = c.data;
           const who = d.patient_name ?? d.caller_name ?? d.chart_no;
           return (
+            // 배지 asChild는 상태 점 자리 때문에 Slot에 자식이 둘이 되어 쓰지 않고, 같은 variant 모양만 단추에 입힌다
             <button
               key={c.id}
               type="button"
               aria-expanded={open === c.id}
               onClick={() => setOpen(open === c.id ? null : c.id)}
               className={cn(
-                chipClass,
-                "cursor-pointer hover:border-primary",
-                open === c.id && "border-primary",
+                badgeVariants({ variant: "chip" }),
+                "cursor-pointer hover:border-primary aria-expanded:border-primary",
               )}
             >
               <span className="font-bold">
@@ -268,8 +268,6 @@ function CaseSources({ cards }: { cards: SourceCard[] }) {
 }
 
 const md = (s: string) => `${s.slice(5, 7)}/${s.slice(8, 10)}`;
-const chipClass =
-  "flex flex-wrap items-center gap-x-2 rounded-md border bg-card px-2.5 py-1 text-xs";
 const chipLink = "font-medium text-link hover:underline";
 
 /** 바로 가기 줄 — 같은 환자의 환자·통화 카드는 칩 하나로(차트 번호, 없으면 통화의 이름). 날짜는 답이 고른 통화만,
@@ -296,16 +294,16 @@ function Shortcuts({ cards }: { cards: LinkCard[] }) {
       });
     } else if (c.type === "claim")
       rest.push(
-        <span key={`claim:${c.id}`} className={chipClass}>
+        <Badge key={`claim:${c.id}`} variant="chip">
           {c.data.name} · {md(c.data.service_date)} {c.data.procedure_name}
           <Link href="/claims" className={chipLink}>
             청구 점검
           </Link>
-        </span>,
+        </Badge>,
       );
     else
       rest.push(
-        <span key={`recon:${c.id}`} className={chipClass}>
+        <Badge key={`recon:${c.id}`} variant="chip">
           {md(c.data.date)} 일계표 불일치 {c.data.count}건
           <Link
             href={`/finance?month=${c.data.date.slice(0, 7)}&day=${c.data.date}`}
@@ -313,7 +311,7 @@ function Shortcuts({ cards }: { cards: LinkCard[] }) {
           >
             재무 대조
           </Link>
-        </span>,
+        </Badge>,
       );
   }
   if (!people.size && !rest.length) return null;
@@ -321,7 +319,7 @@ function Shortcuts({ cards }: { cards: LinkCard[] }) {
     <div className="flex flex-wrap items-center gap-2" aria-label="바로 가기">
       <span className="text-xs text-muted-foreground">바로 가기</span>
       {[...people].map(([key, p]) => (
-        <span key={key} className={chipClass}>
+        <Badge key={key} variant="chip">
           <span className="font-bold">{p.name}</span>
           {p.calls.map((c) => (
             <Link
@@ -341,14 +339,14 @@ function Shortcuts({ cards }: { cards: LinkCard[] }) {
               통화 기록
             </Link>
           )}
-        </span>
+        </Badge>
       ))}
       {rest}
     </div>
   );
 }
 
-/** 답 안의 큰 카드 — 예약 초안·기록 출처(AI 비서 설계 §3.2) */
+/** 답 안의 큰 카드 — 예약 초안·기록 출처(기능 정의 §4 AI 비서) */
 export function AssistantCard({
   card,
   onRetry,
