@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,9 +8,10 @@ import { AssistantCard } from "@/components/assistant/cards";
 import { TurnSteps, type Step } from "@/components/assistant/turn-steps";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
+import { ApiError, useFetch } from "@/lib/api";
 import { getConversation, streamTurn, type Card } from "@/lib/assistant-api";
 import { readPart } from "@/lib/part";
+import { fetchToday, type TodaySheet } from "@/lib/today-api";
 
 // 시작 화면 칩(AI 비서 설계 §3.2) — 누르면 채우고 바로 보낸다
 const CHIPS = [
@@ -22,6 +24,40 @@ const CHIPS = [
 const MAX_TEXT = 1000; // backend/api.py ASSISTANT_MAX_TEXT
 const CUT = "응답이 끊겼습니다 — 다시 말해 주세요";
 const NO_SERVER = "서버에 연결하지 못했습니다";
+
+/** 시작 화면 오늘 요약 한 줄 — 오늘 화면(GET /today)과 같은 값, 0건은 빼고 못 불러오면 숨긴다(기능 정의 §4 AI 비서) */
+function TodayLine() {
+  const { data } = useFetch<TodaySheet>("assistant-today", () => fetchToday());
+  if (!data) return null;
+  const parts = (
+    [
+      ["할 일", data.cards.todo.items],
+      ["예약", data.cards.appointments.total],
+      ["급한 통화", data.people.urgent_calls.length],
+    ] as const
+  ).filter(([, n]) => n > 0);
+  return (
+    <Link
+      href="/today"
+      className="mt-2 flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full bg-muted px-4 py-1.5 text-sm hover:bg-accent"
+    >
+      <span className="flex flex-wrap items-center gap-x-1.5">
+        <span className="font-bold">오늘</span>
+        {parts.length === 0 ? (
+          <span className="text-muted-foreground">볼 일이 없습니다</span>
+        ) : (
+          parts.map(([label, n], i) => (
+            <span key={label} className="text-muted-foreground">
+              {i > 0 && "· "}
+              {label} <strong className="text-foreground">{n}</strong>건
+            </span>
+          ))
+        )}
+      </span>
+      <span className="shrink-0 font-medium text-primary">오늘 화면 →</span>
+    </Link>
+  );
+}
 
 type Item =
   | { id: number; role: "user"; text: string }
@@ -237,6 +273,7 @@ export function AssistantView() {
             </Button>
           ))}
         </div>
+        <TodayLine />
         <p className="text-sm text-muted-foreground">
           조회하고 예약 초안까지 — 확정은 사람이 합니다
         </p>

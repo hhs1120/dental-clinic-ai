@@ -361,3 +361,22 @@ test("assistant: 지운 대화는 읽기 전용으로 열린다", async ({ page 
       0,
     );
 });
+
+test("assistant: 시작 화면 오늘 요약 — 0건은 빼고 오늘 화면으로 잇는다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/today", (r) =>
+    r.fulfill({
+      json: {
+        cards: { todo: { items: 3 }, appointments: { total: 12 } },
+        people: { urgent_calls: [] },
+      },
+    }),
+  );
+  await page.goto("/");
+  const line = page.getByRole("link", { name: /오늘 화면 →/ });
+  await expect(line).toHaveText(/할 일 3건\s*· 예약 12건/);
+  await expect(line).not.toContainText("급한 통화");
+  await expect(line).toHaveAttribute("href", "/today");
+});
