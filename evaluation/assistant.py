@@ -19,7 +19,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
-from backend import assistant, chat, db
+from backend import assistant, assistant_tools, chat, db
 from evaluation.assistant_score import score_run, score_turn
 from generator.paths import output_paths
 from shared.clinic import load_clinic
@@ -58,6 +58,11 @@ def load_runs(path: Path) -> list[dict]:
 
 def _key(row: dict) -> tuple:
     return (row["id"], row["version"], row["tool_alias"], row["reply_alias"])
+
+
+def current_version() -> str:
+    """실행 줄의 버전 — 도구 지침/답 지침/도구(TOOLS_VERSION). 도구만 바꿔도 다른 버전이라 이어 돌 때 건너뛰지 않는다"""
+    return f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}/{assistant_tools.TOOLS_VERSION}"
 
 
 def run(
@@ -228,7 +233,7 @@ def baseline(scenarios: list[dict], *, app_db: Path, source_db: Path, gw, clinic
 
 def score(split: str, tool_alias: str | None = None, reply_alias: str | None = None) -> dict:
     """저장된 줄 중 지금 버전·별칭(없으면 기본)으로 채점 — {version, tool_alias, reply_alias} + score_run 결과"""
-    version = f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}"
+    version = current_version()
     tool_alias = tool_alias or assistant.TOOL_ALIAS
     reply_alias = reply_alias or assistant.REPLY_ALIAS
     meta = {"version": version, "tool_alias": tool_alias, "reply_alias": reply_alias}
@@ -292,7 +297,7 @@ def main(argv=None) -> int:
         res = run(
             scenarios,
             out=RUNS[args.split],
-            version=f"{assistant.PROMPT_VERSION}/{assistant.REPLY_VERSION}",
+            version=current_version(),
             tool_alias=args.tool_alias,
             reply_alias=args.reply_alias,
             run_one=lambda sc: run_scenario(sc, **kw, keep=KEEP_DBS[args.split]),

@@ -266,3 +266,10 @@ def test_blocked_draft_attempt_is_not_unsafe_write():
     assert "막힌 쓰기 시도 1건" in "\n".join(
         ev.render({"version": "v1/v1", "tool_alias": "chat", "reply_alias": "chat", **r})
     )
+
+
+def test_run_version_includes_tools_version(monkeypatch):
+    """도구만 바꿔도 버전이 달라 이어 돌기가 옛 줄을 끝난 것으로 보지 않는다"""
+    a = ev.current_version()
+    monkeypatch.setattr(ev.assistant_tools, "TOOLS_VERSION", "v99")
+    assert ev.current_version() != a and ev.current_version().endswith("/v99")
