@@ -51,6 +51,8 @@ export function EmrChart({
     (a) => a.recorded <= today && (!a.ends || today < a.ends),
   );
   const treatments = [...record.treatments].reverse();
+  // 승인된 종이 차트 이관 줄(기능 정의 §5 종이 차트 이관) — EMR 이전이라 진료 기록 맨 아래에, 최근 것 먼저
+  const paper = [...record.paper_records].reverse();
   const live = (todaySchedule?.appointments ?? []).filter(
     (a) => a.status !== "cancelled" && a.status !== "noshow",
   );
@@ -83,16 +85,47 @@ export function EmrChart({
         ))}
       </dl>
     ),
-    메모: memos.length ? (
-      memos.map((a) => (
-        <p key={a.code}>
-          {a.recorded} {a.source === "intake" ? "문진표" : "진료 중"} —{" "}
-          {a.label}
-        </p>
-      ))
-    ) : (
-      <p>개별 메모 없음</p>
-    ),
+    메모:
+      memos.length || record.paper_notes.length ? (
+        <>
+          {memos.map((a) => (
+            <p key={a.code}>
+              {a.recorded} {a.source === "intake" ? "문진표" : "진료 중"} —{" "}
+              {a.label}
+            </p>
+          ))}
+          {record.paper_notes.map((n) => (
+            <div
+              key={n.import_id}
+              className="mt-1 border-t border-emr-line pt-1"
+            >
+              <p className="text-emr-fg-muted">
+                <small className="border border-emr-line px-1">종이</small> 종이
+                차트 이관 {n.decided_at.slice(0, 10)}
+              </p>
+              {n.memo && (
+                <p className="font-bold text-emr-alert-fg">{n.memo}</p>
+              )}
+              {(
+                [
+                  ["병력", n.present_illness],
+                  ["주소", n.chief_complaint],
+                  ["계획", n.treatment_plan],
+                ] as const
+              ).map(
+                ([k, v]) =>
+                  v && (
+                    <p key={k}>
+                      <span className="text-emr-fg-muted">{k}</span> {v}
+                    </p>
+                  ),
+              )}
+            </div>
+          ))}
+        </>
+      ) : (
+        <p>개별 메모 없음</p>
+      ),
     계획: record.plans.length ? (
       record.plans.map((x) => (
         <p key={x.id}>
@@ -111,18 +144,38 @@ export function EmrChart({
     ) : (
       <p>오늘 예약 없음</p>
     ),
-    수납: record.payments.length ? (
-      [...record.payments]
-        .slice(-8)
-        .reverse()
-        .map((x, i) => (
-          <p key={i}>
-            {x.at.slice(0, 10)} · {commas(x.paid)} / {commas(x.due)}
-          </p>
-        ))
-    ) : (
-      <p>수납 내역 없음</p>
-    ),
+    수납:
+      record.payments.length || record.paper_payments.length ? (
+        <>
+          {[...record.payments]
+            .slice(-8)
+            .reverse()
+            .map((x, i) => (
+              <p key={i}>
+                {x.at.slice(0, 10)} · {commas(x.paid)} / {commas(x.due)}
+              </p>
+            ))}
+          {record.paper_payments.length > 0 && (
+            <p className="mt-1 border-t border-emr-line pt-1 text-emr-fg-muted">
+              <small className="border border-emr-line px-1">종이</small> 종이
+              차트 이관 수납 {record.paper_payments.length}건
+            </p>
+          )}
+          {[...record.paper_payments].reverse().map((x, i) => (
+            <p key={`paper-${i}`}>
+              {x.date ?? "날짜 없음"} · {x.item} {commas(x.amount ?? 0)}
+              {x.balance ? (
+                <span className="text-emr-alert-fg">
+                  {" "}
+                  (잔액 {commas(x.balance)})
+                </span>
+              ) : null}
+            </p>
+          ))}
+        </>
+      ) : (
+        <p>수납 내역 없음</p>
+      ),
     가족: p.family.length ? (
       p.family.map((f) => <p key={f.chart_no}>{f.name}</p>)
     ) : (
@@ -134,7 +187,7 @@ export function EmrChart({
     <div className="flex flex-col gap-1.5">
       <div className="grid grid-cols-[19rem_minmax(0,1fr)_15rem] gap-1.5">
         <Box title="진료 기록" className="max-h-[36rem] overflow-auto">
-          {treatments.length ? (
+          {treatments.length || paper.length ? (
             treatments.map((t, i) => (
               <article
                 key={i}
@@ -156,6 +209,30 @@ export function EmrChart({
           ) : (
             <p className="text-emr-fg-muted">진료 기록 없음</p>
           )}
+          {paper.length > 0 && (
+            <p className="mt-1 border-b border-emr-line bg-emr-surface-2 px-1 font-bold">
+              종이 차트 이관 {paper.length}건
+            </p>
+          )}
+          {paper.map((t, i) => (
+            <article
+              key={`paper-${i}`}
+              className="grid grid-cols-[4.5rem_1fr] gap-1 border-b border-emr-line-soft py-1"
+            >
+              <time className="text-emr-fg-muted">{t.date ?? "날짜 없음"}</time>
+              <div>
+                <small className="border border-emr-line px-1 text-emr-fg-muted">
+                  종이
+                </small>
+                {t.fdi ? (
+                  <span className="tabular-nums"> #{t.fdi}</span>
+                ) : (
+                  t.teeth && <span> {t.teeth}</span>
+                )}
+                <p>{t.treatment}</p>
+              </div>
+            </article>
+          ))}
         </Box>
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex">

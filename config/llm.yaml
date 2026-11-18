@@ -16,6 +16,7 @@ aliases:
   hard_label: [claude-opus-5-5]                    # 어려운 통화 Opus 독립 라벨(evaluation/hard_labels.py) — 녹취만 읽음, 폴백 없음
   action_label: [claude-opus-5-5]                  # 처리 정답 라벨(evaluation/call_actions.py) — 후속 에이전트(Sonnet)와 다른 모델, 폴백 없음
   improve: [claude-opus-5-5]                       # ② 개선 에이전트(evaluation/improve_agent.py) — 분류(Haiku)보다 상위, 폴백 없음(자동 개선 설계 §3)
+  chart_ocr: [claude-sonnet-5-5]                   # 종이 차트 이관 정리(backend/chart_ocr.py) — OCR 글자·좌표 → 항목, 비교에서 정보 추출·Solar·Haiku보다 나음(AI 실험 기록 §40)
 # 모델별 단가($/1M 토큰). cache_read가 없으면 input의 0.1배. server_fallback: 서버 측 거절 폴백(fallbacks: "default")
 models:
   claude-opus-5-5: { input: 4.00, output: 20.00, cache_read: 0.20 }  # 서버 측 폴백 안 씀 — evaluation/ 전용(골드 점검 중재·어려운 통화·처리 정답 라벨·개선 에이전트)

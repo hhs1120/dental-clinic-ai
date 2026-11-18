@@ -1,0 +1,304 @@
+"""차트 OCR 응답 정리 — 상자·날짜 이어받기·치아 번호·약어 제안(backend/chart_ocr.py, 기능 정의 §5 종이 차트 이관 정리).
+고정값은 샘플 C-00016으로 업스테이지를 한 번 부른 실제 응답(tests/backend/fixtures/)."""
+
+import inspect
+import json
+from pathlib import Path
+
+import pytest
+
+from backend import chart_ocr
+from shared.llm import Gateway, LLMResult
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _load(name: str) -> dict:
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def _content(name: str) -> dict:
+    """정리된 항목 — 고정값은 같은 틀(SCHEMA)로 받은 업스테이지 정보 추출 실제 응답의 content"""
+    return json.loads(_load(name)["choices"][0]["message"]["content"])
+
+
+def test_written_date_carries_year():
+    assert chart_ocr.written_date("12.3.14", "2011-07-04") == ("2012-03-14", False)
+    assert chart_ocr.written_date("3/21", "2012-03-14") == ("2012-03-21", False)
+    assert chart_ocr.written_date("〃", "2012-03-14") == ("2012-03-14", False)
+    assert chart_ocr.written_date("10.2.8", None) == ("2010-02-08", False)
+
+
+def test_written_date_flags_backwards_and_garbage():
+    # 손글씨 1이 자주 빠진다(스파이크) — 거꾸로 가면 앞에 1을 붙여 보고 맞으면 그 값, 확인 필요는 그대로
+    assert chart_ocr.written_date("1.6.13", "2010-02-22") == ("2011-06-13", True)
+    assert chart_ocr.written_date("??", "2010-02-22") == (None, True)
+    assert chart_ocr.written_date("3/21", None) == (None, True)
+
+
+@pytest.mark.parametrize(
+    "q, teeth, want",
+    [(4, "6", "46"), (1, "7 6", "17, 16"), (3, "7", "37"), (None, "6", None), (2, "전악", None)],
+)
+def test_fdi(q, teeth, want):
+    assert chart_ocr.fdi(q, teeth) == want
+
+
+def test_suggest_near_abbreviation():
+    assert {"word": "DHI", "abbr": "OHI"} in chart_ocr.suggest("Scaling, 출혈 多, DHI")
+    assert chart_ocr.suggest("Scaling 2/2, OHI") == []
+    # 흔한 낱말을 약어로 바꾸지 않는다
+    assert chart_ocr.suggest("C&S, CaOH 교체, Tx. pain(-), Cr. set") == []
+    assert chart_ocr.suggest("Pulp ext. st, caoH") == []  # 1st의 1이 빠진 st
+    assert (
+        chart_ocr.suggest("Dulp ext. 1st, Lido 2@") == []
+    )  # 숫자로 시작하는 낱말은 약어가 아니다
+    assert chart_ocr.suggest("S10, 치유 양호") == [{"word": "S10", "abbr": "S/O"}]
+
+
+def test_words_from_fixture():
+    words = chart_ocr.words(_load("upstage_ocr.json"))
+    assert len(words) == 304  # 응답 305개 중 빈 글자 1개
+    assert all(0 <= v <= 1 for w in words for v in w["box"])
+    assert all(w["text"] and 0 <= w["confidence"] <= 1 for w in words)
+
+
+def test_fields_from_fixture():
+    f = chart_ocr.fields(_content("upstage_extract.json"))
+    assert f["patient_name"] == "구상철" and f["birth_date"] == "1940-04-05"
+    v = f["visits"]
+    assert len(v) == 12
+    assert v[2]["date_raw"] == "1.6.13" and v[2]["date_check"] is True
+    assert v[2]["date"] == "2011-06-13"  # 앞자리 1을 채운 추정 — 확인 필요는 그대로
+    assert v[3]["date"] == "2011-06-27" and v[3]["date_check"] is False and v[3]["teeth"] == "6 7"
+    assert v[6]["date"] == "2012-03-21" and v[6]["date_check"] is False
+    # 2.3.14(앞자리 1 빠짐)는 1을 채운 2012-03-14가 수납 12.3.14와 맞아 자동 확인
+    assert (v[5]["date"], v[5]["date_check"], v[5]["date_note"]) == (
+        "2012-03-14",
+        False,
+        "수납 장부와 일치",
+    )
+    assert v[0]["teeth"] == "전악" and v[0]["quadrant"] is None and v[0]["fdi"] is None
+    assert {"word": "DHI", "abbr": "OHI"} in v[11]["suggestions"]
+    assert f["payments"][4]["balance"] == 300000 and f["payments"][4]["date"] == "2012-04-18"
+
+
+# 날짜 교차검증(기능 정의 §5 종이 차트 이관 정리) — 정리 모델이 빠뜨린 날짜는 OCR 글자로, 연도는 수납 장부로
+def _v(raw):
+    return {"date_raw": raw, "date": None, "date_check": False, "date_note": None}
+
+
+def _p(raw):
+    return {"date_raw": raw, "date": None, "date_check": False}
+
+
+def _w(text, x0, y0):
+    return {"text": text, "confidence": 0.99, "box": [x0, y0, x0 + 0.03, y0 + 0.015]}
+
+
+HEADERS = [_w("Date", 0.533, 0.05), _w("Location", 0.58, 0.05)]
+
+
+def test_settle_fills_missing_date_from_ocr_then_ledger():
+    # C-00017 실제 실패: 정보 추출은 14.1.22를 "."로, 〃를 ","로 — OCR은 Date 칸에서 14.1.22를 읽었다
+    f = {
+        "visits": [_v("13.3.5"), _v("."), _v(","), _v("9/30")],
+        "payments": [_p("13.3.5"), _p("14.1.22"), _p("14.9.30")],
+    }
+    words = HEADERS + [
+        _w("13.3.5", 0.523, 0.25),
+        _w("14.1.22", 0.526, 0.28),
+        _w(",", 0.528, 0.30),
+        _w("9/30", 0.525, 0.32),
+        _w("6", 0.592, 0.28),  # Location 칸 — Date 칸이 아니다
+    ]
+    v = chart_ocr.settle(f, words)["visits"]
+    assert (v[1]["date"], v[1]["date_check"]) == ("2014-01-22", False)
+    assert v[1]["date_note"] == "OCR 글자로 채움 · 수납 장부와 일치"
+    # 〃로 본 줄은 맞아도 확인 필요 그대로
+    assert (v[2]["date"], v[2]["date_check"], v[2]["date_note"]) == (
+        "2014-01-22",
+        True,
+        "〃(윗줄과 같은 날)로 봄",
+    )
+    assert (v[3]["date"], v[3]["date_check"]) == ("2014-09-30", False)
+
+
+def test_settle_ocr_fill_without_ledger_notes_source():
+    f = {"visits": [_v("13.3.5"), _v(".")], "payments": []}
+    words = HEADERS + [_w("13.3.5", 0.523, 0.25), _w("14.1.22", 0.526, 0.28)]
+    v = chart_ocr.settle(f, words)["visits"]
+    # 수납 장부가 받쳐 주지 않는 OCR 채움은 확인 필요
+    assert (v[1]["date"], v[1]["date_check"], v[1]["date_note"]) == (
+        "2014-01-22",
+        True,
+        "OCR 글자로 채움",
+    )
+
+
+def test_settle_fixes_year_from_ledger():
+    # 앞 줄을 못 읽어 9/30이 2013년을 이어받음 — 수납 장부에 같은 월·일이 한 번이면 그 연도로
+    f = {"visits": [_v("13.3.5"), _v("9/30")], "payments": [_p("14.9.30")]}
+    v = chart_ocr.settle(f, [])["visits"]
+    assert (v[1]["date"], v[1]["date_check"], v[1]["date_note"]) == (
+        "2014-09-30",
+        True,
+        "수납 장부 연도로 고침",
+    )
+
+
+def test_refresh_recomputes_suggestions():
+    f = {
+        "visits": [
+            _v("13.3.5")
+            | {"treatment": "Pulp ext. 1st, DHI", "suggestions": [{"word": "1st", "abbr": "set"}]}
+        ],
+        "payments": [],
+    }
+    assert chart_ocr.refresh(f, [])["visits"][0]["suggestions"] == [{"word": "DHI", "abbr": "OHI"}]
+
+
+def test_settle_suggests_unused_ledger_date_between_neighbors():
+    # C-00013 실제 실패: 6/11을 5/11로 읽음 — 앞뒤 진료 사이에 아직 짝 없는 수납 날짜가 하나면 제안
+    f = {
+        "visits": [_v("12.5.28"), _v("5/11"), _v("13.6.19"), _v("5/26"), _v("14.2.11")],
+        "payments": [_p("12.5.28"), _p("12.6.11"), _p("13.6.19"), _p("14.2.11")],
+    }
+    v = chart_ocr.settle(f, [])["visits"]
+    assert (v[1]["date"], v[1]["date_check"], v[1]["date_suggest"]) == (
+        "2012-05-11",
+        True,
+        "2012-06-11",
+    )
+    assert v[3]["date_check"] is True and v[3]["date_suggest"] is None  # 그 사이 수납 없음
+    assert v[0]["date_suggest"] is None
+
+
+def test_refresh_fills_birth_date_from_ocr():
+    # C-00013 실제 실패: 정보 추출은 생년월일을 비웠고 OCR은 "1949." "7." "5"로 읽었다
+    f = {"birth_date": "", "visits": [], "payments": []}
+    words = [
+        _w("생년월일", 0.20, 0.06),
+        _w("1949.", 0.24, 0.058),
+        _w("7.", 0.265, 0.059),
+        _w("5", 0.28, 0.06),
+        _w("1544", 0.15, 0.06),  # 왼쪽 칸(차트번호)
+    ]
+    out = chart_ocr.refresh(f, words)
+    assert out["birth_date"] == "1949-07-05"
+    assert out["head_notes"] == {"birth_date": "OCR 글자로 채움"}
+    kept = chart_ocr.refresh(f | {"birth_date": "1949-07-05"}, words)
+    assert kept["head_notes"] == {}
+
+
+# 리뷰 반영
+def test_refresh_keeps_head_note_on_second_call():
+    # 저장 때 한 번, 상세 때 또 한 번 부른다 — 두 번째에 근거가 지워지면 안 된다
+    f = {"birth_date": "", "visits": [], "payments": []}
+    words = [
+        _w("생년월일", 0.20, 0.06),
+        _w("1949.", 0.24, 0.058),
+        _w("7.", 0.265, 0.059),
+        _w("5", 0.28, 0.06),
+    ]
+    twice = chart_ocr.refresh(chart_ocr.refresh(f, words), words)
+    assert twice["birth_date"] == "1949-07-05"
+    assert twice["head_notes"] == {"birth_date": "OCR 글자로 채움"}
+
+
+def test_fields_tolerates_nulls_and_bad_json():
+    content = {
+        "patient_name": None,
+        "visits": [{"date": None, "location": None, "treatment": None}],
+        "payments": [{"date": None, "item": None}],
+    }
+    f = chart_ocr.fields(content)
+    assert (
+        f["patient_name"] == ""
+        and f["visits"][0]["date_raw"] == ""
+        and f["visits"][0]["treatment"] == ""
+    )
+    assert f["visits"][0]["date_check"] is True and f["payments"][0]["item"] == ""
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.fields("not a dict")
+
+
+def test_ditto_row_gets_no_ledger_suggestion():
+    f = {
+        "visits": [_v("12.5.28"), _v(","), _v("13.6.19")],
+        "payments": [_p("12.5.28"), _p("12.6.11"), _p("13.6.19")],
+    }
+    v = chart_ocr.settle(f, [])["visits"]
+    assert v[1]["date_check"] is True and v[1]["date_suggest"] is None
+
+
+def test_two_digit_year_in_future_is_1900s():
+    assert chart_ocr.written_date("98.3.4", None) == ("1998-03-04", False)
+    assert chart_ocr.written_date("12.3.4", None) == ("2012-03-04", False)
+
+
+def test_settle_keeps_ocr_date_for_scan_lookup():
+    f = {"visits": [_v("13.3.5"), _v(".")], "payments": []}
+    words = HEADERS + [_w("13.3.5", 0.523, 0.25), _w("14.1.22", 0.526, 0.28)]
+    v = chart_ocr.settle(f, words)["visits"]
+    assert v[1]["date_ocr"] == "14.1.22" and v[0]["date_ocr"] is None
+
+
+class FakeGw:
+    """정리 모델 자리 — 부른 인자를 남기고 정해 둔 결과를 돌려준다"""
+
+    def __init__(self, data=None, ok=True):
+        self.data, self.ok, self.calls = data, ok, []
+
+    def complete(self, alias, **kw):
+        inspect.signature(Gateway.complete).bind(
+            None, alias, **kw
+        )  # 실제 게이트웨이 인자 이름과 맞는지
+        self.calls.append({"alias": alias, **kw})
+        return LLMResult(
+            ok=self.ok,
+            text="",
+            data=self.data,
+            model="m",
+            fallback_used=False,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            latency_ms=0,
+            error=None if self.ok else "boom",
+        )
+
+
+def test_structure_sends_ocr_lines_with_required_schema():
+    gw = FakeGw({"patient_name": "구상철"})
+    assert chart_ocr.structure(gw, _load("upstage_ocr.json")) == {"patient_name": "구상철"}
+    call = gw.calls[0]
+    assert call["alias"] == chart_ocr.ALIAS and call["prompt_version"] == chart_ocr.PROMPT_VERSION
+    assert call["schema"]["required"] == list(chart_ocr.SCHEMA["properties"])
+    assert call["schema"]["properties"]["visits"]["items"]["required"]
+    lines = call["messages"][0]["content"].splitlines()
+    assert len(lines) == 304 and all(len(x.split(" ", 4)) == 5 for x in lines)  # x0 y0 x1 y1 글자
+    assert call["system"]  # prompts/chart_ocr/v1.md
+    assert call["max_tokens"] == chart_ocr.MAX_TOKENS
+
+
+def test_structure_failure_raises():
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.structure(FakeGw(ok=False), _load("upstage_ocr.json"))
+    with pytest.raises(chart_ocr.ReadError):
+        chart_ocr.structure(FakeGw(data=["not", "dict"]), _load("upstage_ocr.json"))
+
+
+def test_structure_passes_ref_for_cost():
+    gw = FakeGw({"patient_name": "구상철"})
+    chart_ocr.structure(gw, _load("upstage_ocr.json"), ref=("chart_import_file", "a.png"))
+    assert gw.calls[0]["ref"] == ("chart_import_file", "a.png")
+
+
+def test_money_may_be_blank_but_other_fields_required():
+    # 금액·잔액은 종이에서 빈 칸일 수 있다 — 필수여도 null을 허용해 0을 지어내지 않게
+    s = chart_ocr._required(chart_ocr.SCHEMA)
+    pay = s["properties"]["payments"]["items"]
+    assert pay["required"] == ["date", "item", "amount", "balance"]
+    assert {"type": "null"} in pay["properties"]["amount"]["anyOf"]
+    assert s["properties"]["visits"]["items"]["properties"]["date"]["type"] == "string"

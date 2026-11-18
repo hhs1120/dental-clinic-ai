@@ -1,0 +1,25 @@
+{
+ "id": "iex-34fxLN3wY_QPP6UY",
+ "choices": [
+  {
+   "finish_reason": "stop",
+   "index": 0,
+   "message": {
+    "content": "{\"patient_name\": \"구상철\", \"birth_date\": \"1940-04-05\", \"old_chart_no\": \"2871\", \"first_visit\": \"2010-02-08\", \"chief_complaint\": \"오른쪽 아래 어금니 씹을 때 아픔 잇몸에서 피 남\", \"present_illness\": \"DM (10년↑) 메트포르민 복용 흡연 x, 의치 ×\", \"treatment_plan\": \"1) Scaling (2회), 2) → Ext. (동요도 3), 3) 67 RCT → PFM cr., 4) 7-」 경과 관찰\", \"memo\": \"당뇨! 발치 시 지혈 주의 보호자 아들 010-0000-1187\", \"visits\": [{\"date\": \"10.2.8\", \"location\": \"전악\", \"treatment\": \"Pano, 전반적 치주염 중등도) Scaling 12, 출혈\", \"signature\": \"임\"}, {\"date\": \"2/22\", \"location\": \"전악\", \"treatment\": \"Scaling 212, 에\", \"signature\": \"임\"}, {\"date\": \"1.6.13\", \"location\": \"7\", \"treatment\": \"동요도 3, Ext. 권유 → 환자 거부\", \"signature\": \"강\"}, {\"date\": \"6/27\", \"location\": \"6 7\", \"treatment\": \"Lido 2@, Ext. 봉합 4-0 silk, 지혈 확인 30분 Rx) 아목시실린3일\", \"signature\": \"강\"}, {\"date\": \"7/4\", \"location\": \"7\", \"treatment\": \"S10, 치유 양호\", \"signature\": \"강\"}, {\"date\": \"2.3.14\", \"location\": \"5\", \"treatment\": \"냉온 통증(+) 타진(+) c3 → Lido 2@, Pulp ext. st, caoH\", \"signature\": \"강\"}, {\"date\": \"3/21\", \"location\": \"6\", \"treatment\": \"C&S, caoH 교체, Tx. pain(-)\", \"signature\": \"강\"}, {\"date\": \"4/4\", \"location\": \"5\", \"treatment\": \"CF (GP), core (resin)\", \"signature\": \"강\"}, {\"date\": \"4/18\", \"location\": \"6\", \"treatment\": \"PFM cr. prep, imp., Temp. cr.\", \"signature\": \"강\"}, {\"date\": \"5/2\", \"location\": \"6-\", \"treatment\": \"cr. set (Fuji), 고합 조정\", \"signature\": \"강\"}, {\"date\": \"3.9.9\", \"location\": \"7\", \"treatment\": \"동요도 2~3, 당뇨 조절. 안 됨. → 내과 협진 의뢰서 발급\", \"signature\": \"강\"}, {\"date\": \"14.11.10\", \"location\": \"전악\", \"treatment\": \"Scaling, 출혈 多, DHI 틀니 상담 원함. → 다음에\", \"signature\": \"임\"}], \"payments\": [{\"date\": \"10.2.8\", \"item\": \"초진, Pano, Sc\", \"amount\": 45000, \"balance\": 0}, {\"date\": \"10.2.22\", \"item\": \"Sc\", \"amount\": 30000, \"balance\": 0}, {\"date\": \"11.6.27\", \"item\": \"Ext.\", \"amount\": 8500, \"balance\": 0}, {\"date\": \"12.3.14\", \"item\": \"RCT\", \"amount\": 12400, \"balance\": 0}, {\"date\": \"12.4.18\", \"item\": \"PFM cr.\", \"amount\": 200000, \"balance\": 300000}, {\"date\": \"12.5.2\", \"item\": \"cr. 잔금\", \"amount\": 300000, \"balance\": 0}, {\"date\": \"14.11.10\", \"item\": \"Sc (보험)\", \"amount\": 15800, \"balance\": 0}]}",
+    "refusal": null,
+    "role": "assistant",
+    "audio": null,
+    "tool_calls": null
+   }
+  }
+ ],
+ "created": 1794990709,
+ "model": "information-extract-261113",
+ "object": "chat.completion",
+ "usage": {
+  "prompt_tokens": 6373,
+  "completion_tokens": 893,
+  "total_tokens": 7266
+ },
+ "split_page_ranges": []
+}

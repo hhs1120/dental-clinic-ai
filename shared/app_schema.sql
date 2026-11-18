@@ -474,3 +474,20 @@ CREATE TABLE ax_assistant_messages (
     created_at      TEXT NOT NULL,
     UNIQUE (conversation_id, seq)
 );
+
+-- 종이 차트 이관(기능 정의 §5 종이 차트 이관, backend/emr_bridge.py) — 스캔 한 장 = 한 행. ocr = 업스테이지 OCR 응답,
+-- fields = 정리한 항목(chart_ocr.fields), final = 사람이 고쳐 승인한 항목. JSON. patient_id = source.emr_patients.id
+-- (이름·생년월일이 한 명과 맞으면 초안 때 채움, 승인 때 사람이 확정). emr_*에는 쓰지 않는다
+CREATE TABLE ax_chart_imports (
+    id         INTEGER PRIMARY KEY,
+    filename   TEXT NOT NULL,
+    image      BLOB NOT NULL,
+    ocr        TEXT NOT NULL,
+    fields     TEXT NOT NULL,
+    final      TEXT,
+    patient_id INTEGER,
+    status     TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'rejected')),
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL
+);

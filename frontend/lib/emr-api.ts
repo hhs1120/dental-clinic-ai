@@ -88,6 +88,34 @@ export interface PatientHit {
   sex: string;
 }
 
+/** 승인된 종이 차트 이관 진료 줄(backend/emr_bridge.py chart_imports) */
+export interface PaperRecord {
+  import_id: number;
+  date: string | null;
+  teeth: string | null;
+  fdi: string | null;
+  treatment: string;
+}
+
+/** 승인된 종이 차트 이관 머리 칸 — 메모 탭(backend/emr_bridge.py chart_import_notes) */
+export interface PaperNote {
+  import_id: number;
+  decided_at: string;
+  memo: string;
+  present_illness: string;
+  chief_complaint: string;
+  treatment_plan: string;
+}
+
+/** 승인된 종이 차트 이관 수납 줄 — 수납 탭(backend/emr_bridge.py chart_import_payments) */
+export interface PaperPayment {
+  import_id: number;
+  date: string | null;
+  item: string;
+  amount: number | null;
+  balance: number | null;
+}
+
 export interface PatientRecord {
   patient: PatientHit & {
     birth: string;
@@ -98,6 +126,9 @@ export interface PatientRecord {
     guardian: { chart_no: string; name: string } | null;
   };
   summary: PatientSummary;
+  paper_records: PaperRecord[];
+  paper_notes: PaperNote[];
+  paper_payments: PaperPayment[];
   alerts: {
     code: string;
     label: string;

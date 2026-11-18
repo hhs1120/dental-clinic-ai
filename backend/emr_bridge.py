@@ -4,8 +4,10 @@
 슬롯 검사는 원본 예약이 지키는 운영 규칙 전부(가상 데이터 생성 설계 §1 (3)·(4)) — 영업시간·점심·휴진일, 기준일
 이후, 시술 소요 시간, 담당 역할, 담당 동시 건수, 체어 한 시각 1건(상담은 체어 없음), 같은 환자 같은 날 1건.
 원본(취소 제외)과 승인된 AX 예약을 합쳐 세고, 초안은 자리를 막지 않는다(체어는 승인 때 다시 고른다).
+종이 차트 이관(기능 정의 §5 종이 차트 이관)도 여기서 — 초안·승인·반려는 ax_chart_imports에만.
 값은 source.ax_master_values(prep.master_values)."""
 
+import json
 import sqlite3
 from datetime import date, datetime, time, timedelta
 
@@ -19,6 +21,14 @@ PATIENT_RULES = ("patient_same_day", "unknown_patient")  # free_slots는 환자 
 
 class Conflict(Exception):
     """초안이 아닌 행을 승인·취소하려 함 — 이미 처리됐다(두 번 누름·다른 파트가 먼저)"""
+
+
+class AlreadyImported(Conflict):
+    """그 환자에게 이미 이관한 진료 날짜가 겹친다 — 같은 차트를 두 번 승인하면 EMR에 두 벌로 붙는다"""
+
+    def __init__(self, dates: list[str]):
+        super().__init__(f"이미 이관한 진료 날짜: {', '.join(dates)}")
+        self.dates = dates
 
 
 def _staff(conn: sqlite3.Connection) -> list[dict]:
@@ -408,3 +418,149 @@ def unbooked_requests(conn: sqlite3.Connection, date_from: date, date_to: date) 
             seen.add(r["patient_id"])
         out.append({**dict(r), "no_chart": r["patient_id"] is None})
     return out
+
+
+def match_patient(conn: sqlite3.Connection, name: str, birth_date: str) -> int | None:
+    """이름·생년월일이 정확히 한 명과 맞으면 그 환자 id — 없거나 동명이인이면 None(사람이 고른다)"""
+    rows = conn.execute(
+        "SELECT id FROM source.emr_patients WHERE name = ? AND birth_date = ?",
+        ((name or "").strip(), (birth_date or "").strip()),
+    ).fetchall()
+    return rows[0][0] if len(rows) == 1 else None
+
+
+def chart_import_draft(
+    conn: sqlite3.Connection,
+    *,
+    filename: str,
+    image: bytes,
+    ocr: dict,
+    fields: dict,
+    at: str,
+) -> int:
+    """종이 차트 한 장의 초안 — 환자는 match_patient로 미리 채운다. 커밋은 부르는 쪽"""
+    pid = match_patient(conn, fields.get("patient_name", ""), fields.get("birth_date", ""))
+    cur = conn.execute(
+        "INSERT INTO ax_chart_imports (filename, image, ocr, fields, patient_id, created_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            filename,
+            image,
+            json.dumps(ocr, ensure_ascii=False),
+            json.dumps(fields, ensure_ascii=False),
+            pid,
+            at,
+        ),
+    )
+    return cur.lastrowid
+
+
+def chart_import(conn: sqlite3.Connection, import_id: int) -> dict | None:
+    """이관 한 행 — JSON 칸은 풀고 이미지는 뺀다(따로 읽는다)"""
+    r = conn.execute(
+        "SELECT id, filename, ocr, fields, final, patient_id, status, decided_by, decided_at,"
+        " created_at FROM ax_chart_imports WHERE id = ?",
+        (import_id,),
+    ).fetchone()
+    if r is None:
+        return None
+    out = dict(r)
+    for k in ("ocr", "fields", "final"):
+        out[k] = json.loads(out[k]) if out[k] else None
+    return out
+
+
+def approve_chart_import(
+    conn: sqlite3.Connection,
+    import_id: int,
+    *,
+    final: dict,
+    patient_id: int,
+    by: str,
+    at: str,
+) -> None:
+    """사람이 고친 항목과 환자로 승인 — 모르는 환자면 ValueError, 초안이 아니면 Conflict, 그 환자에게 이미 이관한
+    진료 날짜와 겹치면 AlreadyImported. 커밋은 부르는 쪽"""
+    if not conn.execute(
+        "SELECT 1 FROM source.emr_patients WHERE id = ?", (patient_id,)
+    ).fetchone():
+        raise ValueError(f"모르는 환자: {patient_id}")
+    row = conn.execute("SELECT status FROM ax_chart_imports WHERE id = ?", (import_id,)).fetchone()
+    if (
+        row is None or row["status"] != "draft"
+    ):  # 두 번 누름은 겹치는 날짜보다 먼저 — 자기 날짜를 늘어놓지 않게
+        raise Conflict(f"초안이 아님: {import_id}")
+    done = {r["date"] for r in chart_imports(conn, patient_id)}
+    again = sorted({v.get("date") for v in final.get("visits", [])} & done - {None})
+    if again:
+        raise AlreadyImported(again)
+    cur = conn.execute(
+        "UPDATE ax_chart_imports SET status = 'approved', final = ?, patient_id = ?,"
+        " decided_by = ?, decided_at = ? WHERE id = ? AND status = 'draft'",
+        (json.dumps(final, ensure_ascii=False), patient_id, by, at, import_id),
+    )
+    if cur.rowcount == 0:
+        raise Conflict(f"초안이 아님: {import_id}")
+
+
+def reject_chart_import(conn: sqlite3.Connection, import_id: int, *, by: str, at: str) -> None:
+    """초안만 rejected — 아니면 Conflict. 커밋은 부르는 쪽"""
+    cur = conn.execute(
+        "UPDATE ax_chart_imports SET status = 'rejected', decided_by = ?, decided_at = ?"
+        " WHERE id = ? AND status = 'draft'",
+        (by, at, import_id),
+    )
+    if cur.rowcount == 0:
+        raise Conflict(f"초안이 아님: {import_id}")
+
+
+def _approved_finals(conn: sqlite3.Connection, patient_id: int) -> list[tuple[int, str, dict]]:
+    return [
+        (r["id"], r["decided_at"], json.loads(r["final"]))
+        for r in conn.execute(
+            "SELECT id, decided_at, final FROM ax_chart_imports"
+            " WHERE patient_id = ? AND status = 'approved' ORDER BY id",
+            (patient_id,),
+        )
+    ]
+
+
+def chart_import_notes(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
+    """그 환자의 승인된 이관 머리 칸 — EMR 메모 탭에(경고·병력·주소·치료 계획), 이관 순"""
+    keys = ("memo", "present_illness", "chief_complaint", "treatment_plan")
+    return [
+        {"import_id": i, "decided_at": at} | {k: (f.get(k) or "").strip() for k in keys}
+        for i, at, f in _approved_finals(conn, patient_id)
+    ]
+
+
+def chart_import_payments(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
+    """그 환자의 승인된 이관 수납 줄 — EMR 수납 탭에, 날짜순 {import_id, date, item, amount, balance}"""
+    out = [
+        {
+            "import_id": i,
+            "date": p.get("date"),
+            "item": p.get("item", ""),
+            "amount": p.get("amount"),
+            "balance": p.get("balance"),
+        }
+        for i, _, f in _approved_finals(conn, patient_id)
+        for p in f.get("payments", [])
+    ]
+    return sorted(out, key=lambda x: (x["date"] or "", x["import_id"]))
+
+
+def chart_imports(conn: sqlite3.Connection, patient_id: int) -> list[dict]:
+    """그 환자의 승인된 이관 진료 줄 — 날짜순(같으면 이관 순) {import_id, date, teeth, fdi, treatment}"""
+    out = [
+        {
+            "import_id": i,
+            "date": v.get("date"),
+            "teeth": v.get("teeth"),
+            "fdi": v.get("fdi"),
+            "treatment": v.get("treatment", ""),
+        }
+        for i, _, f in _approved_finals(conn, patient_id)
+        for v in f.get("visits", [])
+    ]
+    return sorted(out, key=lambda x: (x["date"] or "", x["import_id"]))
