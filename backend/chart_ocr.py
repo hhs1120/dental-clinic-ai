@@ -22,6 +22,8 @@ EXTRACT_URL = "https://api.upstage.ai/v1/information-extraction/chat/completions
 TIMEOUT_S = 120
 LOW_CONFIDENCE = 0.8  # 이보다 낮은 OCR 단어는 화면에서 강조
 DITTO = ("〃", '"', "''", "״")
+# 손글씨 〃를 OCR·정보 추출이 이렇게 읽는다(스파이크) — 〃로 보되 확인 필요
+DITTO_LIKE = (",", ",,", "'", "11", "//", "„")
 
 # 치과 약어 → 뜻(화면 툴팁·제안). 한 낱말 약어만 제안에 쓴다
 ABBREVIATIONS = {
@@ -240,9 +242,8 @@ def suggest(text: str) -> list[dict]:
     out = []
     for word in re.findall(r"[A-Za-z0-9&/]+[.)]?", text):
         n = _norm(word)
-        if (
-            n in _KEYS or n.isdigit() or len(n) < 3
-        ):  # 두 글자는 엇비슷한 약어가 너무 많다(st → set)
+        # 숫자로 시작(1st·2@)은 약어가 아니고, 두 글자는 엇비슷한 약어가 너무 많다(st → set)
+        if n in _KEYS or n[0].isdigit() or len(n) < 3:
             continue
         hit = _KEYS.get(n.translate(_LOOKALIKE)) or next(
             (_KEYS[k] for k in difflib.get_close_matches(n, _KEYS, n=1, cutoff=0.6)), None
@@ -256,17 +257,13 @@ def fields(extract_resp: dict) -> dict:
     """정보 추출 결과 → 화면 폼 — 머리 칸 그대로, 진료·수납은 날짜 정리, 진료는 치아 숫자·약어 제안"""
     raw = json.loads(extract_resp["choices"][0]["message"]["content"])
     head = {k: raw.get(k, "") for k, v in SCHEMA["properties"].items() if v["type"] != "array"}
-    visits, prev = [], None
+    visits = []
     for v in raw.get("visits", []):
-        d, check = written_date(v.get("date", ""), prev)
-        prev = d or prev
         loc = v.get("location", "")
         teeth = "전악" if "전악" in loc else " ".join(re.findall(r"\d", loc))
         visits.append(
             {
                 "date_raw": v.get("date", ""),
-                "date": d,
-                "date_check": check,
                 "location_raw": loc,
                 "teeth": teeth,
                 "quadrant": None,
@@ -276,18 +273,94 @@ def fields(extract_resp: dict) -> dict:
                 "suggestions": suggest(v.get("treatment", "")),
             }
         )
-    payments, prev = [], None
+    payments = []
     for p in raw.get("payments", []):
-        d, check = written_date(p.get("date", ""), prev)
-        prev = d or prev
         payments.append(
             {
                 "date_raw": p.get("date", ""),
-                "date": d,
-                "date_check": check,
                 "item": p.get("item", ""),
                 "amount": p.get("amount"),
                 "balance": p.get("balance"),
             }
         )
-    return head | {"visits": visits, "payments": payments}
+    return settle(head | {"visits": visits, "payments": payments}, [])
+
+
+def _date_column(words: list[dict]) -> list[dict]:
+    """진료 경과 Date 칸의 OCR 단어(위에서 아래로) — 머리 글자 Date·Location 가운데 사이 거리를 칸 폭으로"""
+    head = {
+        w["text"]: w
+        for w in words
+        if w["text"] in ("Date", "Location") and w["box"][0] > 0.5 and w["box"][1] < 0.1
+    }
+    if len(head) < 2:
+        return []
+    cx = {k: (w["box"][0] + w["box"][2]) / 2 for k, w in head.items()}
+    width = cx["Location"] - cx["Date"]
+    top = head["Date"]["box"][3]
+    col = [
+        w
+        for w in words
+        if abs((w["box"][0] + w["box"][2]) / 2 - cx["Date"]) < width / 2 and w["box"][1] > top
+    ]
+    return sorted(col, key=lambda w: w["box"][1])
+
+
+def _fill_from_ocr(visits: list[dict], words: list[dict]) -> list[str | None]:
+    """정보 추출이 날짜를 못 읽은 진료(날짜도 〃도 아님)에 OCR이 Date 칸에서 읽은 글자를 채운다 — 양쪽이 같은
+    글자로 맞는 진료 사이 틈에서, 못 읽은 진료 수와 남는 OCR 단어 수가 같을 때만 차례로 짝짓는다"""
+    col = [w["text"] for w in _date_column(words)]
+    out: list[str | None] = [None] * len(visits)
+    anchors, j = [], 0
+    for i, v in enumerate(visits):
+        k = next((k for k in range(j, len(col)) if col[k] == v["date_raw"]), None)
+        if k is not None:
+            anchors.append((i, k))
+            j = k + 1
+    bounds = [(-1, -1), *anchors, (len(visits), len(col))]
+    for (i0, k0), (i1, k1) in zip(bounds, bounds[1:], strict=False):
+        missing = [i for i in range(i0 + 1, i1) if _unreadable(visits[i]["date_raw"])]
+        spare = col[k0 + 1 : k1]
+        if missing and len(missing) == len(spare):
+            for i, text in zip(missing, spare, strict=True):
+                out[i] = text
+    return out
+
+
+def _unreadable(raw: str) -> bool:
+    raw = raw.strip()
+    return raw not in DITTO + DITTO_LIKE and _parse(raw) is None and "/" not in raw
+
+
+def settle(f: dict, words: list[dict]) -> dict:
+    """날짜 정리(설계 §설계 2) — ① 정보 추출이 빠뜨린 진료 날짜는 OCR 글자로 채우고 ② 윗줄에서 연도·날짜를
+    이어받은 뒤 ③ 수납 장부와 맞춰 본다: 같은 날 수납이 있으면 확인됨, 연도를 이어받은 날짜가 장부에 없고 같은
+    월·일 수납이 한 번이면 그 연도로 고친다(확인 필요). 원문(date_raw)에서 다시 계산해 몇 번 불러도 같다"""
+    payments, prev = [], None
+    for p in f["payments"]:
+        d, check = written_date(p["date_raw"], prev)
+        prev = d or prev
+        payments.append(p | {"date": d, "date_check": check})
+    paid = {p["date"] for p in payments if p["date"] and not p["date_check"]}
+
+    filled = _fill_from_ocr(f["visits"], words)
+    visits, prev = [], None
+    for v, ocr_text in zip(f["visits"], filled, strict=True):
+        raw = ocr_text or v["date_raw"].strip()
+        note = "OCR 글자로 채움" if ocr_text else None
+        if raw in DITTO_LIKE:
+            d, check, note = prev, True, "〃(윗줄과 같은 날)로 봄"
+        else:
+            d, check = written_date(raw, prev)
+        read = raw not in DITTO + DITTO_LIKE  # 그 줄에 날짜를 실제로 썼다
+        inherited = read and "/" in raw  # 연도를 윗줄에서 이어받음
+        if d and read and d in paid:
+            check = False
+            note = " · ".join(x for x in (note, "수납 장부와 일치") if x)
+        elif d and (inherited or check) and d not in paid:
+            same = {x for x in paid if x[5:] == d[5:]}
+            if len(same) == 1:
+                d, check, note = same.pop(), True, "수납 장부 연도로 고침"
+        prev = d or prev
+        visits.append(v | {"date": d, "date_check": check, "date_note": note})
+    return f | {"visits": visits, "payments": payments}

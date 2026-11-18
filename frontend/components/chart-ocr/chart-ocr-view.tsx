@@ -491,8 +491,13 @@ function InspectPanel({
         ) : (
           <div className="flex flex-col gap-2">
             <p className="text-sm">
-              원문 <b>{v.date_raw}</b> — 앞 진료보다 날짜가 거꾸로 가서
-              확인합니다. 추정한 날짜는 <b>{v.date ?? "없음"}</b>입니다.
+              정보 추출이 읽은 글 <b>{v.date_raw || "(없음)"}</b> → 날짜{" "}
+              <b>{v.date ?? "없음"}</b>.{" "}
+              {v.date_note
+                ? `${v.date_note}.`
+                : v.date_check
+                  ? "앞 진료보다 날짜가 거꾸로 가거나 읽지 못해 확인합니다."
+                  : ""}
             </p>
             <p className="text-xs text-muted-foreground">
               다르면 오른쪽 날짜 칸을 고치세요.

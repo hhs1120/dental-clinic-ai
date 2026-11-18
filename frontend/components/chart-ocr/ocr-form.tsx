@@ -271,7 +271,7 @@ export function OcrForm({
                     setVisit(i, { date: e.target.value, date_check: false })
                   }
                 />
-                {v.date_check && (
+                {v.date_check ? (
                   <button
                     type="button"
                     className="cursor-pointer rounded-4xl hover:opacity-80"
@@ -281,6 +281,20 @@ export function OcrForm({
                       날짜 확인 · 원문 {v.date_raw} ›
                     </Badge>
                   </button>
+                ) : (
+                  v.date_note && (
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded-4xl hover:opacity-80"
+                      onClick={() => onInspect("date", i)}
+                    >
+                      <Badge
+                        variant={v.date_note.includes("수납") ? "ok" : "info"}
+                      >
+                        {v.date_note}
+                      </Badge>
+                    </button>
+                  )
                 )}
                 <Input
                   className="w-20"

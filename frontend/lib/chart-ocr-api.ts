@@ -17,6 +17,7 @@ export interface Visit {
   date_raw: string;
   date: string | null;
   date_check: boolean;
+  date_note: string | null; // 교차검증 근거 — OCR 글자로 채움·수납 장부와 일치·수납 장부 연도로 고침·〃로 봄
   location_raw: string;
   teeth: string; // 숫자(공백 구분) 또는 "전악"
   quadrant: number | null; // 사람이 십자에서 고른 사분면
