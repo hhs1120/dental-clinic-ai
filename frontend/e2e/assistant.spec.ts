@@ -380,3 +380,145 @@ test("assistant: 시작 화면 오늘 요약 — 0건은 빼고 오늘 화면으
   await expect(line).not.toContainText("급한 통화");
   await expect(line).toHaveAttribute("href", "/today");
 });
+
+test("assistant: 환자·통화 카드는 사람별 바로 가기 칩 하나로 묶인다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({
+              text: "2건입니다.",
+              cards: [
+                {
+                  type: "call",
+                  id: "c-1",
+                  data: {
+                    call_uid: "c-1",
+                    at: "2026-11-27 15:15:00",
+                    direction: "inbound",
+                    name: "송미영",
+                    chart_no: "C-1",
+                    purpose: "book",
+                    summary: "약 이름 확인 뒤 연락",
+                  },
+                },
+                {
+                  type: "patient",
+                  id: "C-1",
+                  data: { chart_no: "C-1", name: "송미영", birth_date: null },
+                },
+                {
+                  type: "call",
+                  id: "c-2",
+                  data: {
+                    call_uid: "c-2",
+                    at: "2026-11-25 13:45:00",
+                    direction: "inbound",
+                    name: "김지훈",
+                    chart_no: null,
+                    purpose: "emergency",
+                    summary: "잇몸 부기",
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("안 잡힌 사람"));
+  const bar = page.getByLabel("바로 가기");
+  await expect(bar).toContainText("송미영");
+  await expect(bar.getByRole("link", { name: "11/27 통화" })).toHaveAttribute(
+    "href",
+    "/calls?tab=history&q=C-1&call=c-1",
+  );
+  // 근거 통화가 있으면 통화 기록 링크는 따로 두지 않는다(날짜가 그 사람의 통화 기록으로 간다)
+  await expect(bar.getByRole("link", { name: "통화 기록" })).toHaveCount(0);
+  await expect(bar.getByRole("link", { name: "11/25 통화" })).toHaveAttribute(
+    "href",
+    `/calls?${new URLSearchParams({ tab: "history", q: "김지훈", call: "c-2" })}`,
+  );
+  await expect(page.getByText("약 이름 확인 뒤 연락")).toHaveCount(0);
+});
+
+test("assistant: 문서 출처는 카드, 사례 출처는 칩 — 누르면 발췌가 펼쳐진다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  const src = (id: string, extra: object) => ({
+    type: "source",
+    id,
+    data: {
+      id,
+      title: null,
+      body: "",
+      event_date: null,
+      chart_no: null,
+      patient_name: null,
+      caller_name: null,
+      direction: null,
+      doc_type: null,
+      version: null,
+      is_outdated: false,
+      ...extra,
+    },
+  });
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({
+              text: "만 65세 이상입니다.",
+              cards: [
+                src("doc:21:1", {
+                  source_type: "document",
+                  doc_type: "insurance_guide",
+                  title: "임플란트 건강보험 적용 > 적용 대상 나이",
+                  body: "만 65세 이상",
+                }),
+                src("call:c-9:0", {
+                  source_type: "call",
+                  direction: "수신",
+                  caller_name: "이진호",
+                  event_date: "2026-11-25",
+                  body: "임플란트 1차도 건강보험이 되는지",
+                }),
+              ],
+            }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("임플란트 보험"));
+  const docs = page.getByRole("region", { name: "문서 출처" });
+  await expect(
+    docs.getByRole("heading", {
+      name: "임플란트 건강보험 적용 › 적용 대상 나이",
+    }),
+  ).toBeVisible();
+  await expect(docs).not.toContainText("이진호");
+  const chip = page
+    .getByLabel("사례 출처")
+    .getByRole("button", { name: /통화\s*이진호 · 11\/25/ });
+  await expect(page.getByText("임플란트 1차도 건강보험이 되는지")).toHaveCount(
+    0,
+  );
+  await chip.click();
+  await expect(
+    page.getByText("임플란트 1차도 건강보험이 되는지"),
+  ).toBeVisible();
+});

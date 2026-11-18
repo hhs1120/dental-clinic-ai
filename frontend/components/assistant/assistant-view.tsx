@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import Markdown, { type Components } from "react-markdown";
 
-import { AssistantCard } from "@/components/assistant/cards";
+import { ReplyCards } from "@/components/assistant/cards";
 import { TurnSteps, type Step } from "@/components/assistant/turn-steps";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +19,7 @@ const CHIPS = [
   "📞 지난주 전화로 예약 원했는데 안 잡힌 사람",
   "🩺 내일 환자 중 미수·주의사항 있는 사람",
   "🧾 재심 기한이 한 달 안 남은 삭감 건",
-  "💳 이번 주 카드 입금 안 맞는 날",
+  "💳 지난달 카드 입금 안 맞는 날",
   "☎️ 어제 온 전화 중 다시 연락할 곳",
   "📋 임플란트 건강보험 적용 기준",
 ];
@@ -59,6 +60,33 @@ function TodayLine() {
     </Link>
   );
 }
+
+// 답 본문은 마크다운으로 그린다 — 모델이 쓰는 "- " 목록이 항목 사이를 띄운 진짜 목록이 되게(원시 HTML은 그리지 않는다,
+// react-markdown 기본값). 취소선 같은 GFM은 쓰지 않는다("11-23 ~ 11-29"의 ~가 지워지지 않게)
+const REPLY_MD: Components = {
+  p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
+  ul: ({ children }) => (
+    <ul className="my-2 flex list-disc flex-col gap-1.5 pl-5">{children}</ul>
+  ),
+  ol: ({ children, start }) => (
+    <ol start={start} className="my-2 flex list-decimal flex-col gap-1.5 pl-5">
+      {children}
+    </ol>
+  ),
+};
+
+function ReplyText({ text }: { text: string }) {
+  return (
+    <div className="leading-relaxed">
+      <Markdown components={REPLY_MD}>{text}</Markdown>
+    </div>
+  );
+}
+
+/** 고정 문구로 끝난 답(상태가 ok가 아님)은 초안 카드만 — 백엔드도 이제 그렇게 저장하지만, 그 전에 저장된 대화도
+ * 같게 보이도록(backend/assistant.py _reply) */
+const shownCards = (status: string | undefined, cards: Card[]) =>
+  !status || status === "ok" ? cards : cards.filter((c) => c.type === "draft");
 
 type Item =
   | { id: number; role: "user"; text: string }
@@ -135,7 +163,7 @@ export function AssistantView() {
             patch(aid, (it) => ({
               ...it,
               text: e.text,
-              cards: e.cards,
+              cards: shownCards(e.status, e.cards),
               running: false,
               steps: e.tool_calls.length
                 ? e.tool_calls.map((t) => ({ tool: t.name, args: t.args }))
@@ -187,7 +215,7 @@ export function AssistantView() {
                   id: next.current++,
                   role: "assistant",
                   text: m.text,
-                  cards: m.cards,
+                  cards: shownCards(m.status, m.cards),
                   steps: m.tool_calls.map((t) => ({
                     tool: t.name,
                     args: t.args,
@@ -314,16 +342,9 @@ export function AssistantView() {
         ) : (
           <div key={it.id} className="flex flex-col gap-3">
             <TurnSteps steps={it.steps} running={it.running} />
-            {it.text && <p className="whitespace-pre-wrap">{it.text}</p>}
+            {it.text && <ReplyText text={it.text} />}
             {it.error && <p className="text-destructive">{it.error}</p>}
-            {it.cards.map((card) => (
-              <AssistantCard
-                key={`${card.type}:${card.id}`}
-                card={card}
-                onRetry={retry}
-                readOnly={readOnly}
-              />
-            ))}
+            <ReplyCards cards={it.cards} onRetry={retry} readOnly={readOnly} />
           </div>
         ),
       )}
