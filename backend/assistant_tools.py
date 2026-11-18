@@ -17,7 +17,7 @@ from backend.harness.tools import Tool
 from backend.query_tools import _procedure_codes, query_tools
 from shared.clinic import Clinic
 
-TOOLS_VERSION = "v5"  # v2: free_slots에 date_to(기간을 한 번에) · v3: draft_appointment에 window(시간대) · v4: prep_rows 칩 뜻, 초안 전 free_slots 불필요 · v5: 상담은 free_chairs 없음, wrong_role·bad_range·before_today
+TOOLS_VERSION = "v6"  # v2: free_slots에 date_to(기간을 한 번에) · v3: draft_appointment에 window(시간대) · v4: prep_rows 칩 뜻, 초안 전 free_slots 불필요 · v5: 상담은 free_chairs 없음, wrong_role·bad_range·before_today · v6: unknown_procedure에 등록 시술 이름
 ROLES = {"원장": "doctor", "위생사": "hygienist", "상담실장": "consultant"}
 ROLE_NAMES = {v: k for k, v in ROLES.items()}
 LIST_CAP = 20  # 목록 도구가 한 번에 돌려주는 행 수 — count는 전체
@@ -93,7 +93,9 @@ def _procedure(conn, name: str) -> tuple[str | None, dict | None]:
         return codes[0], None
     if codes or candidates:
         return None, {"error": ["ambiguous_procedure"], "candidates": names or candidates}
-    return None, {"error": ["unknown_procedure"]}
+    # 모르는 이름이면 등록된 시술 이름을 함께 — 모델이 고쳐 다시 부를 수 있게("임플란트 상담" → "상담")
+    names = [r[0] for r in conn.execute("SELECT name FROM source.emr_procedures ORDER BY code")]
+    return None, {"error": ["unknown_procedure"], "names": names}
 
 
 def _find_calls(conn, args: dict) -> dict:

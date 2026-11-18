@@ -61,7 +61,7 @@ TURN = {"conversation_id": 7, "turn": 3}
 def test_registry_names_fixed():
     tools = assistant_tools.assistant_tools(CLINIC, None, TURN)
     assert {t.name for t in tools} == NAMES and len(tools) == len(NAMES)
-    assert assistant_tools.TOOLS_VERSION == "v5"
+    assert assistant_tools.TOOLS_VERSION == "v6"
     assert {t.name for t in tools if t.writes} == {"draft_appointment"}
     assert [t.name for t in tools if t.ends_run] == ["done_tools"]
 
@@ -126,9 +126,9 @@ def test_free_slots_tool_open_day_and_role(conn):
     assert call(conn, "free_slots", date=WED, procedure="스케일링", staff="없는사람") == {
         "error": ["unknown_staff"]
     }
-    assert call(conn, "free_slots", date=WED, procedure="없는시술") == {
-        "error": ["unknown_procedure"]
-    }
+    unknown = call(conn, "free_slots", date=WED, procedure="없는시술")
+    assert unknown["error"] == ["unknown_procedure"]
+    assert {"스케일링", "레진", "상담"} <= set(unknown["names"])  # 고쳐 다시 부를 등록 이름
 
 
 def test_free_slots_range_equals_days_joined(conn):
@@ -251,7 +251,7 @@ def test_draft_tool_rejects_bad_slot(conn):
     assert got == {"error": ["closed_day"]}
     assert conn.execute("SELECT COUNT(*) FROM ax_emr_writes").fetchone()[0] == 0
     bad = call(conn, "draft_appointment", **_draft_args(procedure="없는시술"))
-    assert bad == {"error": ["unknown_procedure"]}
+    assert bad["error"] == ["unknown_procedure"] and "상담" in bad["names"]
     assert call(conn, "draft_appointment", **_draft_args(chart_no="C-99"))["error"] == [
         "unknown_patient"
     ]
