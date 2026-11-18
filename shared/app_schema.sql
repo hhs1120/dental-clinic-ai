@@ -475,7 +475,7 @@ CREATE TABLE ax_assistant_messages (
     UNIQUE (conversation_id, seq)
 );
 
--- 종이 차트 이관(차트 OCR 설계 §설계 3, backend/emr_bridge.py) — 스캔 한 장 = 한 행. ocr = 업스테이지 OCR 응답,
+-- 종이 차트 이관(기능 정의 §5 종이 차트 이관, backend/emr_bridge.py) — 스캔 한 장 = 한 행. ocr = 업스테이지 OCR 응답,
 -- fields = 정리한 항목(chart_ocr.fields), final = 사람이 고쳐 승인한 항목. JSON. patient_id = source.emr_patients.id
 -- (이름·생년월일이 한 명과 맞으면 초안 때 채움, 승인 때 사람이 확정). emr_*에는 쓰지 않는다
 CREATE TABLE ax_chart_imports (

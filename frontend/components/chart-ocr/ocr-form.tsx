@@ -12,6 +12,7 @@ import {
   type ChartImport,
   fdi,
   type Fields,
+  isoDate,
   matchWords,
   unionBox,
   type Visit,
@@ -96,6 +97,8 @@ function newVisit(from: Visit, treatment: string, note: string): Visit {
     date_check: true,
     date_note: note,
     date_suggest: null,
+    date_ocr: null,
+    uid: crypto.randomUUID(),
     location_raw: "",
     teeth: "",
     quadrant: null,
@@ -236,7 +239,7 @@ export function OcrForm({
   ) => void;
 }) {
   const locked = item.status !== "draft";
-  const caret = useRef<Record<number, number>>({});
+  const caret = useRef<Record<string, number>>({}); // 줄 uid → 진료 내용 칸 커서 자리
   const setVisit = (i: number, patch: Partial<Visit>) =>
     setFields(withVisit(fields, i, patch));
   const headFocus = (text: string) =>
@@ -295,7 +298,7 @@ export function OcrForm({
             onFocus(visitBand(item.fields.visits, v.src ?? i, item.words));
           return (
             <div
-              key={i}
+              key={v.uid ?? i}
               onFocus={focus}
               className={cn(
                 "group flex flex-col gap-2 rounded-md border bg-card p-2.5",
@@ -309,9 +312,13 @@ export function OcrForm({
                   className="w-32"
                   value={v.date ?? ""}
                   placeholder="YYYY-MM-DD"
+                  aria-label="진료 날짜"
                   disabled={locked}
                   onChange={(e) =>
-                    setVisit(i, { date: e.target.value, date_check: false })
+                    setVisit(i, {
+                      date: e.target.value,
+                      date_check: !isoDate(e.target.value),
+                    })
                   }
                 />
                 {v.date_check ? (
@@ -367,9 +374,11 @@ export function OcrForm({
               </div>
               <Input
                 value={v.treatment}
+                aria-label="진료 내용"
                 disabled={locked}
                 onSelect={(e) => {
-                  caret.current[i] = e.currentTarget.selectionStart ?? 0;
+                  caret.current[v.uid ?? i] =
+                    e.currentTarget.selectionStart ?? 0;
                 }}
                 onChange={(e) => setVisit(i, { treatment: e.target.value })}
               />
@@ -381,7 +390,9 @@ export function OcrForm({
                     variant="ghost"
                     title="진료 내용 칸에서 커서를 둔 자리에서 둘로 나눕니다"
                     onClick={() =>
-                      setFields(splitVisit(fields, i, caret.current[i] ?? 0))
+                      setFields(
+                        splitVisit(fields, i, caret.current[v.uid ?? i] ?? 0),
+                      )
                     }
                   >
                     커서 자리에서 줄 나누기
@@ -467,24 +478,31 @@ export function OcrForm({
             >
               <Input
                 value={p.date ?? ""}
+                aria-label="수납 날짜"
                 disabled={locked}
                 className={cn(p.date_check && "border-status-warn-border")}
                 onChange={(e) =>
-                  set({ date: e.target.value, date_check: false })
+                  set({
+                    date: e.target.value,
+                    date_check: !isoDate(e.target.value),
+                  })
                 }
               />
               <Input
                 value={p.item}
+                aria-label="수납 내용"
                 disabled={locked}
                 onChange={(e) => set({ item: e.target.value })}
               />
               <Input
                 value={p.amount?.toLocaleString("ko-KR") ?? ""}
+                aria-label="수납 금액"
                 disabled={locked}
                 onChange={(e) => set({ amount: num(e.target.value) })}
               />
               <Input
                 value={p.balance?.toLocaleString("ko-KR") ?? ""}
+                aria-label="수납 잔액"
                 disabled={locked}
                 onChange={(e) => set({ balance: num(e.target.value) })}
               />
@@ -504,8 +522,8 @@ export function remaining(
   const out: string[] = [];
   if (!patient) out.push("EMR 환자 고르기");
   const dates =
-    fields.visits.filter((v) => v.date_check || !v.date).length +
-    fields.payments.filter((p) => p.date_check || !p.date).length;
+    fields.visits.filter((v) => v.date_check || !isoDate(v.date)).length +
+    fields.payments.filter((p) => p.date_check || !isoDate(p.date)).length;
   if (dates) out.push(`날짜 확인 ${dates}곳`);
   const loc = fields.visits.filter(
     (v) => v.teeth && v.teeth !== "전악" && !v.quadrant,

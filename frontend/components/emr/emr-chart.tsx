@@ -51,7 +51,7 @@ export function EmrChart({
     (a) => a.recorded <= today && (!a.ends || today < a.ends),
   );
   const treatments = [...record.treatments].reverse();
-  // 승인된 종이 차트 이관 줄(차트 OCR 설계 §설계 3) — EMR 이전이라 진료 기록 맨 아래에, 최근 것 먼저
+  // 승인된 종이 차트 이관 줄(기능 정의 §5 종이 차트 이관) — EMR 이전이라 진료 기록 맨 아래에, 최근 것 먼저
   const paper = [...record.paper_records].reverse();
   const live = (todaySchedule?.appointments ?? []).filter(
     (a) => a.status !== "cancelled" && a.status !== "noshow",

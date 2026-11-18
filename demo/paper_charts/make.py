@@ -1,4 +1,4 @@
-"""시연용 옛 종이 차트 PNG — charts.json 한 건마다 template.html을 채워 Playwright CLI(frontend 설치본, 설치된 Chrome)로
+"""옛 종이 차트 샘플 PNG — charts.json 한 건마다 template.html을 채워 Playwright CLI(frontend 설치본, 설치된 Chrome)로
 찍는다(차트 OCR 설계 §설계 1). 동네 치과에서 파는 두 쪽 펼침 차트 구성(왼쪽 구강 검사·C.C·P.I·치료 계획·수납, 오른쪽
 진료 경과 줄 공책 — 위치 칸에 점선 십자)을 따르고 인쇄 양식 위에 손글씨 글꼴로 기입한다. 흔들림·얼룩은 차트 번호로
 시드를 고정해 실행마다 같다. 생성기·data/·정답과 무관한 고정 샘플이다."""

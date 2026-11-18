@@ -473,7 +473,7 @@ def test_approve_no_chair_left_rejects(conn):
     assert _chair(conn, a["id"]) == chairs
 
 
-# 종이 차트 이관(차트 OCR 설계 §설계 3) — 초안·승인·반려, 환자 맞추기, 승인된 진료 줄만 합쳐 읽기
+# 종이 차트 이관(기능 정의 §5 종이 차트 이관) — 초안·승인·반려, 환자 맞추기, 승인된 진료 줄만 합쳐 읽기
 def _fields(name="김철수", birth="1980-01-01"):
     return {
         "patient_name": name,
@@ -555,3 +555,21 @@ def test_chart_import_never_writes_emr(conn):
     emr_bridge.approve_chart_import(conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT)
     after = {t: conn.execute(f"SELECT COUNT(*) FROM source.{t}").fetchone()[0] for t in tables}
     assert before == after
+
+
+def test_approve_chart_import_blocks_same_visit_dates_twice(conn):
+    # 같은 차트를 두 번 승인하면 EMR에 진료·수납이 두 벌 — 이미 이관한 진료 날짜가 겹치면 막는다
+    first, second = _chart_draft(conn), _chart_draft(conn)
+    emr_bridge.approve_chart_import(conn, first, final=_fields(), patient_id=MISSED, by=BY, at=AT)
+    with pytest.raises(emr_bridge.AlreadyImported) as e:
+        emr_bridge.approve_chart_import(
+            conn, second, final=_fields(), patient_id=MISSED, by=BY, at=AT
+        )
+    assert e.value.dates == ["2012-03-14", "2012-03-21"]
+    assert emr_bridge.chart_import(conn, second)["status"] == "draft"
+    other = _fields() | {"visits": [{"date": "2013-01-02", "teeth": "", "treatment": "SC"}]}
+    emr_bridge.approve_chart_import(conn, second, final=other, patient_id=MISSED, by=BY, at=AT)
+
+
+def test_match_patient_tolerates_none(conn):
+    assert emr_bridge.match_patient(conn, None, None) is None

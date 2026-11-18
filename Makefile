@@ -207,6 +207,6 @@ expense-ai:
 assistant-eval:
 	uv run $(if $(wildcard .env),--env-file .env) python -m evaluation.assistant run --split dev $(if $(TOOL_ALIAS),--tool-alias $(TOOL_ALIAS)) $(if $(REPLY_ALIAS),--reply-alias $(REPLY_ALIAS)) $(if $(BASELINE),--baseline)
 
-# 시연용 샘플 종이 차트 PNG(demo/paper_charts/, 설치된 Chrome으로 찍는다) — 업스테이지 호출 없음
+# 샘플 종이 차트 PNG(demo/paper_charts/, 설치된 Chrome으로 찍는다) — 업스테이지 호출 없음
 paper-charts: frontend/node_modules
 	uv run python demo/paper_charts/make.py

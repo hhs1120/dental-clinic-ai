@@ -510,7 +510,7 @@ def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_d
 
 
 def _paper(paths: tuple[Path, Path], chart_no: str) -> dict:
-    """승인된 종이 차트 이관(emr_bridge, 차트 OCR 설계 §설계 3) — 진료 줄·메모·수납. 앱 DB가 없으면 빈 목록"""
+    """승인된 종이 차트 이관(emr_bridge, 기능 정의 §5 종이 차트 이관) — 진료 줄·메모·수납. 앱 DB가 없으면 빈 목록"""
     empty = {"paper_records": [], "paper_notes": [], "paper_payments": []}
     if not Path(paths[0]).exists():
         return empty
@@ -1541,7 +1541,7 @@ def job(job_id: int, paths: Paths) -> dict:
     return dict(row)
 
 
-# 종이 차트 이관(차트 OCR 설계 §설계 3) — 업스테이지로 읽어 초안, 사람이 고쳐 승인. 쓰기는 emr_bridge
+# 종이 차트 이관(기능 정의 §5 종이 차트 이관) — 업스테이지로 읽어 초안, 사람이 고쳐 승인. 쓰기는 emr_bridge
 CHART_OCR_MAX_BYTES = 5 * 1024 * 1024
 _IMAGE_TYPES = {b"\x89PNG": "image/png", b"\xff\xd8\xff": "image/jpeg"}
 
@@ -1557,7 +1557,7 @@ def get_upstage():
 
 
 def get_paper_charts() -> Path:
-    """시연용 샘플 종이 차트 폴더(demo/paper_charts/make.py가 만든 PNG)"""
+    """샘플 종이 차트 폴더(demo/paper_charts/make.py가 만든 PNG)"""
     return ROOT / "demo" / "paper_charts"
 
 
@@ -1601,20 +1601,16 @@ def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
 
 
 def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -> dict:
-    """업스테이지로 읽어 초안 하나 — 실패하면 행을 남기지 않고 502"""
+    """업스테이지로 읽어 초안 하나 — 실패하면(응답을 못 읽은 것 포함) 행을 남기지 않고 502"""
     try:
         ocr_resp, extract_resp = upstage(image, filename)
+        fields = chart_ocr.refresh(chart_ocr.fields(extract_resp), chart_ocr.words(ocr_resp))
     except chart_ocr.UpstageError as e:
         raise HTTPException(502, str(e)) from e
     conn = _open_rw(paths)
     try:
         import_id = emr_bridge.chart_import_draft(
-            conn,
-            filename=filename,
-            image=image,
-            ocr=ocr_resp,
-            fields=chart_ocr.refresh(chart_ocr.fields(extract_resp), chart_ocr.words(ocr_resp)),
-            at=_stamp(now),
+            conn, filename=filename, image=image, ocr=ocr_resp, fields=fields, at=_stamp(now)
         )
         conn.commit()
         return _chart_detail(conn, import_id)
@@ -1622,25 +1618,35 @@ def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -
         conn.close()
 
 
-def _sample_ids(paths) -> dict[str, int]:
-    """샘플 파일 이름 → 가장 최근 이관 id(앱 DB가 없으면 빈 것)"""
+def _same_image(paths, image: bytes) -> int | None:
+    """같은 이미지를 읽은 가장 최근 이관 id(반려는 빼고) — 다시 부르지 않는다. 앱 DB가 없으면 None"""
     if not Path(paths[0]).exists():
-        return {}
+        return None
     conn = _open_rw(paths)
     try:
-        return {
-            r["filename"]: r["id"]
-            for r in conn.execute("SELECT id, filename FROM ax_chart_imports ORDER BY id")
-        }
+        row = conn.execute(
+            "SELECT id FROM ax_chart_imports WHERE image = ? AND status != 'rejected'"
+            " ORDER BY id DESC LIMIT 1",
+            (image,),
+        ).fetchone()
+        return row["id"] if row else None
+    finally:
+        conn.close()
+
+
+def _detail(paths, import_id: int) -> dict:
+    conn = _open_rw(paths)
+    try:
+        return _chart_detail(conn, import_id)
     finally:
         conn.close()
 
 
 @app.get("/chart-ocr/samples")
 def chart_ocr_samples(paths: Paths, samples: PaperCharts) -> list:
-    ids = _sample_ids(paths)
     return [
-        {"name": f.name, "imported_id": ids.get(f.name)} for f in sorted(samples.glob("*.png"))
+        {"name": f.name, "imported_id": _same_image(paths, f.read_bytes())}
+        for f in sorted(samples.glob("*.png"))
     ]
 
 
@@ -1661,16 +1667,13 @@ def chart_ocr_sample_image(name: str, samples: PaperCharts) -> Response:
 def chart_ocr_sample(
     name: str, paths: Paths, samples: PaperCharts, upstage: Upstage, now: Now
 ) -> dict:
-    """샘플 읽기 — 이미 읽은 샘플은 저장된 행을 돌려준다(녹화 때 업스테이지 대기·실패 없이)"""
-    path = _sample_path(samples, name)
-    saved = _sample_ids(paths).get(name)
+    """샘플 읽기 — 같은 이미지를 읽은 행이 있으면 그것(녹화 때 업스테이지 대기·실패 없이). 샘플을 다시 그렸거나
+    반려했으면 다시 읽는다"""
+    image = _sample_path(samples, name).read_bytes()
+    saved = _same_image(paths, image)
     if saved is not None:
-        conn = _open_rw(paths)
-        try:
-            return _chart_detail(conn, saved)
-        finally:
-            conn.close()
-    return _read_chart(paths, upstage, name, path.read_bytes(), now)
+        return _detail(paths, saved)
+    return _read_chart(paths, upstage, name, image, now)
 
 
 class ChartUpload(BaseModel):
@@ -1688,6 +1691,9 @@ def chart_ocr_upload(body: ChartUpload, paths: Paths, upstage: Upstage, now: Now
         raise HTTPException(413, "이미지가 5MB를 넘습니다")
     if _image_type(image) is None:
         raise HTTPException(415, "PNG·JPEG만 읽습니다")
+    saved = _same_image(paths, image)  # 같은 스캔을 또 올리면 저장된 결과
+    if saved is not None:
+        return _detail(paths, saved)
     return _read_chart(paths, upstage, body.filename, image, now)
 
 
@@ -1749,9 +1755,11 @@ class ChartApprove(BaseModel):
 
 @app.post("/chart-ocr/{import_id}/approve")
 def chart_ocr_approve(import_id: int, body: ChartApprove, paths: Paths, now: Now) -> dict:
-    """사람이 고친 항목·고른 환자로 승인 — 환자 없음·모르는 환자 422, 이미 처리됨 409"""
+    """사람이 고친 항목·고른 환자로 승인 — 환자 없음·모르는 환자·날짜 형식 422, 이미 처리됨·이미 이관한 진료
+    날짜 409"""
     if not body.chart_no:
         raise HTTPException(422, "환자를 골라야 승인할 수 있습니다")
+    _check_final(body.final)
     conn = _open_rw(paths)
     try:
         _chart_detail(conn, import_id)  # 없으면 404
@@ -1769,12 +1777,34 @@ def chart_ocr_approve(import_id: int, body: ChartApprove, paths: Paths, now: Now
             )
         except ValueError as e:
             raise HTTPException(422, "모르는 환자입니다") from e
+        except emr_bridge.AlreadyImported as e:
+            raise HTTPException(
+                409, f"이미 이관한 진료 날짜가 있습니다: {', '.join(e.dates)}"
+            ) from e
         except emr_bridge.Conflict as e:
             raise HTTPException(409, "이미 처리된 이관입니다") from e
         conn.commit()
         return _chart_detail(conn, import_id)
     finally:
         conn.close()
+
+
+def _check_final(final: dict) -> None:
+    """승인할 항목의 모양 — 진료·수납은 객체 목록, 날짜는 YYYY-MM-DD 실제 날짜이거나 비움(EMR 정렬·합쳐 읽기가 기댄다)"""
+    for key in ("visits", "payments"):
+        rows = final.get(key, [])
+        if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+            raise HTTPException(422, f"{key}: 객체 목록이어야 합니다")
+        for r in rows:
+            d = r.get("date")
+            if d is None:
+                continue
+            try:
+                ok = isinstance(d, str) and dt.date.fromisoformat(d).isoformat() == d
+            except ValueError:
+                ok = False
+            if not ok:
+                raise HTTPException(422, f"{key} 날짜는 YYYY-MM-DD: {d}")
 
 
 @app.post("/chart-ocr/{import_id}/reject")

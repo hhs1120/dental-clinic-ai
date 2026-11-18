@@ -1,4 +1,4 @@
-"""종이 차트 이관 API (backend/api.py /chart-ocr/*, 차트 OCR 설계 §설계 3) — 손으로 만든 source + 가짜 업스테이지
+"""종이 차트 이관 API (backend/api.py /chart-ocr/*, 기능 정의 §5 종이 차트 이관) — 손으로 만든 source + 가짜 업스테이지
 (실제 응답 고정값을 이름·생년월일만 바꿔 돌려준다)."""
 
 # ruff: noqa: F401, F811  (다른 테스트 모듈의 fixture를 가져와 쓴다)
@@ -185,3 +185,51 @@ def test_emr_patient_shows_paper_records(client):
     }
     other = client.get("/emr/patients/C-00002").json()
     assert other["paper_records"] == other["paper_notes"] == other["paper_payments"] == []
+
+
+def test_upload_same_image_reuses_row(client, upstage):
+    body = {"filename": "scan.png", "image_base64": base64.b64encode(PNG).decode()}
+    a = client.post("/chart-ocr", json=body).json()
+    b = client.post("/chart-ocr", json=body | {"filename": "again.png"}).json()
+    assert a["id"] == b["id"] and upstage.calls == 1
+
+
+def test_rejected_sample_reads_again(client, upstage):
+    d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    client.post(f"/chart-ocr/{d['id']}/reject", json={"part": "데스크"})
+    assert client.get("/chart-ocr/samples").json()[0]["imported_id"] is None
+    again = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    assert again["id"] != d["id"] and again["status"] == "draft" and upstage.calls == 2
+
+
+def test_sample_changed_image_reads_again(client, upstage, tmp_path):
+    d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    (tmp_path / "paper" / "chart-C-00001.png").write_bytes(PNG + b"1")  # 샘플을 다시 그림
+    assert client.get("/chart-ocr/samples").json()[0]["imported_id"] is None
+    assert client.post("/chart-ocr/samples/chart-C-00001.png").json()["id"] != d["id"]
+
+
+def test_bad_extract_json_502_no_row(client, upstage):
+    upstage.extract = {"choices": [{"message": {"content": "not json"}}]}
+    assert client.post("/chart-ocr/samples/chart-C-00001.png").status_code == 502
+    assert client.get("/chart-ocr").json() == []
+
+
+def test_approve_rejects_bad_dates_422(client):
+    d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    final = _final(d)
+    final["visits"][0]["date"] = "2012-3-1"
+    body = {"final": final, "chart_no": "C-00001", "part": "데스크"}
+    assert client.post(f"/chart-ocr/{d['id']}/approve", json=body).status_code == 422
+    final["visits"][0] = "x"
+    assert client.post(f"/chart-ocr/{d['id']}/approve", json=body).status_code == 422
+
+
+def test_approve_same_visits_twice_409(client, upstage):
+    a = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    body = {"final": _final(a), "chart_no": "C-00001", "part": "데스크"}
+    client.post(f"/chart-ocr/{a['id']}/approve", json=body)
+    up = {"filename": "scan.png", "image_base64": base64.b64encode(PNG + b"2").decode()}
+    b = client.post("/chart-ocr", json=up).json()
+    r = client.post(f"/chart-ocr/{b['id']}/approve", json=body | {"final": _final(b)})
+    assert r.status_code == 409 and "이미 이관" in r.json()["detail"]

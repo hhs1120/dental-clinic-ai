@@ -37,7 +37,8 @@ import { readPart } from "@/lib/part";
 import { cn } from "@/lib/utils";
 
 type Box = [number, number, number, number];
-type Inspect = { kind: "date" | "loc" | "word"; index: number; word?: string };
+// 확인 패널이 가리키는 줄은 uid로 — 줄을 나누거나 지워도 같은 줄을 보고, 줄이 없어지면 닫힌다
+type Inspect = { kind: "date" | "loc" | "word"; uid: string; word?: string };
 
 const STATUS_VARIANT: Record<ImportStatus, "warn" | "ok" | "muted"> = {
   draft: "warn",
@@ -88,7 +89,11 @@ export function ChartOcrView() {
     const f = got.final ?? got.fields;
     setFields({
       ...f,
-      visits: f.visits.map((v, i) => ({ ...v, src: v.src ?? i })),
+      visits: f.visits.map((v, i) => ({
+        ...v,
+        src: v.src ?? i,
+        uid: v.uid ?? crypto.randomUUID(),
+      })),
     });
     setPatient(got.patient);
     setFocus(null);
@@ -257,9 +262,9 @@ export function ChartOcrView() {
                 setInspect(null);
               }}
               onInspect={(kind, index, word) => {
-                setInspect({ kind, index, word });
-                const src = fields.visits[index].src ?? index;
-                setFocus(inspectBox(item, { kind, index: src, word }));
+                const v = fields.visits[index];
+                setInspect({ kind, uid: v.uid ?? "", word });
+                setFocus(inspectBox(item, kind, v.src ?? index, word));
               }}
             />
             <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-background py-3">
@@ -356,7 +361,9 @@ export function ChartOcrView() {
 /** 확인할 칸의 스캔 자리 — 날짜·위치는 그 칸, 약어 제안은 그 낱말 */
 function inspectBox(
   item: ChartImport,
-  { kind, index, word }: Inspect,
+  kind: Inspect["kind"],
+  index: number, // 서버가 읽은 진료 순번(src)
+  word?: string,
 ): Box | null {
   const visits = item.fields.visits;
   if (kind === "word") return wordBox(visits, index, item.words, word ?? "");
@@ -397,11 +404,13 @@ function InspectPanel({
   onChange: (f: Fields) => void;
   onClose: () => void;
 }) {
-  const { kind, index, word } = inspect;
+  const { kind, uid, word } = inspect;
+  const index = fields.visits.findIndex((x) => x.uid === uid);
+  if (index < 0) return null; // 그 줄을 지웠다
   const v = fields.visits[index];
   const locked = item.status !== "draft";
   const at = v.src ?? index; // 스캔 위치는 서버가 읽은 순번으로
-  const cell = inspectBox(item, { kind, index: at, word });
+  const cell = inspectBox(item, kind, at, word);
   const sug = v.suggestions.find((s) => s.word === word);
   // 바로 아래로 이어지는 같은 치아 줄 중 위치를 아직 안 고른 것 — 연달아 한 치료(신경 치료 등)
   const below: number[] = [];

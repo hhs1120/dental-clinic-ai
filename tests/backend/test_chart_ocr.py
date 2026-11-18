@@ -1,4 +1,4 @@
-"""차트 OCR 응답 정리 — 상자·날짜 이어받기·치아 번호·약어 제안(backend/chart_ocr.py, 차트 OCR 설계 §설계 2).
+"""차트 OCR 응답 정리 — 상자·날짜 이어받기·치아 번호·약어 제안(backend/chart_ocr.py, 기능 정의 §5 종이 차트 이관 정리).
 고정값은 샘플 C-00016으로 업스테이지를 한 번 부른 실제 응답(tests/backend/fixtures/)."""
 
 import json
@@ -76,7 +76,7 @@ def test_fields_from_fixture():
     assert f["payments"][4]["balance"] == 300000 and f["payments"][4]["date"] == "2012-04-18"
 
 
-# 날짜 교차검증(차트 OCR 설계 §설계 2) — 정보 추출이 빠뜨린 날짜는 OCR 글자로, 연도는 수납 장부로
+# 날짜 교차검증(기능 정의 §5 종이 차트 이관 정리) — 정보 추출이 빠뜨린 날짜는 OCR 글자로, 연도는 수납 장부로
 def _v(raw):
     return {"date_raw": raw, "date": None, "date_check": False, "date_note": None}
 
@@ -121,9 +121,10 @@ def test_settle_ocr_fill_without_ledger_notes_source():
     f = {"visits": [_v("13.3.5"), _v(".")], "payments": []}
     words = HEADERS + [_w("13.3.5", 0.523, 0.25), _w("14.1.22", 0.526, 0.28)]
     v = chart_ocr.settle(f, words)["visits"]
+    # 수납 장부가 받쳐 주지 않는 OCR 채움은 확인 필요
     assert (v[1]["date"], v[1]["date_check"], v[1]["date_note"]) == (
         "2014-01-22",
-        False,
+        True,
         "OCR 글자로 채움",
     )
 
@@ -181,3 +182,57 @@ def test_refresh_fills_birth_date_from_ocr():
     assert out["head_notes"] == {"birth_date": "OCR 글자로 채움"}
     kept = chart_ocr.refresh(f | {"birth_date": "1949-07-05"}, words)
     assert kept["head_notes"] == {}
+
+
+# 리뷰 반영
+def test_refresh_keeps_head_note_on_second_call():
+    # 저장 때 한 번, 상세 때 또 한 번 부른다 — 두 번째에 근거가 지워지면 안 된다
+    f = {"birth_date": "", "visits": [], "payments": []}
+    words = [
+        _w("생년월일", 0.20, 0.06),
+        _w("1949.", 0.24, 0.058),
+        _w("7.", 0.265, 0.059),
+        _w("5", 0.28, 0.06),
+    ]
+    twice = chart_ocr.refresh(chart_ocr.refresh(f, words), words)
+    assert twice["birth_date"] == "1949-07-05"
+    assert twice["head_notes"] == {"birth_date": "OCR 글자로 채움"}
+
+
+def test_fields_tolerates_nulls_and_bad_json():
+    content = {
+        "patient_name": None,
+        "visits": [{"date": None, "location": None, "treatment": None}],
+        "payments": [{"date": None, "item": None}],
+    }
+    resp = {"choices": [{"message": {"content": json.dumps(content)}}]}
+    f = chart_ocr.fields(resp)
+    assert (
+        f["patient_name"] == ""
+        and f["visits"][0]["date_raw"] == ""
+        and f["visits"][0]["treatment"] == ""
+    )
+    assert f["visits"][0]["date_check"] is True and f["payments"][0]["item"] == ""
+    with pytest.raises(chart_ocr.UpstageError):
+        chart_ocr.fields({"choices": [{"message": {"content": "not json"}}]})
+
+
+def test_ditto_row_gets_no_ledger_suggestion():
+    f = {
+        "visits": [_v("12.5.28"), _v(","), _v("13.6.19")],
+        "payments": [_p("12.5.28"), _p("12.6.11"), _p("13.6.19")],
+    }
+    v = chart_ocr.settle(f, [])["visits"]
+    assert v[1]["date_check"] is True and v[1]["date_suggest"] is None
+
+
+def test_two_digit_year_in_future_is_1900s():
+    assert chart_ocr.written_date("98.3.4", None) == ("1998-03-04", False)
+    assert chart_ocr.written_date("12.3.4", None) == ("2012-03-04", False)
+
+
+def test_settle_keeps_ocr_date_for_scan_lookup():
+    f = {"visits": [_v("13.3.5"), _v(".")], "payments": []}
+    words = HEADERS + [_w("13.3.5", 0.523, 0.25), _w("14.1.22", 0.526, 0.28)]
+    v = chart_ocr.settle(f, words)["visits"]
+    assert v[1]["date_ocr"] == "14.1.22" and v[0]["date_ocr"] is None

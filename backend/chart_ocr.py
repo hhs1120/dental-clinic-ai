@@ -1,6 +1,6 @@
 """옛 종이 차트 OCR — 업스테이지 Document OCR(글자·상자·신뢰도)과 Information Extraction(스키마로 항목)을 부른다
-(차트 OCR 설계 §설계 3). 응답은 그대로 돌려주고 저장·승인은 emr_bridge가 한다. 화면용 정리(상자 비율·날짜 이어받기·
-치아 번호·약어 제안)도 여기서 — 확정은 사람이 한다(설계 §설계 2).
+(기능 정의 §5 종이 차트 이관). 응답은 그대로 돌려주고 저장·승인은 emr_bridge가 한다. 화면용 정리(상자 비율·날짜 이어받기·
+치아 번호·약어 제안)도 여기서 — 확정은 사람이 한다(기능 정의 §5 종이 차트 이관 정리).
 
 - OCR: POST https://api.upstage.ai/v1/document-digitization, multipart `document`·`model=ocr`,
   응답 pages[].words[] = {text, confidence, boundingBox.vertices[4]}
@@ -196,8 +196,10 @@ def _parse(raw: str) -> date | None:
     if not m:
         return None
     y = int(m[1])
+    if y < 100:  # 두 자리 연도 — 올해 뒤면 1900년대(옛 차트·생년월일)
+        y += 2000 if 2000 + y <= date.today().year else 1900
     try:
-        return date(y if y >= 100 else 2000 + y, int(m[2]), int(m[3]))
+        return date(y, int(m[2]), int(m[3]))
     except ValueError:
         return None
 
@@ -254,31 +256,42 @@ def suggest(text: str) -> list[dict]:
 
 
 def fields(extract_resp: dict) -> dict:
-    """정보 추출 결과 → 화면 폼 — 머리 칸 그대로, 진료·수납은 날짜 정리, 진료는 치아 숫자·약어 제안"""
-    raw = json.loads(extract_resp["choices"][0]["message"]["content"])
-    head = {k: raw.get(k, "") for k, v in SCHEMA["properties"].items() if v["type"] != "array"}
+    """정보 추출 결과 → 화면 폼 — 머리 칸 그대로, 진료·수납은 날짜 정리, 진료는 치아 숫자·약어 제안.
+    빈 칸은 null로 올 수 있어 빈 글로 바꾼다. 응답을 못 읽으면 UpstageError(크레딧은 이미 썼다 — 502로 알린다)"""
+    try:
+        raw = json.loads(extract_resp["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+        raise UpstageError(f"정보 추출 응답을 읽지 못했습니다: {e}") from e
+    if not isinstance(raw, dict):
+        raise UpstageError("정보 추출 응답이 객체가 아닙니다")
+
+    def text(d: dict, k: str) -> str:
+        v = d.get(k)
+        return "" if v is None else str(v)
+
+    head = {k: text(raw, k) for k, v in SCHEMA["properties"].items() if v["type"] != "array"}
     visits = []
-    for v in raw.get("visits", []):
-        loc = v.get("location", "")
+    for v in raw.get("visits") or []:
+        loc = text(v, "location")
         teeth = "전악" if "전악" in loc else " ".join(re.findall(r"\d", loc))
         visits.append(
             {
-                "date_raw": v.get("date", ""),
+                "date_raw": text(v, "date"),
                 "location_raw": loc,
                 "teeth": teeth,
                 "quadrant": None,
                 "fdi": None,
-                "treatment": v.get("treatment", ""),
-                "signature": v.get("signature", ""),
-                "suggestions": suggest(v.get("treatment", "")),
+                "treatment": text(v, "treatment"),
+                "signature": text(v, "signature"),
+                "suggestions": suggest(text(v, "treatment")),
             }
         )
     payments = []
-    for p in raw.get("payments", []):
+    for p in raw.get("payments") or []:
         payments.append(
             {
-                "date_raw": p.get("date", ""),
-                "item": p.get("item", ""),
+                "date_raw": text(p, "date"),
+                "item": text(p, "item"),
                 "amount": p.get("amount"),
                 "balance": p.get("balance"),
             }
@@ -333,7 +346,7 @@ def _unreadable(raw: str) -> bool:
 
 
 def settle(f: dict, words: list[dict]) -> dict:
-    """날짜 정리(설계 §설계 2) — ① 정보 추출이 빠뜨린 진료 날짜는 OCR 글자로 채우고 ② 윗줄에서 연도·날짜를
+    """날짜 정리(기능 정의 §5 종이 차트 이관 정리) — ① 정보 추출이 빠뜨린 진료 날짜는 OCR 글자로 채우고 ② 윗줄에서 연도·날짜를
     이어받은 뒤 ③ 수납 장부와 맞춰 본다: 같은 날 수납이 있으면 확인됨, 연도를 이어받은 날짜가 장부에 없고 같은
     월·일 수납이 한 번이면 그 연도로 고친다(확인 필요). 원문(date_raw)에서 다시 계산해 몇 번 불러도 같다"""
     payments, prev = [], None
@@ -361,8 +374,12 @@ def settle(f: dict, words: list[dict]) -> dict:
             same = {x for x in paid if x[5:] == d[5:]}
             if len(same) == 1:
                 d, check, note = same.pop(), True, "수납 장부 연도로 고침"
+        if ocr_text and note == "OCR 글자로 채움":  # 장부가 받쳐 주지 않는 OCR 채움은 사람이 본다
+            check = True
         prev = d or prev
-        visits.append(v | {"date": d, "date_check": check, "date_note": note})
+        visits.append(
+            v | {"date": d, "date_check": check, "date_note": note, "date_ocr": ocr_text}
+        )
     _suggest_ledger(visits, paid)
     return f | {"visits": visits, "payments": payments}
 
@@ -373,7 +390,7 @@ def _suggest_ledger(visits: list[dict], paid: set[str]) -> None:
     used = {v["date"] for v in visits if v["date"]}
     for i, v in enumerate(visits):
         v["date_suggest"] = None
-        if not v["date_check"]:
+        if not v["date_check"] or (v["date_note"] or "").startswith("〃"):  # 〃 줄은 윗줄 날짜
             continue
         lo = next((w["date"] for w in reversed(visits[:i]) if w["date"]), "")
         hi = next((w["date"] for w in visits[i + 1 :] if w["date"]), "9999")
@@ -415,7 +432,7 @@ def refresh(f: dict, words: list[dict]) -> dict:
     """초안을 열 때 기계가 만든 부분을 원문에서 다시 — 정리 규칙이 바뀌어도 반영. 날짜 교차검증·약어 제안, 정보
     추출이 비운 생년월일은 OCR이 "생년월일" 오른쪽에서 읽은 글자로(head_notes에 근거)"""
     f = settle(f, words)
-    notes = {}
+    notes = dict(f.get("head_notes") or {})  # 저장 때 채운 근거 — 다시 불러도 남긴다
     if not _iso(f.get("birth_date", "")):
         d = _parse(_right_of(words, "생년월일"))
         if d:

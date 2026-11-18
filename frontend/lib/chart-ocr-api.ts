@@ -18,6 +18,8 @@ export interface Visit {
   date: string | null;
   date_check: boolean;
   date_suggest: string | null; // 앞뒤 진료 사이 짝 없는 수납 날짜(바꾸지 않고 제안만)
+  uid?: string; // 화면에서 줄을 가리키는 안정 id — 나누기·삭제 뒤에도 커서·확인 패널이 같은 줄을 본다
+  date_ocr?: string | null; // 정보 추출이 빠뜨려 OCR Date 칸 글자로 채운 원문 — 스캔에서 그 칸을 찾을 때
   src?: number; // 서버가 읽은 진료 순번 — 화면에서 줄을 나누거나 더해도 스캔 위치는 이걸로 찾는다
   date_note: string | null; // 교차검증 근거 — OCR 글자로 채움·수납 장부와 일치·수납 장부 연도로 고침·〃로 봄
   location_raw: string;
@@ -136,13 +138,34 @@ export function matchWords(text: string, words: OcrWord[]): OcrWord[] {
 
 type Box = [number, number, number, number];
 
-/** 진료마다 그 날짜 단어(진료 경과는 오른쪽 쪽) — 차례대로 찾아 같은 글의 앞 줄과 헷갈리지 않게 */
+/** YYYY-MM-DD이고 실제 날짜 */
+export function isoDate(s: string | null): boolean {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  return new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+}
+
+/** 진료 경과 Date 칸의 OCR 단어 — 머리 글자 Date·Location 가운데 사이 거리를 칸 폭으로(backend/chart_ocr.py _date_column) */
+function dateColumn(words: OcrWord[]): OcrWord[] {
+  const head = (t: string) =>
+    words.find((w) => w.text === t && w.box[0] > 0.5 && w.box[1] < 0.1);
+  const date = head("Date");
+  const loc = head("Location");
+  if (!date || !loc) return words.filter((w) => w.box[0] > 0.5);
+  const cx = (w: OcrWord) => (w.box[0] + w.box[2]) / 2;
+  const width = cx(loc) - cx(date);
+  return words.filter(
+    (w) => Math.abs(cx(w) - cx(date)) < width / 2 && w.box[1] > date.box[3],
+  );
+}
+
+/** 진료마다 그 날짜 단어 — Date 칸 안에서 차례대로 찾아 앞 줄과 헷갈리지 않게. OCR로 채운 줄은 그 글자로 */
 function anchors(visits: Visit[], words: OcrWord[]): (OcrWord | null)[] {
-  const right = words.filter((w) => w.box[0] > 0.5);
+  const col = dateColumn(words);
   const out: (OcrWord | null)[] = [];
   let after = 0;
   for (const v of visits) {
-    const hit = right.find((w) => w.text === v.date_raw && w.box[1] >= after);
+    const text = v.date_ocr ?? v.date_raw;
+    const hit = col.find((w) => w.text === text && w.box[1] >= after);
     out.push(hit ?? null);
     if (hit) after = hit.box[1];
   }
