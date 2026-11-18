@@ -11,10 +11,11 @@
 import json
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 
 from backend import assistant_tools, calls, chat, documents, prompts
 from backend.assistant_tools import assistant_tools as make_tools
+from backend.emr import _hours
 from backend.harness.loop import TRUST_NOTICE, AgentSpec, Runner, external
 from backend.harness.store import RunStore
 from backend.harness.tools import Tool, ToolRegistry
@@ -26,8 +27,8 @@ from shared.llm import BudgetExceeded
 AGENT, TASK, REPLY_TASK = "assistant", "assistant", "assistant_reply"
 TOOL_ALIAS = "chat"  # 도구 단계 — 다음 묶음에서 로컬 모델 자리(§7.1)
 REPLY_ALIAS = "chat"  # 답 단계
-PROMPT_VERSION = "v2"
-REPLY_VERSION = "v2"
+PROMPT_VERSION = "v3"
+REPLY_VERSION = "v3"
 MAX_TOOL_CALLS = (
     chat.CHAT_MAX_TOOL_CALLS
 )  # 턴당 도구 호출(done_tools 포함) — ③ 값에서 시작, dev 실측으로 정함(§4.1)
@@ -248,6 +249,71 @@ def _tool_log(steps: list[dict]) -> list[dict]:
         for s in steps
         if s["kind"] == "tool"
     ]
+
+
+CLOSED_TEXT = (
+    "{m}월 {d}일은 {why}이라 예약할 수 없습니다. 다른 날짜를 알려 주시면 빈 시간을 찾아 드릴게요."
+)
+SAT_PM_TEXT = (
+    "토요일은 {close}까지 진료라 오후 예약은 할 수 없습니다. 오전이나 다른 날짜를 알려 주세요."
+)
+CLOSED_ONLY_TOOLS = {"free_slots", "query_patient", DRAFT}  # 휴진 확인 턴에 같이 나올 수 있는 도구
+
+
+def _code_reply(conn: sqlite3.Connection, steps: list[dict]) -> str | None:
+    """답 단계 대신 코드가 쓰는 답 — 휴진일·공휴일 하루 확인뿐인 턴, 토요일 오후 초안뿐인 턴. 아니면 None"""
+    if day := _closed_only(steps):
+        return CLOSED_TEXT.format(m=day.month, d=day.day, why=assistant_tools.day_off(conn, day))
+    if day := _saturday_afternoon(conn, steps):
+        return SAT_PM_TEXT.format(close=_hours(conn, day)["close"])
+    return None
+
+
+def _closed_only(steps: list[dict]) -> date | None:
+    """이번 턴이 휴진일 하루 확인뿐이면 그 날 — 하루짜리 free_slots가 모두 closed이고(초안은 closed_day로 실패)
+    다른 조회·성공한 초안이 없을 때. 기간 조회·다른 도구가 섞이면 None(답 단계가 쓴다)"""
+    ok = _ok_steps(steps)
+    if not ok or any(s["tool"] not in CLOSED_ONLY_TOOLS for s in ok):
+        return None
+    days = set()
+    for s in ok:
+        r, a = s["result"], s["args"]
+        if s["tool"] == "free_slots":
+            if a.get("date_to") or not (isinstance(r, dict) and r.get("closed") is True):
+                return None
+            days.add(a["date"])
+        elif s["tool"] == DRAFT:
+            if not (isinstance(r, dict) and "closed_day" in r.get("error", [])):
+                return None
+            days.add(a["date"])
+    return date.fromisoformat(days.pop()) if len(days) == 1 else None
+
+
+def _saturday_afternoon(conn: sqlite3.Connection, steps: list[dict]) -> date | None:
+    """이번 턴이 토요일 오후 초안 실패뿐이면 그 날 — 초안이 모두 같은 토요일에 `window` 오후이거나 마감 뒤 시각이고
+    실패했을 때(토요일은 점심 전에 마감, `backend.emr._hours`). 그날 하루 free_slots는 같이 나와도 된다"""
+    ok = _ok_steps(steps)
+    if not any(s["tool"] == DRAFT for s in ok) or any(
+        s["tool"] not in CLOSED_ONLY_TOOLS for s in ok
+    ):
+        return None
+    days = set()
+    for s in ok:
+        r, a = s["result"], s["args"]
+        if s["tool"] == "free_slots" and a.get("date_to"):
+            return None
+        if s["tool"] == DRAFT:
+            day = date.fromisoformat(a["date"])
+            late = (
+                a["start"] >= _hours(conn, day)["close"]
+                if a.get("start")
+                else a.get("window") == "오후"
+            )
+            if day.weekday() != 5 or not late or not (isinstance(r, dict) and "error" in r):
+                return None
+        if s["tool"] != "query_patient":
+            days.add(a["date"])
+    return date.fromisoformat(days.pop()) if len(days) == 1 else None
 
 
 def _ok_steps(steps: list[dict]) -> list[dict]:
@@ -520,9 +586,12 @@ def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_ev
                         "retrieved_ids": got["retrieved_ids"],
                     }
                 )
-        status, reply_text, cards = _reply(
-            conn, gw, store, outcome.run_id, prompt, steps, records, clinic
-        )
+        if text := _code_reply(conn, steps):  # 다른 날·시각을 권하지 않게 문장을 코드가 쓴다
+            status, reply_text, cards = "ok", text, []
+        else:
+            status, reply_text, cards = _reply(
+                conn, gw, store, outcome.run_id, prompt, steps, records, clinic
+            )
     cards = _with_drafts(conn, cards, steps)
     tool_calls = _tool_log(steps)
     _save(

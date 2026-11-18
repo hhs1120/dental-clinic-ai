@@ -6,6 +6,7 @@
 ③ `chat.chat` 호출은 도구 단계 뒤 턴이 한다. 도구 이름·인자는 `TOOLS_VERSION`으로 고정(§7.1)."""
 
 import datetime as dt
+import json
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -16,8 +17,11 @@ from backend.harness.tools import Tool
 from backend.query_tools import _procedure_codes, query_tools
 from shared.clinic import Clinic
 
-TOOLS_VERSION = "v2"  # v2: free_slots에 date_to(기간을 한 번에)
+TOOLS_VERSION = (
+    "v3"  # v2: free_slots에 date_to(기간을 한 번에) · v3: draft_appointment에 window(시간대)
+)
 ROLES = {"원장": "doctor", "위생사": "hygienist", "상담실장": "consultant"}
+ROLE_NAMES = {v: k for k, v in ROLES.items()}
 LIST_CAP = 20  # 목록 도구가 한 번에 돌려주는 행 수 — count는 전체
 CLAIM_KINDS = ("appeal_soon", "adjusted", "pre_claim_warning")
 
@@ -71,8 +75,11 @@ class AskArgs(BaseModel):
 class DraftArgs(BaseModel):
     chart_no: str
     date: dt.date
-    start: str = Field(pattern=r"^\d{2}:\d{2}$")
-    staff: str = Field(min_length=1)
+    start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    window: Literal["오전", "오후"] | None = (
+        None  # start가 없을 때 — 이 시간대의 가장 이른 빈 시각을 코드가 고른다
+    )
+    staff: str | None = None  # 이름이나 역할, 없으면 그 시술 역할 중 자동
     procedure: str = Field(min_length=1)
     source_call_uid: str | None = None
 
@@ -148,8 +155,7 @@ def _staff_ids(conn, staff: str | None) -> list | None:
 def _day_slots(clinic: Clinic, conn, day: dt.date, code: str, ids: list) -> list | None:
     """그날 빈 시작 시각(시각 순) — 같은 시각은 한 줄로, 그 시각 빈 체어 수(번호는 초안 때 자동). 담당은 초안 때 자동(이름을 주면 그
     사람)이라 보이지 않는다. 휴진·공휴일이면 None"""
-    mv = prep.master_values(conn)
-    if _hours(conn, day)["closed"] or day.isoformat() in mv["bank_holidays"]:
+    if day_off(conn, day):
         return None
     by_time: dict[str, dict] = {}
     for i in ids:
@@ -297,21 +303,39 @@ def _draft(clinic: Clinic, conn, turn: dict, args: dict) -> dict:
     if patient is None:
         return {"error": ["unknown_patient"]}
     staff = emr_bridge._staff(conn)
-    role = ROLES.get(args["staff"])
-    cands = [s for s in staff if (s["role"] == role if role else s["name"] == args["staff"])]
+    want = (
+        args["staff"]
+        or ROLE_NAMES[emr_bridge.ROLE_FOR_TYPE[emr_bridge.appointment_type(conn, code)]]
+    )
+    role = ROLES.get(want)
+    cands = [s for s in staff if (s["role"] == role if role else s["name"] == want)]
     if not cands:
         return {"error": ["unknown_staff"]}
-    start = dt.datetime.combine(
-        dt.date.fromisoformat(args["date"]), dt.time.fromisoformat(args["start"])
-    )
+    day = dt.date.fromisoformat(args["date"])
+    if args["start"]:
+        tries = [(dt.time.fromisoformat(args["start"]), s) for s in cands]
+    else:  # 시각을 말하지 않으면(시간대만·아무것도) 그 시간대 가장 이른 빈 시각부터 — 모델이 고르지 않는다
+        if day_off(conn, day):
+            return {"error": ["closed_day"]}
+        tries = sorted(
+            (
+                (dt.time.fromisoformat(f["start"]), s)
+                for s in cands
+                for f in emr_bridge.free_slots(conn, clinic, day, code, s["id"])
+                if _in_window(conn, f["start"], args["window"])
+            ),
+            key=lambda t: (t[0], t[1]["id"]),
+        )
+        if not tries:
+            return {"error": ["no_slot"]}
     first = None
-    for s in cands:  # 역할이면 검사를 통과하는 첫 담당 — 실패는 행을 남기지 않는다
+    for start, s in tries:  # 검사를 통과하는 첫 (시각, 담당) — 실패는 행을 남기지 않는다
         got = emr_bridge.create_draft(
             conn,
             clinic,
             patient_id=patient["id"],
             staff_id=s["id"],
-            start=start,
+            start=dt.datetime.combine(day, start),
             procedure_code=code,
             source_call_uid=args["source_call_uid"],
             conversation_id=turn["conversation_id"],
@@ -321,6 +345,21 @@ def _draft(clinic: Clinic, conn, turn: dict, args: dict) -> dict:
             return got
         first = first or got
     return first
+
+
+def day_off(conn, day: dt.date) -> str | None:
+    """쉬는 날의 이름 — 공휴일(`bank_holidays`)이 휴진 요일보다 먼저, 진료일이면 None"""
+    if day.isoformat() in prep.master_values(conn)["bank_holidays"]:
+        return "공휴일"
+    return "휴진일" if _hours(conn, day)["closed"] else None
+
+
+def _in_window(conn, start: str, window: str | None) -> bool:
+    """오전 = 점심 시작 전, 오후 = 점심 끝 뒤(병원 영업시간의 점심 — 토요일도 같은 경계), 없으면 하루 전부"""
+    if window is None:
+        return True
+    lunch = json.loads(conn.execute("SELECT hours_json FROM emr_clinic").fetchone()[0])["lunch"]
+    return start < lunch[0] if window == "오전" else start >= lunch[1]
 
 
 def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
@@ -385,8 +424,10 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
         ),
         Tool(
             "draft_appointment",
-            "예약 초안을 만든다(확정 아님, 사람이 승인). 시각은 free_slots 결과에서. staff는 담당 이름이나"
-            " 역할(원장·위생사·상담실장). 실패하면 {error: [코드]}.",
+            "예약 초안을 만든다(확정 아님, 사람이 승인). 직원이 시각을 말했으면 start(free_slots 결과 안),"
+            " 시각 없이 오전·오후만 말했으면 window, 둘 다 없으면 그날 가장 이른 빈 시각 — start가 없으면"
+            " 코드가 고른다. staff는 담당 이름이나 역할(원장·위생사·상담실장), 없으면 그 시술 역할 중 자동."
+            " 실패하면 {error: [코드]}(closed_day 휴진, no_slot 빈 시각 없음).",
             DraftArgs,
             lambda ctx, a: _draft(clinic, conn(ctx), ctx_turn, a),
             writes=True,

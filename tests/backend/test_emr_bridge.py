@@ -403,16 +403,21 @@ def test_slot_off_grid(conn):
     assert _draft(conn, f"{WED} 10:10") == {"error": ["off_slot"]}
 
 
-def test_slot_holiday_is_closed(conn):
+def _holidays(conn, *days):
+    """공휴일 목록을 바꾼다 — source는 읽기 전용으로 붙어 있어 따로 연다"""
     path = conn.execute("SELECT file FROM pragma_database_list WHERE name = 'source'").fetchone()[
         0
     ]
     s = sqlite3.connect(path)
     s.execute(
-        "UPDATE ax_master_values SET value = '[\"2026-12-25\"]' WHERE name = 'bank_holidays'"
+        "UPDATE ax_master_values SET value = ? WHERE name = 'bank_holidays'", (json.dumps(days),)
     )
     s.commit()
     s.close()
+
+
+def test_slot_holiday_is_closed(conn):
+    _holidays(conn, "2026-12-25")
     assert _check(conn, "2026-12-25 10:00") == ["closed_day"]  # 금요일 공휴일
     assert _check(conn, "2026-12-24 10:00") == ["closed_day"]  # 목요일 휴진(그대로)
     assert _check(conn, "2026-12-23 10:00") == []

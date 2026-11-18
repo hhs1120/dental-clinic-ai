@@ -20,6 +20,8 @@ from tests.backend.test_emr_bridge import (
     _approve,
     _call,
     _draft,
+    _holidays,
+    _src_add,
     conn,
     src,
 )
@@ -58,7 +60,7 @@ TURN = {"conversation_id": 7, "turn": 3}
 def test_registry_names_fixed():
     tools = assistant_tools.assistant_tools(CLINIC, None, TURN)
     assert {t.name for t in tools} == NAMES and len(tools) == len(NAMES)
-    assert assistant_tools.TOOLS_VERSION == "v2"
+    assert assistant_tools.TOOLS_VERSION == "v3"
     assert {t.name for t in tools if t.writes} == {"draft_appointment"}
     assert [t.name for t in tools if t.ends_run] == ["done_tools"]
 
@@ -156,6 +158,39 @@ def _draft_args(**kw):
     } | kw
 
 
+def _drafted_at(conn, got):
+    assert "error" not in got, got
+    return conn.execute(
+        "SELECT scheduled_at FROM ax_emr_writes WHERE id = ?", (got["id"],)
+    ).fetchone()[0]
+
+
+def test_draft_window_picks_earliest_free_in_window(conn):
+    """시각 없이 시간대만 — 코드가 그 시간대 가장 이른 빈 시각을 고른다(모델이 고르지 않는다), 담당은 역할 중 자동"""
+    _src_add(
+        conn, (MISSED, HYGIENIST, f"{WED} 14:00:00", "hygiene", SCALING, 1)
+    )  # 오후 첫 칸 막힘
+    pm = call(conn, "draft_appointment", **_draft_args(start=None, window="오후", staff=None))
+    assert _drafted_at(conn, pm) == f"{WED} 14:30:00"
+
+
+def test_draft_without_time_takes_earliest_of_day(conn):
+    got = call(conn, "draft_appointment", **_draft_args(start=None, staff="위생사"))
+    assert _drafted_at(conn, got) == f"{WED} 09:30:00"
+
+
+def test_draft_window_closed_day_and_no_slot(conn):
+    got = call(
+        conn, "draft_appointment", **_draft_args(date="2026-12-03", start=None, window="오전")
+    )
+    assert got == {"error": ["closed_day"]}
+    sat = call(
+        conn, "draft_appointment", **_draft_args(date="2026-12-05", start=None, window="오후")
+    )
+    assert sat == {"error": ["no_slot"]}  # 토요일은 점심 전에 마감 — 오후 빈 시각 없음
+    assert conn.execute("SELECT COUNT(*) FROM ax_emr_writes").fetchone()[0] == 0
+
+
 def test_draft_tool_rejects_bad_slot(conn):
     got = call(conn, "draft_appointment", **_draft_args(date="2026-12-03"))
     assert got == {"error": ["closed_day"]}
@@ -165,6 +200,15 @@ def test_draft_tool_rejects_bad_slot(conn):
     assert call(conn, "draft_appointment", **_draft_args(chart_no="C-99"))["error"] == [
         "unknown_patient"
     ]
+
+
+def test_day_off_names_holiday_before_closed_weekday(conn):
+    _holidays(conn, "2026-12-25", "2026-12-24")
+    day = date.fromisoformat
+    assert assistant_tools.day_off(conn, day("2026-12-25")) == "공휴일"  # 금요일 공휴일
+    assert assistant_tools.day_off(conn, day("2026-12-24")) == "공휴일"  # 목요일 휴진이어도
+    assert assistant_tools.day_off(conn, day("2026-12-03")) == "휴진일"  # 목요일
+    assert assistant_tools.day_off(conn, day("2026-12-05")) is None  # 토요일은 진료
 
 
 def test_draft_tool_records_conversation_turn(conn):
