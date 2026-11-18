@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { OcrForm, remaining } from "@/components/chart-ocr/ocr-form";
+import {
+  CrossPicker,
+  OcrForm,
+  remaining,
+  withVisit,
+} from "@/components/chart-ocr/ocr-form";
 import { OcrImage, OcrSnippet } from "@/components/chart-ocr/ocr-image";
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { errorText, useFetch } from "@/lib/api";
 import {
   approveImport,
+  cellBox,
   type ChartImport,
   fetchAbbreviations,
   fetchImport,
@@ -24,6 +30,7 @@ import {
   sampleUrl,
   STATUS_LABEL,
   uploadChart,
+  visitBand,
 } from "@/lib/chart-ocr-api";
 import { readPart } from "@/lib/part";
 import { cn } from "@/lib/utils";
@@ -60,6 +67,11 @@ export function ChartOcrView() {
     name: string;
   } | null>(null);
   const [focus, setFocus] = useState<Box | null>(null);
+  // 노란 딱지로 연 칸 — 그 칸을 확대해 보이고, 위치는 확대 옆에서 고른다(값은 고를 때만 바뀐다)
+  const [inspect, setInspect] = useState<{
+    kind: "date" | "loc";
+    index: number;
+  } | null>(null);
   const [showBoxes, setShowBoxes] = useState(true);
   const [step, setStep] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +89,7 @@ export function ChartOcrView() {
     setFields(got.final ?? got.fields);
     setPatient(got.patient);
     setFocus(null);
+    setInspect(null);
     samples.reload();
     imports.reload();
   };
@@ -206,13 +219,25 @@ export function ChartOcrView() {
               showBoxes={showBoxes}
               focus={focus}
             />
-            {focus && (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-bold text-muted-foreground">
-                  지금 칸의 손글씨
-                </span>
-                <OcrSnippet src={src} size={item.size} box={focus} />
-              </div>
+            {inspect ? (
+              <InspectPanel
+                item={item}
+                fields={fields}
+                src={src}
+                kind={inspect.kind}
+                index={inspect.index}
+                onChange={setFields}
+                onClose={() => setInspect(null)}
+              />
+            ) : (
+              focus && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold text-muted-foreground">
+                    지금 칸의 손글씨
+                  </span>
+                  <OcrSnippet src={src} size={item.size} box={focus} />
+                </div>
+              )
             )}
           </div>
 
@@ -224,7 +249,15 @@ export function ChartOcrView() {
               setFields={setFields}
               patient={patient}
               setPatient={setPatient}
-              onFocus={setFocus}
+              onFocus={(box) => {
+                setFocus(box);
+                setInspect(null);
+              }}
+              onInspect={(kind, index) => {
+                setInspect({ kind, index });
+                const col = kind === "date" ? "Date" : "Location";
+                setFocus(cellBox(item.fields.visits, index, item.words, col));
+              }}
             />
             <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-background py-3">
               {item.status === "draft" ? (
@@ -312,6 +345,108 @@ export function ChartOcrView() {
             ))}
           </ul>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** 노란 딱지로 연 칸 — 칸 확대 + 그 진료 줄. 날짜는 맞으면 확인, 위치는 십자에서 숫자가 있는 칸을 고른다 */
+function InspectPanel({
+  item,
+  fields,
+  src,
+  kind,
+  index,
+  onChange,
+  onClose,
+}: {
+  item: ChartImport;
+  fields: Fields;
+  src: string;
+  kind: "date" | "loc";
+  index: number;
+  onChange: (f: Fields) => void;
+  onClose: () => void;
+}) {
+  const v = fields.visits[index];
+  const locked = item.status !== "draft";
+  const cell = cellBox(
+    item.fields.visits,
+    index,
+    item.words,
+    kind === "date" ? "Date" : "Location",
+  );
+  const band = visitBand(item.fields.visits, index, item.words);
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-status-warn-border bg-card p-3 shadow-card">
+      <div className="flex items-center gap-2">
+        <Badge variant="warn">
+          {kind === "date" ? "날짜 확인" : "위치 고르기"}
+        </Badge>
+        <span className="text-sm font-bold">
+          진료 {index + 1} · {v.date ?? v.date_raw}
+        </span>
+        <Button size="xs" variant="ghost" className="ml-auto" onClick={onClose}>
+          닫기
+        </Button>
+      </div>
+      <div className="flex items-start gap-4">
+        <div className="flex w-56 shrink-0 flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            {kind === "date" ? "Date 칸 확대" : "Location 칸 확대"}
+          </span>
+          {cell ? (
+            <OcrSnippet src={src} size={item.size} box={cell} />
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              스캔에서 이 칸을 찾지 못했습니다
+            </span>
+          )}
+        </div>
+        {kind === "loc" ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              확대한 십자에서 숫자 <b>{v.teeth}</b>가 있는 칸과 같은 칸을
+              누르세요.
+            </p>
+            <CrossPicker
+              value={v.quadrant}
+              disabled={locked}
+              onPick={(q) =>
+                onChange(withVisit(fields, index, { quadrant: q }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {v.fdi ? `#${v.fdi}로 정했습니다. ` : ""}승인 전까지 다시 바꿀 수
+              있습니다.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              원문 <b>{v.date_raw}</b> — 앞 진료보다 날짜가 거꾸로 가서
+              확인합니다. 추정한 날짜는 <b>{v.date ?? "없음"}</b>입니다.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              다르면 오른쪽 날짜 칸을 고치세요.
+            </p>
+            <Button
+              size="sm"
+              disabled={locked || !v.date || !v.date_check}
+              onClick={() =>
+                onChange(withVisit(fields, index, { date_check: false }))
+              }
+            >
+              {v.date_check ? "이 날짜가 맞아요" : "확인함"}
+            </Button>
+          </div>
+        )}
+      </div>
+      {band && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">이 진료 줄</span>
+          <OcrSnippet src={src} size={item.size} box={band} />
+        </div>
       )}
     </div>
   );

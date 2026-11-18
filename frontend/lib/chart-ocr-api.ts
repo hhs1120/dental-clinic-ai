@@ -130,26 +130,55 @@ export function matchWords(text: string, words: OcrWord[]): OcrWord[] {
   return words.filter((w) => tokens.has(w.text.replace(/,$/, "")));
 }
 
-/** 진료 한 건의 손글씨 띠 — 이 진료 날짜 단어부터 다음 진료 날짜 단어 위까지(진료 경과는 오른쪽 쪽) */
+type Box = [number, number, number, number];
+
+/** 진료마다 그 날짜 단어(진료 경과는 오른쪽 쪽) — 차례대로 찾아 같은 글의 앞 줄과 헷갈리지 않게 */
+function anchors(visits: Visit[], words: OcrWord[]): (OcrWord | null)[] {
+  const right = words.filter((w) => w.box[0] > 0.5);
+  const out: (OcrWord | null)[] = [];
+  let after = 0;
+  for (const v of visits) {
+    const hit = right.find((w) => w.text === v.date_raw && w.box[1] >= after);
+    out.push(hit ?? null);
+    if (hit) after = hit.box[1];
+  }
+  return out;
+}
+
+/** 진료 한 건의 손글씨 띠 — 이 진료 날짜 단어부터 다음 진료 날짜 단어 위까지 */
 export function visitBand(
   visits: Visit[],
   index: number,
   words: OcrWord[],
-): [number, number, number, number] | null {
-  const right = words.filter((w) => w.box[0] > 0.5);
-  const anchors: (OcrWord | null)[] = [];
-  let after = 0;
-  for (const v of visits) {
-    const hit = right.find((w) => w.text === v.date_raw && w.box[1] >= after);
-    anchors.push(hit ?? null);
-    if (hit) after = hit.box[1];
-  }
-  const start = anchors[index];
+): Box | null {
+  const all = anchors(visits, words);
+  const start = all[index];
   if (!start) return null;
-  const next = anchors.slice(index + 1).find((a) => a !== null);
+  const next = all.slice(index + 1).find((a) => a !== null);
   const top = start.box[1] - 0.012;
   const bottom = next ? next.box[1] + 0.004 : start.box[3] + 0.03;
   return [start.box[0] - 0.005, top, 0.97, bottom];
+}
+
+/** 진료 첫 줄의 Date·Location 칸 — 머리 글자(Date·Location) 가운데를 칸 가운데로, 두 머리 사이 거리를 칸 폭으로.
+ * 날짜는 줄 아래에 붙여 써서 날짜 단어 아래 끝을 줄 아래로 본다(위치 칸 위·아래 반쪽이 다 보이게 한 줄 높이) */
+export function cellBox(
+  visits: Visit[],
+  index: number,
+  words: OcrWord[],
+  column: "Date" | "Location",
+): Box | null {
+  const start = anchors(visits, words)[index];
+  const head = (t: string) =>
+    words.find((w) => w.text === t && w.box[0] > 0.5 && w.box[1] < 0.1);
+  const date = head("Date");
+  const loc = head("Location");
+  if (!start || !date || !loc) return null;
+  const cx = (b: Box) => (b[0] + b[2]) / 2;
+  const width = cx(loc.box) - cx(date.box);
+  const mid = cx((column === "Date" ? date : loc).box);
+  const bottom = start.box[3] + 0.008;
+  return [mid - width * 0.6, bottom - 0.036, mid + width * 0.6, bottom];
 }
 
 /** 여러 상자를 감싸는 상자 */

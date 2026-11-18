@@ -42,6 +42,7 @@ def test_suggest_near_abbreviation():
     assert chart_ocr.suggest("Scaling 2/2, OHI") == []
     # 흔한 낱말을 약어로 바꾸지 않는다
     assert chart_ocr.suggest("C&S, CaOH 교체, Tx. pain(-), Cr. set") == []
+    assert chart_ocr.suggest("Pulp ext. st, caoH") == []  # 1st의 1이 빠진 st
     assert chart_ocr.suggest("S10, 치유 양호") == [{"word": "S10", "abbr": "S/O"}]
 
 

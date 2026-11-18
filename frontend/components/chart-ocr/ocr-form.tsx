@@ -52,8 +52,8 @@ function glossary(text: string, abbr: Record<string, string>) {
   );
 }
 
-/** 사분면 고르기 — 차트의 점선 십자와 같은 모양 */
-function CrossPicker({
+/** 사분면 고르기 — 차트의 점선 십자와 같은 모양(왼쪽 위 = 1). 확대한 위치 칸 옆에 둔다 */
+export function CrossPicker({
   value,
   onPick,
   disabled,
@@ -63,30 +63,43 @@ function CrossPicker({
   disabled: boolean;
 }) {
   return (
-    <div className="grid w-14 shrink-0 grid-cols-2 overflow-hidden rounded-md border border-border">
+    <div className="grid w-44 shrink-0 grid-cols-2 overflow-hidden rounded-md border border-border">
       {CROSS.map(({ q, label }, i) => (
         <button
           key={q}
           type="button"
-          title={`${label}(${q})`}
-          aria-label={`${label}(${q})`}
           aria-pressed={value === q}
           disabled={disabled}
           onClick={() => onPick(q)}
           className={cn(
-            "h-6 text-xs",
+            "flex h-12 flex-col items-center justify-center text-xs leading-tight",
             i % 2 === 0 && "border-r border-dashed border-border",
             i < 2 && "border-b border-dashed border-border",
             value === q
               ? "bg-primary font-bold text-primary-foreground"
-              : "bg-card text-muted-foreground hover:bg-muted",
+              : "bg-card hover:bg-muted",
           )}
         >
-          {q}
+          <b className="text-sm">{q}</b>
+          {label}
         </button>
       ))}
     </div>
   );
+}
+
+/** 진료 한 건 고치기 — 치아·사분면이 바뀌면 FDI를 다시 정한다 */
+export function withVisit(
+  fields: Fields,
+  i: number,
+  patch: Partial<Visit>,
+): Fields {
+  const visits = fields.visits.map((v, j) => {
+    if (j !== i) return v;
+    const next = { ...v, ...patch };
+    return { ...next, fdi: fdi(next.quadrant, next.teeth) };
+  });
+  return { ...fields, visits };
 }
 
 /** 환자 맞춤 — 이름·생년월일로 한 명이 맞으면 미리 채워지고, 아니면 검색해 고른다 */
@@ -168,6 +181,7 @@ export function OcrForm({
   patient,
   setPatient,
   onFocus,
+  onInspect,
 }: {
   item: ChartImport;
   abbr: Record<string, string>;
@@ -176,16 +190,11 @@ export function OcrForm({
   patient: { chart_no: string; name: string } | null;
   setPatient: (p: { chart_no: string; name: string }) => void;
   onFocus: (box: Box | null) => void;
+  onInspect: (kind: "date" | "loc", index: number) => void;
 }) {
   const locked = item.status !== "draft";
-  const setVisit = (i: number, patch: Partial<Visit>) => {
-    const visits = fields.visits.map((v, j) => {
-      if (j !== i) return v;
-      const next = { ...v, ...patch };
-      return { ...next, fdi: fdi(next.quadrant, next.teeth) };
-    });
-    setFields({ ...fields, visits });
-  };
+  const setVisit = (i: number, patch: Partial<Visit>) =>
+    setFields(withVisit(fields, i, patch));
   const headFocus = (text: string) =>
     onFocus(unionBox(matchWords(text, item.words)));
 
@@ -259,7 +268,15 @@ export function OcrForm({
                   }
                 />
                 {v.date_check && (
-                  <Badge variant="warn">날짜 확인 · 원문 {v.date_raw}</Badge>
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-4xl hover:opacity-80"
+                    onClick={() => onInspect("date", i)}
+                  >
+                    <Badge variant="warn">
+                      날짜 확인 · 원문 {v.date_raw} ›
+                    </Badge>
+                  </button>
                 )}
                 <Input
                   className="w-20"
@@ -269,18 +286,15 @@ export function OcrForm({
                   onChange={(e) => setVisit(i, { teeth: e.target.value })}
                 />
                 {v.teeth !== "전악" && (
-                  <CrossPicker
-                    value={v.quadrant}
-                    disabled={locked}
-                    onPick={(q) => setVisit(i, { quadrant: q })}
-                  />
-                )}
-                {v.fdi ? (
-                  <Badge variant="info">#{v.fdi}</Badge>
-                ) : (
-                  v.teeth !== "전악" && (
-                    <Badge variant="warn">위치 고르기</Badge>
-                  )
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-4xl hover:opacity-80"
+                    onClick={() => onInspect("loc", i)}
+                  >
+                    <Badge variant={v.fdi ? "info" : "warn"}>
+                      {v.fdi ? `#${v.fdi}` : "위치 고르기"} ›
+                    </Badge>
+                  </button>
                 )}
                 <span className="ml-auto text-xs text-muted-foreground">
                   서명 {v.signature}

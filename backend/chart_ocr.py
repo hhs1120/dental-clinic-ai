@@ -240,7 +240,9 @@ def suggest(text: str) -> list[dict]:
     out = []
     for word in re.findall(r"[A-Za-z0-9&/]+[.)]?", text):
         n = _norm(word)
-        if n in _KEYS or n.isdigit() or len(n) < 2:
+        if (
+            n in _KEYS or n.isdigit() or len(n) < 3
+        ):  # 두 글자는 엇비슷한 약어가 너무 많다(st → set)
             continue
         hit = _KEYS.get(n.translate(_LOOKALIKE)) or next(
             (_KEYS[k] for k in difflib.get_close_matches(n, _KEYS, n=1, cutoff=0.6)), None
