@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { MobileTabs, SpacePanel } from "@/components/shell/space-panel";
 import { Button } from "@/components/ui/button";
@@ -123,10 +129,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   // 목록 칸 접힘은 <html data-list-collapsed>를 CSS가 읽는다(list-collapsed 변형) — 그리기 전 스크립트가 붙여
   // 새로 고침해도 펼쳐진 채 깜빡이지 않고, 서버 HTML과 렌더가 같다. 서랍(좁은 화면)에서는 접힘을 무시한다
-  // 아이콘 줄로 다른 공간에 가면 목록 칸을 편다 — 같은 공간 안에서 옮길 때는 접힘을 그대로 둔다
-  const enter = (key: string) => {
-    if (key !== space) saveListCollapsed(false);
+  // 아이콘 줄로 다른 공간에 가면 목록 칸을 편다 — 같은 공간 안에서 옮길 때는 접힘을 그대로 둔다.
+  // 펴기는 경로가 바뀌어 새 공간을 그린 뒤(그리기 전 layout effect)에 한다 — 누르자마자 펴면 옛 공간 목록이 잠깐 보인다.
+  // 넓은 화면에서 지금 공간 아이콘을 다시 누르면 옮기지 않고 목록 칸을 접고 편다(서랍·EMR은 그냥 링크)
+  const enter = (key: string, e?: React.MouseEvent) => {
+    if (key !== space) {
+      expandFor.current = key;
+      return;
+    }
+    if (
+      !e ||
+      open ||
+      key === "emr" ||
+      !matchMedia("(min-width: 48rem)").matches
+    )
+      return;
+    e.preventDefault();
+    saveListCollapsed(!("listCollapsed" in document.documentElement.dataset));
   };
+  const expandFor = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (expandFor.current !== space) return;
+    expandFor.current = null;
+    saveListCollapsed(false);
+  }, [space]);
   useEffect(() => {
     if (!open) return;
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -172,25 +198,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <XIcon />
             </Button>
           )}
-          {!open && space !== "emr" && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="목록 펴기"
-              title="목록 펴기"
-              onClick={() => saveListCollapsed(false)}
-              className="mb-1 hidden text-muted-foreground md:list-collapsed:inline-flex"
-            >
-              <ChevronsRightIcon />
-            </Button>
-          )}
           <nav aria-label="공간" className="flex w-full flex-col gap-1">
             {SPACES.map(({ key, label, icon: Icon, href }) => (
               <Link
                 key={key}
                 href={href}
                 aria-current={key === space ? "page" : undefined}
-                onClick={() => enter(key)}
+                onClick={(e) => enter(key, e)}
                 className={railItem(key === space)}
               >
                 <Icon className="size-5" />
@@ -221,7 +235,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
           <span className="font-bold">{name}</span>
         </div>
-        <main className="mx-auto w-full max-w-[90rem] px-4 pt-6 pb-12 sm:px-6 print:pb-0">
+        <main
+          className={cn(
+            "relative mx-auto w-full max-w-[90rem] px-4 pt-6 pb-12 sm:px-6 print:pb-0",
+            space !== "emr" && "md:list-collapsed:pl-14",
+          )}
+        >
+          {/* 접은 목록 칸을 펴는 단추 — 접기 단추가 있던 높이, 본문 왼쪽 위 */}
+          {space !== "emr" && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="목록 펴기"
+              title="목록 펴기"
+              onClick={() => saveListCollapsed(false)}
+              className="absolute top-6 left-3 hidden text-muted-foreground md:list-collapsed:inline-flex print:hidden"
+            >
+              <ChevronsRightIcon />
+            </Button>
+          )}
           <MobileTabs space={space} />
           {children}
         </main>

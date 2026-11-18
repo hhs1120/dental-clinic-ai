@@ -138,6 +138,22 @@ test("shell: 접은 목록 칸은 같은 공간 안에선 그대로, 아이콘�
   await expect(menu).toBeVisible();
 });
 
+test("shell: 지금 공간 아이콘을 다시 누르면 옮기지 않고 목록 칸을 접고 편다", async ({
+  page,
+}) => {
+  await page.goto("/schedule");
+  const menu = page.getByRole("navigation", { name: "메뉴" });
+  const work = page
+    .getByRole("navigation", { name: "공간" })
+    .getByRole("link", { name: "업무" });
+  await work.click();
+  await expect(menu).toBeHidden();
+  await expect(page).toHaveURL(/\/schedule$/);
+  await work.click();
+  await expect(menu).toBeVisible();
+  await expect(page).toHaveURL(/\/schedule$/);
+});
+
 test("shell: 저장소가 막혀도 테마 단추가 바뀐다", async ({ page }) => {
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => {
