@@ -2,6 +2,7 @@
 sqlite3 연결은 만든 스레드에 묶이고 의존성과 핸들러는 다른 워커 스레드에서 돌 수 있어, 핸들러를 동기 def로 쓰고
 연결·Searcher는 핸들러 안에서 만들어 닫는다. 임베더·리랭커만 프로세스에 하나 둔다."""
 
+import base64
 import datetime as dt
 import json
 import os
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from backend import (
@@ -21,6 +22,7 @@ from backend import (
     autoclose,
     blind,
     calls,
+    chart_ocr,
     chat,
     claim_appeal,
     claim_check,
@@ -504,7 +506,21 @@ def emr_patient(chart_no: str, paths: Annotated[tuple[Path, Path], Depends(get_d
         conn.close()
     if record is None:
         raise HTTPException(404, "환자를 찾을 수 없습니다")
-    return record
+    return record | {"paper_records": _paper_records(paths, chart_no.strip())}
+
+
+def _paper_records(paths: tuple[Path, Path], chart_no: str) -> list[dict]:
+    """승인된 종이 차트 이관 진료 줄(emr_bridge, 차트 OCR 설계 §설계 3) — 앱 DB가 없으면 빈 목록"""
+    if not Path(paths[0]).exists():
+        return []
+    conn = _open_rw(paths)
+    try:
+        row = conn.execute(
+            "SELECT id FROM source.emr_patients WHERE upper(chart_no) = upper(?)", (chart_no,)
+        ).fetchone()
+        return emr_bridge.chart_imports(conn, row["id"]) if row else []
+    finally:
+        conn.close()
 
 
 @app.get("/documents")
@@ -1516,3 +1532,223 @@ def job(job_id: int, paths: Paths) -> dict:
     if row is None:
         raise HTTPException(404, "작업 없음")
     return dict(row)
+
+
+# 종이 차트 이관(차트 OCR 설계 §설계 3) — 업스테이지로 읽어 초안, 사람이 고쳐 승인. 쓰기는 emr_bridge
+CHART_OCR_MAX_BYTES = 5 * 1024 * 1024
+_IMAGE_TYPES = {b"\x89PNG": "image/png", b"\xff\xd8\xff": "image/jpeg"}
+
+
+def get_upstage():
+    """(이미지, 파일 이름) → (OCR 응답, 정보 추출 응답). 키는 부를 때 환경 변수에서(테스트는 가짜로 바꾼다)"""
+
+    def run(image: bytes, filename: str) -> tuple[dict, dict]:
+        key = os.environ.get("UPSTAGE_API_KEY", "")
+        return chart_ocr.ocr(image, filename, key), chart_ocr.extract(image, key)
+
+    return run
+
+
+def get_paper_charts() -> Path:
+    """시연용 샘플 종이 차트 폴더(demo/paper_charts/make.py가 만든 PNG)"""
+    return ROOT / "demo" / "paper_charts"
+
+
+Upstage = Annotated[object, Depends(get_upstage)]
+PaperCharts = Annotated[Path, Depends(get_paper_charts)]
+
+
+def _image_type(image: bytes) -> str | None:
+    return next((t for magic, t in _IMAGE_TYPES.items() if image.startswith(magic)), None)
+
+
+def _chart_detail(conn: sqlite3.Connection, import_id: int) -> dict:
+    row = emr_bridge.chart_import(conn, import_id)
+    if row is None:
+        raise HTTPException(404, "이관 기록을 찾을 수 없습니다")
+    patient = None
+    if row["patient_id"] is not None:
+        p = conn.execute(
+            "SELECT id, chart_no, name FROM source.emr_patients WHERE id = ?", (row["patient_id"],)
+        ).fetchone()
+        patient = dict(p) if p else None
+    words = chart_ocr.words(row.pop("ocr"))
+    return row | {"words": words, "patient": patient, "low_confidence": chart_ocr.LOW_CONFIDENCE}
+
+
+def _read_chart(paths, upstage, filename: str, image: bytes, now: dt.datetime) -> dict:
+    """업스테이지로 읽어 초안 하나 — 실패하면 행을 남기지 않고 502"""
+    try:
+        ocr_resp, extract_resp = upstage(image, filename)
+    except chart_ocr.UpstageError as e:
+        raise HTTPException(502, str(e)) from e
+    conn = _open_rw(paths)
+    try:
+        import_id = emr_bridge.chart_import_draft(
+            conn,
+            filename=filename,
+            image=image,
+            ocr=ocr_resp,
+            fields=chart_ocr.fields(extract_resp),
+            at=_stamp(now),
+        )
+        conn.commit()
+        return _chart_detail(conn, import_id)
+    finally:
+        conn.close()
+
+
+def _sample_ids(paths) -> dict[str, int]:
+    """샘플 파일 이름 → 가장 최근 이관 id(앱 DB가 없으면 빈 것)"""
+    if not Path(paths[0]).exists():
+        return {}
+    conn = _open_rw(paths)
+    try:
+        return {
+            r["filename"]: r["id"]
+            for r in conn.execute("SELECT id, filename FROM ax_chart_imports ORDER BY id")
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/chart-ocr/samples")
+def chart_ocr_samples(paths: Paths, samples: PaperCharts) -> list:
+    ids = _sample_ids(paths)
+    return [
+        {"name": f.name, "imported_id": ids.get(f.name)} for f in sorted(samples.glob("*.png"))
+    ]
+
+
+@app.post("/chart-ocr/samples/{name}")
+def chart_ocr_sample(
+    name: str, paths: Paths, samples: PaperCharts, upstage: Upstage, now: Now
+) -> dict:
+    """샘플 읽기 — 이미 읽은 샘플은 저장된 행을 돌려준다(녹화 때 업스테이지 대기·실패 없이)"""
+    path = samples / name
+    if path.suffix != ".png" or path.parent != samples or not path.is_file():
+        raise HTTPException(404, "샘플을 찾을 수 없습니다")
+    saved = _sample_ids(paths).get(name)
+    if saved is not None:
+        conn = _open_rw(paths)
+        try:
+            return _chart_detail(conn, saved)
+        finally:
+            conn.close()
+    return _read_chart(paths, upstage, name, path.read_bytes(), now)
+
+
+class ChartUpload(BaseModel):
+    filename: str
+    image_base64: str
+
+
+@app.post("/chart-ocr")
+def chart_ocr_upload(body: ChartUpload, paths: Paths, upstage: Upstage, now: Now) -> dict:
+    try:
+        image = base64.b64decode(body.image_base64, validate=True)
+    except ValueError as e:
+        raise HTTPException(422, "image_base64: base64가 아닙니다") from e
+    if len(image) > CHART_OCR_MAX_BYTES:
+        raise HTTPException(413, "이미지가 5MB를 넘습니다")
+    if _image_type(image) is None:
+        raise HTTPException(415, "PNG·JPEG만 읽습니다")
+    return _read_chart(paths, upstage, body.filename, image, now)
+
+
+@app.get("/chart-ocr")
+def chart_ocr_list(paths: Paths) -> list:
+    """이관 목록 — 최신순"""
+    conn = _open_rw(paths)
+    try:
+        rows = conn.execute(
+            "SELECT id, filename, status, fields, created_at FROM ax_chart_imports ORDER BY id DESC"
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "filename": r["filename"],
+                "status": r["status"],
+                "patient_name": json.loads(r["fields"]).get("patient_name", ""),
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+@app.get("/chart-ocr/abbreviations")
+def chart_ocr_abbreviations() -> dict:
+    return chart_ocr.ABBREVIATIONS
+
+
+@app.get("/chart-ocr/{import_id}")
+def chart_ocr_detail(import_id: int, paths: Paths) -> dict:
+    conn = _open_rw(paths)
+    try:
+        return _chart_detail(conn, import_id)
+    finally:
+        conn.close()
+
+
+@app.get("/chart-ocr/{import_id}/image")
+def chart_ocr_image(import_id: int, paths: Paths) -> Response:
+    conn = _open_rw(paths)
+    try:
+        row = conn.execute(
+            "SELECT image FROM ax_chart_imports WHERE id = ?", (import_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(404, "이관 기록을 찾을 수 없습니다")
+    return Response(row["image"], media_type=_image_type(row["image"]) or "image/png")
+
+
+class ChartApprove(BaseModel):
+    final: dict
+    patient_id: int | None
+    part: str
+
+
+@app.post("/chart-ocr/{import_id}/approve")
+def chart_ocr_approve(import_id: int, body: ChartApprove, paths: Paths, now: Now) -> dict:
+    """사람이 고친 항목·고른 환자로 승인 — 환자 없음·모르는 환자 422, 이미 처리됨 409"""
+    if body.patient_id is None:
+        raise HTTPException(422, "환자를 골라야 승인할 수 있습니다")
+    conn = _open_rw(paths)
+    try:
+        _chart_detail(conn, import_id)  # 없으면 404
+        try:
+            emr_bridge.approve_chart_import(
+                conn,
+                import_id,
+                final=body.final,
+                patient_id=body.patient_id,
+                by=body.part,
+                at=_stamp(now),
+            )
+        except ValueError as e:
+            raise HTTPException(422, "모르는 환자입니다") from e
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 이관입니다") from e
+        conn.commit()
+        return _chart_detail(conn, import_id)
+    finally:
+        conn.close()
+
+
+@app.post("/chart-ocr/{import_id}/reject")
+def chart_ocr_reject(import_id: int, body: Part, paths: Paths, now: Now) -> dict:
+    conn = _open_rw(paths)
+    try:
+        _chart_detail(conn, import_id)
+        try:
+            emr_bridge.reject_chart_import(conn, import_id, by=body.part, at=_stamp(now))
+        except emr_bridge.Conflict as e:
+            raise HTTPException(409, "이미 처리된 이관입니다") from e
+        conn.commit()
+        return _chart_detail(conn, import_id)
+    finally:
+        conn.close()
