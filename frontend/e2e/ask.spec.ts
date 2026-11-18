@@ -187,3 +187,39 @@ test("목록 칸의 기록 검색·문서함 링크로 전환, 상단 탭 없음
   await expect(docs).toHaveAttribute("aria-current", "page");
   await expect(search).not.toHaveAttribute("aria-current", "page");
 });
+
+test("검색 결과 문서 카드는 인용 표시를 떼고 제목 경로는 ›, 생략은 (중략)과 안내 줄", async ({
+  page,
+}) => {
+  await page.route("**/api/search?*", (r) =>
+    r.fulfill({
+      json: {
+        manual_results: [
+          {
+            ...CARD,
+            doc_type: "claim_standard",
+            title: "임플란트 청구 기준 > 급여 대상 부위",
+            body: "> 1. 급여대상\n>\n> 가. 부분 무치악 환자 …",
+          },
+        ],
+        case_results: [],
+      },
+    }),
+  );
+  await page.route("**/api/search/summary", (r) =>
+    r.fulfill({
+      json: { status: "answered", text: "급여대상[1].", sources: [CARD] },
+    }),
+  );
+  await page.goto("/ask?tab=search&q=임플란트");
+  await expect(
+    page.getByRole("heading", { name: "임플란트 청구 기준 › 급여 대상 부위" }),
+  ).toBeVisible();
+  const body = page.getByText("1. 급여대상");
+  await expect(body).toContainText("가. 부분 무치악 환자");
+  await expect(body).not.toContainText(">");
+  await expect(body).toContainText("부분 무치악 환자 (중략)");
+  await expect(
+    page.getByText("(중략)은 생략한 부분입니다", { exact: false }),
+  ).toBeVisible();
+});
