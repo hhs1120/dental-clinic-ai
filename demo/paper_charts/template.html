@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Brush+Script&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;500&display=block" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --ink: #4f9a96; --fill: #e3f1ef; --pen: #1d2f6b; --red: #b3261e; }
+  html, body { width: 2400px; height: 1700px; background: #85857f; overflow: hidden; }
+  .spread {
+    position: absolute; left: 40px; top: 40px; width: 2320px; height: 1620px; display: flex;
+    transform: rotate(${tilt}deg); filter: blur(0.35px) contrast(1.04);
+    box-shadow: 0 0 22px rgba(0, 0, 0, 0.4);
+    font-family: "Noto Sans KR", sans-serif; color: #333;
+  }
+  .page { position: relative; width: 50%; height: 100%; background: #f7f3e6; padding: 36px 40px; }
+  .page.left { background: linear-gradient(to left, #e4dfcf 0, #f7f3e6 40px); }
+  .page.right { background: linear-gradient(to right, #e4dfcf 0, #f7f3e6 40px); }
+  .stain { position: absolute; border-radius: 50%; pointer-events: none; z-index: 3; }
+  .panel { border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; position: relative; }
+  .label { background: var(--fill); color: #2e5f5c; font-size: 17px; padding: 3px 10px;
+           border-bottom: 1.5px solid var(--ink); font-weight: 500; }
+  .sub { font-size: 16px; color: #2e5f5c; font-weight: 500; }
+  .hw { font-family: "Nanum Pen Script", cursive; color: var(--pen); display: inline-block;
+        white-space: nowrap; line-height: 1; }
+  .hw.red { color: var(--red); }
+  .brush { font-family: "Nanum Brush Script", cursive; }
+  .struck { text-decoration: line-through; text-decoration-thickness: 3px; margin-right: 10px; }
+  .note { position: absolute; z-index: 2; }
+  .head { display: flex; align-items: flex-end; gap: 14px; height: 54px; margin-bottom: 12px;
+          font-size: 17px; color: #2e5f5c; }
+  .head .blank { border-bottom: 1.5px solid var(--ink); min-width: 150px; height: 40px;
+                 display: flex; align-items: flex-end; padding: 0 6px 2px; }
+  .head .clinic { margin-left: auto; font-size: 20px; color: var(--ink); font-weight: 500; }
+  .exam { display: flex; height: 520px; }
+  .exam .teeth { width: 64%; border-right: 2px solid var(--ink); position: relative; }
+  .exam .side { flex: 1; display: flex; flex-direction: column; }
+  .side .row { border-bottom: 1.5px solid var(--ink); padding: 8px 12px; }
+  .side .cc { height: 210px; }
+  .side .pi { flex: 1; border-bottom: 0; }
+  .lines .hw { display: block; margin: 8px 0 0 10px; }
+  .boxes { display: flex; gap: 18px; margin-top: 18px; height: 420px; }
+  .boxes .panel { flex: 1; }
+  .ledgers { display: flex; gap: 18px; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th { background: var(--fill); color: #2e5f5c; font-weight: 500; font-size: 15px; height: 32px;
+       border-bottom: 1.5px solid var(--ink); }
+  th + th, td + td { border-left: 1.2px solid var(--ink); }
+  td { height: 38px; border-bottom: 1px solid rgba(79, 154, 150, 0.6); padding: 0 6px;
+       vertical-align: bottom; overflow: visible; position: relative; }
+  .prog td { height: 42px; }
+  .prog th { height: 44px; font-size: 17px; }
+  .loc { padding: 0; }
+  .loc .cross { position: absolute; inset: 0; }
+  .loc .cross::before { content: ""; position: absolute; left: 0; right: 0; top: 50%;
+                        border-top: 1.6px dotted var(--ink); }
+  .loc .cross::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%;
+                       border-left: 1.6px dotted var(--ink); }
+  .q { position: absolute; z-index: 1; line-height: 1; }
+  .q1 { right: 56%; top: 0; } .q2 { left: 56%; top: 0; }
+  .q4 { right: 56%; bottom: 0; } .q3 { left: 56%; bottom: 0; }
+  .q0 { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+  .wm { position: absolute; right: 70px; bottom: 60px; font-size: 64px; color: rgba(79, 154, 150, 0.18);
+        font-weight: 500; letter-spacing: 6px; }
+</style>
+</head>
+<body>
+<div class="spread">
+  <div class="page left">
+    <div class="head">
+      성명 <span class="blank">$name</span>
+      차트번호 <span class="blank" style="min-width:110px">$old_chart_no</span>
+      생년월일 <span class="blank">$birth</span>
+      <span class="clinic">클로드치과의원</span>
+    </div>
+    <div class="panel exam">
+      <div class="teeth"><div class="label">Oral Examination</div>$teeth</div>
+      <div class="side">
+        <div class="row" style="display:flex;gap:10px;align-items:center;height:56px">
+          <span class="sub">담당 Staff :</span> $staff
+          <span class="sub" style="margin-left:auto">초진일 :</span> $first_visit
+        </div>
+        <div class="row cc"><span class="sub">C.C</span><div class="lines">$cc</div></div>
+        <div class="row pi"><span class="sub">P.I</span><div class="lines">$pi</div></div>
+      </div>
+    </div>
+    <div class="boxes">
+      <div class="panel"><div class="label">Tx. Plan</div><div class="lines">$tx_plan</div></div>
+      <div class="panel">$notes</div>
+    </div>
+    <div class="ledgers">$ledgers</div>
+    $stains_left
+  </div>
+  <div class="page right">
+    <table class="prog">
+      <tr><th style="width:12%">Date</th><th style="width:12%">Location</th><th>Treatment</th>
+          <th style="width:10%">Signature</th></tr>
+      $progress
+    </table>
+    <div class="wm">클로드치과</div>
+    $stains_right
+  </div>
+</div>
+</body>
+</html>

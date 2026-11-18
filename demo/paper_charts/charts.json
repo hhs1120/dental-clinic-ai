@@ -1,0 +1,152 @@
+[
+  {
+    "chart_no": "C-00016",
+    "name": "구상철",
+    "birth_date": "1940-04-05",
+    "old_chart_no": "2871",
+    "first_visit": "2010-02-08",
+    "staff": "강",
+    "cc": ["오른쪽 아래 어금니 씹을 때 아픔", "잇몸에서 피 남"],
+    "pi": ["DM (10년↑) 메트포르민 복용", "흡연 X, 의치 X"],
+    "tx_plan": ["1) Scaling (2회)", "2) ┌7 Ext. (동요도 3)", "3) 6┐ RCT → PFM Cr.", "4) 7┘ 경과 관찰"],
+    "marks": [{"tooth": "46", "mark": "○"}, {"tooth": "37", "mark": "X"}, {"tooth": "17", "mark": "△"}],
+    "notes": [
+      {"text": "당뇨! 발치 시 지혈 주의", "color": "red", "left": 40, "top": 40, "rot": -4, "size": 40},
+      {"text": "보호자 아들", "color": "blue", "left": 60, "top": 140, "rot": -2, "size": 34},
+      {"text": "010-0000-1187", "color": "blue", "left": 80, "top": 185, "rot": -2, "size": 34}
+    ],
+    "visits": [
+      {"date": "2010-02-08", "tooth": "전악", "lines": ["Pano, 전반적 치주염 (중등도)", "Scaling 1/2, 출혈 多"], "sign": "임"},
+      {"date": "2010-02-22", "fmt": "short", "tooth": "전악", "lines": ["Scaling 2/2, OHI"], "sign": "임"},
+      {"date": "2011-06-13", "tooth": "┌7", "lines": ["동요도 3, Ext. 권유 → 환자 거부"]},
+      {"date": "2011-06-27", "fmt": "short", "tooth": "┌7", "struck": {"tooth": "┌6"}, "lines": ["Lido 2@, Ext.", "봉합 4-0 silk, 지혈 확인 30분", "Rx) 아목시실린 3일"]},
+      {"date": "2011-07-04", "fmt": "short", "tooth": "┌7", "lines": ["S/O, 치유 양호"]},
+      {"date": "2012-03-14", "tooth": "6┐", "lines": ["냉온 통증(+) 타진(+) C3", "→ Lido 2@, Pulp ext. 1st, CaOH"]},
+      {"date": "2012-03-21", "fmt": "short", "tooth": "6┐", "lines": ["C&S, CaOH 교체, Tx. pain(-)"]},
+      {"date": "2012-04-04", "fmt": "short", "tooth": "6┐", "lines": ["CF (GP), Core (resin)"]},
+      {"date": "2012-04-18", "fmt": "short", "tooth": "6┐", "lines": ["PFM Cr. prep, imp., Temp. Cr."]},
+      {"date": "2012-05-02", "fmt": "short", "tooth": "6┐", "lines": ["Cr. set (Fuji), 교합 조정"]},
+      {"date": "2013-09-09", "tooth": "7┘", "lines": ["동요도 2~3, 당뇨 조절 안 됨", "→ 내과 협진 의뢰서 발급"]},
+      {"date": "2014-11-10", "tooth": "전악", "lines": ["Scaling, 출혈 多, OHI", "틀니 상담 원함 → 다음에"], "sign": "임"}
+    ],
+    "payments": [
+      {"date": "2010-02-08", "item": "초진, Pano, SC", "amount": "45,000", "balance": "0"},
+      {"date": "2010-02-22", "item": "SC", "amount": "30,000", "balance": "0"},
+      {"date": "2011-06-27", "item": "Ext.", "amount": "8,500", "balance": "0"},
+      {"date": "2012-03-14", "item": "RCT", "amount": "12,400", "balance": "0"},
+      {"date": "2012-04-18", "item": "PFM Cr.", "amount": "200,000", "balance": "300,000"},
+      {"date": "2012-05-02", "item": "Cr. 잔금", "amount": "300,000", "balance": "0"},
+      {"date": "2014-11-10", "item": "SC (보험)", "amount": "15,800", "balance": "0"}
+    ]
+  },
+  {
+    "chart_no": "C-00013",
+    "name": "김상훈",
+    "birth_date": "1949-07-05",
+    "old_chart_no": "1544",
+    "first_visit": "2010-11-03",
+    "staff": "강",
+    "cc": ["왼쪽 위 이 시림", "스케일링 원함"],
+    "pi": ["HTN, 암로디핀 복용", "흡연 1갑/일", "이전 치과 마취 잘 안 됐다 함"],
+    "tx_plan": ["1) Scaling", "2) └45 Resin / GI", "3) 7┘ 동요 → Ext. 후 Imp. 상담"],
+    "marks": [{"tooth": "17", "mark": "X"}, {"tooth": "24", "mark": "○"}, {"tooth": "25", "mark": "○"}, {"tooth": "46", "mark": "○"}],
+    "notes": [
+      {"text": "마취 잘 안 됨 → 3@", "color": "red", "left": 40, "top": 40, "rot": -5, "size": 40},
+      {"text": "BP 체크하고 시작", "color": "red", "left": 60, "top": 110, "rot": -3, "size": 36},
+      {"text": "Imp. 상담 원함 (7┘)", "color": "blue", "left": 60, "top": 200, "rot": 2, "size": 34}
+    ],
+    "visits": [
+      {"date": "2010-11-03", "tooth": "전악", "lines": ["Scaling, 치석 多", "흡연 → 금연 권유"], "sign": "임"},
+      {"date": "2011-09-07", "tooth": "└5", "lines": ["시림(+), C2 → Resin filling (A3)"]},
+      {"date": "2011-09-07", "fmt": "ditto", "tooth": "└4", "lines": ["치경부 마모, GI filling"]},
+      {"date": "2012-04-16", "tooth": "6┐", "lines": ["교합통, 크랙 의심", "→ 교합 조정, 경과 관찰"]},
+      {"date": "2012-05-07", "fmt": "short", "tooth": "6┐", "lines": ["통증 지속 → Pulp ext.", "Lido 3@ (마취 잘 안 됨)"]},
+      {"date": "2012-05-14", "fmt": "short", "tooth": "6┐", "lines": ["C&S, CaOH"]},
+      {"date": "2012-05-28", "fmt": "short", "tooth": "6┐", "lines": ["CF, Core, Cr. prep, imp."]},
+      {"date": "2012-06-11", "fmt": "short", "tooth": "6┐", "lines": ["Gold Cr. set"]},
+      {"date": "2013-06-19", "tooth": "7┘", "struck": {"tooth": "6┘"}, "lines": ["동요도 3, Lido 3@, Ext.", "봉합, 거즈 1시간"]},
+      {"date": "2013-06-26", "fmt": "short", "tooth": "7┘", "lines": ["S/O, 경과 양호"]},
+      {"date": "2014-02-11", "tooth": "전악", "struck": {"text": "Scaling + RP (하악)"}, "lines": ["Scaling + RP (상악)", "BP 150/95"], "sign": "임"}
+    ],
+    "payments": [
+      {"date": "2010-11-03", "item": "초진, SC", "amount": "50,000", "balance": "0"},
+      {"date": "2011-09-07", "item": "Resin, GI", "amount": "110,000", "balance": "0"},
+      {"date": "2012-05-07", "item": "RCT", "amount": "13,200", "balance": "0"},
+      {"date": "2012-05-28", "item": "Gold Cr.", "amount": "300,000", "balance": "400,000"},
+      {"date": "2012-06-11", "item": "Cr. 잔금", "amount": "400,000", "balance": "0"},
+      {"date": "2013-06-19", "item": "Ext.", "amount": "9,100", "balance": "0"},
+      {"date": "2014-02-11", "item": "SC, RP", "amount": "18,600", "balance": "0"}
+    ]
+  },
+  {
+    "chart_no": "C-00014",
+    "name": "조수민",
+    "birth_date": "1962-04-20",
+    "old_chart_no": "2203",
+    "first_visit": "2010-05-12",
+    "staff": "강",
+    "cc": ["왼쪽 아래 이 사이에 음식 낌"],
+    "pi": ["특이 병력 없음", "NKDA"],
+    "tx_plan": ["1) ┌6 Inlay (Gold)", "2) Scaling", "3) 8┐ 매복 → 대학병원"],
+    "marks": [{"tooth": "36", "mark": "○"}, {"tooth": "37", "mark": "○"}, {"tooth": "44", "mark": "○"}, {"tooth": "45", "mark": "○"}, {"tooth": "48", "mark": "△"}],
+    "notes": [
+      {"text": "사랑니 대학병원 결과 확인!", "color": "red", "left": 40, "top": 50, "rot": -3, "size": 38},
+      {"text": "치실 사용법 교육함", "color": "blue", "left": 70, "top": 150, "rot": -2, "size": 34}
+    ],
+    "visits": [
+      {"date": "2010-05-12", "tooth": "┌6", "lines": ["C2, Inlay prep. imp., Temp."]},
+      {"date": "2010-05-19", "fmt": "short", "tooth": "┌6", "lines": ["Gold inlay set"]},
+      {"date": "2010-05-19", "fmt": "ditto", "tooth": "전악", "lines": ["Scaling"], "sign": "임"},
+      {"date": "2011-08-22", "tooth": "┌7", "lines": ["C1 → Resin (A2)"]},
+      {"date": "2012-01-30", "tooth": "8┐", "lines": ["매복 사랑니, Pano", "→ 대학병원 의뢰서"]},
+      {"date": "2012-10-08", "fmt": "short", "tooth": "전악", "lines": ["Scaling, 치석 少"], "sign": "임"},
+      {"date": "2013-08-28", "tooth": "전악", "lines": ["Scaling"], "sign": "임"},
+      {"date": "2014-03-17", "tooth": "┌6", "struck": {"tooth": "└6"}, "lines": ["Inlay 탈락 → 재부착", "(Resin cement)"]},
+      {"date": "2014-10-15", "fmt": "short", "tooth": "4┐", "lines": ["치경부 마모, 시림(+), GI filling"]},
+      {"date": "2014-10-15", "fmt": "ditto", "tooth": "5┐", "lines": ["치경부 마모, GI filling"]}
+    ],
+    "payments": [
+      {"date": "2010-05-12", "item": "Gold Inlay", "amount": "150,000", "balance": "250,000"},
+      {"date": "2010-05-19", "item": "Inlay 잔금, SC", "amount": "300,000", "balance": "0"},
+      {"date": "2011-08-22", "item": "Resin", "amount": "100,000", "balance": "0"},
+      {"date": "2012-01-30", "item": "Pano, 의뢰서", "amount": "6,300", "balance": "0"},
+      {"date": "2014-03-17", "item": "재부착", "amount": "4,800", "balance": "0"},
+      {"date": "2014-10-15", "item": "GI ×2", "amount": "11,000", "balance": "0"}
+    ]
+  },
+  {
+    "chart_no": "C-00017",
+    "name": "이지은",
+    "birth_date": "1965-04-05",
+    "old_chart_no": "3127",
+    "first_visit": "2012-07-03",
+    "staff": "강",
+    "cc": ["앞니 깨짐 (넘어짐)"],
+    "pi": ["폐소공포증 — 입 오래 벌리기 힘듦", "NKDA"],
+    "tx_plan": ["1) 1┘ Resin build-up", "2) 경과 보고 RCT", "3) 6┘ Resin", "4) 미백 상담"],
+    "marks": [{"tooth": "11", "mark": "○"}, {"tooth": "16", "mark": "○"}, {"tooth": "26", "mark": "△"}],
+    "notes": [
+      {"text": "폐소공포! 러버댐 X", "color": "red", "left": 40, "top": 40, "rot": -4, "size": 40},
+      {"text": "중간에 쉬어 가기", "color": "red", "left": 70, "top": 110, "rot": -3, "size": 36},
+      {"text": "오후 늦게 예약 선호", "color": "blue", "left": 60, "top": 200, "rot": 3, "size": 34}
+    ],
+    "visits": [
+      {"date": "2012-07-03", "tooth": "1┘", "lines": ["넘어짐, Crown fx, 동통(+), PA", "→ Resin build-up"]},
+      {"date": "2012-07-17", "fmt": "short", "tooth": "1┘", "lines": ["냉 반응 정상, 경과 관찰"]},
+      {"date": "2012-12-04", "fmt": "short", "tooth": "1┘", "lines": ["변색 → EPT(-)", "Pulp ext. 1st"]},
+      {"date": "2012-12-11", "fmt": "short", "tooth": "1┘", "lines": ["C&S, CaOH"]},
+      {"date": "2012-12-26", "fmt": "short", "tooth": "1┘", "lines": ["CF, 미백 상담 (비보험)"]},
+      {"date": "2013-03-05", "tooth": "전악", "lines": ["Scaling, 입 오래 벌리기 힘들어함"], "sign": "임"},
+      {"date": "2014-01-22", "tooth": "6┘", "lines": ["C2 → Resin, 러버댐 X (폐소)"]},
+      {"date": "2014-01-22", "fmt": "ditto", "tooth": "└6", "lines": ["C1, 경과 관찰"]},
+      {"date": "2014-09-30", "fmt": "short", "tooth": "전악", "struck": {"text": "치석 多"}, "lines": ["Scaling, 치석 中"], "sign": "임"}
+    ],
+    "payments": [
+      {"date": "2012-07-03", "item": "초진, PA, Resin", "amount": "85,000", "balance": "0"},
+      {"date": "2012-12-04", "item": "RCT", "amount": "11,700", "balance": "0"},
+      {"date": "2013-03-05", "item": "SC", "amount": "50,000", "balance": "0"},
+      {"date": "2014-01-22", "item": "Resin", "amount": "100,000", "balance": "0"},
+      {"date": "2014-09-30", "item": "SC (보험)", "amount": "15,500", "balance": "0"}
+    ]
+  }
+]

@@ -15,6 +15,7 @@ generator = [
 backend = [
     "anthropic>=2.3.0",
     "fastapi>=0.162.0",
+    "httpx>=0.28.1",
     "numpy",
     "openai",
     "pydantic",
