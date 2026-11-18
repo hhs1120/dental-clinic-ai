@@ -130,22 +130,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 목록 칸 접힘은 <html data-list-collapsed>를 CSS가 읽는다(list-collapsed 변형) — 그리기 전 스크립트가 붙여
   // 새로 고침해도 펼쳐진 채 깜빡이지 않고, 서버 HTML과 렌더가 같다. 서랍(좁은 화면)에서는 접힘을 무시한다
   // 아이콘 줄로 다른 공간에 가면 목록 칸을 편다 — 같은 공간 안에서 옮길 때는 접힘을 그대로 둔다.
-  // 펴기는 경로가 바뀌어 새 공간을 그린 뒤(그리기 전 layout effect)에 한다 — 누르자마자 펴면 옛 공간 목록이 잠깐 보인다.
-  // 넓은 화면에서 지금 공간 아이콘을 다시 누르면 옮기지 않고 목록 칸을 접고 편다(서랍·EMR은 그냥 링크)
-  const enter = (key: string, e?: React.MouseEvent) => {
-    if (key !== space) {
-      expandFor.current = key;
-      return;
-    }
-    if (
-      !e ||
-      open ||
-      key === "emr" ||
-      !matchMedia("(min-width: 48rem)").matches
-    )
-      return;
-    e.preventDefault();
-    saveListCollapsed(!("listCollapsed" in document.documentElement.dataset));
+  // 펴기는 경로가 바뀌어 새 공간을 그린 뒤(그리기 전 layout effect)에 한다 — 누르자마자 펴면 옛 공간 목록이 잠깐 보인다
+  const enter = (key: string) => {
+    if (key !== space) expandFor.current = key;
   };
   const expandFor = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -204,7 +191,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={key}
                 href={href}
                 aria-current={key === space ? "page" : undefined}
-                onClick={(e) => enter(key, e)}
+                onClick={() => enter(key)}
                 className={railItem(key === space)}
               >
                 <Icon className="size-5" />
