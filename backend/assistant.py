@@ -26,8 +26,8 @@ from shared.llm import BudgetExceeded
 AGENT, TASK, REPLY_TASK = "assistant", "assistant", "assistant_reply"
 TOOL_ALIAS = "chat"  # 도구 단계 — 다음 묶음에서 로컬 모델 자리(§7.1)
 REPLY_ALIAS = "chat"  # 답 단계
-PROMPT_VERSION = "v1"
-REPLY_VERSION = "v1"
+PROMPT_VERSION = "v2"
+REPLY_VERSION = "v2"
 MAX_TOOL_CALLS = (
     chat.CHAT_MAX_TOOL_CALLS
 )  # 턴당 도구 호출(done_tools 포함) — ③ 값에서 시작, dev 실측으로 정함(§4.1)
