@@ -360,18 +360,17 @@ def _reply(conn, gw, store, run_id, prompt, steps, records, clinic) -> tuple[str
             {"role": "assistant", "content": r.text},
             {"role": "user", "content": RETRY_REASON[rule] + RETRY_HINT},
         ]
+    # 고정 문구 아래 대상 카드가 붙으면 답과 어긋나 보인다 — 초안 카드만 _with_drafts가 붙인다
+    if rule is not None:
+        return FAILED_STATUS[rule], FAILED_TEXT, []
     cards, seen = [], set()
-    for c in data[
-        "cards"
-    ]:  # 이번 턴 결과 밖 대상은 그 카드만 버린다 — 어긋난 답이어도 남는 카드는 검증된 대상
+    for c in data["cards"]:  # 이번 턴 결과 밖 대상은 그 카드만 버린다
         key = (c["type"], c["id"])
         if key in seen or c["id"] not in targets.get(c["type"], ()):
             continue
         seen.add(key)
         if (detail := card_detail(conn, c["type"], c["id"], clinic)) is not None:
             cards.append({"type": c["type"], "id": c["id"], "data": detail})
-    if rule is not None:
-        return FAILED_STATUS[rule], FAILED_TEXT, cards
     return "ok", data["text"], cards
 
 

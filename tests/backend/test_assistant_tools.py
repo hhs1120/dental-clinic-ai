@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from backend import assistant_tools, emr_bridge
+from backend import assistant_tools, calls, claims, emr_bridge
 from backend.harness.loop import ToolContext
 from backend.harness.store import RunStore
 from tests.backend.test_emr_bridge import (
@@ -81,6 +81,23 @@ def test_find_calls_filters(conn):
     assert wants["calls"][0]["wants_appt"] is True and wants["calls"][0]["chart_no"] == "C-00002"
     only = call(conn, "find_calls", chart_no="C-00001", **base)
     assert [c["call_uid"] for c in only["calls"]] == ["c-2"]
+
+
+def test_find_calls_carries_todo_with_done(conn):
+    """통화 화면 할 일을 그대로 — 연락(contact)·안에서(internal)와 끝낸 상태"""
+    _call(conn, "c-1", "2026-11-26 15:00:00", NEW)
+    base = {"date_from": "2026-11-24", "date_to": "2026-11-30"}
+    todo = call(conn, "find_calls", **base)["calls"][0]["todo"]
+    assert todo == [
+        {"kind": "internal", "who": "", "text": "원장님께 여쭙기", "done": False},
+        {"kind": "contact", "who": "김철수", "text": "회신 전화", "done": False},
+    ]
+    cid = conn.execute("SELECT id FROM ax_call_classifications WHERE call_uid = 'c-1'").fetchone()[
+        0
+    ]
+    calls.set_todo_done(conn, cid, 1, part="데스크", at="2026-11-27 09:00:00", done=True)
+    todo = call(conn, "find_calls", **base)["calls"][0]["todo"]
+    assert [t["done"] for t in todo] == [False, True]
 
 
 def test_free_slots_tool_closed_thursday(conn):
@@ -164,6 +181,25 @@ def test_prep_rows_includes_approved_ax(conn):
 @pytest.mark.parametrize("kind", ["appeal_soon", "adjusted", "pre_claim_warning"])
 def test_claim_items_empty(conn, kind):
     assert call(conn, "claim_items", kind=kind) == {"kind": kind, "count": 0, "items": []}
+
+
+def test_appeal_soon_matches_claims_soon_chip(conn, monkeypatch):
+    """재심 기한 임박 = 청구 점검 soon 칩(오늘 화면 숫자와 같음) — 상병 착오(diagnosis)는 재청구 불가라 뺀다"""
+    row = {
+        "claim_id": 1,
+        "chart_no": "C-00001",
+        "name": "김철수",
+        "procedure_name": "스케일링",
+        "adjust_note": "메모",
+        "unpaid": 1000,
+        "deadline": "2026-12-08",
+        "days_left": 7,
+        "expired": False,
+    }
+    rows = [row | {"chips": ["soon"]}, row | {"claim_id": 2, "chips": ["diagnosis"]}]
+    monkeypatch.setattr(claims, "adjusted", lambda conn, today: {"rows": rows})
+    got = call(conn, "claim_items", kind="appeal_soon")
+    assert got["count"] == 1 and [i["claim_id"] for i in got["items"]] == [1]
 
 
 def test_draft_tool_accepts_pasted_source_call(conn):

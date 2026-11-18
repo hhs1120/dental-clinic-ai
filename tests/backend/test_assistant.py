@@ -102,9 +102,11 @@ def test_card_outside_turn_dropped(conn):
 
 
 def test_number_mismatch_retry_then_fixed_text(conn):
-    gw = Turns(conn, [[PATIENT, DONE]], [reply("잔액 777원"), reply("잔액 777원")])
+    cards = [{"type": "patient", "id": "C-00001"}]
+    gw = Turns(conn, [[PATIENT, DONE]], [reply("잔액 777원", cards), reply("잔액 777원", cards)])
     out = turn(conn, gw, "김철수 잔액")
     assert out["status"] == "number_failed" and out["text"] == assistant.FAILED_TEXT
+    assert out["cards"] == []  # 고정 문구 아래 대상 카드를 붙이지 않는다
     replies = [kw for _, kw in gw.calls if kw.get("schema")]
     assert len(replies) == 2 and len(replies[1]["messages"]) > len(replies[0]["messages"])
     saved = _messages(conn, out["conversation_id"])[-1]

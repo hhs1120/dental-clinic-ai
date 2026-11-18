@@ -93,13 +93,15 @@ def _find_calls(conn, args: dict) -> dict:
     if args["chart_no"]:
         where += " AND calls.chart_no = :c"
         params["c"] = args["chart_no"]
+    rows = calls._rows(conn, where, params)
+    checks = calls._checks(conn, [r["classification_id"] for r in rows if r["classification_id"]])
     out = []
-    for r in calls._rows(conn, where, params):
+    for r in rows:
         labels = calls._labels(r)
         wants = bool(labels["wants_appt"]) if labels else None
         if args["wants_appt"] is not None and wants != args["wants_appt"]:
             continue
-        card = calls._card(r, {})
+        card = calls._card(r, checks)
         out.append(
             {
                 "call_uid": card["call_uid"],
@@ -109,6 +111,11 @@ def _find_calls(conn, args: dict) -> dict:
                 "purpose": card["purpose"],
                 "wants_appt": wants,
                 "summary": card["summary"],
+                # 통화 화면 할 일과 같은 목록 — "다시 연락할 곳"을 요약 문장에서 짐작하지 않게(contact = 연락)
+                "todo": [
+                    {"kind": t["kind"], "who": t["who"], "text": t["text"], "done": t["done"]}
+                    for t in calls._todo(r, checks)
+                ],
             }
         )
     return {"count": len(out), "calls": out[:LIST_CAP]}
@@ -164,8 +171,10 @@ def _claim_items(clinic: Clinic, conn, args: dict) -> dict:
         items = [{k: r[k] for k in keep} | {"dx_name": r["dx_name"], **r["warning"]} for r in rows]
     else:
         rows = claims.adjusted(conn, clinic.today)["rows"]
-        if kind == "appeal_soon":
-            rows = [r for r in rows if "soon" in r["chips"] or "diagnosis" in r["chips"]]
+        if (
+            kind == "appeal_soon"
+        ):  # 청구 점검 soon 칩·오늘 화면과 같은 기준 — 상병 착오는 재청구할 수 없어 뺀다
+            rows = [r for r in rows if "soon" in r["chips"]]
         keep = ("claim_id", "chart_no", "name", "procedure_name", "adjust_note", "unpaid")
         items = [
             {k: r[k] for k in keep}
@@ -208,7 +217,15 @@ def _missed(clinic: Clinic, conn, args: dict) -> dict:
     keep = ("rank", "chart_no", "name", "last_visit", "balance", "chips", "score")
     return {
         "count": len(rows),
-        "patients": [{k: r[k] for k in keep} for r in rows[: args["limit"]]],
+        # 최근 연락(결과·시각·감점 기간 남음 active) — 화면이 보여 주는 연락 기록, 방금 연락한 사람을 다시 권하지 않게
+        "patients": [
+            {k: r[k] for k in keep}
+            | {
+                "contact": r["contact"]
+                and {k: r["contact"][k] for k in ("result", "at", "active")}
+            }
+            for r in rows[: args["limit"]]
+        ],
     }
 
 
@@ -270,7 +287,8 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
         *(t for t in query_tools(clinic, include_ax=True) if t.name != "refuse"),
         Tool(
             "find_calls",
-            f"기간(YYYY-MM-DD, 오늘 {today})의 통화 목록 — 목적·요약·예약 원함. 차트번호·예약 원함으로 거른다.",
+            f"기간(YYYY-MM-DD, 오늘 {today})의 통화 목록 — 목적·요약·예약 원함·할 일(kind contact = 연락할"
+            " 사람에게 할 일, internal = 안에서 할 일, done = 끝냄). 차트번호·예약 원함으로 거른다.",
             FindCallsArgs,
             lambda ctx, a: _find_calls(conn(ctx), a),
         ),
@@ -306,7 +324,8 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
         ),
         Tool(
             "missed_patients",
-            "미예약 환자 상위(칩으로 거름, 최대 10명).",
+            "미예약 환자 상위(칩으로 거름, 최대 10명). contact = 최근 연락(active면 감점 기간이라 다시 연락을"
+            " 권하지 않는다).",
             MissedArgs,
             lambda ctx, a: _missed(clinic, conn(ctx), a),
         ),
