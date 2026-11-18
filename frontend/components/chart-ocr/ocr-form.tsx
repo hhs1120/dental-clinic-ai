@@ -302,7 +302,9 @@ export function OcrForm({
               onFocus={focus}
               className={cn(
                 "group flex flex-col gap-2 rounded-md border bg-card p-2.5",
-                v.date_check || (!v.quadrant && v.teeth && v.teeth !== "전악")
+                v.date_check ||
+                  !v.treatment.trim() ||
+                  (!v.quadrant && v.teeth && v.teeth !== "전악")
                   ? "border-status-warn-border"
                   : "border-border",
               )}
@@ -372,6 +374,11 @@ export function OcrForm({
                   서명 {v.signature}
                 </span>
               </div>
+              {!v.treatment.trim() && (
+                <Badge variant="warn" className="self-start">
+                  진료 내용 없음 — 채우거나 줄 삭제
+                </Badge>
+              )}
               <Input
                 value={v.treatment}
                 aria-label="진료 내용"
@@ -529,5 +536,8 @@ export function remaining(
     (v) => v.teeth && v.teeth !== "전악" && !v.quadrant,
   ).length;
   if (loc) out.push(`위치 고르기 ${loc}곳`);
+  // 정리 모델이 빈 줄을 더 만드는 일이 있다 — 채우거나 지운다(서버도 422)
+  const empty = fields.visits.filter((v) => !v.treatment.trim()).length;
+  if (empty) out.push(`빈 진료 줄 ${empty}곳`);
   return out;
 }

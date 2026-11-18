@@ -573,3 +573,13 @@ def test_approve_chart_import_blocks_same_visit_dates_twice(conn):
 
 def test_match_patient_tolerates_none(conn):
     assert emr_bridge.match_patient(conn, None, None) is None
+
+
+def test_approve_same_import_twice_says_already_processed(conn):
+    cid = _chart_draft(conn)
+    emr_bridge.approve_chart_import(conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT)
+    with pytest.raises(emr_bridge.Conflict) as e:
+        emr_bridge.approve_chart_import(
+            conn, cid, final=_fields(), patient_id=MISSED, by=BY, at=AT
+        )
+    assert not isinstance(e.value, emr_bridge.AlreadyImported)

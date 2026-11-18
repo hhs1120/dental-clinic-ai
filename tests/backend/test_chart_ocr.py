@@ -1,13 +1,14 @@
 """차트 OCR 응답 정리 — 상자·날짜 이어받기·치아 번호·약어 제안(backend/chart_ocr.py, 기능 정의 §5 종이 차트 이관 정리).
 고정값은 샘플 C-00016으로 업스테이지를 한 번 부른 실제 응답(tests/backend/fixtures/)."""
 
+import inspect
 import json
 from pathlib import Path
 
 import pytest
 
 from backend import chart_ocr
-from shared.llm import LLMResult
+from shared.llm import Gateway, LLMResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -82,7 +83,7 @@ def test_fields_from_fixture():
     assert f["payments"][4]["balance"] == 300000 and f["payments"][4]["date"] == "2012-04-18"
 
 
-# 날짜 교차검증(기능 정의 §5 종이 차트 이관 정리) — 정보 추출이 빠뜨린 날짜는 OCR 글자로, 연도는 수납 장부로
+# 날짜 교차검증(기능 정의 §5 종이 차트 이관 정리) — 정리 모델이 빠뜨린 날짜는 OCR 글자로, 연도는 수납 장부로
 def _v(raw):
     return {"date_raw": raw, "date": None, "date_check": False, "date_note": None}
 
@@ -250,6 +251,9 @@ class FakeGw:
         self.data, self.ok, self.calls = data, ok, []
 
     def complete(self, alias, **kw):
+        inspect.signature(Gateway.complete).bind(
+            None, alias, **kw
+        )  # 실제 게이트웨이 인자 이름과 맞는지
         self.calls.append({"alias": alias, **kw})
         return LLMResult(
             ok=self.ok,
@@ -275,6 +279,7 @@ def test_structure_sends_ocr_lines_with_required_schema():
     lines = call["messages"][0]["content"].splitlines()
     assert len(lines) == 304 and all(len(x.split(" ", 4)) == 5 for x in lines)  # x0 y0 x1 y1 글자
     assert call["system"]  # prompts/chart_ocr/v1.md
+    assert call["max_tokens"] == chart_ocr.MAX_TOKENS
 
 
 def test_structure_failure_raises():
@@ -282,3 +287,18 @@ def test_structure_failure_raises():
         chart_ocr.structure(FakeGw(ok=False), _load("upstage_ocr.json"))
     with pytest.raises(chart_ocr.ReadError):
         chart_ocr.structure(FakeGw(data=["not", "dict"]), _load("upstage_ocr.json"))
+
+
+def test_structure_passes_ref_for_cost():
+    gw = FakeGw({"patient_name": "구상철"})
+    chart_ocr.structure(gw, _load("upstage_ocr.json"), ref=("chart_import_file", "a.png"))
+    assert gw.calls[0]["ref"] == ("chart_import_file", "a.png")
+
+
+def test_money_may_be_blank_but_other_fields_required():
+    # 금액·잔액은 종이에서 빈 칸일 수 있다 — 필수여도 null을 허용해 0을 지어내지 않게
+    s = chart_ocr._required(chart_ocr.SCHEMA)
+    pay = s["properties"]["payments"]["items"]
+    assert pay["required"] == ["date", "item", "amount", "balance"]
+    assert {"type": "null"} in pay["properties"]["amount"]["anyOf"]
+    assert s["properties"]["visits"]["items"]["properties"]["date"]["type"] == "string"

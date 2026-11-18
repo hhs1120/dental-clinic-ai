@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import api, chart_ocr
+from shared.llm import BudgetExceeded
 from tests.backend.test_chart_ocr import FakeGw
 from tests.backend.test_emr_bridge import CLINIC, MISSED, NEW, conn, src
 
@@ -238,3 +239,22 @@ def test_approve_same_visits_twice_409(client, upstage):
     b = client.post("/chart-ocr", json=up).json()
     r = client.post(f"/chart-ocr/{b['id']}/approve", json=body | {"final": _final(b)})
     assert r.status_code == 409 and "이미 이관" in r.json()["detail"]
+
+
+def test_budget_exceeded_503_no_row(client, gw):
+    def boom(alias, **kw):
+        raise BudgetExceeded("runtime 15")
+
+    gw.complete = boom
+    r = client.post("/chart-ocr/samples/chart-C-00001.png")
+    assert r.status_code == 503 and "상한" in r.json()["detail"]
+    assert client.get("/chart-ocr").json() == []
+
+
+def test_approve_rejects_empty_treatment_422(client):
+    d = client.post("/chart-ocr/samples/chart-C-00001.png").json()
+    final = _final(d)
+    final["visits"][1]["treatment"] = "  "
+    body = {"final": final, "chart_no": "C-00001", "part": "데스크"}
+    r = client.post(f"/chart-ocr/{d['id']}/approve", json=body)
+    assert r.status_code == 422 and "빈 진료" in r.json()["detail"]

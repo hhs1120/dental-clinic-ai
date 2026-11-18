@@ -485,6 +485,11 @@ def approve_chart_import(
         "SELECT 1 FROM source.emr_patients WHERE id = ?", (patient_id,)
     ).fetchone():
         raise ValueError(f"모르는 환자: {patient_id}")
+    row = conn.execute("SELECT status FROM ax_chart_imports WHERE id = ?", (import_id,)).fetchone()
+    if (
+        row is None or row["status"] != "draft"
+    ):  # 두 번 누름은 겹치는 날짜보다 먼저 — 자기 날짜를 늘어놓지 않게
+        raise Conflict(f"초안이 아님: {import_id}")
     done = {r["date"] for r in chart_imports(conn, patient_id)}
     again = sorted({v.get("date") for v in final.get("visits", [])} & done - {None})
     if again:

@@ -16,9 +16,9 @@ import httpx
 from backend import prompts
 
 OCR_URL = "https://api.upstage.ai/v1/document-digitization"
-TIMEOUT_S = 120
+TIMEOUT_S = 60  # OCR — 정리 호출(게이트웨이)까지 더해도 화면 프록시 제한(frontend/next.config.ts proxyTimeout 300초) 안에 들게
 TASK, ALIAS, PROMPT_VERSION = "chart_ocr", "chart_ocr", "v1"
-MAX_TOKENS = 8000  # 진료 12건·수납 7줄에 출력 약 4,600토큰(AI 실험 기록 §40)
+MAX_TOKENS = 12000  # 샘플 4장 실측 출력 2,500~7,700토큰(진료 최대 12건) — 늘어질 때 비용·대기를 끊는 천장(AI 실험 기록 §40)
 LOW_CONFIDENCE = 0.8  # 이보다 낮은 OCR 단어는 화면에서 강조
 DITTO = ("〃", '"', "''", "״")
 # 손글씨 〃를 OCR이 이렇게 읽는다(스파이크) — 〃로 보되 확인 필요
@@ -108,8 +108,15 @@ SCHEMA = {
                 "properties": {
                     "date": {"type": "string"},
                     "item": {"type": "string", "description": "내용"},
-                    "amount": {"type": "integer", "description": "금액(원)"},
-                    "balance": {"type": "integer", "description": "잔액(원)"},
+                    # 금액·잔액은 빈 칸일 수 있어 null 허용 — 필수 칸이어도 0을 지어내지 않게
+                    "amount": {
+                        "anyOf": [{"type": "integer"}, {"type": "null"}],
+                        "description": "금액(원), 비었으면 null",
+                    },
+                    "balance": {
+                        "anyOf": [{"type": "integer"}, {"type": "null"}],
+                        "description": "잔액(원), 비었으면 null",
+                    },
                 },
             },
         },
@@ -162,8 +169,9 @@ def ocr_lines(ocr_resp: dict) -> str:
     )
 
 
-def structure(gw, ocr_resp: dict) -> dict:
-    """OCR 글자·좌표 → SCHEMA 항목(게이트웨이 — 기록·비용·하루 상한). 실패·객체 아님은 ReadError"""
+def structure(gw, ocr_resp: dict, ref: tuple | None = None) -> dict:
+    """OCR 글자·좌표 → SCHEMA 항목(게이트웨이 — 기록·비용·하루 상한, ref는 기록에 남길 출처). 실패·객체 아님은
+    ReadError"""
     res = gw.complete(
         ALIAS,
         task=TASK,
@@ -172,6 +180,7 @@ def structure(gw, ocr_resp: dict) -> dict:
         schema=_required(SCHEMA),
         prompt_version=PROMPT_VERSION,
         max_tokens=MAX_TOKENS,
+        ref=ref,
     )
     if not res.ok or not isinstance(res.data, dict):
         raise ReadError(f"항목 정리 실패: {res.error or '결과가 객체가 아님'}")
@@ -440,8 +449,8 @@ def _iso(value: str) -> bool:
 
 
 def refresh(f: dict, words: list[dict]) -> dict:
-    """초안을 열 때 기계가 만든 부분을 원문에서 다시 — 정리 규칙이 바뀌어도 반영. 날짜 교차검증·약어 제안, 정보
-    추출이 비운 생년월일은 OCR이 "생년월일" 오른쪽에서 읽은 글자로(head_notes에 근거)"""
+    """초안을 열 때 기계가 만든 부분을 원문에서 다시 — 정리 규칙이 바뀌어도 반영. 날짜 교차검증·약어 제안, 정리
+    모델이 비운 생년월일은 OCR이 "생년월일" 오른쪽에서 읽은 글자로(head_notes에 근거)"""
     f = settle(f, words)
     notes = dict(f.get("head_notes") or {})  # 저장 때 채운 근거 — 다시 불러도 남긴다
     if not _iso(f.get("birth_date", "")):

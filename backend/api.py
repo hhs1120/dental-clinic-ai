@@ -1611,10 +1611,9 @@ def _read_chart(paths, upstage, gw, filename: str, image: bytes, now: dt.datetim
     try:
         words = chart_ocr.words(ocr_resp)
         try:
-            raw = chart_ocr.structure(gw(conn), ocr_resp)
+            raw = chart_ocr.structure(gw(conn), ocr_resp, ref=("chart_import_file", filename))
             fields = chart_ocr.refresh(chart_ocr.fields(raw), words)
-        except chart_ocr.ReadError as e:
-            conn.commit()  # 호출 기록은 남긴다
+        except chart_ocr.ReadError as e:  # 호출 기록은 게이트웨이가 이미 남겼다
             raise HTTPException(502, str(e)) from e
         except BudgetExceeded as e:
             raise HTTPException(503, f"오늘 AI 비용 상한에 닿았습니다: {e}") from e
@@ -1627,18 +1626,22 @@ def _read_chart(paths, upstage, gw, filename: str, image: bytes, now: dt.datetim
         conn.close()
 
 
-def _same_image(paths, image: bytes) -> int | None:
-    """같은 이미지를 읽은 가장 최근 이관 id(반려는 빼고) — 다시 부르지 않는다. 앱 DB가 없으면 None"""
+def _same_image(paths, *images: bytes) -> list[int | None]:
+    """이미지마다 같은 이미지를 읽은 가장 최근 이관 id(반려는 빼고) — 다시 부르지 않는다. 연결 하나로,
+    앱 DB가 없으면 모두 None"""
     if not Path(paths[0]).exists():
-        return None
+        return [None] * len(images)
     conn = _open_rw(paths)
     try:
-        row = conn.execute(
-            "SELECT id FROM ax_chart_imports WHERE image = ? AND status != 'rejected'"
-            " ORDER BY id DESC LIMIT 1",
-            (image,),
-        ).fetchone()
-        return row["id"] if row else None
+        out = []
+        for image in images:
+            row = conn.execute(
+                "SELECT id FROM ax_chart_imports WHERE image = ? AND status != 'rejected'"
+                " ORDER BY id DESC LIMIT 1",
+                (image,),
+            ).fetchone()
+            out.append(row["id"] if row else None)
+        return out
     finally:
         conn.close()
 
@@ -1653,10 +1656,9 @@ def _detail(paths, import_id: int) -> dict:
 
 @app.get("/chart-ocr/samples")
 def chart_ocr_samples(paths: Paths, samples: PaperCharts) -> list:
-    return [
-        {"name": f.name, "imported_id": _same_image(paths, f.read_bytes())}
-        for f in sorted(samples.glob("*.png"))
-    ]
+    files = sorted(samples.glob("*.png"))
+    ids = _same_image(paths, *(f.read_bytes() for f in files))
+    return [{"name": f.name, "imported_id": i} for f, i in zip(files, ids, strict=True)]
 
 
 def _sample_path(samples: Path, name: str) -> Path:
@@ -1679,7 +1681,7 @@ def chart_ocr_sample(
     """샘플 읽기 — 같은 이미지를 읽은 행이 있으면 그것(녹화 때 업스테이지 대기·실패 없이). 샘플을 다시 그렸거나
     반려했으면 다시 읽는다"""
     image = _sample_path(samples, name).read_bytes()
-    saved = _same_image(paths, image)
+    (saved,) = _same_image(paths, image)
     if saved is not None:
         return _detail(paths, saved)
     return _read_chart(paths, upstage, gw, name, image, now)
@@ -1702,7 +1704,7 @@ def chart_ocr_upload(
         raise HTTPException(413, "이미지가 5MB를 넘습니다")
     if _image_type(image) is None:
         raise HTTPException(415, "PNG·JPEG만 읽습니다")
-    saved = _same_image(paths, image)  # 같은 스캔을 또 올리면 저장된 결과
+    (saved,) = _same_image(paths, image)  # 같은 스캔을 또 올리면 저장된 결과
     if saved is not None:
         return _detail(paths, saved)
     return _read_chart(paths, upstage, gw, body.filename, image, now)
@@ -1816,6 +1818,9 @@ def _check_final(final: dict) -> None:
                 ok = False
             if not ok:
                 raise HTTPException(422, f"{key} 날짜는 YYYY-MM-DD: {d}")
+    empty = sum(not str(v.get("treatment") or "").strip() for v in final.get("visits", []))
+    if empty:  # 정리 모델이 빈 줄을 더 만드는 일이 있다(AI 실험 기록 §40) — 지우거나 채운 뒤 승인
+        raise HTTPException(422, f"빈 진료 줄 {empty}곳 — 채우거나 지운 뒤 승인하세요")
 
 
 @app.post("/chart-ocr/{import_id}/reject")
