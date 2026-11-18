@@ -64,13 +64,20 @@ CONFIRM_CLAIM_RE = re.compile(
     rf"(확정|승인)(했|해{_KEEP})"
     r"|(예약|초안)\s*(을|를|이|가|도|은|는)?\s*(확정|승인|완료)\s*(처리)?\s*(되었|됐)"
 )
+# 다른 사람이 한 일임을 밝힌 문장 — 통화에서 있었던 일("통화에서 12월 11일로 확정했습니다")이나 환자·직원이 한 일은
+# 비서가 예약을 만들었다·확정했다는 말이 아니다. 위 두 검사는 이런 문장을 빼고 문장마다 본다
+OTHER_ACTOR_RE = re.compile(
+    r"(통화|전화)\s*(에서|중에?|때)|(환자|보호자|직원|원장)\s*(님)?\s*(이|가|께서)|님\s*(이|께서)\s"
+)
+SENTENCE_RE = re.compile(r"[^.!?\n]+")
 EVIDENCE_SKIP = (*chat.EVIDENCE_SKIP, "question")  # 모델이 쓴 자유 글은 숫자 근거가 아니다
 RETRY_REASON = {
     CITE: "cited_ids가 이번 턴 기록 검색·차트 조회 결과 밖임.",
     NUMBER: "답의 숫자가 이번 턴 도구 결과·입력에 없음.",
     DRAFT_CLAIM: "이번 턴에 만든 예약 초안이 없는데 답이 초안·예약을 만든 것처럼 썼거나, 예약을 확정·승인한"
     " 것처럼 씀. 지난 예약·이미 있는 예약은 그대로 설명해도 되지만, 이번 턴 결과에 초안 카드가 없으면 무엇도 새로"
-    " 만들었다·잡았다고 쓰지 않는다. 확정·승인은 직원이 초안 카드에서 하므로 했다고 쓰지 않는다.",
+    " 만들었다·잡았다고 쓰지 않는다. 확정·승인은 직원이 초안 카드에서 하므로 했다고 쓰지 않는다. 통화에서 있었던"
+    ' 일은 "통화에서 ~했습니다"처럼 통화 내용임을 밝혀 쓴다.',
 }
 RETRY_HINT = " 이번 턴 결과에 있는 사실·숫자만 그대로 써서 다시 답한다."
 REPLY_SCHEMA = {
@@ -299,10 +306,11 @@ def _check(data: dict, nums: set[int], cites: set[str], drafted: bool) -> str | 
         return CITE
     if not numbers_ok(data["text"], nums):
         return NUMBER
-    if CONFIRM_CLAIM_RE.search(data["text"]) or (
-        not drafted and DRAFT_CLAIM_RE.search(data["text"])
-    ):
-        return DRAFT_CLAIM
+    for s in SENTENCE_RE.findall(data["text"]):
+        if OTHER_ACTOR_RE.search(s):
+            continue
+        if CONFIRM_CLAIM_RE.search(s) or (not drafted and DRAFT_CLAIM_RE.search(s)):
+            return DRAFT_CLAIM
     return None
 
 
