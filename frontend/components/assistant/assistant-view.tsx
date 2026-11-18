@@ -261,7 +261,8 @@ export function AssistantView() {
 
   if (items.length === 0)
     return (
-      <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 py-16 text-center">
+      // 시작 화면은 본문 높이(화면 − main 위아래 여백, 좁은 화면은 위 띠까지)의 세로 가운데보다 조금 위 — 넘치면 위부터 쌓인다
+      <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-2xl flex-col items-center justify-center gap-6 pt-8 pb-[12dvh] text-center max-md:min-h-[calc(100dvh-7.5rem)]">
         <h1 className="text-3xl font-bold">무엇을 도와드릴까요?</h1>
         {loadError && <p className="text-destructive">{loadError}</p>}
         <div className="w-full text-left">{form}</div>
