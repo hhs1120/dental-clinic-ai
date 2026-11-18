@@ -1334,7 +1334,7 @@
         }
       },
       {
-        "user": "박지우 님 12월 15일 오전 구강검진 자리 봐 줘",
+        "user": "서예준 님 12월 15일 오전 구강검진 자리 봐 줘",
         "gold": {
           "tools": [
             "free_slots"
@@ -1353,13 +1353,13 @@
             "draft_appointment"
           ],
           "args": {
-            "chart_no": "C-00300",
+            "chart_no": "C-01423",
             "date": "2026-12-15",
             "procedure": "구강검진"
           },
           "end": {
             "draft": {
-              "chart_no": "C-00300",
+              "chart_no": "C-01423",
               "date": "2026-12-15",
               "start_range": [
                 "11:00",
@@ -1987,7 +1987,7 @@
             "query_patient"
           ],
           "args": {
-            "chart_no": "C-00300"
+            "chart_no": "C-01423"
           },
           "end": null
         }
@@ -1999,13 +1999,13 @@
             "draft_appointment"
           ],
           "args": {
-            "chart_no": "C-00300",
+            "chart_no": "C-01423",
             "date": "2026-12-08",
             "procedure": "구강검진"
           },
           "end": {
             "draft": {
-              "chart_no": "C-00300",
+              "chart_no": "C-01423",
               "date": "2026-12-08",
               "start_range": [
                 "09:30",
