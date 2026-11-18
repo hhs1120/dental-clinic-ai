@@ -68,11 +68,12 @@ test("assistant: 칩을 누르면 질문이 보내지고 단계 줄 뒤 답", as
   await expect(
     page.getByText("조회하고 예약 초안까지 — 확정은 사람이 합니다"),
   ).toBeVisible();
+  // 시작 화면에는 입력칸 아래 예약 안내가 없다(맨 아래 문구와 겹친다)
   await expect(
     page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
       exact: false,
     }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: /지난주 전화로 예약 원했는데/ })
     .click();
@@ -535,4 +536,31 @@ test("assistant: 문서 출처는 카드, 사례 출처는 칩 — 누르면 발
   await expect(
     page.getByText("임플란트 1차도 건강보험이 되는지"),
   ).toBeVisible();
+});
+
+test("assistant: 예약 이야기가 없는 대화에는 입력칸 아래 예약 안내가 없다", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([
+        [
+          "reply",
+          {
+            type: "reply",
+            ...REPLY({ text: "재심 기한 임박은 36건입니다.", cards: [] }),
+          },
+        ],
+      ]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("재심 기한 임박 건"));
+  await expect(page.getByText("재심 기한 임박은 36건입니다.")).toBeVisible();
+  await expect(
+    page.getByText("초안 카드가 없으면 예약되지 않은 것입니다", {
+      exact: false,
+    }),
+  ).toHaveCount(0);
 });

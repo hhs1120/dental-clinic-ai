@@ -27,7 +27,8 @@ const MAX_TEXT = 1000; // backend/api.py ASSISTANT_MAX_TEXT
 const CUT = "응답이 끊겼습니다 — 다시 말해 주세요";
 const NO_SERVER = "서버에 연결하지 못했습니다";
 
-/** 입력칸 아래 늘 보이는 안내 — 비서의 말이 아니라 초안 카드의 승인만 예약을 만든다(AI 비서 설계 §5.2) */
+/** 대화 중 입력칸 아래 안내 — 비서의 말이 아니라 초안 카드의 승인만 예약을 만든다(AI 비서 설계 §5.2). 예약 이야기가
+ * 나온 대화에서만(초안 카드가 떴거나 말·답에 "예약"이 있으면 — 카드 없이 "예약을 잡았다"고 쓴 답도 걸린다) */
 const DRAFT_NOTE = (
   <p className="mt-2 text-center text-xs text-muted-foreground">
     예약은 초안 카드에서 <strong className="font-bold">승인</strong>을 눌러야
@@ -95,6 +96,13 @@ function ReplyText({ text }: { text: string }) {
  * 같게 보이도록(backend/assistant.py _reply) */
 const shownCards = (status: string | undefined, cards: Card[]) =>
   !status || status === "ok" ? cards : cards.filter((c) => c.type === "draft");
+
+const aboutBooking = (items: Item[]) =>
+  items.some(
+    (it) =>
+      it.text.includes("예약") ||
+      (it.role === "assistant" && it.cards.some((c) => c.type === "draft")),
+  );
 
 type Item =
   | { id: number; role: "user"; text: string }
@@ -301,10 +309,7 @@ export function AssistantView() {
       <div className="mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-2xl flex-col items-center justify-center gap-6 pt-8 pb-[6dvh] text-center max-md:min-h-[calc(100dvh-7.5rem)]">
         <h1 className="text-3xl font-bold">무엇을 도와드릴까요?</h1>
         {loadError && <p className="text-destructive">{loadError}</p>}
-        <div className="w-full text-left">
-          {form}
-          {DRAFT_NOTE}
-        </div>
+        <div className="w-full text-left">{form}</div>
         <div className="mt-6 flex flex-col items-center gap-2">
           <p className="text-xs text-muted-foreground">
             이렇게 물어볼 수 있어요
@@ -362,7 +367,7 @@ export function AssistantView() {
       <div ref={bottom} />
       <div className="sticky bottom-0 bg-background pb-6">
         {form}
-        {DRAFT_NOTE}
+        {aboutBooking(items) && DRAFT_NOTE}
       </div>
     </div>
   );
