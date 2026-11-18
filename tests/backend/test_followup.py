@@ -123,6 +123,14 @@ def test_targets(conn):
     }  # 7일 안·판정 풀 밖·할 일
 
 
+def test_targets_skip_todo_list_without_has_todo(conn):
+    """할 일 목록은 있는데 has_todo가 거짓인 분류(엇갈림)는 대상이 아니다 — run_for_call이 건너뛰는 것과 같게"""
+    classify_row(conn, "c-0001", version="v3", labels=LABELS | {"has_todo": 0})  # 목록은 기본 TODO
+    classify_row(conn, "c-0004", version="v3")
+    conn.execute("INSERT OR REPLACE INTO ax_settings VALUES ('active_prompt_version', '\"v3\"')")
+    assert followup.targets(conn, CLINIC.today) == ["c-0004"]
+
+
 def test_max_tool_calls_matches_eval():
     from evaluation.metrics import MAX_TOOL_CALLS
 
