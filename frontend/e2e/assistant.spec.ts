@@ -564,3 +564,24 @@ test("assistant: 예약 이야기가 없는 대화에는 입력칸 아래 예약
     }),
   ).toHaveCount(0);
 });
+
+test("assistant: 목록 뒤에 붙은 끝맺음은 마지막 항목에 붙지 않고 선 아래 따로", async ({
+  page,
+}) => {
+  await fakeShell(page);
+  const text =
+    "2명입니다.\n\n- 송미영 — 시간을 보류했습니다.\n- 김진호 — 날짜를 비워 두었습니다.\n김지훈 님은 차트가 없어 신환 등록을 먼저 해 주셔야 합니다.";
+  await page.route("**/api/assistant/turn", (r) =>
+    r.fulfill({
+      contentType: "text/event-stream",
+      body: sse([["reply", { type: "reply", ...REPLY({ text, cards: [] }) }]]),
+    }),
+  );
+  await page.goto("/?draft=" + encodeURIComponent("지난주 안 잡힌 사람"));
+  const items = page.getByRole("listitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(1)).toHaveText("김진호 — 날짜를 비워 두었습니다.");
+  const tail = page.getByText("김지훈 님은 차트가 없어", { exact: false });
+  await expect(tail).toBeVisible();
+  await expect(tail.locator("xpath=ancestor::li")).toHaveCount(0);
+});

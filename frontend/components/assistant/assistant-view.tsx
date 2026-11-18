@@ -84,10 +84,37 @@ const REPLY_MD: Components = {
   ),
 };
 
+const LIST_LINE = /^\s*([-*]|\d+\.)\s/;
+
+/** 목록 뒤에 빈 줄 없이 붙은 글(마크다운은 앞 항목에 이어 붙인다)을 떼어 낸다 → [본문, 끝맺음]. 끝맺음은 마지막
+ * 목록 뒤의 안내(신환 등록·예약 초안 제안 등)라 목록과 가는 선으로 떼어 보인다. 목록이 없으면 끝맺음도 없다 */
+function splitTail(text: string): [string, string] {
+  const lines = text.split("\n");
+  let last = -1;
+  lines.forEach((l, i) => {
+    if (LIST_LINE.test(l)) last = i;
+  });
+  if (last < 0) return [text, ""];
+  while (last + 1 < lines.length && /^\s+\S/.test(lines[last + 1])) last++; // 들여 쓴 항목 이어짐
+  return [
+    lines.slice(0, last + 1).join("\n"),
+    lines
+      .slice(last + 1)
+      .join("\n")
+      .trim(),
+  ];
+}
+
 function ReplyText({ text }: { text: string }) {
+  const [body, tail] = splitTail(text);
   return (
     <div className="leading-relaxed">
-      <Markdown components={REPLY_MD}>{text}</Markdown>
+      <Markdown components={REPLY_MD}>{body}</Markdown>
+      {tail && (
+        <div className="mt-3 border-t pt-3 text-sm">
+          <Markdown components={REPLY_MD}>{tail}</Markdown>
+        </div>
+      )}
     </div>
   );
 }
