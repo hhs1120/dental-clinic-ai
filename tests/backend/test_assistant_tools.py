@@ -60,7 +60,7 @@ TURN = {"conversation_id": 7, "turn": 3}
 def test_registry_names_fixed():
     tools = assistant_tools.assistant_tools(CLINIC, None, TURN)
     assert {t.name for t in tools} == NAMES and len(tools) == len(NAMES)
-    assert assistant_tools.TOOLS_VERSION == "v3"
+    assert assistant_tools.TOOLS_VERSION == "v4"
     assert {t.name for t in tools if t.writes} == {"draft_appointment"}
     assert [t.name for t in tools if t.ends_run] == ["done_tools"]
 

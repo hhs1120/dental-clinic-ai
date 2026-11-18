@@ -17,9 +17,7 @@ from backend.harness.tools import Tool
 from backend.query_tools import _procedure_codes, query_tools
 from shared.clinic import Clinic
 
-TOOLS_VERSION = (
-    "v3"  # v2: free_slots에 date_to(기간을 한 번에) · v3: draft_appointment에 window(시간대)
-)
+TOOLS_VERSION = "v4"  # v2: free_slots에 date_to(기간을 한 번에) · v3: draft_appointment에 window(시간대) · v4: prep_rows 칩 뜻, 초안 전 free_slots 불필요
 ROLES = {"원장": "doctor", "위생사": "hygienist", "상담실장": "consultant"}
 ROLE_NAMES = {v: k for k, v in ROLES.items()}
 LIST_CAP = 20  # 목록 도구가 한 번에 돌려주는 행 수 — count는 전체
@@ -387,13 +385,16 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
             f"시술이 들어갈 빈 시작 시각×담당(date YYYY-MM-DD, 오늘 {today}). 하루면 date만, '다음 주'처럼"
             " 기간이면 date~date_to를 한 번에(휴진일 건너뜀, 날마다 빈 시각 수 days, 가까운 순 slots)."
             " 시각마다 빈 체어 수 free_chairs. staff는 역할이나 담당 이름 — 없으면 그 시술 역할 전부, 담당은 초안 때"
-            " 자동. 예약은 이 안에서만 고른다.",
+            " 자동.",
             FreeSlotsArgs,
             lambda ctx, a: _free_slots(clinic, conn(ctx), a),
         ),
         Tool(
             "prep_rows",
-            f"그날 준비표 행(시각·환자·시술·주의 칩). date YYYY-MM-DD, 오늘 {today}.",
+            f"그날 준비표 행(시각·환자·시술·칩). date YYYY-MM-DD, 오늘 {today}. 칩: balance 미수 잔액 ·"
+            " alert 그날 시술과 관련된 주의사항(병력·알레르기) · insurance 올해 스케일링 급여 미사용 ·"
+            " family_recall 리콜이 지난 가족 · open_plan 남은 진료계획 · unconfirmed 예약 확인 안 됨(오늘만) ·"
+            " appointment 예약. 미수·주의 질문은 이 칩으로 답한다(환자마다 다시 조회하지 않는다).",
             DayArgs,
             lambda ctx, a: _prep_rows(clinic, conn(ctx), a),
         ),
@@ -424,7 +425,7 @@ def assistant_tools(clinic: Clinic, searcher, ctx_turn: dict) -> list[Tool]:
         ),
         Tool(
             "draft_appointment",
-            "예약 초안을 만든다(확정 아님, 사람이 승인). 직원이 시각을 말했으면 start(free_slots 결과 안),"
+            "예약 초안을 만든다(확정 아님, 사람이 승인). 직원이 시각을 말했으면 start(빈 시각인지 도구가 검사),"
             " 시각 없이 오전·오후만 말했으면 window, 둘 다 없으면 그날 가장 이른 빈 시각 — start가 없으면"
             " 코드가 고른다. staff는 담당 이름이나 역할(원장·위생사·상담실장), 없으면 그 시술 역할 중 자동."
             " 실패하면 {error: [코드]}(closed_day 휴진, no_slot 빈 시각 없음).",

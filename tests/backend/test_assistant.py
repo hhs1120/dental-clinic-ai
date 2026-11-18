@@ -273,10 +273,13 @@ def test_reply_budget_is_budget_status(conn):
 
 
 def test_input_states_today_and_closed_days(conn):
+    """도구 단계는 오늘만(휴진은 도구가 판단), 답 단계는 오늘과 휴진 요일"""
     gw = Turns(conn, [[DONE]], [reply()])
     turn(conn, gw, "내일 예약 몇 건?")
-    first = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
-    assert "오늘: 2026-12-01(화)" in first and "휴진 요일: 목·일" in first
+    tool = [kw for _, kw in gw.calls if kw.get("tools")][0]["messages"][0]["content"]
+    assert "오늘: 2026-12-01(화)" in tool and "휴진" not in tool
+    answer = [kw for _, kw in gw.calls if kw.get("schema")][0]["messages"][0]["content"]
+    assert "오늘: 2026-12-01(화)" in answer and "휴진 요일: 목·일" in answer
 
 
 DRAFT = (

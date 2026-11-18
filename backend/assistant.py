@@ -27,7 +27,7 @@ from shared.llm import BudgetExceeded
 AGENT, TASK, REPLY_TASK = "assistant", "assistant", "assistant_reply"
 TOOL_ALIAS = "chat"  # 도구 단계 — 다음 묶음에서 로컬 모델 자리(§7.1)
 REPLY_ALIAS = "chat"  # 답 단계
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4"
 REPLY_VERSION = "v3"
 MAX_TOOL_CALLS = (
     chat.CHAT_MAX_TOOL_CALLS
@@ -552,12 +552,16 @@ def turn(
 
 
 def _turn(conn, gw, searcher, clinic, conversation_id, seq, history, text, on_event) -> dict:
-    prompt = _input(history, _today_lines(conn, clinic), text)
+    today_lines = _today_lines(conn, clinic)
+    # 도구 단계에는 휴진 요일을 주지 않는다 — 휴진은 도구(free_slots·draft_appointment)가 판단하고, 미리 알면
+    # 조회 없이 끝내 코드 답(_code_reply)이 날짜를 모른다. 답 단계는 둘 다 본다
+    prompt = _input(history, today_lines[:1], text)
     reg, names = registry(
         clinic, searcher, {"conversation_id": conversation_id, "turn": seq}, on_event
     )
     store = RunStore(conn)
     outcome = Runner(spec(names), gw, store, reg).start(f"{conversation_id}:{seq}", prompt)
+    prompt = _input(history, today_lines, text)
     steps = store.steps(outcome.run_id)
     if outcome.status == "failed" or outcome.reason in ("budget", "cost_limit"):
         status = "failed" if outcome.status == "failed" else outcome.reason
