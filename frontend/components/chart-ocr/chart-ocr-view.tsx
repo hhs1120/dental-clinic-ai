@@ -9,7 +9,13 @@ import {
   remaining,
   withVisit,
 } from "@/components/chart-ocr/ocr-form";
-import { OcrImage, OcrSnippet } from "@/components/chart-ocr/ocr-image";
+import {
+  centerOn,
+  FULL_VIEW,
+  OcrImage,
+  OcrSnippet,
+  type View,
+} from "@/components/chart-ocr/ocr-image";
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,6 +79,7 @@ export function ChartOcrView() {
   // 노란 딱지로 연 칸 — 그 칸을 확대해 보이고, 위치는 확대 옆에서 고른다(값은 고를 때만 바뀐다)
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [showBoxes, setShowBoxes] = useState(true);
+  const [view, setView] = useState<View>(FULL_VIEW);
   const [step, setStep] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,6 +105,7 @@ export function ChartOcrView() {
     setPatient(got.patient);
     setFocus(null);
     setInspect(null);
+    setView(FULL_VIEW);
     samples.reload();
     imports.reload();
   };
@@ -114,6 +122,12 @@ export function ChartOcrView() {
     run()
       .then(open, (e) => setError(errorText(e)))
       .finally(() => setBusy(false));
+  };
+
+  // 확대한 채로 다른 칸을 누르면 배율은 두고 그 칸으로 옮겨 간다(1배면 테두리만)
+  const focusOn = (box: Box | null) => {
+    setFocus(box);
+    if (box) setView((v) => (v.s > 1 ? centerOn(v, box) : v));
   };
 
   const left = item && fields ? remaining(fields, patient) : [];
@@ -222,10 +236,13 @@ export function ChartOcrView() {
             </div>
             <OcrImage
               src={src}
+              size={item.size}
               words={item.words}
               lowConfidence={item.low_confidence}
               showBoxes={showBoxes}
               focus={focus}
+              view={view}
+              onView={setView}
             />
             {inspect ? (
               <InspectPanel
@@ -268,13 +285,13 @@ export function ChartOcrView() {
               patient={patient}
               setPatient={setPatient}
               onFocus={(box) => {
-                setFocus(box);
+                focusOn(box);
                 setInspect(null);
               }}
               onInspect={(kind, index, word) => {
                 const v = fields.visits[index];
                 setInspect({ kind, uid: v.uid ?? "", word });
-                setFocus(inspectBox(item, kind, v.src ?? index, word));
+                focusOn(inspectBox(item, kind, v.src ?? index, word));
               }}
             />
             <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-background py-3">

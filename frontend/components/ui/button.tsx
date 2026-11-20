@@ -32,6 +32,9 @@ const buttonVariants = cva(
         icon: "size-8",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+        // 확대 툴바처럼 둥근 바 안의 아이콘 버튼
+        "icon-xs-round":
+          "size-6 rounded-full [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
