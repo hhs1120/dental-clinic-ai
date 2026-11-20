@@ -50,20 +50,21 @@ export const centerOn = (v: View, box: Box): View =>
     (box[1] + box[3]) / 2 - 0.5 / v.s,
   );
 
-/** 확대 창 — 휠·버튼으로 키우고 키운 뒤에는 끌어서 옮긴다. 안의 층은 % 자리라 상자도 같이 움직인다.
- * clickZoom이면 끌지 않고 누른 자리를 한 단계 키운다 */
+/** 확대 창 — 버튼으로 키우고 키운 뒤에는 끌어서 옮긴다. 안의 층은 % 자리라 상자도 같이 움직인다.
+ * 원본(기본)은 Ctrl/⌘+휠·핀치만 확대(그냥 휠은 페이지 스크롤), 툴바는 창 위 구석.
+ * snippet은 그냥 휠·누르기로 확대하고, 작은 창을 가리지 않게 툴바를 창 아래 바깥에 둔다 */
 function ZoomPane({
   aspect,
   view,
   onView,
-  clickZoom = false,
+  snippet = false,
   className,
   children,
 }: {
   aspect: string;
   view: View;
   onView: Dispatch<SetStateAction<View>>;
-  clickZoom?: boolean;
+  snippet?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -76,24 +77,38 @@ function ZoomPane({
   } | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  // React onWheel은 passive라 막을 수 없다 — 그림 위 휠만 확대에 쓰고, 1배에서 줄이는 휠은 페이지로 넘긴다
+  // 휠은 한 프레임에 여러 번 온다 — 다시 그리기를 기다리지 않게 지금 배율을 ref로 들고 판단·계산을 한 번에
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  // React onWheel은 passive라 막을 수 없다 — 1배에서 줄이는 그냥 휠은 페이지로 넘긴다
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      const out = e.deltaY > 0;
-      onView((v) => {
-        if (out && v.s <= 1) return v;
-        const r = el.getBoundingClientRect();
-        const px = (e.clientX - r.left) / r.width;
-        const py = (e.clientY - r.top) / r.height;
-        return zoomAt(v, v.s * Math.exp(-e.deltaY * 0.002), px, py);
-      });
-      if (!(out && view.s <= 1)) e.preventDefault();
+      const pinch = e.ctrlKey || e.metaKey; // 트랙패드 핀치는 ctrlKey로 온다
+      if (!snippet && !pinch) return;
+      const v = viewRef.current;
+      if (e.deltaY > 0 && v.s <= 1 && !pinch) return;
+      e.preventDefault(); // Ctrl+휠은 1배여도 막는다 — 브라우저 쪽 확대가 되지 않게
+      const r = el.getBoundingClientRect();
+      // deltaMode 1은 줄(Firefox 마우스), 2는 쪽 단위
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
+      const rate = pinch && e.deltaMode === 0 ? 0.01 : 0.002;
+      const next = zoomAt(
+        v,
+        v.s * Math.exp(-e.deltaY * unit * rate),
+        (e.clientX - r.left) / r.width,
+        (e.clientY - r.top) / r.height,
+      );
+      viewRef.current = next;
+      onView(next);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [onView, view.s]);
+  }, [onView, snippet]);
 
   const zoomed = view.s > 1;
   const end = () => {
@@ -105,16 +120,19 @@ function ZoomPane({
       <div
         ref={ref}
         className={cn(
-          "relative touch-none overflow-hidden rounded-md border border-border bg-muted select-none",
+          "relative overflow-hidden rounded-md border border-border bg-muted select-none",
+          // 1배에서는 터치로 페이지를 쓸어 내릴 수 있게
+          zoomed && "touch-none",
           zoomed
             ? dragging
               ? "cursor-grabbing"
               : "cursor-grab"
-            : clickZoom && "cursor-zoom-in",
+            : snippet && "cursor-zoom-in",
           className,
         )}
         style={{ aspectRatio: aspect }}
         onPointerDown={(e) => {
+          if (e.button !== 0) return; // 오른쪽·가운데 버튼은 확대·끌기에 쓰지 않는다
           drag.current = {
             px: e.clientX,
             py: e.clientY,
@@ -143,7 +161,7 @@ function ZoomPane({
         onPointerUp={(e) => {
           const d = drag.current;
           end();
-          if (!clickZoom || !d || d.moved || view.s >= MAX_SCALE) return;
+          if (!snippet || !d || d.moved || view.s >= MAX_SCALE) return;
           const r = e.currentTarget.getBoundingClientRect();
           onView((v) =>
             zoomAt(
@@ -174,16 +192,20 @@ function ZoomPane({
       </div>
       <div
         className={cn(
-          "absolute right-2 bottom-2 flex items-center gap-0.5 rounded-full border border-border bg-background/90 p-0.5 shadow-card backdrop-blur-sm transition-opacity",
-          zoomed
-            ? "opacity-100"
-            : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+          "flex w-fit items-center gap-0.5 rounded-full border border-border bg-background/90 p-0.5 shadow-card backdrop-blur-sm transition-opacity",
+          snippet
+            ? "mt-1 ml-auto"
+            : cn(
+                "absolute right-2 bottom-2",
+                zoomed
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 focus-within:opacity-100",
+              ),
         )}
       >
         <Button
-          size="icon-xs"
+          size="icon-xs-round"
           variant="ghost"
-          className="rounded-full"
           aria-label="축소"
           disabled={!zoomed}
           onClick={() => onView((v) => zoomAt(v, v.s / STEP))}
@@ -194,9 +216,8 @@ function ZoomPane({
           {Math.round(view.s * 100)}%
         </span>
         <Button
-          size="icon-xs"
+          size="icon-xs-round"
           variant="ghost"
-          className="rounded-full"
           aria-label="확대"
           disabled={view.s >= MAX_SCALE}
           onClick={() => onView((v) => zoomAt(v, v.s * STEP))}
@@ -205,9 +226,8 @@ function ZoomPane({
         </Button>
         {/* 늘 두고 끄기만 — 나타나면 + 자리가 밀려 연달아 누르다 되돌아간다 */}
         <Button
-          size="icon-xs"
+          size="icon-xs-round"
           variant="ghost"
-          className="rounded-full"
           aria-label="전체 보기"
           title="전체 보기"
           disabled={!zoomed}
@@ -240,14 +260,23 @@ export function OcrImage({
   view: View;
   onView: Dispatch<SetStateAction<View>>;
 }) {
+  // 창 비율은 실제로 불러온 그림 크기로 — OCR 쪽 치수와 다르면(사진 회전 등) 그림이 잘린다
+  const [natural, setNatural] = useState<[number, number] | null>(null);
+  const [w, h] = natural ?? size;
   return (
-    <ZoomPane aspect={`${size[0]} / ${size[1]}`} view={view} onView={onView}>
+    <ZoomPane aspect={`${w} / ${h}`} view={view} onView={onView}>
       {/* eslint-disable-next-line @next/next/no-img-element -- API가 주는 스캔 원본 */}
       <img
         src={src}
         alt="종이 차트 스캔"
         draggable={false}
         className="block w-full"
+        onLoad={(e) =>
+          setNatural([
+            e.currentTarget.naturalWidth,
+            e.currentTarget.naturalHeight,
+          ])
+        }
       />
       {showBoxes &&
         words.map((w, i) => (
@@ -316,7 +345,7 @@ function Snippet({
       aspect={`${bw * size[0]} / ${bh * size[1]}`}
       view={view}
       onView={setView}
-      clickZoom
+      snippet
       className="w-full"
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- 같은 스캔의 일부 */}
