@@ -33,3 +33,37 @@ test("design: 글꼴은 Inter 다음 Pretendard, 숫자 폭 고정", async ({ pa
   expect(family).not.toContain("noto");
   expect(await css(page, "body", "font-variant-numeric")).toBe("tabular-nums");
 });
+
+test("design: 아이콘 줄과 목록 칸은 같은 면, 선택 칸은 흰 바탕", async ({
+  page,
+}) => {
+  await page.goto("/claims");
+  await setTheme(page, "light");
+  const rail = await css(page, "aside > div:first-child", "background-color");
+  const panel = await css(page, "aside > :nth-child(2)", "background-color");
+  expect(await css(page, "aside", "background-color")).toBe(
+    "rgb(239, 233, 225)",
+  );
+  expect(rail).toBe("rgba(0, 0, 0, 0)");
+  expect(panel).toBe("rgba(0, 0, 0, 0)");
+  expect(
+    await css(
+      page,
+      'nav[aria-label="메뉴"] a[aria-current=page]',
+      "background-color",
+    ),
+  ).toBe("rgb(255, 255, 255)");
+  expect(
+    await css(
+      page,
+      'nav[aria-label="공간"] a[aria-current=page]',
+      "background-color",
+    ),
+  ).toBe("rgb(255, 255, 255)");
+});
+
+test("design: 테마를 바꾸면 사이드바도", async ({ page }) => {
+  await page.goto("/claims");
+  await setTheme(page, "dark");
+  expect(await css(page, "aside", "background-color")).toBe("rgb(28, 25, 22)");
+});
