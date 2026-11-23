@@ -63,7 +63,7 @@ export function LedgerTable({
   onSaved: () => void;
 }) {
   return (
-    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
       <table className="w-full min-w-4xl text-sm tabular-nums">
         <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>

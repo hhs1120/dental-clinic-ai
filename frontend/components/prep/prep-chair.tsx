@@ -166,7 +166,9 @@ function ChairCard({ row, tag }: { row: PrepRow; tag: string }) {
         </span>
       </div>
       <div className="flex items-baseline gap-3">
-        <h2 className="text-3xl font-bold">{row.patient.name}</h2>
+        <h2 className="text-3xl font-medium tracking-tight">
+          {row.patient.name}
+        </h2>
         <span className="text-muted-foreground tabular-nums">
           {row.patient.age}세 {row.patient.sex === "M" ? "남" : "여"} ·{" "}
           {row.patient.chart_no}
@@ -219,7 +221,7 @@ function ChairCard({ row, tag }: { row: PrepRow; tag: string }) {
         )}
       </dl>
       <div className="flex flex-col gap-1">
-        <h3 className="text-sm font-bold">제안 (AI)</h3>
+        <h3 className="text-sm font-medium tracking-tight">제안 (AI)</h3>
         <SuggestionLine row={row} />
       </div>
     </section>

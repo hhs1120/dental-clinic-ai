@@ -3,9 +3,13 @@ import remarkGfm from "remark-gfm";
 
 // 문서 본문은 마크다운(제목·목록·표·굵게). 원시 HTML은 그리지 않는다(react-markdown 기본값) — 설계 2026-11-09 검색 요약 "화면"
 const COMPONENTS: Components = {
-  h1: ({ children }) => <h2 className="mb-3 text-xl font-bold">{children}</h2>,
+  h1: ({ children }) => (
+    <h2 className="mb-3 text-xl font-medium tracking-tight">{children}</h2>
+  ),
   h2: ({ children }) => (
-    <h3 className="mt-6 mb-2 text-base font-bold">{children}</h3>
+    <h3 className="mt-6 mb-2 text-base font-medium tracking-tight">
+      {children}
+    </h3>
   ),
   h3: ({ children }) => <h4 className="mt-4 mb-1.5 font-bold">{children}</h4>,
   p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,

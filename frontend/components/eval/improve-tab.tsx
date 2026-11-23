@@ -38,7 +38,7 @@ export function ImproveTab() {
         검증 구간에서 거릅니다. 지금 쓰는 분류 버전 {data.active}.
       </p>
       {data.pending && (
-        <p className="rounded-lg border bg-card p-3 text-sm">
+        <p className="rounded-xl border bg-card p-3 text-sm">
           <Badge variant="kind">{data.pending}</Badge> 대기 중 — 사람이
           재분류(make classify V={data.pending})를 끝내면 전환됩니다.
         </p>
@@ -48,7 +48,7 @@ export function ImproveTab() {
           아직 자동 개선을 돌린 기록이 없습니다.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-card p-4">
+        <div className="overflow-x-auto rounded-xl border bg-card p-4">
           <table className="w-full min-w-4xl text-sm">
             <thead>
               <tr className="text-left whitespace-nowrap text-muted-foreground">

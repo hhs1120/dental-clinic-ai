@@ -306,7 +306,7 @@ export function CallDetail({
         {failed}
         {plan}
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-4">
+          <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-1 overflow-y-auto rounded-xl border bg-card p-4">
             {todo}
             {summary}
             {diff}
@@ -317,7 +317,7 @@ export function CallDetail({
             </div>
             {pastCalls}
           </div>
-          <div className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4">
+          <div className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-xl border bg-card p-4">
             <Transcript
               text={call.transcript}
               bubbles
@@ -329,7 +329,7 @@ export function CallDetail({
     );
   return (
     <aside
-      className="flex flex-col gap-1 rounded-lg border bg-card p-4 shadow-card lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto"
+      className="flex flex-col gap-1 rounded-xl border bg-card p-4 shadow-card lg:max-h-[calc(100vh-var(--page-band-h,0px)-2rem)] lg:overflow-y-auto"
       aria-label="통화 상세"
     >
       {head}

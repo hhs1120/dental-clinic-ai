@@ -132,7 +132,7 @@ export function AdjustTable({
           못 받은 돈 합계 {won(sheet.chips[chip].amount)}
         </span>
       </div>
-      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
         <table className="w-full min-w-3xl text-sm">
           <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
@@ -298,7 +298,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
       className={`grid gap-4 ${contested ? "md:grid-cols-3" : "md:grid-cols-2"}`}
     >
       <div className="flex flex-col gap-1">
-        <h3 className="font-bold">왜 깎였나</h3>
+        <h3 className="font-medium tracking-tight">왜 깎였나</h3>
         <p>{r.adjust_note}</p>
         <p className="tabular-nums">
           청구 {won(r.claim_amount)} → 지급 {won(r.paid_amount)} ·{" "}
@@ -310,7 +310,7 @@ function Detail({ row: r, onSaved }: { row: AdjustRow; onSaved: () => void }) {
         {r.standard && <StandardBox card={r.standard} />}
       </div>
       <div className="flex flex-col gap-1.5">
-        <h3 className="font-bold">어떻게 할까</h3>
+        <h3 className="font-medium tracking-tight">어떻게 할까</h3>
         <p>
           {suggestText(r)}
           <span className="text-muted-foreground"> — {r.reason}</span>
@@ -373,7 +373,7 @@ export function StandardBox({
   card: { doc_title: string; heading: string; body: string };
 }) {
   return (
-    <div className="mt-1 rounded-lg border bg-card p-2.5 text-sm">
+    <div className="mt-1 rounded-xl border bg-card p-2.5 text-sm">
       <p className="text-xs text-muted-foreground">
         {card.doc_title} › {card.heading}
       </p>

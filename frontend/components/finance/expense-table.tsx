@@ -212,10 +212,10 @@ function Detail({
   return (
     <section
       aria-label={`출금 상세 ${row.label}`}
-      className="grid gap-3 rounded-md border bg-card p-3 md:grid-cols-2"
+      className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-2"
     >
       <div className="flex flex-col gap-2">
-        <h3 className="font-bold">증빙 본문</h3>
+        <h3 className="font-medium tracking-tight">증빙 본문</h3>
         {row.docs.length === 0 ? (
           <p className="text-muted-foreground">찾은 증빙 없음</p>
         ) : (
@@ -233,7 +233,7 @@ function Detail({
         )}
       </div>
       <div className="flex flex-col gap-2">
-        <h3 className="font-bold">출금일 근처 증빙</h3>
+        <h3 className="font-medium tracking-tight">출금일 근처 증빙</h3>
         <p className="text-sm text-muted-foreground">
           체크한 증빙으로 확정합니다
         </p>
@@ -440,7 +440,7 @@ export function ExpenseTable({
 }) {
   const rows = chip ? sheet.rows.filter(keep[chip]) : sheet.rows;
   return (
-    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
       <table className="w-full min-w-4xl text-sm tabular-nums">
         <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>

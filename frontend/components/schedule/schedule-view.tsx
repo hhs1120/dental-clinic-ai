@@ -87,6 +87,17 @@ export function ScheduleView() {
         String(a.id) === appt &&
         (showAll || (a.status !== "cancelled" && a.status !== "noshow")),
     ) ?? null;
+  // 환자 패널 닫기 — 닫기 단추·Esc·같은 카드 다시 누르기
+  const close = () => go({ appt: null }, true);
+  const open = selected !== null;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") go({ appt: null }, true);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  });
   const [patient, setPatient] = useState<Loaded<PatientRecord> | null>(null);
   const chart = selected?.chart_no ?? "";
   useEffect(() => {
@@ -165,8 +176,10 @@ export function ScheduleView() {
           </Label>
         </div>
         <span className="ml-auto text-sm text-muted-foreground">
-          총 {c.total}건 · 진료 {c.treatment} · 위생 {c.hygiene} · 상담{" "}
-          {c.consult}
+          총 {c.total}건 · <TypeDot className="bg-appt-treatment" />
+          진료 {c.treatment} · <TypeDot className="bg-appt-hygiene" />
+          위생 {c.hygiene} · <TypeDot className="border bg-card" />
+          상담 {c.consult}
           {current.date === today ? ` · 내원 확인 전 ${c.unconfirmed}` : ""}
         </span>
       </div>
@@ -182,7 +195,10 @@ export function ScheduleView() {
             day={current}
             showAll={showAll}
             selected={selected?.id ?? null}
-            onSelect={(id) => go({ appt: String(id) }, true)}
+            // 고른 카드를 다시 누르면 패널을 닫는다
+            onSelect={(id) =>
+              go({ appt: id === selected?.id ? null : String(id) }, true)
+            }
           />
         </div>
         {selected &&
@@ -192,6 +208,7 @@ export function ScheduleView() {
               summary={record.summary}
               appt={selected}
               date={current.date}
+              onClose={close}
             />
           ) : patient?.key === chart && "error" in patient ? (
             <ErrorBand text={patient.error} />
@@ -214,5 +231,18 @@ function ErrorBand({ text }: { text: string }) {
       <StatusDot status="danger" />
       {text}
     </p>
+  );
+}
+
+/** 요약 줄의 종류 색 점 — 예약 카드 바탕과 같은 색(범례) */
+function TypeDot({ className }: { className: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mr-1 inline-block size-2.5 rounded-sm align-[-1px]",
+        className,
+      )}
+    />
   );
 }

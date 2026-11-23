@@ -30,7 +30,7 @@ function Column({
 }) {
   return (
     <section className="flex min-w-0 flex-col gap-3">
-      <h3 className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
+      <h3 className="flex items-center gap-2 text-sm font-medium tracking-tight text-muted-foreground">
         {title}
         <span className="rounded-full bg-secondary px-2 text-xs font-medium text-foreground">
           {cards.length}
@@ -72,7 +72,7 @@ export function SearchResults({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         {/* 벡터 검색에 임계값이 없어 의미 없는 검색어도 결과가 나온다 — 건수를 '관련도 상위'로 보인다 */}
-        <h2 className="text-base font-bold">
+        <h2 className="text-base font-medium tracking-tight">
           관련도 상위 {manual.length + cases.length}건
         </h2>
         <span className="text-sm text-muted-foreground">

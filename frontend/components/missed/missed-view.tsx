@@ -150,7 +150,7 @@ export function MissedView() {
         </Button>
       </div>
       {how && <Rules rules={sheet.rules} />}
-      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
         <table className="w-full min-w-2xl text-sm">
           <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
@@ -171,7 +171,7 @@ export function MissedView() {
                 <td className="px-3 py-2 align-middle whitespace-nowrap">
                   <Link
                     href={`/emr?chart=${encodeURIComponent(r.chart_no)}`}
-                    className="font-bold text-primary hover:underline"
+                    className="font-bold text-link hover:underline"
                   >
                     {r.name}
                   </Link>
@@ -261,7 +261,7 @@ function Rules({ rules }: { rules: MissedSheet["rules"] }) {
       aria-label="순위 정하는 법"
       className="rounded-xl border bg-card px-4 py-3 text-sm"
     >
-      <h2 className="font-bold">순위 정하는 법</h2>
+      <h2 className="font-medium tracking-tight">순위 정하는 법</h2>
       <p className="text-xs text-muted-foreground">
         연락하면 결과(예약·수납)가 날 가능성 순 — 점수는 코드가 계산하고 AI는
         쓰지 않습니다. 값은 앱 설정에서 바꿉니다.

@@ -143,7 +143,7 @@ export function PreClaimTable({
               : "AI 점검 최신"}
         </Button>
       </div>
-      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
         <table className="w-full min-w-3xl text-sm">
           <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
@@ -164,7 +164,7 @@ export function PreClaimTable({
                 <td className="px-3 py-2 align-middle whitespace-nowrap">
                   <Link
                     href={`/emr?chart=${encodeURIComponent(r.chart_no)}`}
-                    className="font-bold text-primary hover:underline"
+                    className="font-bold text-link hover:underline"
                   >
                     {r.name}
                   </Link>

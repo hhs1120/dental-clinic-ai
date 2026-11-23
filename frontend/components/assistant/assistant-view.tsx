@@ -65,7 +65,7 @@ function TodayLine() {
           ))
         )}
       </span>
-      <span className="shrink-0 font-medium text-primary">오늘 화면 →</span>
+      <span className="shrink-0 font-medium text-link">오늘 화면 →</span>
     </Link>
   );
 }
@@ -378,7 +378,7 @@ export function AssistantView() {
         it.role === "user" ? (
           <p
             key={it.id}
-            className="max-w-[80%] self-end whitespace-pre-wrap rounded-2xl bg-muted px-4 py-2"
+            className="max-w-[80%] self-end whitespace-pre-wrap rounded-2xl border bg-card px-4 py-2"
           >
             {it.text}
           </p>

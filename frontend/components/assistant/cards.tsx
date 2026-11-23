@@ -211,7 +211,9 @@ export function ReplyCards({
       ))}
       {docs.length > 0 && (
         <section aria-label="문서 출처" className="flex flex-col gap-2">
-          <h3 className="text-xs font-bold text-muted-foreground">문서 출처</h3>
+          <h3 className="text-xs font-medium tracking-tight text-muted-foreground">
+            문서 출처
+          </h3>
           {docs.map((card) => (
             <ResultCard key={card.id} card={card.data} q="" />
           ))}

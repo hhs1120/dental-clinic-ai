@@ -32,8 +32,9 @@ interface Conversation {
 
 const itemClass = (current: boolean) =>
   cn(
-    "flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-    current && "bg-accent font-bold text-accent-foreground",
+    "flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-hover",
+    current &&
+      "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-sidebar-active hover:bg-sidebar-accent",
   );
 
 /** 업무 메뉴 줄 옆 건수 — 오늘 화면(GET /today)과 같은 값, 0건·못 불러온 칸은 비운다.
@@ -71,7 +72,7 @@ function WorkMenu({ pathname }: { pathname: string }) {
           >
             {m.label}
             {n[m.href] ? (
-              <span className="rounded-full bg-primary px-2 text-xs leading-5 text-primary-foreground">
+              <span className="rounded-full bg-sidebar-count px-2 text-xs leading-5 text-sidebar-accent-foreground">
                 {n[m.href]}
               </span>
             ) : null}
@@ -190,7 +191,7 @@ function ConversationList({ current }: { current: string | null }) {
         + 새 대화
       </Link>
       {first.data?.length === 0 && (
-        <p className="mt-2 px-3 text-xs text-muted-foreground">
+        <p className="mt-2 px-3 text-xs text-sidebar-foreground">
           지난 대화가 아직 없습니다. 물어본 대화는 여기에 쌓입니다.
         </p>
       )}
@@ -299,14 +300,9 @@ export function SpacePanel({
   const today = clinic === "error" ? "—" : (clinic?.today ?? "");
   if (space === "emr") return null;
   return (
-    <div
-      className={cn(
-        "flex w-48 flex-col gap-3 border-r bg-card px-3 pt-6 pb-3",
-        className,
-      )}
-    >
+    <div className={cn("flex w-48 flex-col gap-3 px-3 pt-6 pb-3", className)}>
       <div className="flex h-8 items-center justify-between gap-1 pl-3">
-        <h2 className="text-xs font-bold text-muted-foreground">
+        <h2 className="text-xs font-medium tracking-tight text-sidebar-foreground">
           {TITLES[space]}
         </h2>
         {onCollapse && (
@@ -316,7 +312,7 @@ export function SpacePanel({
             aria-label="목록 접기"
             title="목록 접기"
             onClick={onCollapse}
-            className="text-muted-foreground"
+            className="text-sidebar-foreground"
           >
             <ChevronsLeftIcon />
           </Button>
@@ -330,7 +326,7 @@ export function SpacePanel({
         {space === "eval" && <EvalMenu tab={params.get("tab") ?? ""} />}
         {space === "library" && <LibraryMenu params={params} />}
       </div>
-      <p className="px-3 text-xs text-muted-foreground">
+      <p className="px-3 text-xs text-sidebar-foreground">
         기준일 <strong className="font-medium text-foreground">{today}</strong>
       </p>
     </div>

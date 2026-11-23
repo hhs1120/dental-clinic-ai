@@ -80,7 +80,7 @@ export function AppealDraft({
     );
   return (
     <section aria-label="재심 사유서" className="flex flex-col gap-2">
-      <h3 className="font-bold">재심 사유서</h3>
+      <h3 className="font-medium tracking-tight">재심 사유서</h3>
       {internal && (
         <p className="rounded-lg border border-dashed px-2.5 py-2 text-xs text-muted-foreground">
           이 사유의 기준은 고시에 같은 문장이 없는 병원 내부 점검 기준입니다.
@@ -102,7 +102,7 @@ export function AppealDraft({
         <>
           <section
             aria-label="사유서 본문"
-            className="flex flex-col gap-1.5 rounded-lg border bg-card p-2.5"
+            className="flex flex-col gap-1.5 rounded-xl border bg-card p-2.5"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-bold">사유서 본문</p>

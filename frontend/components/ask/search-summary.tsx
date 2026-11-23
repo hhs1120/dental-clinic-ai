@@ -94,7 +94,7 @@ export function SearchSummary({
   return (
     <section aria-label="AI 요약">
       <Card className="gap-3 p-4 shadow-card">
-        <h2 className="flex items-baseline gap-2 font-bold">
+        <h2 className="flex items-baseline gap-2 font-medium tracking-tight">
           AI 요약
           <span className="text-xs font-normal text-muted-foreground">
             검색 결과로 AI가 만든 정리 · 문장 끝 번호는 아래 출처

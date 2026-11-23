@@ -97,7 +97,7 @@ function Column({
     >
       <h2
         className={cn(
-          "flex items-center gap-2 rounded-lg px-3 py-2 font-bold",
+          "flex items-center gap-2 rounded-lg px-3 py-2 font-medium tracking-tight",
           tone === "contact"
             ? "bg-accent text-accent-foreground"
             : "bg-secondary text-secondary-foreground",
@@ -163,7 +163,7 @@ function CallCard({
   return (
     <div
       className={cn(
-        "flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-card hover:border-primary/50",
+        "flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-card px-3 py-2.5 shadow-card hover:border-primary/50",
         on && "border-primary hover:border-primary",
       )}
       onClick={() => onOpen(head.call_uid)}

@@ -98,7 +98,7 @@ function Briefing({ lines }: { lines: TodaySheet["briefing"] }) {
   if (lines.length === 0) return null;
   return (
     <Card aria-label="아침 브리핑" className="gap-3 px-4 shadow-card">
-      <h2 className="text-lg font-bold">아침 브리핑</h2>
+      <h2 className="text-lg font-medium tracking-tight">아침 브리핑</h2>
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2">
         {lines.map((l, i) => (
           <div key={i} className="contents">
@@ -335,7 +335,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
   );
   const group = (title: string, lines: Line[], content: React.ReactNode) => (
     <section aria-label={title} className="flex flex-col gap-1.5">
-      <h3 className="flex items-baseline gap-1.5 font-bold">
+      <h3 className="flex items-baseline gap-1.5 font-medium tracking-tight">
         {title}{" "}
         <span className="text-sm font-normal text-muted-foreground">
           {lines.length}
@@ -347,7 +347,7 @@ function People({ sheet }: { sheet: TodaySheet }) {
 
   return (
     <section aria-label="사람이 볼 일" className="flex flex-col gap-2">
-      <h2 className="text-lg font-bold">사람이 볼 일</h2>
+      <h2 className="text-lg font-medium tracking-tight">사람이 볼 일</h2>
       {callLines.length + workLines.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
           오늘 남은 일이 없습니다
@@ -454,7 +454,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
   return (
     <section aria-label="AI가 한 일" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-lg font-bold">AI가 한 일</h2>
+        <h2 className="text-lg font-medium tracking-tight">AI가 한 일</h2>
         <span className="text-sm text-muted-foreground">{summary}</span>
         <span className="flex-1" />
         <Button
@@ -474,7 +474,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
       {open && (
         <div className="flex flex-col gap-4 rounded-xl border bg-card p-4">
           <div className="flex flex-col gap-2">
-            <h3 className="font-bold">자동 처리</h3>
+            <h3 className="font-medium tracking-tight">자동 처리</h3>
             {!ai.autoclose_on ? (
               <p className="text-sm text-muted-foreground">
                 자동 종결이 꺼져 있습니다
@@ -521,7 +521,9 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
           </div>
           {ai.recon_auto.on && (
             <div className="flex flex-col gap-2">
-              <h3 className="font-bold">일계표 불일치 자동 마감</h3>
+              <h3 className="font-medium tracking-tight">
+                일계표 불일치 자동 마감
+              </h3>
               {ai.recon_auto.recent.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   자동으로 마감한 불일치 건이 없습니다
@@ -558,7 +560,9 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
           )}
           {ai.expense_auto.on && (
             <div className="flex flex-col gap-2">
-              <h3 className="font-bold">지출 증빙 자동 확정</h3>
+              <h3 className="font-medium tracking-tight">
+                지출 증빙 자동 확정
+              </h3>
               {ai.expense_auto.recent.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   자동으로 확정한 출금이 없습니다
@@ -594,7 +598,7 @@ function AiDone({ sheet, reload }: { sheet: TodaySheet; reload: () => void }) {
             </div>
           )}
           <div className="flex flex-col gap-2">
-            <h3 className="font-bold">결과 표에서 센 것</h3>
+            <h3 className="font-medium tracking-tight">결과 표에서 센 것</h3>
             <ul className="flex flex-col divide-y">
               {results.map((r) => (
                 <li key={r.title} className="flex items-center gap-3 py-2">

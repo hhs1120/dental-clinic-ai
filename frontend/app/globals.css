@@ -7,14 +7,18 @@
 /* 목록 칸 접힘(넓은 화면) — 그리기 전 스크립트가 <html data-list-collapsed>를 붙인다(lib/theme.ts) */
 @custom-variant list-collapsed (&:where([data-list-collapsed] *));
 
-/* 토큰 — 앱 뼈대 설계안 '스타일'. 색·모서리·글꼴·그림자는 여기서만 정하고 화면 코드는 이름으로 쓴다.
-   바탕·글자·그림자는 Graphite(oklch → sRGB), 강조색은 딥 틸. 다크는 <html data-theme="dark"> — 아이콘 줄의 테마 단추(고른 적이 없으면 OS 설정을 따른다, app/layout.tsx 스크립트) */
+/* 토큰 — 색·모서리·글꼴·그림자는 여기서만 정하고 화면 코드는 이름으로 쓴다(디자인 새로 입히기 설계).
+   형태·글꼴은 Mercury, 라이트 색은 웜 차콜(링크만 페트롤), 다크 색은 Warp(링크는 따뜻한 청록).
+   다크는 <html data-theme="dark"> — 아이콘 줄의 테마 단추(고른 적이 없으면 OS 설정을 따른다, app/layout.tsx 스크립트) */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), var(--font-noto-kr), sans-serif;
+  --font-sans: var(--font-inter), var(--font-pretendard), sans-serif;
   --font-heading: var(--font-sans);
+  /* 화면 제목 띠(PageHeader) — cn 패키지는 text-page-*를 글자색으로 본다: cn()으로 text-색과 함께 넣으면 크기가 빠진다 */
+  --text-page-title: 1.45rem;
+  --text-page-desc: 13px;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -31,7 +35,18 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-header: var(--header);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-count: var(--sidebar-count);
+  --color-sidebar-rail: var(--sidebar-rail);
+  --color-appt-treatment: var(--appt-treatment);
+  --color-appt-treatment-fg: var(--appt-treatment-fg);
+  --color-appt-hygiene: var(--appt-hygiene);
+  --color-appt-hygiene-fg: var(--appt-hygiene-fg);
   --color-link: var(--link);
   --color-mark: var(--mark);
   --color-status-warn-bg: var(--status-warn-bg);
@@ -64,11 +79,12 @@
   --color-emr-row-on: var(--emr-row-on);
   --shadow-card: var(--shadow-card);
   --shadow-control: var(--shadow-control);
-  /* 컨트롤(rounded-lg·md) 5px, 카드(rounded-xl) 11px */
+  --shadow-sidebar-active: var(--shadow-sidebar-active);
+  /* 컨트롤(rounded-lg·md) 12px, 카드(rounded-xl) 16px */
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 6px);
+  --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
@@ -76,47 +92,65 @@
 
 :root {
   color-scheme: light;
-  --radius: 0.3125rem;
-  --background: #f0f0f0;
-  --foreground: #333333;
-  --card: #f5f5f5;
-  --card-foreground: #333333;
-  --popover: #f5f5f5;
-  --popover-foreground: #333333;
-  --header: #eaeaea;
-  --primary: #115e59;
+  --radius: 0.75rem;
+  --background: #f6f4f0;
+  --foreground: #2b2622;
+  --card: #ffffff;
+  --card-foreground: #2b2622;
+  --popover: #ffffff;
+  --popover-foreground: #2b2622;
+  --primary: #3d3631;
   --primary-foreground: #ffffff;
-  --secondary: #e0e0e0;
-  --secondary-foreground: #333333;
-  --muted: #e0e0e0;
-  --muted-foreground: #666666;
-  --accent: #d0e4e2;
-  --accent-foreground: #0f4f4b;
+  --secondary: #eeeae4;
+  --secondary-foreground: #2b2622;
+  --muted: #eeeae4;
+  --muted-foreground: #77706a;
+  --accent: #e9e6e3;
+  --accent-foreground: #2b2622;
   --destructive: #dc2626;
-  --border: #d0d0d0;
-  --input: #e0e0e0;
-  --ring: rgba(17, 94, 89, 0.3);
-  --link: #115e59;
-  --mark: #cbe1de;
+  --border: #e7e2db;
+  --input: #e7e2db;
+  --ring: #3d36314d;
+  --link: #1f5f7a;
+  --mark: #e9e6e3;
   --shadow-card:
-    0 2px 0 0 hsl(0 0% 20% / 0.15), 0 1px 2px -1px hsl(0 0% 20% / 0.15);
-  --shadow-control: 0 2px 0 0 hsl(0 0% 20% / 0.07);
-  --status-warn-bg: #fde68a;
-  --status-warn-fg: #78350f;
-  --status-warn-border: #f59e0b;
-  --status-warn-dot: #d97706;
-  --status-danger-bg: #fecaca;
-  --status-danger-fg: #991b1b;
-  --status-danger-border: #f87171;
-  --status-danger-dot: #dc2626;
-  --status-ok-bg: #bbf7d0;
-  --status-ok-fg: #14532d;
-  --status-ok-border: #4ade80;
-  --status-ok-dot: #16a34a;
-  --status-info-bg: #bfdbfe;
-  --status-info-fg: #1e3a8a;
-  --status-info-border: #60a5fa;
-  --status-info-dot: #2563eb;
+    0 1px 2px rgba(40, 37, 59, 0.04), 0 8px 24px rgba(40, 37, 59, 0.06);
+  --shadow-control: 0 1px 2px rgba(40, 37, 59, 0.06);
+  /* 사이드바 — 아이콘 줄과 목록 칸이 한 면, 선택 칸은 흰 바탕으로 띄운다 */
+  --sidebar: #efe9e1;
+  --sidebar-foreground: #5f574e;
+  --sidebar-border: #e2dbd1;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #2b2622;
+  --sidebar-hover: rgba(0, 0, 0, 0.04);
+  --sidebar-count: rgba(0, 0, 0, 0.07);
+  /* 두 톤 — 아이콘 줄은 목록 칸보다 한 단계 진하게 */
+  --sidebar-rail: #e7dfd4;
+  /* 예약 종류(예약 화면 카드) — 진료 모래·위생 세이지, 상담은 흰 카드 + 테두리. 점심은 빗금(bg-lunch) */
+  --appt-treatment: #efe3d3;
+  --appt-treatment-fg: #5a4128;
+  --appt-hygiene: #e2ede5;
+  --appt-hygiene-fg: #355a45;
+  --lunch-stripe: rgba(43, 38, 34, 0.07);
+  --lunch-line: #d9d2c8;
+  --shadow-sidebar-active: 0 1px 2px rgba(43, 38, 34, 0.1), 0 0 0 1px #e2dbd1;
+  /* 상태 — 딱지는 테두리를 그리지 않고(badge.tsx), border는 경고 띠·상자 테두리 */
+  --status-warn-bg: #fff3dc;
+  --status-warn-fg: #8a5a00;
+  --status-warn-border: #f2d49b;
+  --status-warn-dot: #e8a33a;
+  --status-danger-bg: #fde8ea;
+  --status-danger-fg: #b3263a;
+  --status-danger-border: #f3b4bb;
+  --status-danger-dot: #e5484d;
+  --status-ok-bg: #e3f5ec;
+  --status-ok-fg: #1d6b47;
+  --status-ok-border: #a9dcc1;
+  --status-ok-dot: #30a46c;
+  --status-info-bg: #edecfb;
+  --status-info-fg: #3e4fc7;
+  --status-info-border: #c9c6f4;
+  --status-info-dot: #5266eb;
   /* 전환 전 EMR 창 — 옛 병원 프로그램 색. 그때 프로그램엔 다크 모드가 없어 다크 블록에 두지 않는다 */
   --emr-title: #3b4a5c;
   --emr-title-fg: #ffffff;
@@ -135,43 +169,60 @@
 :root[data-theme="dark"] {
   /* 날짜 고르기·스크롤바 같은 브라우저 기본 부품도 어둡게 */
   color-scheme: dark;
-  --background: #1a1a1a;
-  --foreground: #d9d9d9;
-  --card: #202020;
-  --card-foreground: #d9d9d9;
-  --popover: #202020;
-  --popover-foreground: #d9d9d9;
-  --header: #1f1f1f;
-  --primary: #2bb3a3;
-  --primary-foreground: #062421;
-  --secondary: #303030;
-  --secondary-foreground: #d9d9d9;
-  --muted: #303030;
-  --muted-foreground: #808080;
-  --accent: #173a37;
-  --accent-foreground: #99e6da;
+  --background: #25211d;
+  --foreground: #f7f5f0;
+  --card: #322d29;
+  --card-foreground: #f7f5f0;
+  --popover: #383330;
+  --popover-foreground: #f7f5f0;
+  --primary: #f7f5f0;
+  --primary-foreground: #2b2622;
+  --secondary: #3a3430;
+  --secondary-foreground: #dad2c1;
+  --muted: #3a3430;
+  --muted-foreground: #aea69c;
+  --accent: #433c36;
+  --accent-foreground: #f7f5f0;
   --destructive: #f87171;
-  --border: #353535;
-  --input: #303030;
-  --ring: rgba(43, 179, 163, 0.35);
-  --link: #5fd0c2;
-  --mark: #1c4743;
-  --status-warn-bg: #5c4410;
-  --status-warn-fg: #fde68a;
-  --status-warn-border: #b45309;
-  --status-warn-dot: #fbbf24;
-  --status-danger-bg: #5c1d1d;
-  --status-danger-fg: #fecaca;
-  --status-danger-border: #dc2626;
-  --status-danger-dot: #f87171;
-  --status-ok-bg: #14432a;
-  --status-ok-fg: #bbf7d0;
-  --status-ok-border: #16a34a;
-  --status-ok-dot: #4ade80;
-  --status-info-bg: #1e3a6e;
-  --status-info-fg: #bfdbfe;
-  --status-info-border: #2563eb;
-  --status-info-dot: #60a5fa;
+  --border: #3f3a36;
+  --input: #4a443f;
+  --ring: rgba(247, 245, 240, 0.3);
+  --link: #8cc0b8;
+  --mark: #4a4239;
+  /* 다크는 선과 면 차이로만 */
+  --shadow-card: 0 0 #0000;
+  --shadow-control: 0 0 #0000;
+  --sidebar: #1c1916;
+  --sidebar-foreground: #a39b90;
+  --sidebar-border: #2e2925;
+  --sidebar-accent: rgba(255, 255, 255, 0.09);
+  --sidebar-accent-foreground: #f7f5f0;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-count: rgba(255, 255, 255, 0.14);
+  --sidebar-rail: #151210;
+  --appt-treatment: #3b3127;
+  --appt-treatment-fg: #ead9c2;
+  --appt-hygiene: #22362a;
+  --appt-hygiene-fg: #a6d6b4;
+  --lunch-stripe: rgba(255, 255, 255, 0.07);
+  --lunch-line: #4a443f;
+  --shadow-sidebar-active: 0 0 #0000;
+  --status-warn-bg: #3d3010;
+  --status-warn-fg: #f5cf5b;
+  --status-warn-border: #6b5420;
+  --status-warn-dot: #f5cf5b;
+  --status-danger-bg: #4a1a1d;
+  --status-danger-fg: #ff9a94;
+  --status-danger-border: #7a2e33;
+  --status-danger-dot: #ff6b63;
+  --status-ok-bg: #1f3a2b;
+  --status-ok-fg: #8fdcae;
+  --status-ok-border: #35684d;
+  --status-ok-dot: #4cc983;
+  --status-info-bg: #22304a;
+  --status-info-fg: #a9c6ff;
+  --status-info-border: #3b5280;
+  --status-info-dot: #6fa0ff;
 }
 
 @layer base {
@@ -197,6 +248,16 @@
     var(--muted) 0 6px,
     var(--card) 6px 12px
   );
+}
+
+/* 점심시간 — 예약이 아닌 빈 시간이라 칠하지 않고 빗금 + 점선(예약 화면). 색은 토큰 */
+@utility bg-lunch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    var(--lunch-stripe) 7px 9px
+  );
+  border: 1px dashed var(--lunch-line);
 }
 
 /* 가로로 넘치는 표 칸 — 더 밀 수 있는 쪽 가장자리에 옅은 그림자(스크롤 단서). 바탕이 background인 칸에 쓴다.

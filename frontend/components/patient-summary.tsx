@@ -1,3 +1,4 @@
+import { XIcon } from "lucide-react";
 import Link from "next/link";
 
 import { PatientCalls } from "@/components/calls/patient-calls";
@@ -20,11 +21,13 @@ export function PatientSummary({
   summary,
   appt,
   date,
+  onClose,
 }: {
   patient: PatientRecord["patient"];
   summary: Summary;
   appt: Appt | null;
   date: string; // appt의 날짜
+  onClose?: () => void; // 있으면 오른쪽 위 닫기 단추(예약표 패널)
 }) {
   const upcoming = summary.upcoming
     .filter((u) => u.id !== appt?.id)
@@ -45,10 +48,22 @@ export function PatientSummary({
   return (
     <Card aria-label="환자 요약" className="gap-0 p-5 text-sm shadow-card">
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <h2 className="text-lg font-bold">{patient.name}</h2>
+        <h2 className="text-lg font-medium tracking-tight">{patient.name}</h2>
         <span className="text-muted-foreground">
           {patient.chart_no} · {patient.age}세 {patient.sex}
         </span>
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="닫기"
+            title="닫기 (Esc)"
+            onClick={onClose}
+            className="-mt-1 -mr-2 ml-auto self-start text-muted-foreground"
+          >
+            <XIcon />
+          </Button>
+        )}
       </div>
 
       {appt && (
@@ -218,7 +233,9 @@ function Section({
   return (
     <section className="mt-4 flex flex-col gap-1.5 border-t pt-4">
       {title && (
-        <h3 className="text-xs font-bold text-muted-foreground">{title}</h3>
+        <h3 className="text-xs font-medium tracking-tight text-muted-foreground">
+          {title}
+        </h3>
       )}
       {children}
     </section>

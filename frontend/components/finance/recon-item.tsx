@@ -124,7 +124,7 @@ function Investigation({
   return (
     <div className="flex flex-col gap-1 rounded-md bg-muted/40 p-2">
       <div className="flex items-center gap-2">
-        <h3 className="font-bold">조사 과정</h3>
+        <h3 className="font-medium tracking-tight">조사 과정</h3>
         {running && (
           <span className="text-sm text-muted-foreground">조사 중…</span>
         )}
@@ -200,11 +200,11 @@ export function ReconItemView({
   return (
     <section
       aria-label={`불일치 건 ${at(item.date)}`}
-      className="flex flex-col gap-3 rounded-md border bg-card p-3"
+      className="flex flex-col gap-3 rounded-xl border bg-card p-3"
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="flex flex-col gap-1">
-          <h3 className="font-bold">장부</h3>
+          <h3 className="font-medium tracking-tight">장부</h3>
           {item.ledger_rows.length === 0 ? (
             <p className="text-muted-foreground">장부에 해당 수납 없음</p>
           ) : (
@@ -225,7 +225,7 @@ export function ReconItemView({
           )}
         </div>
         <div className="flex flex-col gap-1">
-          <h3 className="font-bold">카드·통장</h3>
+          <h3 className="font-medium tracking-tight">카드·통장</h3>
           {item.fin_rows.length === 0 ? (
             <p className="text-muted-foreground">카드·통장에 해당 내역 없음</p>
           ) : (

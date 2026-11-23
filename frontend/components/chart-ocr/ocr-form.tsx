@@ -289,7 +289,7 @@ export function OcrForm({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-bold">
+        <h3 className="text-sm font-medium tracking-tight">
           진료 경과 {fields.visits.length}건
         </h3>
         {fields.visits.map((v, i) => {
@@ -301,7 +301,7 @@ export function OcrForm({
               key={v.uid ?? i}
               onFocus={focus}
               className={cn(
-                "group flex flex-col gap-2 rounded-md border bg-card p-2.5",
+                "group flex flex-col gap-2 rounded-xl border bg-card p-2.5",
                 v.date_check ||
                   !v.treatment.trim() ||
                   (!v.quadrant && v.teeth && v.teeth !== "전악")
@@ -460,7 +460,9 @@ export function OcrForm({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-bold">수납 {fields.payments.length}건</h3>
+        <h3 className="text-sm font-medium tracking-tight">
+          수납 {fields.payments.length}건
+        </h3>
         <div className="grid grid-cols-[8rem_1fr_7rem_7rem] gap-1.5 text-xs font-bold text-muted-foreground">
           <span>날짜</span>
           <span>내용</span>
