@@ -17,7 +17,7 @@ export function ListExpandButton({ className }: { className?: string }) {
       title="목록 펴기"
       onClick={() => saveListCollapsed(false)}
       className={cn(
-        "hidden text-muted-foreground md:list-collapsed:inline-flex print:hidden",
+        "hidden text-muted-foreground md:list-collapsed:inline-flex print:hidden!",
         className,
       )}
     >

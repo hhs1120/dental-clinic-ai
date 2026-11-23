@@ -9,6 +9,13 @@ const css = (page: Page, sel: string, prop: string) =>
     .locator(sel)
     .first()
     .evaluate((e, p) => getComputedStyle(e).getPropertyValue(p).trim(), prop);
+// 숨은 화면(cacheComponents)의 띠도 DOM에 남는다 — 지금 화면의 띠만 고른다
+const BAND = 'main > div > [data-slot="page-header"]';
+const setThemeBeforeLoad = (page: Page, t: "light" | "dark") =>
+  page.addInitScript(
+    (v) => document.documentElement.setAttribute("data-theme", v),
+    t,
+  );
 const setTheme = (page: Page, t: "light" | "dark") =>
   page.evaluate(
     (v) => document.documentElement.setAttribute("data-theme", v),
@@ -76,20 +83,18 @@ test("design: 업무 화면 제목은 위쪽 띠, AI 비서·EMR은 띠 없음",
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/claims");
-  const band = page.locator('[data-slot="page-header"]');
+  const band = page.locator(BAND);
   await expect(
     band.getByRole("heading", { level: 1, name: "청구 점검" }),
   ).toBeVisible();
   await expect(band.getByText("업무", { exact: true })).toBeVisible();
-  expect(await css(page, '[data-slot="page-header"]', "position")).toBe(
-    "sticky",
-  );
+  expect(await css(page, BAND, "position")).toBe("sticky");
   await page.mouse.move(900, 600);
   await page.mouse.wheel(0, 2000);
   await expect.poll(async () => (await band.boundingBox())!.y).toBe(0);
   for (const path of ["/", "/emr"]) {
     await page.goto(path);
-    await expect(page.locator('[data-slot="page-header"]')).toHaveCount(0);
+    await expect(page.locator(BAND)).toHaveCount(0);
   }
 });
 
@@ -108,7 +113,7 @@ test("design: 띠가 높아져도 sticky 칸이 띠 아래", async ({ page }) =>
   await expect
     .poll(() => page.evaluate(() => window.scrollY))
     .toBeGreaterThan(200);
-  const band = (await page.locator('[data-slot="page-header"]').boundingBox())!;
+  const band = (await page.locator(BAND).boundingBox())!;
   const box = (await panel.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(band.y + band.height);
 });
@@ -118,7 +123,7 @@ test("design: 목록 펴기는 띠 안에", async ({ page }) => {
   await page.goto("/claims");
   await page.getByRole("button", { name: "목록 접기" }).click();
   const expandBtn = page
-    .locator('[data-slot="page-header"]')
+    .locator(BAND)
     .getByRole("button", { name: "목록 펴기" });
   await expect(expandBtn).toBeVisible();
   await expandBtn.click();
@@ -128,23 +133,19 @@ test("design: 목록 펴기는 띠 안에", async ({ page }) => {
 test("design: 인쇄하면 띠는 제목만", async ({ page }) => {
   await page.goto("/prep");
   await page.emulateMedia({ media: "print" });
-  const band = page.locator('[data-slot="page-header"]');
+  const band = page.locator(BAND);
   await expect(
     band.getByRole("heading", { level: 1, name: "준비표" }),
   ).toBeVisible();
   await expect(band.getByText("업무", { exact: true })).toBeHidden();
-  expect(await css(page, '[data-slot="page-header"]', "position")).toBe(
-    "static",
-  );
+  expect(await css(page, BAND, "position")).toBe("static");
 });
 
 test("design: 좁은 화면은 띠가 붙지 않고 가로 넘침 없음", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const path of ["/today", "/claims", "/ask"]) {
     await page.goto(path);
-    expect(await css(page, '[data-slot="page-header"]', "position")).toBe(
-      "static",
-    );
+    expect(await css(page, BAND, "position")).toBe("static");
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -188,4 +189,104 @@ test("design: AI 비서 질문 말풍선은 카드 면", async ({ page }) => {
   expect(await css(page, bubble, "background-color")).toBe(
     "rgb(255, 255, 255)",
   );
+});
+
+test("design: 예약 카드가 띠를 덮지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 600 });
+  await page.goto("/schedule?date=2026-12-01");
+  await expect(page.locator("main").getByText("09:30").first()).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 400));
+  const band = (await page.locator(BAND).boundingBox())!;
+  const covered = await page.evaluate((b) => {
+    let n = 0;
+    for (let x = b.x + 20; x < b.x + b.width; x += 40) {
+      const el = document.elementFromPoint(x, b.y + b.height - 6);
+      if (!el?.closest('[data-slot="page-header"]')) n++;
+    }
+    return n;
+  }, band);
+  expect(covered).toBe(0);
+});
+
+test("design: 중간 폭에서 통화를 열면 상세 머리가 띠 아래", async ({
+  page,
+}) => {
+  // lg 미만은 목록에서 통화를 누르면 위에 놓인 상세로 스크롤해 간다 — 그 머리가 띠에 가리지 않아야
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("/calls?tab=history");
+  const rows = page.locator("main section > button");
+  await expect(rows.nth(8)).toBeVisible();
+  await rows.nth(8).scrollIntoViewIfNeeded();
+  await rows.nth(8).click();
+  const panel = page.getByRole("complementary", { name: "통화 상세" });
+  await expect(panel).toBeVisible();
+  await page.waitForTimeout(800);
+  const band = (await page.locator(BAND).boundingBox())!;
+  expect((await panel.boundingBox())!.y).toBeGreaterThanOrEqual(
+    band.y + band.height,
+  );
+});
+
+test("design: 붙어 있는 통화 상세 칸은 화면 안에", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.goto("/calls?call=c-0450");
+  const panel = page.getByRole("complementary", { name: "통화 상세" });
+  await expect(panel).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight), {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(3000);
+  await page.evaluate(() => window.scrollTo(0, 2000));
+  await expect
+    .poll(async () => {
+      const b = (await panel.boundingBox())!;
+      return b.y + b.height;
+    })
+    .toBeLessThanOrEqual(800);
+});
+
+test("design: 환자 이름 링크는 링크 색", async ({ page }) => {
+  await setThemeBeforeLoad(page, "light");
+  for (const path of ["/missed", "/prep"]) {
+    await page.goto(path);
+    const link = page.locator('main a[href^="/emr?chart="]').first();
+    await expect(link).toBeVisible();
+    expect(await link.evaluate((e) => getComputedStyle(e).color)).toBe(
+      "rgb(31, 95, 122)",
+    );
+  }
+});
+
+test("design: 목록을 접은 채 인쇄해도 띠는 제목만", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/prep");
+  await page.getByRole("button", { name: "목록 접기" }).click();
+  await page.emulateMedia({ media: "print" });
+  await expect(
+    page.locator(BAND).getByRole("button", { name: "목록 펴기" }),
+  ).toBeHidden();
+  expect(await css(page, BAND, "padding-left")).toBe("0px");
+});
+
+test("design: 사이드바 작은 글씨는 사이드바 글자색", async ({ page }) => {
+  await page.goto("/today");
+  await setTheme(page, "light");
+  expect(await css(page, "aside h2", "color")).toBe("rgb(95, 87, 78)");
+});
+
+test("design: 본문 여백 — 좁은 폭 16px, 인쇄 0", async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 });
+  await page.goto("/prep");
+  await expect(page.locator(BAND)).toBeVisible();
+  expect(await css(page, "main", "padding-left")).toBe("16px");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ media: "print" });
+  expect(await css(page, "main", "padding-left")).toBe("0px");
+});
+
+test("design: 띠 글자 크기(토큰)", async ({ page }) => {
+  await page.goto("/today");
+  expect(await css(page, `${BAND} h1`, "font-size")).toBe("23.2px");
+  expect(await css(page, `${BAND} p`, "font-size")).toBe("13px");
 });

@@ -65,7 +65,7 @@ function TodayLine() {
           ))
         )}
       </span>
-      <span className="shrink-0 font-medium text-primary">오늘 화면 →</span>
+      <span className="shrink-0 font-medium text-link">오늘 화면 →</span>
     </Link>
   );
 }

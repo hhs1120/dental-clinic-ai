@@ -224,7 +224,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <main
           className={cn(
-            "relative w-full px-4 pt-6 pb-12 sm:px-12 print:pb-0",
+            "relative w-full px-4 pt-6 pb-12 md:px-12 print:px-0 print:pb-0",
             space === "assistant" && "md:list-collapsed:pl-14",
           )}
         >

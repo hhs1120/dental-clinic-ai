@@ -65,7 +65,8 @@ export function DayGrid({
   const minRem = (id: number) => (weight(id) > 1 ? weight(id) * 7 : 5.5);
 
   return (
-    <div className="overflow-x-auto">
+    // isolate — 예약 카드의 z-20이 위에 붙은 제목 띠(z-20)를 덮지 않게 이 안에 가둔다
+    <div className="isolate overflow-x-auto">
       <div
         className="grid gap-x-1.5 px-3 pb-3"
         style={{

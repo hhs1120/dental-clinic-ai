@@ -16,6 +16,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), var(--font-pretendard), sans-serif;
   --font-heading: var(--font-sans);
+  /* 화면 제목 띠(PageHeader) */
+  --text-page-title: 1.45rem;
+  --text-page-desc: 13px;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);

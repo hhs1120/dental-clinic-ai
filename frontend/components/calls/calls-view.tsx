@@ -210,7 +210,7 @@ export function CallsView() {
             // 좁은 화면은 상세를 목록 위에 두고 열 때 그리로 옮긴다(목록 아래 멀리 열리지 않게)
             <div
               ref={panelRef}
-              className="order-first scroll-mt-4 lg:sticky lg:top-[calc(var(--page-band-h,0px)+1rem)] lg:order-none"
+              className="order-first scroll-mt-[calc(var(--page-band-h,0px)+1rem)] lg:sticky lg:top-[calc(var(--page-band-h,0px)+1rem)] lg:order-none"
             >
               {panel}
             </div>

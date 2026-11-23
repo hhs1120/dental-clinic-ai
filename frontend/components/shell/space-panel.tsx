@@ -191,7 +191,7 @@ function ConversationList({ current }: { current: string | null }) {
         + 새 대화
       </Link>
       {first.data?.length === 0 && (
-        <p className="mt-2 px-3 text-xs text-muted-foreground">
+        <p className="mt-2 px-3 text-xs text-sidebar-foreground">
           지난 대화가 아직 없습니다. 물어본 대화는 여기에 쌓입니다.
         </p>
       )}
@@ -302,7 +302,7 @@ export function SpacePanel({
   return (
     <div className={cn("flex w-48 flex-col gap-3 px-3 pt-6 pb-3", className)}>
       <div className="flex h-8 items-center justify-between gap-1 pl-3">
-        <h2 className="text-xs font-medium tracking-tight text-muted-foreground">
+        <h2 className="text-xs font-medium tracking-tight text-sidebar-foreground">
           {TITLES[space]}
         </h2>
         {onCollapse && (
@@ -312,7 +312,7 @@ export function SpacePanel({
             aria-label="목록 접기"
             title="목록 접기"
             onClick={onCollapse}
-            className="text-muted-foreground"
+            className="text-sidebar-foreground"
           >
             <ChevronsLeftIcon />
           </Button>
@@ -326,7 +326,7 @@ export function SpacePanel({
         {space === "eval" && <EvalMenu tab={params.get("tab") ?? ""} />}
         {space === "library" && <LibraryMenu params={params} />}
       </div>
-      <p className="px-3 text-xs text-muted-foreground">
+      <p className="px-3 text-xs text-sidebar-foreground">
         기준일 <strong className="font-medium text-foreground">{today}</strong>
       </p>
     </div>

@@ -143,7 +143,7 @@ export function PrepTable({
                   <td className="px-3 py-2 align-middle whitespace-nowrap">
                     <Link
                       href={`/emr?chart=${encodeURIComponent(r.patient.chart_no)}`}
-                      className="font-bold text-primary hover:underline"
+                      className="font-bold text-link hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {r.patient.name}
