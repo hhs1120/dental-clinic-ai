@@ -302,7 +302,7 @@ export function SpacePanel({
   return (
     <div className={cn("flex w-48 flex-col gap-3 px-3 pt-6 pb-3", className)}>
       <div className="flex h-8 items-center justify-between gap-1 pl-3">
-        <h2 className="text-xs font-bold text-muted-foreground">
+        <h2 className="text-xs font-medium tracking-tight text-muted-foreground">
           {TITLES[space]}
         </h2>
         {onCollapse && (

@@ -109,7 +109,7 @@ export function CallsView() {
   const panel =
     call &&
     (detail.error ? (
-      <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+      <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
         {detail.error}
         <Button variant="ghost" size="sm" onClick={() => go({ call: null })}>
           닫기

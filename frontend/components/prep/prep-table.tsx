@@ -105,7 +105,7 @@ export function PrepTable({
         </Button>
       </div>
       <BusyHours rows={all} />
-      <div className="scroll-shadow-x overflow-x-auto rounded-md border print:overflow-visible">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border print:overflow-visible">
         <table className="w-full min-w-3xl text-sm print:min-w-0">
           <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>
@@ -319,7 +319,7 @@ function Expand({ row }: { row: PrepRow }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-xs font-bold text-muted-foreground">
+        <h3 className="mb-2 text-xs font-medium tracking-tight text-muted-foreground">
           사실 (코드가 EMR에서 모음)
         </h3>
         <dl className="flex flex-col gap-1">
@@ -332,7 +332,7 @@ function Expand({ row }: { row: PrepRow }) {
         </dl>
       </div>
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-bold text-muted-foreground">
+        <h3 className="text-xs font-medium tracking-tight text-muted-foreground">
           오늘 할 일 제안 (AI)
         </h3>
         <SuggestionLine row={row} />
@@ -424,7 +424,7 @@ function BusyHours({ rows }: { rows: PrepRow[] }) {
   const span = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
   return (
     <section aria-label="몰리는 시간대" className="flex flex-col gap-1">
-      <h2 className="text-xs font-bold text-muted-foreground">
+      <h2 className="text-xs font-medium tracking-tight text-muted-foreground">
         몰리는 시간대 (시작 시각 기준 예약 수)
       </h2>
       <div className="flex items-end gap-1.5">

@@ -145,7 +145,9 @@ function Interpretation({ sheet }: { sheet: ReportSheet }) {
       <CardContent className="flex flex-col gap-3 px-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="kind">AI</Badge>
-          <h2 className="text-lg font-bold">AI가 고른 주목할 점</h2>
+          <h2 className="text-lg font-medium tracking-tight">
+            AI가 고른 주목할 점
+          </h2>
           <span className="text-xs text-muted-foreground">
             문장의 숫자는 점마다 근거 보기의 값에서 — 후검증을 통과한 해석만
             보입니다
@@ -199,7 +201,7 @@ function DxCard({ sheet }: { sheet: ReportSheet }) {
     <Card className="py-4">
       <CardContent className="flex flex-col gap-2 px-4 lg:flex-row lg:items-center lg:gap-6">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold">상병 착오</h2>
+          <h2 className="text-lg font-medium tracking-tight">상병 착오</h2>
           <span className="text-xs text-muted-foreground">재청구 불가</span>
         </div>
         {dx ? (
@@ -301,7 +303,7 @@ function ProcedureCard({ sheet }: { sheet: ReportSheet }) {
     <div className="grid gap-3 lg:grid-cols-2">
       <Card className="py-4">
         <CardContent className="flex flex-col gap-2 px-4">
-          <h2 className="text-lg font-bold">매출 비중</h2>
+          <h2 className="text-lg font-medium tracking-tight">매출 비중</h2>
           {top.length === 0 ? (
             <p className="text-sm text-muted-foreground">이 기간 매출 없음</p>
           ) : (
@@ -339,7 +341,7 @@ function ProcedureCard({ sheet }: { sheet: ReportSheet }) {
       </Card>
       <Card className="py-4">
         <CardContent className="flex flex-col gap-2 px-4">
-          <h2 className="text-lg font-bold">
+          <h2 className="text-lg font-medium tracking-tight">
             {prev ? `${prevLabel(sheet.scope, prev)} 대비` : "이전 기간 대비"}
           </h2>
           {!prev ? (
@@ -391,7 +393,7 @@ function Trend({
     v === null || v === undefined ? "—" : v.toLocaleString("ko-KR");
   const rows = [...sheet.trend].reverse();
   return (
-    <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+    <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
       <table className="w-full min-w-2xl text-sm whitespace-nowrap tabular-nums">
         <thead className="bg-muted whitespace-nowrap text-muted-foreground">
           <tr>

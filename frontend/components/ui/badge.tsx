@@ -18,16 +18,16 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
-        // 앱 뼈대 설계안 '스타일' — 종류 표시, 옛 버전, 상태 4종(진한 배경 + 같은 색 테두리 + 점 + 굵은 글자)
+        // 종류 표시, 옛 버전, 상태 4종(옅은 배경 + 점, 테두리 없는 알약 — 디자인 새로 입히기 설계 "모양")
         kind: "rounded-md bg-accent font-bold text-accent-foreground",
         muted: "rounded-md bg-secondary font-bold text-secondary-foreground",
         outdated:
           "rounded-md border-dashed border-muted-foreground text-muted-foreground",
-        warn: "border-status-warn-border bg-status-warn-bg font-bold text-status-warn-fg",
+        warn: "border-transparent bg-status-warn-bg font-medium text-status-warn-fg",
         danger:
-          "border-status-danger-border bg-status-danger-bg font-bold text-status-danger-fg",
-        ok: "border-status-ok-border bg-status-ok-bg font-bold text-status-ok-fg",
-        info: "border-status-info-border bg-status-info-bg font-bold text-status-info-fg",
+          "border-transparent bg-status-danger-bg font-medium text-status-danger-fg",
+        ok: "border-transparent bg-status-ok-bg font-medium text-status-ok-fg",
+        info: "border-transparent bg-status-info-bg font-medium text-status-info-fg",
         // AI 비서 답 아래 바로 가기·사례 출처 칩 — 이름과 링크 여러 개가 들어가 줄바꿈된다
         chip: "h-auto flex-wrap justify-start gap-x-2 overflow-visible rounded-md border-border bg-card px-2.5 py-1 font-normal whitespace-normal",
       },

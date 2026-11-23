@@ -94,7 +94,7 @@ export function BlindTab() {
     const s = n === 1 ? pair.left : pair.right;
     const v = versions?.[n === 1 ? "left" : "right"];
     return (
-      <div className="flex flex-col gap-1.5 rounded-lg border bg-card p-3">
+      <div className="flex flex-col gap-1.5 rounded-xl border bg-card p-3">
         <div className="flex items-center gap-2">
           <span className="flex size-6 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
             {n}
@@ -134,7 +134,7 @@ export function BlindTab() {
         </section>
         {/* 넓은 화면은 녹취록 높이를 왼쪽 칸(짧으면 화면 높이)에 맞추고 안에서 민다 — 크기 봉쇄로 녹취록 길이가 줄 높이를 늘리지 않게 */}
         <section
-          className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg border bg-card p-4 lg:max-h-none lg:min-h-[calc(100vh-14rem)] lg:self-stretch lg:contain-size"
+          className="max-h-[calc(100vh-14rem)] overflow-y-auto rounded-xl border bg-card p-4 lg:max-h-none lg:min-h-[calc(100vh-14rem)] lg:self-stretch lg:contain-size"
           aria-label="녹취록"
         >
           <p className="mb-2 text-sm text-muted-foreground">

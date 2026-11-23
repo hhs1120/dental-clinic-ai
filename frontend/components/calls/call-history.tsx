@@ -158,7 +158,7 @@ export function CallHistory({
       )}
       {[...days].map(([date, d]) => (
         <section key={date} className="flex flex-col gap-1.5">
-          <h2 className="mt-2 font-bold">
+          <h2 className="mt-2 font-medium tracking-tight">
             {dayTitle(date)}
             <span className="ml-1.5 text-sm font-normal text-muted-foreground">
               · {d.count}통
@@ -170,7 +170,7 @@ export function CallHistory({
               type="button"
               onClick={() => onOpen(c.call_uid)}
               className={cn(
-                "flex flex-col gap-1 rounded-lg border bg-card px-3 py-2.5 text-left shadow-card",
+                "flex flex-col gap-1 rounded-xl border bg-card px-3 py-2.5 text-left shadow-card",
                 selected === c.call_uid && "border-primary",
               )}
             >

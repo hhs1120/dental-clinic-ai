@@ -143,7 +143,7 @@ export function PreClaimTable({
               : "AI 점검 최신"}
         </Button>
       </div>
-      <div className="scroll-shadow-x overflow-x-auto rounded-md border">
+      <div className="scroll-shadow-x overflow-x-auto rounded-xl border">
         <table className="w-full min-w-3xl text-sm">
           <thead className="bg-muted text-left whitespace-nowrap text-muted-foreground">
             <tr>

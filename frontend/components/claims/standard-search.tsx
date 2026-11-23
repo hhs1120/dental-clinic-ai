@@ -58,7 +58,7 @@ export function StandardSearch() {
           className="flex flex-col gap-2 rounded-lg border bg-muted p-3"
         >
           <div className="flex items-center justify-between">
-            <h3 className="font-bold">찾은 조항</h3>
+            <h3 className="font-medium tracking-tight">찾은 조항</h3>
             <Button size="sm" variant="ghost" onClick={() => setHits(null)}>
               닫기
             </Button>

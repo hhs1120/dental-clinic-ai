@@ -52,7 +52,7 @@ export function AccuracyTab() {
         정확도는 평가 리포트(eval.py)에서만 봅니다.
       </p>
       <div className="grid items-start gap-5 lg:grid-cols-[3fr_2fr]">
-        <div className="overflow-x-auto rounded-lg border bg-card p-4">
+        <div className="overflow-x-auto rounded-xl border bg-card p-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left whitespace-nowrap text-muted-foreground">
@@ -80,8 +80,8 @@ export function AccuracyTab() {
         </div>
         <div className="flex flex-col gap-4">
           {data.blind && (
-            <section className="flex flex-col gap-2 rounded-lg border bg-card p-4">
-              <h2 className="font-bold">
+            <section className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+              <h2 className="font-medium tracking-tight">
                 블라인드 승률 ({b} vs {a})
               </h2>
               <RateBars title="LLM 쌍 비교" r={data.blind.llm} a={a} b={b} />
@@ -94,8 +94,8 @@ export function AccuracyTab() {
               </p>
             </section>
           )}
-          <section className="flex flex-col gap-2 rounded-lg border bg-card p-4">
-            <h2 className="font-bold">사람이 보는 몫</h2>
+          <section className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+            <h2 className="font-medium tracking-tight">사람이 보는 몫</h2>
             <Bar {...data.human_share} />
             <p className="text-xs text-muted-foreground">
               판정 풀 밖 통화 중 두 AI가 엇갈렸거나 표본으로 뽑힌 통화

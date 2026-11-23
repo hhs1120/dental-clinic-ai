@@ -137,7 +137,7 @@ export function ChartOcrView() {
     <div className="flex flex-col gap-5">
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold">스캔 고르기</h2>
+          <h2 className="text-sm font-medium tracking-tight">스캔 고르기</h2>
           <input
             ref={fileRef}
             type="file"
@@ -213,7 +213,9 @@ export function ChartOcrView() {
         <section className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-5">
           <div className="flex flex-col gap-3 self-start lg:sticky lg:top-[calc(var(--page-band-h,0px)+1rem)]">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold">{item.filename}</h2>
+              <h2 className="text-sm font-medium tracking-tight">
+                {item.filename}
+              </h2>
               <Badge variant={STATUS_VARIANT[item.status]}>
                 {STATUS_LABEL[item.status]}
               </Badge>
@@ -356,7 +358,7 @@ export function ChartOcrView() {
 
       {(imports.data ?? []).length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-bold">이관 기록</h2>
+          <h2 className="text-sm font-medium tracking-tight">이관 기록</h2>
           <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
             {imports.data!.map((r) => (
               <li key={r.id}>

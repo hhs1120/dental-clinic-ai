@@ -1,5 +1,8 @@
 // 디자인 토큰·셸 배치(docs/superpowers/specs/2026-11-23-design-refresh-design.md)
-import { expect, type Page, test } from "@playwright/test";
+import { expect as baseExpect, type Page, test } from "@playwright/test";
+
+// 데이터를 불러온 뒤에 보는 단언이 많다 — 전체 e2e(작업자 4)에서는 API가 느려 기본 5초를 넘긴다
+const expect = baseExpect.configure({ timeout: 15_000 });
 
 const css = (page: Page, sel: string, prop: string) =>
   page
@@ -148,4 +151,41 @@ test("design: 좁은 화면은 띠가 붙지 않고 가로 넘침 없음", async
       ),
     ).toBe(true);
   }
+});
+
+test("design: 상태 딱지는 테두리 없는 알약, 굵기 500", async ({ page }) => {
+  await page.goto("/claims");
+  const sel = "[data-slot=badge][data-variant=danger]";
+  await expect(page.locator(sel).first()).toBeVisible();
+  expect(await css(page, sel, "border-top-color")).toBe("rgba(0, 0, 0, 0)");
+  expect(await css(page, sel, "font-weight")).toBe("500");
+});
+
+test("design: 카드·표 감싸개 모서리 16px, 소제목 굵기 500", async ({
+  page,
+}) => {
+  // 청구 점검 표 감싸개는 rounded-md였다 — 큰 덩어리는 16px, 바탕은 시안대로 본문 바탕 그대로
+  await page.goto("/claims");
+  const table = "main .scroll-shadow-x.border";
+  await expect(page.locator(table).first()).toBeVisible();
+  expect(await css(page, table, "border-top-left-radius")).toBe("16px");
+  await page.goto("/today");
+  await expect(page.locator("main h2").first()).toBeVisible();
+  expect(await css(page, "main h2", "font-weight")).toBe("500");
+});
+
+test("design: AI 비서 질문 말풍선은 카드 면", async ({ page }) => {
+  // 지난 대화는 다른 e2e가 지우기도 한다 — 번호를 박지 않고 남아 있는 첫 대화를 연다
+  await page.goto("/");
+  const past = page
+    .getByRole("navigation", { name: "지난 대화" })
+    .getByRole("link");
+  await expect(past.first()).toBeVisible();
+  await past.first().click();
+  await setTheme(page, "light");
+  const bubble = "main p.self-end";
+  await expect(page.locator(bubble).first()).toBeVisible();
+  expect(await css(page, bubble, "background-color")).toBe(
+    "rgb(255, 255, 255)",
+  );
 });

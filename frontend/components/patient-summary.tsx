@@ -45,7 +45,7 @@ export function PatientSummary({
   return (
     <Card aria-label="환자 요약" className="gap-0 p-5 text-sm shadow-card">
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <h2 className="text-lg font-bold">{patient.name}</h2>
+        <h2 className="text-lg font-medium tracking-tight">{patient.name}</h2>
         <span className="text-muted-foreground">
           {patient.chart_no} · {patient.age}세 {patient.sex}
         </span>
@@ -218,7 +218,9 @@ function Section({
   return (
     <section className="mt-4 flex flex-col gap-1.5 border-t pt-4">
       {title && (
-        <h3 className="text-xs font-bold text-muted-foreground">{title}</h3>
+        <h3 className="text-xs font-medium tracking-tight text-muted-foreground">
+          {title}
+        </h3>
       )}
       {children}
     </section>
