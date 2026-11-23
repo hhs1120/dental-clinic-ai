@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  ChevronsRightIcon,
-  MenuIcon,
-  MoonIcon,
-  SunIcon,
-  UserIcon,
-  XIcon,
-} from "lucide-react";
+import { MenuIcon, MoonIcon, SunIcon, UserIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -19,6 +12,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { ListExpandButton } from "@/components/shell/list-expand-button";
 import { MobileTabs, SpacePanel } from "@/components/shell/space-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -230,22 +224,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <main
           className={cn(
-            "relative mx-auto w-full max-w-[90rem] px-4 pt-6 pb-12 sm:px-6 print:pb-0",
-            space !== "emr" && "md:list-collapsed:pl-14",
+            "relative w-full px-4 pt-6 pb-12 sm:px-12 print:pb-0",
+            space === "assistant" && "md:list-collapsed:pl-14",
           )}
         >
-          {/* 접은 목록 칸을 펴는 단추 — 접기 단추가 있던 높이, 본문 왼쪽 위 */}
-          {space !== "emr" && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="목록 펴기"
-              title="목록 펴기"
-              onClick={() => saveListCollapsed(false)}
-              className="absolute top-6 left-3 hidden text-muted-foreground md:list-collapsed:inline-flex print:hidden"
-            >
-              <ChevronsRightIcon />
-            </Button>
+          {/* 제목 띠가 없는 AI 비서만 — 접기 단추가 있던 높이, 본문 왼쪽 위. 다른 공간은 띠 안(PageHeader) */}
+          {space === "assistant" && (
+            <ListExpandButton className="absolute top-6 left-3" />
           )}
           <MobileTabs space={space} />
           {children}

@@ -211,7 +211,7 @@ export function ChartOcrView() {
 
       {item && fields && (
         <section className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-5">
-          <div className="flex flex-col gap-3 self-start lg:sticky lg:top-4">
+          <div className="flex flex-col gap-3 self-start lg:sticky lg:top-[calc(var(--page-band-h,0px)+1rem)]">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold">{item.filename}</h2>
               <Badge variant={STATUS_VARIANT[item.status]}>
