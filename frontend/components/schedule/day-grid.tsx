@@ -13,18 +13,22 @@ const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toTime = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-// 카드(@container)가 좁으면 상태 배지는 글자를 숨기고 점만(title에 이름), 그래도 넘치면 이름이 …로 줄어든다.
-// 기준은 시각·이름(약 69px)과 배지가 한 줄에 들어가는 카드 너비 — 두 글자(신환·취소·노쇼) 140px, 내원 확인 전 176px. AX는 짧아 그대로
-const NARROW = {
+// 상태 배지 — 넓은 카드는 첫 줄(시각·이름 옆), 좁은 카드(@container)는 둘째 줄 앞(시술이 …로 줄어든다).
+// 기준은 시각·이름(약 69px)과 배지가 한 줄에 들어가는 카드 너비 — 두 글자(신환·취소·노쇼) 140px, 내원 확인 전 176px. AX는 짧아 첫 줄 그대로
+const PLACE = {
   short: {
-    label: "@max-[8.75rem]:sr-only",
-    badge:
-      "h-4 shrink-0 py-0 @max-[8.75rem]:bg-transparent @max-[8.75rem]:px-0",
+    line1: "@max-[8.75rem]:hidden",
+    line2: "hidden @max-[8.75rem]:inline-flex",
   },
   long: {
-    label: "@max-[11rem]:sr-only",
-    badge: "h-4 shrink-0 py-0 @max-[11rem]:bg-transparent @max-[11rem]:px-0",
+    line1: "@max-[11rem]:hidden",
+    line2: "hidden @max-[11rem]:inline-flex",
   },
+};
+// 신환·내원 확인 전은 카드 왼쪽 색 띠로도 — 표를 훑을 때 멀리서 보이게(취소·노쇼의 빨간 띠와 같은 방식, 내원 확인 전이 먼저)
+const EDGE = {
+  unconfirmed: "border-l-4 border-l-status-warn-dot pl-1.5",
+  new_patient: "border-l-4 border-l-status-info-dot pl-1.5",
 };
 
 const CARD: Record<Appt["type"], string> = {
@@ -221,6 +225,44 @@ function ApptCard({
   style: React.CSSProperties;
 }) {
   const off = appt.status === "cancelled" || appt.status === "noshow";
+  const status: {
+    variant: "danger" | "info" | "warn";
+    label: string;
+    size: keyof typeof PLACE;
+  }[] = [
+    ...(off
+      ? [
+          {
+            variant: "danger" as const,
+            label: STATUS_LABEL[appt.status],
+            size: "short" as const,
+          },
+        ]
+      : []),
+    ...(appt.new_patient
+      ? [{ variant: "info" as const, label: "신환", size: "short" as const }]
+      : []),
+    ...(appt.unconfirmed
+      ? [
+          {
+            variant: "warn" as const,
+            label: "내원 확인 전",
+            size: "long" as const,
+          },
+        ]
+      : []),
+  ];
+  const badges = (line: "line1" | "line2") =>
+    status.map((b) => (
+      <Badge
+        key={b.label}
+        variant={b.variant}
+        className={cn("h-4 shrink-0 py-0", PLACE[b.size][line])}
+      >
+        {b.label}
+      </Badge>
+    ));
+  const line1 = badges("line1");
   return (
     <button
       type="button"
@@ -231,49 +273,34 @@ function ApptCard({
         // 취소·노쇼는 흐리게 하지 않고(다크 모드에서 안 읽힘) 점선 테두리·취소선으로 구분한다
         off
           ? "border border-l-4 border-border border-l-status-danger-dot bg-hatch text-muted-foreground"
-          : CARD[appt.type],
+          : cn(
+              CARD[appt.type],
+              appt.unconfirmed
+                ? EDGE.unconfirmed
+                : appt.new_patient && EDGE.new_patient,
+            ),
         selected && "ring-2 ring-primary",
       )}
       style={{ ...style, height: `calc(${span} * ${ROW} - 0.25rem)` }}
     >
-      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 배지는 낮게. 칸이 좁으면 배지는 점만(title에 이름), 그래도 넘치면 이름이 줄어든다 */}
+      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 배지는 낮게. 좁은 카드는 상태 배지를 둘째 줄 앞으로 */}
       <span className="flex min-w-0 items-center gap-1">
         <b className={cn("min-w-0 truncate", off && "line-through")}>
           {appt.time} {appt.name}
         </b>
-        {off && (
-          <Badge
-            variant="danger"
-            className={NARROW.short.badge}
-            title={STATUS_LABEL[appt.status]}
-          >
-            <span className={NARROW.short.label}>
-              {STATUS_LABEL[appt.status]}
-            </span>
-          </Badge>
-        )}
+        {off && line1[0]}
         {appt.source === "ax" && (
           <Badge variant="kind" className="h-4 shrink-0 py-0">
             AX
           </Badge>
         )}
-        {appt.new_patient && (
-          <Badge variant="info" className={NARROW.short.badge} title="신환">
-            <span className={NARROW.short.label}>신환</span>
-          </Badge>
-        )}
-        {appt.unconfirmed && (
-          <Badge
-            variant="warn"
-            className={NARROW.long.badge}
-            title="내원 확인 전"
-          >
-            <span className={NARROW.long.label}>내원 확인 전</span>
-          </Badge>
-        )}
+        {line1.slice(off ? 1 : 0)}
       </span>
-      <span className="truncate">
-        {appt.procedure} · {appt.duration}분
+      <span className="flex min-w-0 items-center gap-1">
+        {badges("line2")}
+        <span className="truncate">
+          {appt.procedure} · {appt.duration}분
+        </span>
       </span>
       {appt.plan_step && span > 1 && (
         <span className="truncate">

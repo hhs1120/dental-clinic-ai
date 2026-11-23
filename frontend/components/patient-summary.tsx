@@ -1,3 +1,4 @@
+import { XIcon } from "lucide-react";
 import Link from "next/link";
 
 import { PatientCalls } from "@/components/calls/patient-calls";
@@ -20,11 +21,13 @@ export function PatientSummary({
   summary,
   appt,
   date,
+  onClose,
 }: {
   patient: PatientRecord["patient"];
   summary: Summary;
   appt: Appt | null;
   date: string; // appt의 날짜
+  onClose?: () => void; // 있으면 오른쪽 위 닫기 단추(예약표 패널)
 }) {
   const upcoming = summary.upcoming
     .filter((u) => u.id !== appt?.id)
@@ -49,6 +52,18 @@ export function PatientSummary({
         <span className="text-muted-foreground">
           {patient.chart_no} · {patient.age}세 {patient.sex}
         </span>
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="닫기"
+            title="닫기 (Esc)"
+            onClick={onClose}
+            className="-mt-1 -mr-2 ml-auto self-start text-muted-foreground"
+          >
+            <XIcon />
+          </Button>
+        )}
       </div>
 
       {appt && (

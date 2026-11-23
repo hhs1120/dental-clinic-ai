@@ -334,12 +334,13 @@ test("design: 좁은 예약 카드도 첫 줄이 넘치지 않는다", async ({ 
         .map((e) => e.textContent),
     );
     expect(over, `${width}px`).toEqual([]);
-    // 좁아도 신환 점은 남는다
-    const dot = page
+    // 좁아도 신환 글자가 읽힌다(둘째 줄)
+    const label = await page
       .locator("main button[aria-pressed]")
       .filter({ hasText: "17:30 김재호" })
-      .locator('[data-variant="info"] > span[aria-hidden]');
-    await expect(dot).toBeVisible();
+      .getByText("신환", { exact: true })
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+    expect(Math.max(0, ...label)).toBeGreaterThan(15);
   }
 });
 
@@ -373,4 +374,53 @@ test("design: 휴대폰 폭에서 통화를 열면 상세가 위에 붙는다", 
   await expect(panel).toBeVisible();
   await page.waitForTimeout(800);
   expect((await panel.boundingBox())!.y).toBeLessThan(40);
+});
+
+test("design: 좁은 카드의 상태 딱지는 둘째 줄에 글자 그대로, 카드엔 왼쪽 색 띠", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/schedule?date=2026-12-01");
+  await setTheme(page, "light");
+  const card = (name: string) =>
+    page.locator("main button[aria-pressed]").filter({ hasText: name }).first();
+  await expect(card("09:30 이정훈")).toBeVisible();
+  // 좁은 카드 — 신환 글자가 보인다(둘째 줄)
+  // 화면에 읽히는 너비로 — 화면 읽기용으로만 남긴 글자(1px)는 보이는 것으로 치지 않는다
+  const shown = async (name: string, label: string) => {
+    const boxes = await card(name)
+      .getByText(label, { exact: true })
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+    return Math.max(0, ...boxes);
+  };
+  expect(await shown("09:30 이정훈", "신환")).toBeGreaterThan(15);
+  expect(await shown("10:30 박서준", "내원 확인 전")).toBeGreaterThan(40);
+  // 왼쪽 색 띠 — 신환 파랑, 내원 확인 전 노랑(넓은 카드도)
+  const left = (name: string) =>
+    card(name).evaluate((e) => getComputedStyle(e).borderLeftColor);
+  expect(await left("09:30 이정훈")).toBe("rgb(82, 102, 235)");
+  expect(await left("12:00 김은경")).toBe("rgb(82, 102, 235)");
+  expect(await left("10:30 박서준")).toBe("rgb(232, 163, 58)");
+});
+
+test("design: 예약 패널 닫기 — 같은 카드 다시 누르기·닫기 단추·Esc", async ({
+  page,
+}) => {
+  await page.goto("/schedule?date=2026-12-01");
+  const card = page
+    .locator("main button[aria-pressed]")
+    .filter({ hasText: "09:30 김성호" });
+  const panel = page.getByLabel("환자 요약");
+  await card.click();
+  await expect(panel).toBeVisible();
+  await card.click();
+  await expect(panel).toBeHidden();
+  await card.click();
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "닫기" }).click();
+  await expect(panel).toBeHidden();
+  await card.click();
+  await expect(panel).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
 });

@@ -87,6 +87,17 @@ export function ScheduleView() {
         String(a.id) === appt &&
         (showAll || (a.status !== "cancelled" && a.status !== "noshow")),
     ) ?? null;
+  // 환자 패널 닫기 — 닫기 단추·Esc·같은 카드 다시 누르기
+  const close = () => go({ appt: null }, true);
+  const open = selected !== null;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") go({ appt: null }, true);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  });
   const [patient, setPatient] = useState<Loaded<PatientRecord> | null>(null);
   const chart = selected?.chart_no ?? "";
   useEffect(() => {
@@ -184,7 +195,10 @@ export function ScheduleView() {
             day={current}
             showAll={showAll}
             selected={selected?.id ?? null}
-            onSelect={(id) => go({ appt: String(id) }, true)}
+            // 고른 카드를 다시 누르면 패널을 닫는다
+            onSelect={(id) =>
+              go({ appt: id === selected?.id ? null : String(id) }, true)
+            }
           />
         </div>
         {selected &&
@@ -194,6 +208,7 @@ export function ScheduleView() {
               summary={record.summary}
               appt={selected}
               date={current.date}
+              onClose={close}
             />
           ) : patient?.key === chart && "error" in patient ? (
             <ErrorBand text={patient.error} />
