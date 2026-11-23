@@ -13,9 +13,23 @@ const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const toTime = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
+// 카드(@container)가 좁으면 상태 배지는 글자를 숨기고 점만(title에 이름), 그래도 넘치면 이름이 …로 줄어든다.
+// 기준은 시각·이름(약 69px)과 배지가 한 줄에 들어가는 카드 너비 — 두 글자(신환·취소·노쇼) 140px, 내원 확인 전 176px. AX는 짧아 그대로
+const NARROW = {
+  short: {
+    label: "@max-[8.75rem]:sr-only",
+    badge:
+      "h-4 shrink-0 py-0 @max-[8.75rem]:bg-transparent @max-[8.75rem]:px-0",
+  },
+  long: {
+    label: "@max-[11rem]:sr-only",
+    badge: "h-4 shrink-0 py-0 @max-[11rem]:bg-transparent @max-[11rem]:px-0",
+  },
+};
+
 const CARD: Record<Appt["type"], string> = {
-  treatment: "bg-accent text-accent-foreground",
-  hygiene: "bg-secondary text-secondary-foreground",
+  treatment: "bg-appt-treatment text-appt-treatment-fg",
+  hygiene: "bg-appt-hygiene text-appt-hygiene-fg",
   consult: "border bg-card",
 };
 
@@ -106,7 +120,7 @@ export function DayGrid({
         )}
         {lunch && (
           <span
-            className="z-10 flex items-center rounded-md bg-muted text-xs text-muted-foreground"
+            className="bg-lunch z-10 flex items-center rounded-md text-xs text-muted-foreground"
             style={{
               gridColumn: "2 / -1",
               gridRow: `${row(lunch[0])} / span ${span(lunch[0], toMin(lunch[1]) - toMin(lunch[0]))}`,
@@ -213,7 +227,7 @@ function ApptCard({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-0.5 text-left text-xs",
+        "@container flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-md px-2 py-0.5 text-left text-xs",
         // 취소·노쇼는 흐리게 하지 않고(다크 모드에서 안 읽힘) 점선 테두리·취소선으로 구분한다
         off
           ? "border border-l-4 border-border border-l-status-danger-dot bg-hatch text-muted-foreground"
@@ -222,14 +236,20 @@ function ApptCard({
       )}
       style={{ ...style, height: `calc(${span} * ${ROW} - 0.25rem)` }}
     >
-      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 배지는 낮게. 칸이 좁으면 시각·이름은 두고 뒤 배지가 잘린다 */}
+      {/* 30분 한 칸에 두 줄이 들어가게 첫 줄은 줄바꿈하지 않고 배지는 낮게. 칸이 좁으면 배지는 점만(title에 이름), 그래도 넘치면 이름이 줄어든다 */}
       <span className="flex min-w-0 items-center gap-1">
-        <b className={cn("shrink-0", off && "line-through")}>
+        <b className={cn("min-w-0 truncate", off && "line-through")}>
           {appt.time} {appt.name}
         </b>
         {off && (
-          <Badge variant="danger" className="h-4 shrink-0 py-0">
-            {STATUS_LABEL[appt.status]}
+          <Badge
+            variant="danger"
+            className={NARROW.short.badge}
+            title={STATUS_LABEL[appt.status]}
+          >
+            <span className={NARROW.short.label}>
+              {STATUS_LABEL[appt.status]}
+            </span>
           </Badge>
         )}
         {appt.source === "ax" && (
@@ -238,13 +258,17 @@ function ApptCard({
           </Badge>
         )}
         {appt.new_patient && (
-          <Badge variant="info" className="h-4 shrink-0 py-0">
-            신환
+          <Badge variant="info" className={NARROW.short.badge} title="신환">
+            <span className={NARROW.short.label}>신환</span>
           </Badge>
         )}
         {appt.unconfirmed && (
-          <Badge variant="warn" className="h-4 shrink-0 py-0">
-            내원 확인 전
+          <Badge
+            variant="warn"
+            className={NARROW.long.badge}
+            title="내원 확인 전"
+          >
+            <span className={NARROW.long.label}>내원 확인 전</span>
           </Badge>
         )}
       </span>

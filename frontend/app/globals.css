@@ -16,7 +16,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), var(--font-pretendard), sans-serif;
   --font-heading: var(--font-sans);
-  /* 화면 제목 띠(PageHeader) */
+  /* 화면 제목 띠(PageHeader) — cn 패키지는 text-page-*를 글자색으로 본다: cn()으로 text-색과 함께 넣으면 크기가 빠진다 */
   --text-page-title: 1.45rem;
   --text-page-desc: 13px;
   --color-ring: var(--ring);
@@ -42,6 +42,11 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-count: var(--sidebar-count);
+  --color-sidebar-rail: var(--sidebar-rail);
+  --color-appt-treatment: var(--appt-treatment);
+  --color-appt-treatment-fg: var(--appt-treatment-fg);
+  --color-appt-hygiene: var(--appt-hygiene);
+  --color-appt-hygiene-fg: var(--appt-hygiene-fg);
   --color-link: var(--link);
   --color-mark: var(--mark);
   --color-status-warn-bg: var(--status-warn-bg);
@@ -119,6 +124,15 @@
   --sidebar-accent-foreground: #2b2622;
   --sidebar-hover: rgba(0, 0, 0, 0.04);
   --sidebar-count: rgba(0, 0, 0, 0.07);
+  /* 두 톤 — 아이콘 줄은 목록 칸보다 한 단계 진하게 */
+  --sidebar-rail: #e7dfd4;
+  /* 예약 종류(예약 화면 카드) — 진료 모래·위생 세이지, 상담은 흰 카드 + 테두리. 점심은 빗금(bg-lunch) */
+  --appt-treatment: #efe3d3;
+  --appt-treatment-fg: #5a4128;
+  --appt-hygiene: #e2ede5;
+  --appt-hygiene-fg: #355a45;
+  --lunch-stripe: rgba(43, 38, 34, 0.07);
+  --lunch-line: #d9d2c8;
   --shadow-sidebar-active: 0 1px 2px rgba(43, 38, 34, 0.1), 0 0 0 1px #e2dbd1;
   /* 상태 — 딱지는 테두리를 그리지 않고(badge.tsx), border는 경고 띠·상자 테두리 */
   --status-warn-bg: #fff3dc;
@@ -185,6 +199,13 @@
   --sidebar-accent-foreground: #f7f5f0;
   --sidebar-hover: rgba(255, 255, 255, 0.05);
   --sidebar-count: rgba(255, 255, 255, 0.14);
+  --sidebar-rail: #151210;
+  --appt-treatment: #3b3127;
+  --appt-treatment-fg: #ead9c2;
+  --appt-hygiene: #22362a;
+  --appt-hygiene-fg: #a6d6b4;
+  --lunch-stripe: rgba(255, 255, 255, 0.07);
+  --lunch-line: #4a443f;
   --shadow-sidebar-active: 0 0 #0000;
   --status-warn-bg: #3d3010;
   --status-warn-fg: #f5cf5b;
@@ -227,6 +248,16 @@
     var(--muted) 0 6px,
     var(--card) 6px 12px
   );
+}
+
+/* 점심시간 — 예약이 아닌 빈 시간이라 칠하지 않고 빗금 + 점선(예약 화면). 색은 토큰 */
+@utility bg-lunch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 7px,
+    var(--lunch-stripe) 7px 9px
+  );
+  border: 1px dashed var(--lunch-line);
 }
 
 /* 가로로 넘치는 표 칸 — 더 밀 수 있는 쪽 가장자리에 옅은 그림자(스크롤 단서). 바탕이 background인 칸에 쓴다.

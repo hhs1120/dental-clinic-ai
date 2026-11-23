@@ -165,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             : "hidden md:sticky md:top-0 md:flex md:h-screen",
         )}
       >
-        <div className="flex w-18 shrink-0 flex-col items-center gap-1 px-1.5 pt-6 pb-3">
+        <div className="flex w-18 shrink-0 flex-col items-center gap-1 bg-sidebar-rail px-1.5 pt-6 pb-3">
           <Link
             href="/"
             aria-label={name || "홈"}
@@ -224,7 +224,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <main
           className={cn(
-            "relative w-full px-4 pt-6 pb-12 md:px-12 print:px-0 print:pb-0",
+            "relative w-full px-4 pt-6 pb-12 md:px-12 print:px-0! print:pb-0",
             space === "assistant" && "md:list-collapsed:pl-14",
           )}
         >

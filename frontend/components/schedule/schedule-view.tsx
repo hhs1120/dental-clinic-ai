@@ -165,8 +165,10 @@ export function ScheduleView() {
           </Label>
         </div>
         <span className="ml-auto text-sm text-muted-foreground">
-          총 {c.total}건 · 진료 {c.treatment} · 위생 {c.hygiene} · 상담{" "}
-          {c.consult}
+          총 {c.total}건 · <TypeDot className="bg-appt-treatment" />
+          진료 {c.treatment} · <TypeDot className="bg-appt-hygiene" />
+          위생 {c.hygiene} · <TypeDot className="border bg-card" />
+          상담 {c.consult}
           {current.date === today ? ` · 내원 확인 전 ${c.unconfirmed}` : ""}
         </span>
       </div>
@@ -214,5 +216,18 @@ function ErrorBand({ text }: { text: string }) {
       <StatusDot status="danger" />
       {text}
     </p>
+  );
+}
+
+/** 요약 줄의 종류 색 점 — 예약 카드 바탕과 같은 색(범례) */
+function TypeDot({ className }: { className: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "mr-1 inline-block size-2.5 rounded-sm align-[-1px]",
+        className,
+      )}
+    />
   );
 }

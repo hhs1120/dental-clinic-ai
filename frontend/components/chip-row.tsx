@@ -37,7 +37,8 @@ export function ChipRow({
       role={role}
       aria-label={label}
       className={cn(
-        "scroll-shadow-x flex gap-1.5 overflow-x-auto pb-1 *:shrink-0",
+        // pb-3 — 맥의 덮는 스크롤바가 칩 글씨를 가리지 않게 그 두께만큼 아래를 비운다
+        "scroll-shadow-x flex gap-1.5 overflow-x-auto pb-3 *:shrink-0",
         className,
       )}
     >
