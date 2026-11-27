@@ -391,11 +391,12 @@ export function AssistantView() {
           </div>
         ),
       )}
-      <div ref={bottom} />
       <div className="sticky bottom-0 bg-background pb-6">
         {form}
         {aboutBooking(items) && DRAFT_NOTE}
       </div>
+      {/* 입력 칸 아래에 둔다 — 위에 두면 맨 끝 줄을 화면 바닥에 맞춰 붙은 입력 칸에 가린다 */}
+      <div ref={bottom} />
     </div>
   );
 }

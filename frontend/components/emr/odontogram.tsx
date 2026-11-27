@@ -1,5 +1,5 @@
 // 치식도 — 치아 종류별 선화(위턱 기준 경로, 아래턱은 뒤집음).
-// 진료 기록 있는 치아는 칠하고, 남은 치료계획 치아는 점선
+// 진료 기록(종이 차트 이관 포함) 있는 치아는 칠하고, 남은 치료계획 치아는 점선
 import type { PatientRecord } from "@/lib/emr-api";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +40,11 @@ function kind(n: number): Kind {
 }
 
 export function Odontogram({ record }: { record: PatientRecord }) {
-  const done = new Set(record.treatments.map((t) => t.tooth));
+  // 승인된 종이 차트 이관 줄도 진료 기록이다 — fdi는 "45, 46"처럼 쉼표로(전악·사분면 없음은 null)
+  const done = new Set([
+    ...record.treatments.map((t) => t.tooth),
+    ...record.paper_records.flatMap((p) => p.fdi?.split(/,\s*/) ?? []),
+  ]);
   const plan = new Set(
     record.plans.filter((x) => x.status === "open").map((x) => x.tooth),
   );
