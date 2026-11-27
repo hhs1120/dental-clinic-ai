@@ -34,13 +34,16 @@ const argText = (args: Record<string, unknown>) =>
     .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join(", ");
 
-/** 접힌 "조회 n번 ›" 줄 — 누르면 단계마다 도구·조건. 진행 중이면 펼쳐 한 줄씩 쌓인다 */
+/** 접힌 "조회 n번 ›" 줄 — 누르면 단계마다 도구·조건. 진행 중이면 펼쳐 한 줄씩 쌓인다.
+ * onOpen은 펼친 직후 한 번(마지막 턴이면 대화 끝을 입력 칸 위로 붙이는 데 쓴다) */
 export function TurnSteps({
   steps,
   running = false,
+  onOpen,
 }: {
   steps: Step[];
   running?: boolean;
+  onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   if (steps.length === 0 && !running) return null;
@@ -52,7 +55,10 @@ export function TurnSteps({
         variant="ghost"
         size="sm"
         aria-expanded={shown}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open);
+          if (!open && onOpen) requestAnimationFrame(onOpen);
+        }}
         className="w-fit gap-1 px-1 text-muted-foreground"
       >
         <ChevronRight

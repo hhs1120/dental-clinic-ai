@@ -292,6 +292,9 @@ export function AssistantView() {
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ block: "end" });
   }, [items]);
+  // 마지막 턴의 조회를 펼치면 늘어난 만큼 대화 끝을 다시 입력 칸 위로
+  const toBottom = () =>
+    bottom.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
 
   const retry = () => setDraft("다른 시간으로");
 
@@ -384,7 +387,11 @@ export function AssistantView() {
           </p>
         ) : (
           <div key={it.id} className="flex flex-col gap-3">
-            <TurnSteps steps={it.steps} running={it.running} />
+            <TurnSteps
+              steps={it.steps}
+              running={it.running}
+              onOpen={it === items.at(-1) ? toBottom : undefined}
+            />
             {it.text && <ReplyText text={it.text} />}
             {it.error && <p className="text-destructive">{it.error}</p>}
             <ReplyCards cards={it.cards} onRetry={retry} readOnly={readOnly} />
