@@ -27,7 +27,10 @@
   .hw.red { color: var(--red); }
   .hw .d { display: inline-block; }
   .brush { font-family: "Nanum Brush Script", cursive; }
-  .struck { text-decoration: line-through; text-decoration-thickness: 3px; margin-right: 10px; }
+  /* 지운 글자 — 글자보다 살짝 길게 비스듬히 그은 펜 줄 하나(글자 굵기 줄은 숫자 획처럼 보여 지운 줄로 안 읽힌다) */
+  .struck { position: relative; margin-right: 10px; }
+  .struck::after { content: ""; position: absolute; left: -4px; right: -7px; top: 50%; height: 2.5px;
+                   background: var(--pen); border-radius: 2px; transform: rotate(-8deg); }
   .note { position: absolute; z-index: 2; }
   .head { display: flex; align-items: flex-end; gap: 14px; height: 54px; margin-bottom: 12px;
           font-size: 17px; color: #2e5f5c; }
