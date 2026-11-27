@@ -533,24 +533,24 @@ function InspectPanel({
         ) : kind === "loc" ? (
           <div className="flex flex-col gap-2">
             {unsure.length > 0 && (
-              <div className="flex flex-col gap-1.5 rounded-md bg-status-warn-bg p-2 text-xs text-status-warn-fg">
-                <span>
-                  OCR이 자신 없이 읽은 숫자: <b>{unsure.join(" ")}</b> — 확대한
-                  숫자와 다르면 치아 칸을 고치세요.
-                </span>
-                <Input
-                  className="h-8 w-24 bg-card text-sm"
-                  value={v.teeth}
-                  disabled={locked}
-                  aria-label="치아 숫자 고치기"
-                  onChange={(e) =>
-                    onChange(
-                      withVisit(fields, index, { teeth: e.target.value }),
-                    )
-                  }
-                />
-              </div>
+              <p className="rounded-md bg-status-warn-bg p-2 text-xs text-status-warn-fg">
+                OCR이 자신 없이 읽은 숫자: <b>{unsure.join(" ")}</b> — 확대한
+                숫자와 다르면 아래 치아 숫자를 고치세요.
+              </p>
             )}
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              치아 숫자
+              <Input
+                className="h-8 w-24 text-sm"
+                value={v.teeth}
+                disabled={locked}
+                aria-label="치아 숫자 고치기"
+                onChange={(e) =>
+                  onChange(withVisit(fields, index, { teeth: e.target.value }))
+                }
+              />
+              줄 그어 지운 숫자는 빼고
+            </label>
             <p className="text-sm">
               확대한 십자에서 숫자 <b>{v.teeth}</b>
               {digitJosa(v.teeth)} 있는 칸과 같은 칸을 누르세요.
