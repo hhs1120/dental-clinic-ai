@@ -15,6 +15,7 @@ import {
   isoDate,
   matchWords,
   unionBox,
+  unsureTeeth,
   type Visit,
   visitBand,
 } from "@/lib/chart-ocr-api";
@@ -359,6 +360,22 @@ export function OcrForm({
                   aria-label="치아"
                   onChange={(e) => setVisit(i, { teeth: e.target.value })}
                 />
+                {v.teeth !== "전악" &&
+                  !v.quadrant &&
+                  unsureTeeth(
+                    item.fields.visits,
+                    v.src ?? i,
+                    item.words,
+                    item.low_confidence,
+                  ).length > 0 && (
+                    <button
+                      type="button"
+                      className="cursor-pointer rounded-4xl hover:opacity-80"
+                      onClick={() => onInspect("loc", i)}
+                    >
+                      <Badge variant="warn">숫자 자신 없음</Badge>
+                    </button>
+                  )}
                 {v.teeth !== "전악" && (
                   <button
                     type="button"

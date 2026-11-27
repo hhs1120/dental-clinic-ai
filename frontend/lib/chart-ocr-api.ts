@@ -208,6 +208,38 @@ export function cellBox(
   return [mid - width * 0.6, bottom - 0.036, mid + width * 0.6, bottom];
 }
 
+/** 진료 첫 줄 Location 칸에서 OCR이 자신 없이(confidence < low) 읽은 숫자 글자 — 치아 숫자가 틀렸을 수 있어
+ * 위치 고르기에서 확대 그림과 맞춰 보게 한다(기능 정의 §5 종이 차트 이관 사람 확인) */
+export function unsureTeeth(
+  visits: Visit[],
+  index: number,
+  words: OcrWord[],
+  low: number,
+): string[] {
+  const box = cellBox(visits, index, words, "Location");
+  if (!box) return [];
+  return words
+    .filter((w) => {
+      const cx = (w.box[0] + w.box[2]) / 2;
+      const cy = (w.box[1] + w.box[3]) / 2;
+      return (
+        w.confidence < low &&
+        /\d/.test(w.text) &&
+        cx >= box[0] &&
+        cx <= box[2] &&
+        cy >= box[1] &&
+        cy <= box[3]
+      );
+    })
+    .map((w) => w.text);
+}
+
+/** 숫자 뒤 조사 — 마지막 숫자를 읽은 소리에 받침이 있으면 "이"(0 영·1 일·3 삼·6 육·7 칠·8 팔), 없으면 "가" */
+export function digitJosa(text: string): "이" | "가" {
+  const last = text.trim().slice(-1);
+  return "013678".includes(last) ? "이" : "가";
+}
+
 /** 진료 줄 안에서 그 낱말의 상자(앞뒤 글자가 보이게 조금 넓혀) — 약어 제안을 고치기 전에 확대해 본다 */
 export function wordBox(
   visits: Visit[],

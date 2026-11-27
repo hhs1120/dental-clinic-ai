@@ -19,6 +19,7 @@ import {
 import { ErrorBand } from "@/components/prep/prep-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { errorText, useFetch } from "@/lib/api";
 import {
   approveImport,
@@ -35,6 +36,8 @@ import {
   rejectImport,
   sampleUrl,
   STATUS_LABEL,
+  digitJosa,
+  unsureTeeth,
   uploadChart,
   visitBand,
   wordBox,
@@ -449,6 +452,12 @@ function InspectPanel({
     if (!w.quadrant) below.push(j);
   }
   const band = visitBand(item.fields.visits, at, item.words);
+  const unsure = unsureTeeth(
+    item.fields.visits,
+    at,
+    item.words,
+    item.low_confidence,
+  );
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-status-warn-border bg-card p-3 shadow-card">
       <div className="flex items-center gap-2">
@@ -523,9 +532,28 @@ function InspectPanel({
           </div>
         ) : kind === "loc" ? (
           <div className="flex flex-col gap-2">
+            {unsure.length > 0 && (
+              <div className="flex flex-col gap-1.5 rounded-md bg-status-warn-bg p-2 text-xs text-status-warn-fg">
+                <span>
+                  OCR이 자신 없이 읽은 숫자: <b>{unsure.join(" ")}</b> — 확대한
+                  숫자와 다르면 치아 칸을 고치세요.
+                </span>
+                <Input
+                  className="h-8 w-24 bg-card text-sm"
+                  value={v.teeth}
+                  disabled={locked}
+                  aria-label="치아 숫자 고치기"
+                  onChange={(e) =>
+                    onChange(
+                      withVisit(fields, index, { teeth: e.target.value }),
+                    )
+                  }
+                />
+              </div>
+            )}
             <p className="text-sm">
-              확대한 십자에서 숫자 <b>{v.teeth}</b>가 있는 칸과 같은 칸을
-              누르세요.
+              확대한 십자에서 숫자 <b>{v.teeth}</b>
+              {digitJosa(v.teeth)} 있는 칸과 같은 칸을 누르세요.
             </p>
             <CrossPicker
               value={v.quadrant}
@@ -535,7 +563,7 @@ function InspectPanel({
               }
             />
             <p className="text-xs text-muted-foreground">
-              {v.fdi ? `#${v.fdi}로 정했습니다. ` : ""}승인 전까지 다시 바꿀 수
+              {v.fdi ? `정한 치아: #${v.fdi}. ` : ""}승인 전까지 다시 바꿀 수
               있습니다.
             </p>
             {v.quadrant && below.length > 0 && !locked && (
